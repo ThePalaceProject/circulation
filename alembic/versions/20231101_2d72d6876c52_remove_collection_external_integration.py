@@ -5,13 +5,13 @@ Revises: cc084e35e037
 Create Date: 2023-11-01 22:42:06.754873+00:00
 
 """
-import logging
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
 from api.integration.registry.license_providers import LicenseProvidersRegistry
+from core.migration.util import migration_logger
 from core.model import json_serializer
 
 # revision identifiers, used by Alembic.
@@ -21,9 +21,7 @@ branch_labels = None
 depends_on = None
 
 
-log = logging.getLogger(f"palace.migration.{revision}")
-log.setLevel(logging.INFO)
-log.disabled = False
+log = migration_logger(revision)
 
 
 def upgrade() -> None:
