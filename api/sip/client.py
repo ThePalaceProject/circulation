@@ -39,6 +39,7 @@ import certifi
 
 from api.sip.dialect import Dialect
 from core.util.datetime_helpers import utc_now
+from core.util.log import LoggerMixin
 
 # SIP2 defines a large number of fields which are used in request and
 # response messages. This library focuses on defining the response
@@ -223,9 +224,7 @@ class Constants:
     TERMINATOR_CHAR = "\r"
 
 
-class SIPClient(Constants):
-    log = client_logger
-
+class SIPClient(Constants, LoggerMixin):
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
     # Timeout in seconds
@@ -877,7 +876,7 @@ class SIPClient(Constants):
         if summary.count("Y") > 1:
             # This violates the spec but in my tests it seemed to
             # work, so we'll allow it.
-            self.log.warn(
+            self.log.warning(
                 "Summary requested too many kinds of detailed information: %s" % summary
             )
         return summary
@@ -892,7 +891,10 @@ class SIPClient(Constants):
 
         This method exists only to be subclassed by MockSIPClient.
         """
+        start_time = time.time()
         self.connection.sendall(data)
+        time_taken = time.time() - start_time
+        self.log.info("Sent %s bytes in %.2f seconds", len(data), time_taken)
 
     def read_message(self, max_size=1024 * 1024):
         """Read a SIP2 message from the socket connection.
@@ -913,6 +915,8 @@ class SIPClient(Constants):
                 done = True
             if len(data) > max_size:
                 raise OSError("SIP2 response too large.")
+        time_taken = time.time() - start_time
+        self.log.info("Received %s bytes in %.2f seconds", len(data), time_taken)
         return data
 
     def append_checksum(self, text, include_sequence_number=True):
