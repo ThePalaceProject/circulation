@@ -31,7 +31,7 @@ def _ensure_string(s: str | bytes, encoding: str) -> str:
 
 
 def _wrap_func_bytes_string(
-    func: Callable[Concatenate[bytes, P], bytes], encoding: str
+    func: Callable[Concatenate[bytes, P], bytes | str], encoding: str
 ) -> Callable[Concatenate[str | bytes, P], str]:
     """
     Wrap a function, ensuring that the first input parameter is

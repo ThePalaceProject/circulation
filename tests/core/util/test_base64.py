@@ -60,3 +60,28 @@ def test_default_is_base64(func):
     wrapped_func = getattr(base64, func)
     assert original_func is not wrapped_func
     assert original_func is wrapped_func.__wrapped__
+
+
+def test__wrap_func_bytes_string() -> None:
+    # Test that the input is always encoded to bytes and the output is always decoded to a string.
+    func_called_with = None
+
+    def func1(s: bytes) -> bytes:
+        nonlocal func_called_with
+        func_called_with = s
+        return s
+
+    wrapped = base64._wrap_func_bytes_string(func1, "utf8")
+    assert wrapped("abc") == "abc"
+    assert func_called_with == b"abc"
+    assert wrapped(b"abc") == "abc"
+    assert func_called_with == b"abc"
+
+    # Test that we can wrap a function that returns a string.
+    def func2(s: bytes) -> str:
+        nonlocal func_called_with
+        func_called_with = s
+        return s.decode("utf8")
+
+    wrapped = base64._wrap_func_bytes_string(func2, "utf8")
+    assert wrapped("abc") == "abc"
