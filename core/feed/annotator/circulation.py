@@ -9,6 +9,7 @@ import urllib.request
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
+from dependency_injector.wiring import Provide, inject
 from flask import url_for
 from sqlalchemy.orm import Session
 
@@ -51,6 +52,7 @@ from core.model.licensing import (
 )
 from core.model.patron import Hold, Loan, Patron
 from core.model.work import Work
+from core.service.container import Services
 from core.util.datetime_helpers import from_timestamp
 from core.util.opds_writer import OPDSFeed
 
@@ -179,6 +181,7 @@ class AcquisitionHelper:
 class CirculationManagerAnnotator(Annotator):
     hidden_content_types: list[str]
 
+    @inject
     def __init__(
         self,
         lane: Optional[WorkList],
@@ -186,6 +189,7 @@ class CirculationManagerAnnotator(Annotator):
         active_holds_by_work: Optional[Dict[Work, Hold]] = None,
         active_fulfillments_by_work: Optional[Dict[Work, Any]] = None,
         hidden_content_types: Optional[List[str]] = None,
+        analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
         if lane:
             logger_name = "Circulation Manager Annotator for %s" % lane.display_name
@@ -198,6 +202,7 @@ class CirculationManagerAnnotator(Annotator):
         self.active_fulfillments_by_work = active_fulfillments_by_work or {}
         self.hidden_content_types = hidden_content_types or []
         self.facet_view = "feed"
+        self.analytics = analytics
 
     def is_work_entry_solo(self, work: Work) -> bool:
         """Return a boolean value indicating whether the work's OPDS catalog entry is served by itself,
@@ -927,7 +932,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 )
             )
 
-        if Analytics.is_configured(self.library):
+        if self.analytics.is_configured():
             entry.computed.other_links.append(
                 Link(
                     rel="http://librarysimplified.org/terms/rel/analytics/open-book",

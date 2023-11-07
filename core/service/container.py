@@ -2,6 +2,8 @@ from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 from dependency_injector.providers import Container
 
+from core.service.analytics.configuration import AnalyticsConfiguration
+from core.service.analytics.container import AnalyticsContainer
 from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
 from core.service.storage.configuration import StorageConfiguration
@@ -21,6 +23,12 @@ class Services(DeclarativeContainer):
         config=config.logging,
     )
 
+    analytics = Container(
+        AnalyticsContainer,
+        config=config.analytics,
+        storage=storage,
+    )
+
 
 def create_container() -> Services:
     container = Services()
@@ -28,7 +36,20 @@ def create_container() -> Services:
         {
             "storage": StorageConfiguration().dict(),
             "logging": LoggingConfiguration().dict(),
+            "analytics": AnalyticsConfiguration().dict(),
         }
+    )
+    container.wire(
+        modules=[
+            "core.metadata_layer",
+            "api.odl",
+            "api.axis",
+            "api.bibliotheca",
+            "api.enki",
+            "api.controller",
+            "api.overdrive",
+            "core.feed.annotator.circulation",
+        ]
     )
     return container
 

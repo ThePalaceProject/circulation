@@ -1157,14 +1157,14 @@ class TestJackpotWorkList:
         # These worklists show ebooks and audiobooks from the two
         # collections associated with the default library.
         [
-            overdrive_audio,
-            overdrive_ebooks,
             default_audio,
             default_ebooks,
+            overdrive_audio,
+            overdrive_ebooks,
         ] = sorted(available_now, key=lambda x: x.display_name)
 
         assert (
-            "License source {[Unknown]} - Medium {Book} - Collection name {%s}"
+            "License source {OPDS} - Medium {Book} - Collection name {%s}"
             % db.default_collection().name
             == default_ebooks.display_name
         )
@@ -1172,7 +1172,7 @@ class TestJackpotWorkList:
         assert [Edition.BOOK_MEDIUM] == default_ebooks.media
 
         assert (
-            "License source {[Unknown]} - Medium {Audio} - Collection name {%s}"
+            "License source {OPDS} - Medium {Audio} - Collection name {%s}"
             % db.default_collection().name
             == default_audio.display_name
         )

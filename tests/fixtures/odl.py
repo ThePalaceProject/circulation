@@ -95,11 +95,10 @@ class ODLTestFixture:
             f"Test {api_class.__name__} Collection",
             integration_protocol,
         )
-        collection.external_account_id = "http://odl"
         collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
-            "url": "http://metadata",
+            "external_account_id": "http://odl",
             Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
         }
         collection.libraries.append(library)

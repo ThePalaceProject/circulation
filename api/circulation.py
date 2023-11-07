@@ -7,17 +7,7 @@ import time
 from abc import ABC, abstractmethod
 from threading import Thread
 from types import TracebackType
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterable,
-    List,
-    Literal,
-    Tuple,
-    Type,
-    TypeVar,
-)
+from typing import Any, Dict, Iterable, List, Literal, Tuple, Type, TypeVar
 
 import flask
 from flask import Response
@@ -57,9 +47,6 @@ from core.model import (
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
-
-if TYPE_CHECKING:
-    pass
 
 
 class CirculationInfo:

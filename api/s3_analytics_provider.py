@@ -1,34 +1,24 @@
+from __future__ import annotations
+
 import datetime
 import json
 import random
 import string
-from typing import Dict, Optional
-
-from flask_babel import lazy_gettext as _
-from sqlalchemy.orm import Session
+from typing import TYPE_CHECKING, Dict, Optional
 
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
 from core.model import Library, LicensePool, MediaTypes
-from core.service.container import Services
-from core.service.storage.s3 import S3Service
+
+if TYPE_CHECKING:
+    from core.service.storage.s3 import S3Service
 
 
 class S3AnalyticsProvider(LocalAnalyticsProvider):
     """Analytics provider storing data in a S3 bucket."""
 
-    NAME = _("S3 Analytics")
-    DESCRIPTION = _("Store analytics events in a S3 bucket.")
-
-    SETTINGS = LocalAnalyticsProvider.SETTINGS
-
-    def __init__(
-        self,
-        integration,
-        services: Services,
-        library=None,
-    ):
-        super().__init__(integration, services, library)
+    def __init__(self, s3_service: Optional[S3Service]):
+        self.s3_service = s3_service
 
     @staticmethod
     def _create_event_object(
@@ -38,7 +28,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time: datetime.datetime,
         old_value,
         new_value,
-        neighborhood: str,
+        neighborhood: Optional[str] = None,
     ) -> Dict:
         """Create a Python dict containing required information about the event.
 
@@ -146,7 +136,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time,
         old_value=None,
         new_value=None,
-        **kwargs
+        **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
 
@@ -177,25 +167,16 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         if not library and not license_pool:
             raise ValueError("Either library or license_pool must be provided.")
-        if library:
-            _db = Session.object_session(library)
-        else:
-            _db = Session.object_session(license_pool)
-        if library and self.library_id and library.id != self.library_id:
-            return
-
-        neighborhood = None
-        if self.location_source == self.LOCATION_SOURCE_NEIGHBORHOOD:
-            neighborhood = kwargs.pop("neighborhood", None)
 
         event = self._create_event_object(
-            library, license_pool, event_type, time, old_value, new_value, neighborhood
+            library, license_pool, event_type, time, old_value, new_value
         )
         content = json.dumps(
             event,
             default=str,
             ensure_ascii=True,
         )
+
         storage = self._get_storage()
         analytics_file_key = self._get_file_key(library, license_pool, event_type, time)
 
@@ -242,13 +223,9 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :return: StorageServiceBase object
         """
-        s3_storage_service = self.services.storage.analytics()
-        if s3_storage_service is None:
+        if self.s3_service is None:
             raise CannotLoadConfiguration(
                 "No storage service is configured with an analytics bucket."
             )
 
-        return s3_storage_service
-
-
-Provider = S3AnalyticsProvider
+        return self.s3_service

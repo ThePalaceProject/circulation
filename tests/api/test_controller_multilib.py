@@ -1,4 +1,5 @@
 from core.model import Collection, ExternalIntegration
+from core.opds_import import OPDSAPI
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
     ControllerFixtureSetupOverrides,
@@ -20,6 +21,10 @@ class TestMultipleLibraries:
                 f"{controller_fixture.db.fresh_str()} (for multi-library test)",
                 ExternalIntegration.OPDS_IMPORT,
             )
+            settings = OPDSAPI.settings_class()(
+                external_account_id="http://url.com", data_source="OPDS"
+            )
+            OPDSAPI.settings_update(collection.integration_configuration, settings)
             library.collections.append(collection)
             return collection
 

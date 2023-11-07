@@ -10,13 +10,7 @@ import pytest
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
-from core.model import (
-    CirculationEvent,
-    DataSource,
-    ExternalIntegration,
-    MediaTypes,
-    create,
-)
+from core.model import CirculationEvent, DataSource, MediaTypes
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -28,16 +22,10 @@ class S3AnalyticsFixture:
         self, db: DatabaseTransactionFixture, services_fixture: MockServicesFixture
     ) -> None:
         self.db = db
-        self.analytics_integration, _ = create(
-            db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol=S3AnalyticsProvider.__module__,
-        )
         self.services = services_fixture.services
         self.analytics_storage = services_fixture.storage.analytics
         self.analytics_provider = S3AnalyticsProvider(
-            self.analytics_integration, self.services, db.default_library()
+            services_fixture.services.storage.analytics(),
         )
 
 
@@ -69,9 +57,7 @@ class TestS3AnalyticsProvider:
         s3_analytics_fixture.services.storage.analytics.override(None)
 
         provider = S3AnalyticsProvider(
-            s3_analytics_fixture.analytics_integration,
-            s3_analytics_fixture.services,
-            s3_analytics_fixture.db.default_library(),
+            s3_analytics_fixture.services.storage.analytics()
         )
 
         # Act, Assert

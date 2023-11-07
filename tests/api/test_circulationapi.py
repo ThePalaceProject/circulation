@@ -886,10 +886,17 @@ class TestCirculationAPI:
 
     def test_fulfill_errors(self, circulation_api: CirculationAPIFixture):
         # Here's an open-access title.
+        collection = circulation_api.db.collection(
+            protocol=ExternalIntegration.OPDS_IMPORT,
+            data_source_name="OPDS",
+            external_account_id="http://url/",
+        )
         circulation_api.pool.open_access = True
+        circulation_api.pool.collection = collection
+
         circulation_api.circulation.remotes[
             circulation_api.pool.data_source.name
-        ] = OPDSAPI(circulation_api.db.session, circulation_api.collection)
+        ] = OPDSAPI(circulation_api.db.session, collection)
 
         # The patron has the title on loan.
         circulation_api.pool.loan_to(circulation_api.patron)

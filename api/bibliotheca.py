@@ -15,6 +15,7 @@ from io import BytesIO
 from typing import Dict, Generator, List, Tuple, Type, TypeVar, Union
 
 import dateutil.parser
+from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml.etree import _Element
 from pymarc import parse_xml_to_array
@@ -74,6 +75,7 @@ from core.model import (
 from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
+from core.service.container import Services
 from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from core.util.http import HTTP
 from core.util.string_helpers import base64
@@ -1265,7 +1267,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
                 continue
             if pool.licenses_owned > 0:
                 self.log.warn("Removing %s from circulation.", identifier.identifier)
-            pool.update_availability(0, 0, 0, 0, self.analytics, as_of=now)
+            pool.update_availability(0, 0, 0, 0, as_of=now)
 
     def _process_metadata(
         self,
@@ -1296,7 +1298,14 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
     PROTOCOL = ExternalIntegration.BIBLIOTHECA
     LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
-    def __init__(self, _db, collection, api_class=BibliothecaAPI, analytics=None):
+    @inject
+    def __init__(
+        self,
+        _db,
+        collection,
+        api_class=BibliothecaAPI,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
         """Initializer.
 
         :param _db: Database session object.
@@ -1309,7 +1318,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
         :param analytics: An optional Analytics object.
         :type analytics: Optional[Analytics]
         """
-        self.analytics = analytics or Analytics(_db)
+        self.analytics = analytics
         super().__init__(_db, collection)
         if isinstance(api_class, BibliothecaAPI):
             # We were given an actual API object. Just use it.

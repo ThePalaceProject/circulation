@@ -123,7 +123,9 @@ class TestCollectionSettings:
             settings2 = coll2.get("settings", {})
             settings3 = coll3.get("settings", {})
 
-            assert settings1.get("external_account_id") is None
+            assert (
+                settings1.get("external_account_id") == "http://opds.example.com/feed"
+            )
             assert settings2.get("external_account_id") == "1234"
             assert settings3.get("external_account_id") == "5678"
 

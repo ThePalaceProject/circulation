@@ -4,7 +4,7 @@ import ssl
 import tempfile
 from functools import partial
 from typing import Callable, List, Optional
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -39,16 +39,20 @@ class MockSocket:
         self.data = self.data[size:]
         return block
 
+    def sendall(self, data):
+        self.data += data
+
 
 class MockSocketFixture:
     def __init__(self, monkeypatch: MonkeyPatch):
         self.monkeypatch = monkeypatch
+        self.mock = MockSocket()
+        # Patch the socket method so that we don't create a real network socket.
+        self.monkeypatch.setattr("socket.socket", lambda x, y: self.mock)
 
 
 @pytest.fixture(scope="function")
 def mock_socket(monkeypatch: MonkeyPatch) -> MockSocketFixture:
-    # Patch the socket method so that we don't create a real network socket.
-    monkeypatch.setattr("socket.socket", lambda x, y: MockSocket())
     return MockSocketFixture(monkeypatch)
 
 
@@ -304,6 +308,21 @@ class TestSIPClient:
         wrap_called = self.context_with_verification.wrap_socket.call_args
         assert wrap_called.kwargs["server_hostname"] == target_server
 
+    def test_send(self, mock_socket: MockSocketFixture):
+        target_server = object()
+        sip = SIPClient(target_server, 999)
+        sip.connect()
+
+        mock_socket.mock.sendall = MagicMock()
+
+        # Send a message and make sure it's queued up.
+        sip.send("abcd")
+
+        # Make sure we called sendall on the socket.
+        mock_socket.mock.sendall.assert_called_once_with(
+            ("abcd" + SIPClient.TERMINATOR_CHAR).encode(SIPClient.DEFAULT_ENCODING)
+        )
+
     def test_read_message(self):
         target_server = object()
         sip = SIPClient(target_server, 999)
@@ -338,6 +357,14 @@ class TestSIPClient:
             conn.queue_data("no newline")
             with pytest.raises(IOError, match="No data read from socket."):
                 sip.read_message()
+
+            # IOError if we exceed the timeout, even if we're in the
+            # middle of reading a message.
+            with patch("api.sip.client.time") as mock_time:
+                mock_time.time.side_effect = [0, 10]
+                with pytest.raises(IOError, match="Timeout reading from socket."):
+                    sip.read_message()
+
         finally:
             # Un-mock the socket.socket function
             socket.socket = old_socket
@@ -708,12 +735,13 @@ class TestPatronResponse:
 
 class TestClientDialects:
     @pytest.mark.parametrize(
-        "dialect,expected_read_count,expected_write_count",
+        "dialect,expected_read_count,expected_write_count,expected_tz_spaces",
         [
             # Generic ILS should send end_session message
-            (Dialect.GENERIC_ILS, 1, 1),
+            (Dialect.GENERIC_ILS, 1, 1, False),
             # AG VERSO ILS shouldn't end_session message
-            (Dialect.AG_VERSO, 0, 0),
+            (Dialect.AG_VERSO, 0, 0, False),
+            (Dialect.FOLIO, 1, 1, True),
         ],
     )
     def test_dialect(
@@ -722,6 +750,7 @@ class TestClientDialects:
         dialect,
         expected_read_count,
         expected_write_count,
+        expected_tz_spaces,
     ):
         sip = sip_client_factory(dialect=dialect)
         sip.queue_response("36Y201610210000142637AO3|AA25891000331441|AF|AG")
@@ -729,3 +758,9 @@ class TestClientDialects:
         assert sip.dialect_config == dialect.config
         assert sip.read_count == expected_read_count
         assert sip.write_count == expected_write_count
+        assert sip.dialect_config.tz_spaces == expected_tz_spaces
+
+        # verify timestamp format aligns with the expected tz spaces dialect
+        ts = sip.now()
+        tz_element = ts[8:12]
+        assert tz_element == ("    " if expected_tz_spaces else "0000")

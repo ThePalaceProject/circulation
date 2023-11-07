@@ -244,13 +244,19 @@ export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 The FCM credentials can be downloaded once a Google Service account has been created.
 More details in the [FCM documentation](https://firebase.google.com/docs/admin/setup#set-up-project-and-service-account)
 
-##### Quicksight Dashboards
+#### Quicksight Dashboards
 
 For generating quicksight dashboard links the following environment variable is required
 `QUICKSIGHT_AUTHORIZED_ARNS` - A dictionary of the format `"<dashboard name>": ["arn:aws:quicksight:...",...]`
 where each quicksight dashboard gets treated with an arbitrary "name", and a list of "authorized arns".
 The first the "authorized arns" is always considered as the `InitialDashboardID` when creating an embed URL
 for the respective "dashboard name".
+
+#### Analytics
+
+Local analytics are enabled by default. S3 analytics can be enabled via the following environment variable:
+
+- PALACE_S3_ANALYTICS_ENABLED: A boolean value to disable or enable s3 analytics. The default is false.
 
 #### Email
 

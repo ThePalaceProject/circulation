@@ -13,6 +13,7 @@ from wsgiref.handlers import format_date_time
 import flask
 import pytz
 from attr import define
+from dependency_injector.wiring import Provide, inject
 from expiringdict import ExpiringDict
 from flask import Response, make_response, redirect
 from flask_babel import lazy_gettext as _
@@ -113,7 +114,6 @@ if TYPE_CHECKING:
     from werkzeug import Response as wkResponse
 
     from api.admin.controller.admin_search import AdminSearchController
-    from api.admin.controller.analytics_services import AnalyticsServicesController
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
     from api.admin.controller.collection_self_tests import CollectionSelfTestsController
@@ -192,7 +192,6 @@ class CirculationManager:
     admin_self_tests_controller: SelfTestsController
     admin_discovery_services_controller: DiscoveryServicesController
     admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController
-    admin_analytics_services_controller: AnalyticsServicesController
     admin_metadata_services_controller: MetadataServicesController
     admin_metadata_service_self_tests_controller: MetadataServiceSelfTestsController
     admin_patron_auth_services_controller: PatronAuthServicesController
@@ -211,9 +210,14 @@ class CirculationManager:
     admin_view_controller: ViewController
     admin_quicksight_controller: QuickSightController
 
-    def __init__(self, _db, services: Services):
+    @inject
+    def __init__(
+        self,
+        _db,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
         self._db = _db
-        self.services = services
+        self.analytics = analytics
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -262,8 +266,6 @@ class CirculationManager:
         configuration after changes are made in the administrative
         interface.
         """
-        self.analytics = Analytics(self._db, refresh=True)
-
         with elapsed_time_logging(
             log_method=self.log.debug,
             skip_start=True,
@@ -393,7 +395,7 @@ class CirculationManager:
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""
-        return CirculationAPI(self._db, library, analytics)
+        return CirculationAPI(self._db, library, analytics=analytics)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.

@@ -247,6 +247,7 @@ class TestOPDSImporter:
                 "primary_identifier_source": ExternalIntegration.DCTERMS_IDENTIFIER,
             },
             data_source_name="OPDS",
+            external_account_id="http://root.uri",
         )
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
@@ -1443,6 +1444,7 @@ class TestOPDSImporter:
                 "OPDS collection with a WAYFless acquisition link",
                 ExternalIntegration.OPDS_IMPORT,
                 data_source_name="test",
+                external_account_id="http://wayfless.example.com/feed",
             )
             collection.libraries.append(library)
 
@@ -2086,7 +2088,11 @@ class OPDSAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.session = db.session
-        self.collection = db.collection(protocol=OPDSAPI.label())
+        self.collection = db.collection(
+            protocol=OPDSAPI.label(),
+            data_source_name="OPDS",
+            external_account_id="http://opds.example.com/feed",
+        )
         self.api = OPDSAPI(self.session, self.collection)
 
         self.mock_patron = MagicMock()

@@ -95,7 +95,11 @@ def opds2_importer_fixture(
 ) -> TestOPDS2ImporterFixture:
     data = TestOPDS2ImporterFixture()
     data.transaction = db
-    data.collection = db.collection(protocol=OPDS2API.label())
+    data.collection = db.collection(
+        protocol=OPDS2API.label(),
+        data_source_name="OPDS 2.0 Data Source",
+        external_account_id="http://opds2.example.org/feed",
+    )
     data.library = db.default_library()
     data.collection.libraries.append(data.library)
     data.data_source = DataSource.lookup(
@@ -464,7 +468,9 @@ class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
         self.patron = db.patron()
         self.collection: Collection = db.collection(
-            protocol=ExternalIntegration.OPDS2_IMPORT
+            protocol=ExternalIntegration.OPDS2_IMPORT,
+            data_source_name="test",
+            external_account_id="http://opds2.example.org/feed",
         )
         self.collection.integration_configuration.context = {
             ExternalIntegration.TOKEN_AUTH: "http://example.org/token?userName={patron_id}"
@@ -520,7 +526,7 @@ class TestOpds2Api:
 
         work = works[0]
 
-        api = CirculationAPI(db.session, db.default_library())
+        api = CirculationAPI(db.session, opds2_importer_fixture.library)
         patron = db.patron()
 
         # Borrow the book from the library

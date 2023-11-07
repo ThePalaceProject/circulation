@@ -31,6 +31,7 @@ from api.overdrive import (
     OverdriveRepresentationExtractor,
     RecentOverdriveCollectionMonitor,
 )
+from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
 from core.integration.goals import Goals
@@ -2898,9 +2899,8 @@ class TestOverdriveCirculationMonitor:
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
 
-        class MockAnalytics:
-            def __init__(self, _db):
-                self.db = _db
+        class MockAnalytics(Analytics):
+            def __init__(self):
                 self.events = []
 
             def collect_event(self, *args):
@@ -2927,14 +2927,13 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
         assert isinstance(monitor.analytics, MockAnalytics)
-        assert db.session == monitor.analytics.db
 
         # The 'Overdrive API' is ready to tell us about four books,
         # but only one of them (the first) represents a change from what
@@ -3023,9 +3022,8 @@ class TestOverdriveCirculationMonitor:
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
 
-        class MockAnalytics:
-            def __init__(self, _db):
-                self._db = _db
+        class MockAnalytics(Analytics):
+            def __init__(self):
                 self.events = []
 
             def collect_event(self, *args):
@@ -3035,14 +3033,13 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
         assert isinstance(monitor.analytics, MockAnalytics)
-        assert db.session == monitor.analytics._db
 
         lp1 = db.licensepool(None)
         lp1.last_checked = utc_now()
@@ -3084,9 +3081,8 @@ class TestOverdriveCirculationMonitor:
                 self.tries[str(book_id)] = current_count
                 raise StaleDataError("Ouch!")
 
-        class MockAnalytics:
-            def __init__(self, _db):
-                self._db = _db
+        class MockAnalytics(Analytics):
+            def __init__(self):
                 self.events = []
 
             def collect_event(self, *args):
@@ -3096,14 +3092,13 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,
-            analytics_class=MockAnalytics,
+            analytics=MockAnalytics(),
         )
         api = monitor.api
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
         assert isinstance(monitor.analytics, MockAnalytics)
-        assert db.session == monitor.analytics._db
 
         lp1 = db.licensepool(None)
         lp1.last_checked = utc_now()
