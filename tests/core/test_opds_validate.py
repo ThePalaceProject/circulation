@@ -23,9 +23,7 @@ class TestOPDS2Validation(OPDS2Test):
             protocol=ExternalIntegration.OPDS2_IMPORT,
             data_source_name=DataSource.FEEDBOOKS,
             settings={
-                "username": "username",
-                "password": "password",
-                "external_account_id": "account_id",
+                "external_account_id": "http://example.com/feed",
             },
         )
         validator = OPDS2SchemaValidation(
@@ -51,7 +49,7 @@ class TestODL2Validation(OPDS2Test):
             settings={
                 "username": "username",
                 "password": "password",
-                "external_account_id": "account_id",
+                "external_account_id": "http://example.com/feed",
             },
         )
         validator = ODL2SchemaValidation(
