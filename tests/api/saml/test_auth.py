@@ -34,8 +34,8 @@ from api.saml.metadata.model import (
 from api.saml.metadata.parser import SAMLSubjectParser
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
+from core.util import base64
 from core.util.datetime_helpers import datetime_utc
-from core.util.string_helpers import base64
 from tests.api.saml import saml_strings
 from tests.fixtures.api_controller import ControllerFixture
 
