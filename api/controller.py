@@ -2203,18 +2203,15 @@ class WorkController(CirculationManagerController):
 class ProfileController(CirculationManagerController):
     """Implement the User Profile Management Protocol."""
 
-    @property
-    def _controller(self):
+    def _controller(self, patron):
         """Instantiate a CoreProfileController that actually does the work."""
-        # TODO: Probably better to use request_patron and check for
-        # None here.
-        patron = self.authenticated_patron_from_request()
         storage = CirculationPatronProfileStorage(patron, flask.url_for)
         return CoreProfileController(storage)
 
     def protocol(self):
         """Handle a UPMP request."""
-        controller = self._controller
+        patron = flask.request.patron
+        controller = self._controller(patron)
         if flask.request.method == "GET":
             result = controller.get()
         else:
