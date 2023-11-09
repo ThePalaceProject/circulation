@@ -8,11 +8,12 @@ import pytest
 
 from api.authentication.base import PatronData
 from api.authentication.basic import BasicAuthProviderLibrarySettings, Keyboards
+from api.problem_details import INVALID_CREDENTIALS
 from api.sip import SIP2AuthenticationProvider, SIP2LibrarySettings, SIP2Settings
 from api.sip.client import Constants, Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect
 from core.config import CannotLoadConfiguration
-from core.util.http import RemoteIntegrationException
+from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -400,7 +401,7 @@ class TestSIP2AuthenticationProvider:
         assert patrondata.external_type is None
         assert PatronData.NO_VALUE == patrondata.block_reason
 
-    def test_ioerror_during_connect_becomes_remoteintegrationexception(
+    def test_ioerror_during_connect_becomes_problemdetail(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_settings: Callable[..., SIP2Settings],
@@ -418,20 +419,26 @@ class TestSIP2AuthenticationProvider:
         )
         provider = create_provider(client=CannotConnect, settings=settings)
 
-        with pytest.raises(RemoteIntegrationException) as excinfo:
-            provider.remote_authenticate(
-                "username",
-                "password",
-            )
-        assert "Error accessing unknown server: Doom!" in str(excinfo.value)
+        response = provider.remote_authenticate(
+            "username",
+            "password",
+        )
 
-    def test_ioerror_during_send_becomes_remoteintegrationexception(
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == INVALID_CREDENTIALS.status_code
+        assert response.uri == INVALID_CREDENTIALS.uri
+        assert (
+            response.detail
+            == "Error contacting authentication server (unknown server). Please try again later."
+        )
+
+    def test_ioerror_during_send_becomes_problemdetail(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_settings: Callable[..., SIP2Settings],
     ):
         """If there's an IOError communicating with the server,
-        it becomes a RemoteIntegrationException.
+        it becomes a ProblemDetail to be sent to the client.
         """
 
         class CannotSend(MockSIPClient):
@@ -443,12 +450,18 @@ class TestSIP2AuthenticationProvider:
         )
         provider = create_provider(client=CannotSend, settings=settings)
 
-        with pytest.raises(RemoteIntegrationException) as excinfo:
-            provider.remote_authenticate(
-                "username",
-                "password",
-            )
-        assert "Error accessing server.local: Doom!" in str(excinfo.value)
+        response = provider.remote_authenticate(
+            "username",
+            "password",
+        )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == INVALID_CREDENTIALS.status_code
+        assert response.uri == INVALID_CREDENTIALS.uri
+        assert (
+            response.detail
+            == "Error contacting authentication server (server.local). Please try again later."
+        )
 
     def test_parse_date(self):
         parse = SIP2AuthenticationProvider.parse_date
@@ -492,6 +505,20 @@ class TestSIP2AuthenticationProvider:
         assert client.patron_information == "1234"
         assert client.password is None
 
+    def test_info_to_patrondata_problemdetail(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_settings: Callable[..., SIP2Settings],
+    ):
+        # If we get a ProblemDetail we just return it.
+        settings = create_settings(
+            url="server.local",
+        )
+        provider = create_provider(settings=settings)
+        problem_detail = ProblemDetail("foo")
+        patron = provider.info_to_patrondata(problem_detail)
+        assert patron is problem_detail
+
     def test_info_to_patrondata_validate_password(
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
@@ -508,8 +535,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_valid_login
         )
         patron = provider.info_to_patrondata(info)
-        assert patron is not None
-        assert patron.__class__ == PatronData
+        assert isinstance(patron, PatronData)
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
@@ -541,8 +567,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_valid_login
         )
         patron = provider.info_to_patrondata(info, validate_password=False)
-        assert patron is not None
-        assert patron.__class__ == PatronData
+        assert isinstance(patron, PatronData)
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
@@ -556,8 +581,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.sierra_invalid_login
         )
         patron = provider.info_to_patrondata(info, validate_password=False)
-        assert patron is not None
-        assert patron.__class__ == PatronData
+        assert isinstance(patron, PatronData)
         assert "12345" == patron.authorization_identifier
         assert "foo@example.com" == patron.email_address
         assert "SHELDON, ALICE" == patron.personal_name
@@ -590,8 +614,7 @@ class TestSIP2AuthenticationProvider:
             TestSIP2AuthenticationProvider.evergreen_expired_card
         )
         patron = provider.info_to_patrondata(info)
-        assert patron is not None
-        assert patron.__class__ == PatronData
+        assert isinstance(patron, PatronData)
         assert "12345" == patron.authorization_identifier
         assert "863716" == patron.permanent_id
         assert "Booth Expired Test" == patron.personal_name
@@ -625,8 +648,7 @@ class TestSIP2AuthenticationProvider:
         )
         info["fee_limit"] = "10.0"
         patron = provider.info_to_patrondata(info)
-        assert patron is not None
-        assert patron.__class__ == PatronData
+        assert isinstance(patron, PatronData)
         assert "12345" == patron.authorization_identifier
         assert "863718" == patron.permanent_id
         assert "Booth Excessive Fines Test" == patron.personal_name
