@@ -122,7 +122,7 @@ class TestProfileController:
 
             # ...the annotation goes away.
             profile_fixture.db.session.commit()
-            assert request_patron.synchronize_annotations == False
+            assert request_patron.synchronize_annotations is False
             assert 0 == len(request_patron.annotations)
 
     def test_problemdetail_on_error(self, profile_fixture: ProfileFixture):
