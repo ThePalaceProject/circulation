@@ -44,7 +44,9 @@ class TestProfileController:
             "/", method="GET", headers=profile_fixture.auth
         ):
             assert isinstance(
-                profile_fixture.manager.profiles._controller.storage,
+                profile_fixture.manager.profiles._controller(
+                    profile_fixture.other_patron
+                ).storage,
                 CirculationPatronProfileStorage,
             )
 
@@ -59,7 +61,7 @@ class TestProfileController:
             assert "200 OK" == response.status
             data = json.loads(response.get_data(as_text=True))
             settings = data["settings"]
-            assert True == settings[ProfileStorage.SYNCHRONIZE_ANNOTATIONS]
+            assert settings[ProfileStorage.SYNCHRONIZE_ANNOTATIONS] is True
 
     def test_put(self, profile_fixture: ProfileFixture):
         """Verify that a patron can modify their own profile."""
@@ -78,7 +80,7 @@ class TestProfileController:
             request_patron = (
                 profile_fixture.controller.authenticated_patron_from_request()
             )
-            assert None == request_patron.synchronize_annotations
+            assert request_patron.synchronize_annotations is None
 
             # This means we can't create annotations for them.
             pytest.raises(
@@ -90,17 +92,17 @@ class TestProfileController:
             )
 
             # But by sending a PUT request...
-            response = profile_fixture.manager.profiles.protocol()
+            profile_fixture.manager.profiles.protocol()
 
             # ...we can change synchronize_annotations to True.
-            assert True == request_patron.synchronize_annotations
+            assert request_patron.synchronize_annotations is True
 
             # The other patron is unaffected.
-            assert False == profile_fixture.other_patron.synchronize_annotations
+            assert profile_fixture.other_patron.synchronize_annotations is False  # type: ignore[unreachable]
 
         # Now we can create an annotation for the patron who enabled
         # annotation sync.
-        annotation = Annotation.get_one_or_create(
+        Annotation.get_one_or_create(  # type: ignore[unreachable]
             profile_fixture.db.session, patron=request_patron, identifier=identifier
         )
         assert 1 == len(request_patron.annotations)
@@ -115,11 +117,12 @@ class TestProfileController:
             content_type=ProfileController.MEDIA_TYPE,
             data=json.dumps(payload),
         ):
-            response = profile_fixture.manager.profiles.protocol()
+            profile_fixture.controller.authenticated_patron_from_request()
+            profile_fixture.manager.profiles.protocol()
 
             # ...the annotation goes away.
             profile_fixture.db.session.commit()
-            assert False == request_patron.synchronize_annotations
+            assert request_patron.synchronize_annotations is False
             assert 0 == len(request_patron.annotations)
 
     def test_problemdetail_on_error(self, profile_fixture: ProfileFixture):
@@ -132,6 +135,7 @@ class TestProfileController:
             headers=profile_fixture.auth,
             content_type="text/plain",
         ):
+            profile_fixture.controller.authenticated_patron_from_request()
             response = profile_fixture.manager.profiles.protocol()
             assert isinstance(response, ProblemDetail)
             assert 415 == response.status_code
