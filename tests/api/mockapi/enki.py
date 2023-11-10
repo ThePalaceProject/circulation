@@ -40,7 +40,7 @@ class MockEnkiAPI(EnkiAPI):
     def queue_response(self, status_code, headers={}, content=None):
         self.responses.insert(0, MockRequestsResponse(status_code, headers, content))
 
-    def _request(self, method, url, headers, data, params, **kwargs):
+    def _request(self, url, method, headers, data, params, **kwargs):
         """Override EnkiAPI._request to pull responses from a
         queue instead of making real HTTP requests
         """
