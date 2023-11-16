@@ -176,9 +176,15 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 edition: Optional[Edition] = None
                 identifier: Optional[Identifier] = None
                 if identifier_id:
-                    identifier = get_one(self._db, Identifier, id=identifier_id)
                     edition = get_one(
                         self._db, Edition, primary_identifier_id=identifier_id
+                    )
+                    # Use the identifier from the edition where available.
+                    # Otherwise, we'll have to look it up.
+                    identifier = (
+                        edition.primary_identifier
+                        if edition
+                        else get_one(self._db, Identifier, id=identifier_id)
                     )
                 isbn = self._isbn_for_identifier(identifier)
                 title = edition and edition.title
