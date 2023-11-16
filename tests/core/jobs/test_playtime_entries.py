@@ -384,75 +384,49 @@ class TestPlaytimeEntriesEmailReportsScript:
             assert "date,urn,isbn,collection," in script._log.warning.call_args[0][0]
 
     @pytest.mark.parametrize(
-        "id_key, equivalents, default_value, default_match_strength, expected_isbn",
+        "id_key, equivalents, default_value, expected_isbn",
         [
             # If the identifier is an ISBN, we will not use an equivalency.
             [
                 "i1",
                 (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
                 "",
-                -1,
                 "080442957X",
             ],
             [
                 "i2",
                 (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
                 "",
-                -1,
                 "9788175257665",
             ],
-            ["i1", (("i1", "i2", 200),), "", -1, "080442957X"],
-            ["i2", (("i2", "i1", 200),), "", -1, "9788175257665"],
+            ["i1", (("i1", "i2", 200),), "", "080442957X"],
+            ["i2", (("i2", "i1", 200),), "", "9788175257665"],
             # If identifier is not an ISBN, but has an equivalency that is, use the strongest match.
             [
                 "g2",
                 (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
                 "",
-                -1,
                 "080442957X",
             ],
             [
                 "g2",
                 (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
                 "",
-                -1,
-                "9788175257665",
-            ],
-            [
-                "g2",
-                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", None)),
-                "",
-                -1,
-                "080442957X",
-            ],
-            [
-                "g2",
-                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", None)),
-                "",
-                1,
-                "9788175257665",
-            ],
-            [
-                "g2",
-                (("g1", "g2", 1), ("g2", "i1", -2), ("g1", "i2", None)),
-                "",
-                -1,
                 "9788175257665",
             ],
             # If we don't find an equivalent ISBN identifier, then we'll use the default.
-            ["g2", (), "default value", -1, "default value"],
-            ["g1", (("g1", "g2", 1),), "default value", -1, "default value"],
+            ["g2", (), "default value", "default value"],
+            ["g1", (("g1", "g2", 1),), "default value", "default value"],
             # If identifier is None, expect default value.
-            [None, (), "default value", -1, "default value"],
+            [None, (), "default value", "default value"],
         ],
     )
     def test__isbn_for_identifier(
         self,
         db: DatabaseTransactionFixture,
         id_key: str | None,
-        equivalents: tuple[tuple[str, str, Optional[int | float]]],
+        equivalents: tuple[tuple[str, str, int | float]],
         default_value: str,
-        default_match_strength: Optional[int | float],
         expected_isbn: str,
     ):
         ids: dict[str, Identifier] = {
@@ -484,7 +458,6 @@ class TestPlaytimeEntriesEmailReportsScript:
         result = PlaytimeEntriesEmailReportsScript._isbn_for_identifier(
             test_identifier,
             default_value=default_value,
-            default_match_strength=default_match_strength,
         )
         assert result == expected_isbn
 

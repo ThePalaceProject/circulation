@@ -6,10 +6,11 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import dateutil.parser
 import pytz
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.functions import sum
 
 from core.config import Configuration
@@ -244,43 +245,47 @@ class PlaytimeEntriesEmailReportsScript(Script):
         /,
         *,
         default_value: str = "",
-        default_match_strength=-1,
     ) -> str:
         """Find the strongest ISBN match for the given identifier.
 
         :param identifier: The identifier to match.
         :param default_value: The default value to return if the identifier is missing or a match is not found.
-        :param default_match_strength: The default strength for an equivalent, if none is present.
         """
         if identifier is None:
             return default_value
 
-        isbn = (
-            identifier.identifier
-            if _is_usable_isbn_identifier(identifier)
-            else next(
-                map(
-                    lambda equivalency: equivalency.output.identifier,
-                    sorted(
-                        filter(
-                            lambda equivalency: _is_usable_isbn_identifier(
-                                equivalency.output
-                            ),
-                            identifier.equivalencies,
-                        ),
-                        key=lambda equivalency: equivalency.strength
-                        or default_match_strength,
-                        reverse=True,
-                    ),
+        if _is_usable_isbn_identifier(identifier):
+            return cast(str, identifier.identifier)
+
+        # If our identifer is not an ISBN itself, we'll use our Recursive Equivalency
+        # mechanism to find the next best one, if available.
+        db = Session.object_session(identifier)
+        eq_subquery = Identifier.recursively_equivalent_identifier_ids_query(
+            identifier.id
+        )
+        equivalent_identifiers = (
+            db.query(Identifier)
+            .filter(Identifier.id.in_(eq_subquery))
+            .filter(Identifier.type == Identifier.ISBN)
+        )
+
+        isbn = next(
+            map(
+                lambda id_: id_.identifier,
+                filter(
+                    lambda id_: _is_usable_isbn_identifier(id_), equivalent_identifiers
                 ),
-                None,
-            )
+            ),
+            None,
         )
         return isbn or default_value
 
 
 def _is_usable_isbn_identifier(id_: Identifier) -> bool:
-    """Is this a useful ISBN identifier?"""
+    """Is this a useful ISBN identifier?
+
+    :param identifier: The identifier to check.
+    """
     return (
         id_.type == Identifier.ISBN
         and id_.identifier is not None
