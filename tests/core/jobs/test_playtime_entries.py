@@ -11,6 +11,7 @@ from freezegun import freeze_time
 
 from api.model.time_tracking import PlaytimeTimeEntry
 from core.config import Configuration
+from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
 from core.jobs.playtime_entries import (
     PlaytimeEntriesEmailReportsScript,
     PlaytimeEntriesSummationScript,
@@ -245,9 +246,11 @@ class TestPlaytimeEntriesEmailReportsScript:
                 input_id=isbn_ids["i1"].id, output_id=isbn_ids["i2"].id, strength=1
             ),
         ]
-        db.session.flush()
         strongest_isbn = isbn_ids["i2"].identifier
         no_isbn = ""
+
+        # We're using the RecursiveEquivalencyCache, so must refresh it.
+        EquivalentIdentifiersCoverageProvider(db.session).run()
 
         playtime(db.session, identifier, collection, library, date3m(3), 1)
         playtime(db.session, identifier, collection, library, date3m(31), 2)
@@ -279,8 +282,10 @@ class TestPlaytimeEntriesEmailReportsScript:
                 Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
             },
         ):
+            # Act
             PlaytimeEntriesEmailReportsScript(db.session).run()
 
+        # Assert
         assert (
             writer().writerow.call_count == 6
         )  # 1 header, 5 identifier,collection,library entries
@@ -447,18 +452,21 @@ class TestPlaytimeEntriesEmailReportsScript:
             )
             for equivalent in equivalents
         ]
-
         test_identifier: Optional[Identifier] = (
             ids[id_key] if id_key is not None else None
         )
         if test_identifier is not None:
             test_identifier.equivalencies = equivalencies
-            db.session.flush()
 
+        # We're using the RecursiveEquivalencyCache, so must refresh it.
+        EquivalentIdentifiersCoverageProvider(db.session).run()
+
+        # Act
         result = PlaytimeEntriesEmailReportsScript._isbn_for_identifier(
             test_identifier,
             default_value=default_value,
         )
+        # Assert
         assert result == expected_isbn
 
     @pytest.mark.parametrize(

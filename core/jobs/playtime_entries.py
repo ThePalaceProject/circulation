@@ -16,7 +16,7 @@ from sqlalchemy.sql.functions import sum
 from core.config import Configuration
 from core.model import get_one
 from core.model.edition import Edition
-from core.model.identifier import Identifier
+from core.model.identifier import Identifier, RecursiveEquivalencyCache
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import previous_months, utc_now
 from core.util.email import EmailManager
@@ -257,11 +257,11 @@ class PlaytimeEntriesEmailReportsScript(Script):
         if _is_usable_isbn_identifier(identifier):
             return cast(str, identifier.identifier)
 
-        # If our identifer is not an ISBN itself, we'll use our Recursive Equivalency
-        # mechanism to find the next best one, if available.
+        # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
+        # mechanism to find the next best one that is, if available.
         db = Session.object_session(identifier)
-        eq_subquery = Identifier.recursively_equivalent_identifier_ids_query(
-            identifier.id
+        eq_subquery = db.query(RecursiveEquivalencyCache.identifier_id).filter(
+            RecursiveEquivalencyCache.parent_identifier_id == identifier.id
         )
         equivalent_identifiers = (
             db.query(Identifier)
