@@ -217,7 +217,7 @@ class EnkiAPI(
         headers = dict(extra_headers) if extra_headers else {}
         try:
             response = self._request(
-                method, url, headers=headers, data=data, params=params, **kwargs
+                url, method, headers=headers, data=data, params=params, **kwargs
             )
         except RequestTimedOut as e:
             if not retry_on_timeout:
