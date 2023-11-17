@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime
-from typing import Callable, Optional, Type, Union
+from typing import Any, Callable, Dict, Optional, Type, Union
 
 from pydantic import Field, PositiveInt
 
@@ -10,6 +12,7 @@ from api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
+from api.problem_details import INVALID_CREDENTIALS
 from api.sip.client import Sip2Encoding, SIPClient
 from api.sip.dialect import Dialect as Sip2Dialect
 from core.analytics import Analytics
@@ -21,6 +24,7 @@ from core.integration.settings import (
 from core.model import Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class SIP2Settings(BasicAuthProviderSettings):
@@ -287,7 +291,9 @@ class SIP2AuthenticationProvider(
     def library_settings_class(cls) -> Type[SIP2LibrarySettings]:
         return SIP2LibrarySettings
 
-    def patron_information(self, username, password):
+    def patron_information(
+        self, username: str | None, password: str | None
+    ) -> Dict[str, Any] | ProblemDetail:
         try:
             sip = self.client
             sip.connect()
@@ -298,11 +304,15 @@ class SIP2AuthenticationProvider(
             return info
 
         except OSError as e:
-            raise RemoteIntegrationException(self.server or "unknown server", str(e))
+            server_name = self.server or "unknown server"
+            self.log.warning(f"SIP2 error ({server_name}): {str(e)}", exc_info=e)
+            return INVALID_CREDENTIALS.detailed(
+                f"Error contacting authentication server ({server_name}). Please try again later."
+            )
 
     def remote_patron_lookup(
         self, patron_or_patrondata: Union[PatronData, Patron]
-    ) -> Optional[PatronData]:
+    ) -> PatronData | None | ProblemDetail:
         info = self.patron_information(
             patron_or_patrondata.authorization_identifier, None
         )
@@ -310,7 +320,7 @@ class SIP2AuthenticationProvider(
 
     def remote_authenticate(
         self, username: Optional[str], password: Optional[str]
-    ) -> Optional[PatronData]:
+    ) -> PatronData | None | ProblemDetail:
         """Authenticate a patron with the SIP2 server.
 
         :param username: The patron's username/barcode/card
@@ -371,11 +381,16 @@ class SIP2AuthenticationProvider(
                     ("Raw test patron information"), raw_patron_information
                 )
 
-    def info_to_patrondata(self, info, validate_password=True) -> Optional[PatronData]:
+    def info_to_patrondata(
+        self, info: Dict[str, Any] | ProblemDetail, validate_password: bool = True
+    ) -> Optional[PatronData] | ProblemDetail:
         """Convert the SIP-specific dictionary obtained from
         SIPClient.patron_information() to an abstract,
         authenticator-independent PatronData object.
         """
+        if isinstance(info, ProblemDetail):
+            return info
+
         if info.get("valid_patron", "N") == "N":
             # The patron could not be identified as a patron of this
             # library. Don't return any data.
