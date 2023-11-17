@@ -1204,7 +1204,10 @@ class TestConfigureCollectionScript:
         collection = get_one(db.session, Collection)
         assert "New Collection" == collection.name
         assert "url" == collection.integration_configuration.settings_dict["url"]
-        assert "acctid" == collection.external_account_id
+        assert (
+            "acctid"
+            == collection.integration_configuration.settings_dict["external_account_id"]
+        )
         assert (
             "username" == collection.integration_configuration.settings_dict["username"]
         )

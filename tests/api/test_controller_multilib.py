@@ -1,4 +1,4 @@
-from core.model import Collection, ExternalIntegration, get_one_or_create
+from core.model import Collection, ExternalIntegration
 from core.opds_import import OPDSAPI
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
@@ -16,19 +16,15 @@ class TestMultipleLibraries:
             return [controller_fixture.db.library() for x in range(2)]
 
         def make_default_collection(_db, library):
-            collection, ignore = get_one_or_create(
-                controller_fixture.db.session,
-                Collection,
-                name=f"{controller_fixture.db.fresh_str()} (for multi-library test)",
-            )
-            collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
-            integration = collection.create_integration_configuration(
-                ExternalIntegration.OPDS_IMPORT
+            collection, _ = Collection.by_name_and_protocol(
+                _db,
+                f"{controller_fixture.db.fresh_str()} (for multi-library test)",
+                ExternalIntegration.OPDS_IMPORT,
             )
             settings = OPDSAPI.settings_class()(
                 external_account_id="http://url.com", data_source="OPDS"
             )
-            OPDSAPI.settings_update(integration, settings)
+            OPDSAPI.settings_update(collection.integration_configuration, settings)
             library.collections.append(collection)
             return collection
 

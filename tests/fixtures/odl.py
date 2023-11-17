@@ -17,7 +17,6 @@ from core.model import (
     Patron,
     Representation,
     Work,
-    get_one_or_create,
 )
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
@@ -91,26 +90,18 @@ class ODLTestFixture:
     def collection(self, library, api_class=ODLAPI):
         """Create a mock ODL collection to use in tests."""
         integration_protocol = api_class.label()
-        collection, ignore = get_one_or_create(
+        collection, _ = Collection.by_name_and_protocol(
             self.db.session,
-            Collection,
-            name=f"Test {api_class.__name__} Collection",
-            create_method_kwargs=dict(
-                external_account_id="http://odl",
-            ),
+            f"Test {api_class.__name__} Collection",
+            integration_protocol,
         )
-        integration = collection.create_external_integration(
-            protocol=integration_protocol
-        )
-        config = collection.create_integration_configuration(integration_protocol)
-        config.settings_dict = {
+        collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
-            "url": "http://metadata",
+            "external_account_id": "http://odl",
             Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
         }
-        config.for_library(library.id, create=True)
-        library.collections.append(collection)
+        collection.libraries.append(library)
         return collection
 
     def work(self, collection):
@@ -290,7 +281,7 @@ class ODL2TestFixture(ODLTestFixture):
         self, library: Library, api_class: Type[ODL2API] = ODL2API
     ) -> Collection:
         collection = super().collection(library, api_class)
-        collection.name = "Test ODL2 Collection"
+        collection.integration_configuration.name = "Test ODL2 Collection"
         collection.integration_configuration.protocol = ExternalIntegration.ODL2
         return collection
 

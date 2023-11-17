@@ -274,7 +274,7 @@ class TestBaseController:
         library = circulation_fixture.library
         [c1] = library.collections
         c2 = circulation_fixture.db.collection()
-        library.collections.append(c2)
+        c2.libraries.append(library)
 
         # Here's a Collection not affiliated with any Library.
         c3 = circulation_fixture.db.collection()

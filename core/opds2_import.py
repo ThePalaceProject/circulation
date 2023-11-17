@@ -10,7 +10,6 @@ from typing import (
     Dict,
     Iterable,
     List,
-    Literal,
     Optional,
     Tuple,
     Type,
@@ -66,7 +65,6 @@ from core.model import (
     RightsStatus,
     Subject,
 )
-from core.model.configuration import ConfigurationSetting
 from core.model.constants import IdentifierType
 from core.opds_import import (
     BaseOPDSAPI,
@@ -194,16 +192,10 @@ class OPDS2API(BaseOPDSAPI):
 
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
-        # TODO: This needs to be refactored to use IntegrationConfiguration,
-        #  but it has been temporarily rolled back, since the IntegrationConfiguration
-        #  code caused problems fulfilling TOKEN_AUTH books in production.
-        #  This should be fixed as part of the work PP-313 to fully remove
-        #  ExternalIntegrations from our collections code.
-        token_auth_configuration = ConfigurationSetting.for_externalintegration(
-            ExternalIntegration.TOKEN_AUTH, collection.external_integration
-        )
-        self.token_auth_configuration = (
-            token_auth_configuration.value if token_auth_configuration else None
+        self.token_auth_configuration: str | None = (
+            collection.integration_configuration.context.get(
+                ExternalIntegration.TOKEN_AUTH
+            )
         )
 
     @classmethod
@@ -246,6 +238,12 @@ class OPDS2API(BaseOPDSAPI):
         if "authentication_token" not in templated.variable_names:
             self.log.warning(
                 "No authentication_token variable found in content_link, unable to fulfill via OPDS2 token auth."
+            )
+            return fulfillment
+
+        if not self.token_auth_configuration:
+            self.log.warning(
+                "No token auth configuration found, unable to fulfill via OPDS2 token auth."
             )
             return fulfillment
 
@@ -307,11 +305,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         super().__init__(db, collection, data_source_name, http_get)
         self._parser = parser
         self.ignored_identifier_types = self.settings.ignored_identifier_types
-
-    def assert_importable_content(
-        self, feed: str, feed_url: str, max_get_attempts: int = 5
-    ) -> Literal[True]:
-        raise NotImplementedError("OPDS2Importer does not support this method")
 
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
         """Check the identifier and return a boolean value indicating whether CM can import it.
@@ -878,15 +871,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return formats
 
-    def external_integration(self, db: Session) -> ExternalIntegration:
-        """Return an external integration associated with this object.
-        :param db: Database session
-        :return: External integration associated with this object
-        """
-        if self.collection is None:
-            raise ValueError("Collection is not set")
-        return self.collection.external_integration
-
     @staticmethod
     def _get_publications(
         feed: opds2_ast.OPDS2Feed,
@@ -1034,10 +1018,9 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         for link in links:
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
-                auth_setting = ConfigurationSetting.for_externalintegration(
-                    ExternalIntegration.TOKEN_AUTH, self.external_integration(self._db)
+                self.collection.integration_configuration.context_update(
+                    {ExternalIntegration.TOKEN_AUTH: link.href}
                 )
-                auth_setting.value = link.href
 
     def extract_feed_data(
         self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None

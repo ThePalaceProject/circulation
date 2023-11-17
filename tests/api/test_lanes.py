@@ -927,7 +927,7 @@ class TestCrawlableCollectionBasedLane:
         library = db.default_library()
         default_collection = db.default_collection()
         other_library_collection = db.collection()
-        library.collections.append(other_library_collection)
+        other_library_collection.libraries.append(library)
 
         # This collection is not associated with any library.
         unused_collection = db.collection()
@@ -1111,12 +1111,13 @@ class TestJackpotWorkList:
         # The default library comes with a collection whose data
         # source is unspecified. Make another one whose data source _is_
         # specified.
+        library = db.default_library()
         overdrive_collection = db.collection(
             "Test Overdrive Collection",
             protocol=ExternalIntegration.OVERDRIVE,
             data_source_name=DataSource.OVERDRIVE,
         )
-        db.default_library().collections.append(overdrive_collection)
+        overdrive_collection.libraries.append(library)
 
         # Create another collection that is _not_ associated with this
         # library. It will not be used at all.
@@ -1127,11 +1128,11 @@ class TestJackpotWorkList:
         )
 
         # Pass in a JackpotFacets object
-        facets = JackpotFacets.default(db.default_library())
+        facets = JackpotFacets.default(library)
 
         # The JackpotWorkList has no works of its own -- only its children
         # have works.
-        wl = JackpotWorkList(db.default_library(), facets)
+        wl = JackpotWorkList(library, facets)
         assert [] == wl.works(db.session)
 
         # Let's take a look at the children.
@@ -1156,11 +1157,11 @@ class TestJackpotWorkList:
         # These worklists show ebooks and audiobooks from the two
         # collections associated with the default library.
         [
-            default_ebooks,
             default_audio,
-            overdrive_ebooks,
+            default_ebooks,
             overdrive_audio,
-        ] = available_now
+            overdrive_ebooks,
+        ] = sorted(available_now, key=lambda x: x.display_name)
 
         assert (
             "License source {OPDS} - Medium {Book} - Collection name {%s}"

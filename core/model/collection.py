@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, TypeVar
 
 from sqlalchemy import (
@@ -12,14 +11,15 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     exists,
+    select,
 )
-from sqlalchemy.orm import Mapped, Query, backref, mapper, relationship
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.orm import Mapped, Query, mapper, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
-from core.model import Base, create, get_one_or_create
+from core.model import Base, create
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.constants import EditionConstants
 from core.model.coverage import CoverageRecord
@@ -28,10 +28,7 @@ from core.model.edition import Edition
 from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
 from core.model.identifier import Identifier
-from core.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
+from core.model.integration import IntegrationConfiguration
 from core.model.library import Library
 from core.model.licensing import LicensePool, LicensePoolDeliveryMechanism
 from core.model.work import Work
@@ -51,34 +48,38 @@ class Collection(Base, HasSessionCache):
     __tablename__ = "collections"
     id = Column(Integer, primary_key=True, nullable=False)
 
-    name = Column(Unicode, unique=True, nullable=False, index=True)
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _name_deprecated = Column("name", Unicode)
 
     DATA_SOURCE_NAME_SETTING = "data_source"
 
-    # For use in forms that edit Collections.
-    EXTERNAL_ACCOUNT_ID_KEY = "external_account_id"
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _external_account_id_deprecated = Column("external_account_id", Unicode)
 
-    # How does the provider of this collection distinguish it from
-    # other collections it provides? On the other side this is usually
-    # called a "library ID".
-    external_account_id = Column(Unicode, nullable=True)
+    # TODO: This should no longer be used. And will be removed in the next release.
+    #  Collections store their configurations in integration configurations now.
+    #  This is only left here in case there needs to be a rollback to the current
+    #  release.
+    _external_integration_id_deprecated = Column("external_integration_id", Integer)
 
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
     # into the external integration, as does the 'protocol', which
     # designates the integration technique we will use to actually get
     # the metadata and licenses. Each Collection has a distinct
-    # ExternalIntegration.
-    external_integration_id = Column(
-        Integer, ForeignKey("externalintegrations.id"), unique=True, index=True
-    )
-    _external_integration: ExternalIntegration
-
+    # integration configuration.
     integration_configuration_id = Column(
         Integer,
-        ForeignKey("integration_configurations.id", ondelete="SET NULL"),
+        ForeignKey("integration_configurations.id"),
         unique=True,
         index=True,
+        nullable=False,
     )
     integration_configuration: Mapped[IntegrationConfiguration] = relationship(
         "IntegrationConfiguration",
@@ -94,27 +95,26 @@ class Collection(Base, HasSessionCache):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    # SQLAlchemy will create a Collection-typed field called "parent".
-    parent: Collection
+    parent: Collection = relationship(
+        "Collection", remote_side=[id], back_populates="children"
+    )
+
+    # A collection may have many child collections. For example,
+    # An Overdrive collection may have many children corresponding
+    # to Overdrive Advantage collections.
+    children: Mapped[List[Collection]] = relationship(
+        "Collection", back_populates="parent", uselist=True
+    )
 
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
     # useful for deleting large collections which can timeout when deleting.
     marked_for_deletion = Column(Boolean, default=False)
 
-    # A collection may have many child collections. For example,
-    # An Overdrive collection may have many children corresponding
-    # to Overdrive Advantage collections.
-    children: Mapped[List[Collection]] = relationship(
-        "Collection", backref=backref("parent", remote_side=[id]), uselist=True
-    )
-
     # A Collection can provide books to many Libraries.
-    libraries: Mapped[List[Library]] = relationship(
-        "Library",
-        secondary=lambda: collections_libraries,
-        backref="collections",
-        uselist=True,
+    # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
+    libraries: Mapped[List[Library]] = association_proxy(
+        "integration_configuration", "libraries"
     )
 
     # A Collection can include many LicensePools.
@@ -164,7 +164,7 @@ class Collection(Base, HasSessionCache):
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
 
     def cache_key(self) -> Tuple[str | None, str | None]:
-        return self.name, self.external_integration.protocol
+        return self.name, self.integration_configuration.protocol
 
     @classmethod
     def by_name_and_protocol(
@@ -198,24 +198,54 @@ class Collection(Base, HasSessionCache):
         """
         name, protocol = cache_key
 
-        qu = cls.by_protocol(_db, protocol)
-        qu = qu.filter(Collection.name == name)
-        try:
-            collection = qu.one()
+        query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.name == name
+        )
+        integration_or_none = _db.execute(query).scalar_one_or_none()
+        if integration_or_none is None:
+            integration, _ = create(
+                _db,
+                IntegrationConfiguration,
+                protocol=protocol,
+                goal=Goals.LICENSE_GOAL,
+                name=name,
+            )
+        else:
+            integration = integration_or_none
+
+        if integration.goal != Goals.LICENSE_GOAL:
+            raise ValueError(
+                f'Integration "{name}" does not have goal "{Goals.LICENSE_GOAL.name}".'
+            )
+        if integration.protocol != protocol:
+            raise ValueError(
+                f'Integration "{name}" does not use protocol "{protocol}".'
+            )
+
+        if integration.collection is not None:
+            collection = integration.collection
             is_new = False
-        except NoResultFound as e:
-            # Make a new Collection.
-            collection, is_new = get_one_or_create(_db, Collection, name=name)
-            if not is_new and collection.protocol != protocol:
-                # The collection already exists, it just uses a different
-                # protocol than the one we asked about.
-                raise ValueError(
-                    f'Collection "{name}" does not use protocol "{protocol}".'
-                )
-            integration = collection.create_external_integration(protocol=protocol)
-            collection.external_integration.protocol = protocol
-            collection.create_integration_configuration(protocol)
+        else:
+            collection, _ = create(  # type: ignore[unreachable]
+                _db,
+                Collection,
+                integration_configuration=integration,
+            )
+            is_new = True
+
         return collection, is_new
+
+    @classmethod
+    def by_name(cls, _db: Session, name: str) -> Collection | None:
+        """Find a Collection by name."""
+        return _db.execute(
+            select(Collection)
+            .join(IntegrationConfiguration)
+            .where(
+                IntegrationConfiguration.name == name,
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+            )
+        ).scalar_one_or_none()
 
     @classmethod
     def by_protocol(cls, _db: Session, protocol: str | None) -> Query[Collection]:
@@ -241,35 +271,17 @@ class Collection(Base, HasSessionCache):
 
         return qu
 
-    @classmethod
-    def by_datasource(
-        cls, _db: Session, data_source: DataSource | str
-    ) -> Query[Collection]:
-        """Query collections that are associated with the given DataSource.
+    @property
+    def name(self) -> str:
+        """What is the name of this collection?"""
+        if self.integration_configuration is None:
+            raise ValueError("Collection has no integration configuration.")
+        name = self.integration_configuration.name
+        if not name:
+            raise ValueError("Collection has no name.")
+        return name
 
-        Collections marked for deletion are not included.
-        """
-        data_source_name = (
-            data_source.name if isinstance(data_source, DataSource) else data_source
-        )
-
-        qu = (
-            _db.query(cls)
-            .join(
-                IntegrationConfiguration,
-                cls.integration_configuration_id == IntegrationConfiguration.id,
-            )
-            .filter(
-                IntegrationConfiguration.settings_dict[
-                    Collection.DATA_SOURCE_NAME_SETTING
-                ].astext
-                == data_source_name
-            )
-            .filter(Collection.marked_for_deletion == False)
-        )
-        return qu
-
-    @hybrid_property
+    @property
     def protocol(self) -> str:
         """What protocol do we need to use to get licenses for this
         collection?
@@ -295,23 +307,6 @@ class Collection(Base, HasSessionCache):
         self.integration_configuration.protocol = new_protocol
         for child in self.children:
             child.protocol = new_protocol
-
-    @hybrid_property
-    def primary_identifier_source(self) -> str | None:
-        """Identify if should try to use another identifier than <id>"""
-        return self.integration_configuration.settings_dict.get(
-            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
-        )
-
-    @primary_identifier_source.setter
-    def primary_identifier_source(self, new_primary_identifier_source: str) -> None:
-        """Modify the primary identifier source in use by this Collection."""
-        self.integration_configuration.settings_dict = (
-            self.integration_configuration.settings_dict.copy()
-        )
-        self.integration_configuration.settings_dict[
-            ExternalIntegration.PRIMARY_IDENTIFIER_SOURCE
-        ] = new_primary_identifier_source
 
     # For collections that can control the duration of the loans they
     # create, the durations are stored in these settings and new loans are
@@ -353,10 +348,8 @@ class Collection(Base, HasSessionCache):
         collection has it for this number of days.
         """
         key = self.loan_period_key(medium)
-        if library.id is None:
-            return None
 
-        config = self.integration_configuration.for_library(library.id)
+        config = self.integration_configuration.for_library(library)
         if config is None:
             return None
 
@@ -412,78 +405,6 @@ class Collection(Base, HasSessionCache):
         :param new_value: New default audience
         """
         self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
-
-    def create_external_integration(self, protocol: str) -> ExternalIntegration:
-        """Create an ExternalIntegration for this Collection.
-
-        To be used immediately after creating a new Collection,
-        e.g. in by_name_and_protocol, from_metadata_identifier, and
-        various test methods that create mock Collections.
-
-        If an external integration already exists, return it instead
-        of creating another one.
-
-        :param protocol: The protocol known to be in use when getting
-            licenses for this collection.
-        """
-        _db = Session.object_session(self)
-        goal = ExternalIntegration.LICENSE_GOAL
-        external_integration, is_new = get_one_or_create(
-            _db,
-            ExternalIntegration,
-            id=self.external_integration_id,
-            create_method_kwargs=dict(protocol=protocol, goal=goal),
-        )
-        if external_integration.protocol != protocol:
-            raise ValueError(
-                "Located ExternalIntegration, but its protocol (%s) does not match desired protocol (%s)."
-                % (external_integration.protocol, protocol)
-            )
-        self.external_integration_id = external_integration.id
-        return external_integration
-
-    def create_integration_configuration(
-        self, protocol: str
-    ) -> IntegrationConfiguration:
-        _db = Session.object_session(self)
-        goal = Goals.LICENSE_GOAL
-        if self.integration_configuration_id:
-            integration = self.integration_configuration
-        else:
-            integration, is_new = create(
-                _db,
-                IntegrationConfiguration,
-                protocol=protocol,
-                goal=goal,
-                name=self.name,
-            )
-        if integration.protocol != protocol:
-            raise ValueError(
-                "Located ExternalIntegration, but its protocol (%s) does not match desired protocol (%s)."
-                % (integration.protocol, protocol)
-            )
-        self.integration_configuration_id = integration.id
-        # Immediately accessing the relationship fills out the data
-        return self.integration_configuration
-
-    @property
-    def external_integration(self) -> ExternalIntegration:
-        """Find the external integration for this Collection, assuming
-        it already exists.
-
-        This is generally a safe assumption since by_name_and_protocol and
-        from_metadata_identifier both create ExternalIntegrations for the
-        Collections they create.
-        """
-        # We don't enforce this on the database level because it is
-        # legitimate for a newly created Collection to have no
-        # ExternalIntegration. But by the time it's being used for real,
-        # it needs to have one.
-        if not self.external_integration_id:
-            raise ValueError(
-                "No known external integration for collection %s" % self.name
-            )
-        return self._external_integration
 
     @hybrid_property
     def data_source(self) -> DataSource | None:
@@ -545,47 +466,6 @@ class Collection(Base, HasSessionCache):
         yield parent
         yield from parent.parents
 
-    def disassociate_library(self, library: Library) -> None:
-        """Disassociate a Library from this Collection and delete any relevant
-        ConfigurationSettings.
-        """
-        if library is None or library not in self.libraries:
-            # No-op.
-            return
-
-        _db = Session.object_session(self)
-        if self.external_integration_id:
-            qu = (
-                _db.query(ConfigurationSetting)
-                .filter(ConfigurationSetting.library == library)
-                .filter(
-                    ConfigurationSetting.external_integration
-                    == self.external_integration
-                )
-            )
-            qu.delete()
-        else:
-            raise ValueError(
-                "No known external integration for collection %s" % self.name
-            )
-        if self.integration_configuration_id:
-            qu = (
-                _db.query(IntegrationLibraryConfiguration)
-                .filter(IntegrationLibraryConfiguration.library_id == library.id)
-                .filter(
-                    IntegrationLibraryConfiguration.parent_id
-                    == self.integration_configuration_id
-                )
-            )
-            qu.delete()
-        else:
-            raise ValueError(
-                "No known integration library configuration for collection %s"
-                % self.name
-            )
-
-        self.libraries.remove(library)
-
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:
         """Find all LicensePools in this Collection that have no delivery
@@ -616,8 +496,6 @@ class Collection(Base, HasSessionCache):
             lines.append('Protocol: "%s"' % integration.protocol)
         for library in self.libraries:
             lines.append('Used by library: "%s"' % library.short_name)
-        if self.external_account_id:
-            lines.append('External account ID: "%s"' % self.external_account_id)
         for name in sorted(integration.settings_dict):
             value = integration.settings_dict[name]
             if (
@@ -723,8 +601,7 @@ class Collection(Base, HasSessionCache):
         _db = Session.object_session(self)
 
         # Disassociate all libraries from this collection.
-        for library in self.libraries:
-            self.disassociate_library(library)
+        self.libraries.clear()
 
         # Delete all the license pools. This should be the only part
         # of the application where LicensePools are permanently
@@ -742,29 +619,23 @@ class Collection(Base, HasSessionCache):
 
             _db.delete(pool)
 
-        # Delete the ExternalIntegration associated with this
-        # Collection, assuming it wasn't deleted already.
-        if self.external_integration:
-            _db.delete(self.external_integration)
-
         # Now delete the Collection itself.
         _db.delete(self)
         _db.commit()
 
 
-collections_libraries: Table = Table(
+# TODO: This should no longer be used. And will be removed in the next release.
+#  Collections store their configurations in integration configurations now.
+#  This is only left here in case there needs to be a rollback to the current
+#  release.
+_collections_libraries_deprecated: Table = Table(
     "collections_libraries",
     Base.metadata,
     Column(
         "collection_id",
         Integer,
-        ForeignKey("collections.id"),
-        index=True,
-        nullable=False,
     ),
-    Column(
-        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
-    ),
+    Column("library_id", Integer),
     UniqueConstraint("collection_id", "library_id"),
 )
 
@@ -830,19 +701,3 @@ collections_customlists: Table = Table(
     ),
     UniqueConstraint("collection_id", "customlist_id"),
 )
-
-
-class HasExternalIntegrationPerCollection(metaclass=ABCMeta):
-    """Interface allowing to get access to an external integration"""
-
-    @abstractmethod
-    def collection_external_integration(
-        self, collection: Optional[Collection]
-    ) -> ExternalIntegration:
-        """Returns an external integration associated with the collection
-
-        :param collection: Collection
-
-        :return: External integration associated with the collection
-        """
-        raise NotImplementedError()

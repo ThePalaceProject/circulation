@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 import flask
 from flask import Response
@@ -24,7 +24,6 @@ from api.admin.problem_details import (
 )
 from api.admin.validator import Validator
 from api.controller import CirculationManagerController
-from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.external_search import ExternalSearchIndex
 from core.integration.base import (
     HasChildIntegrationConfiguration,
@@ -43,8 +42,6 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.opds_import import OPDSImporter, OPDSImportMonitor
-from core.selftest import BaseHasSelfTests
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -307,14 +304,16 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         library = get_one(self._db, Library, short_name=info_copy.pop("short_name"))
         if not library:
             raise RuntimeError("Could not find the configuration library")
-        config = None
 
         # Validate first
         validated_data = protocol_class.library_settings_class()(**info_copy)
+
         # Attach the configuration
-        config = configuration.for_library(cast(int, library.id), create=True)
-        config.settings_dict = validated_data.dict()
-        return config
+        library_configuration = IntegrationLibraryConfiguration(
+            library=library, settings_dict=validated_data.dict()
+        )
+        configuration.library_configurations.append(library_configuration)
+        return library_configuration
 
     def _set_integration_library(self, integration, library_info, protocol):
         library = get_one(self._db, Library, short_name=library_info.get("short_name"))
@@ -407,24 +406,7 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         self_test_results = None
 
         try:
-            if self.type == "collection":
-                if not item.protocol or not len(item.protocol):
-                    return None
-
-                if not protocol_class:
-                    registry = LicenseProvidersRegistry()
-                    protocol_class = registry.get(item.protocol)
-
-                if item.protocol == OPDSImportMonitor.PROTOCOL:
-                    protocol_class = OPDSImportMonitor
-                    extra_args = (OPDSImporter,)
-
-                if issubclass(protocol_class, BaseHasSelfTests):
-                    self_test_results = protocol_class.prior_test_results(
-                        self._db, protocol_class, self._db, item, *extra_args
-                    )
-
-            elif self.type == "search service":
+            if self.type == "search service":
                 self_test_results = ExternalSearchIndex.prior_test_results(
                     self._db, None, self._db, item
                 )
@@ -432,20 +414,6 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
                 self_test_results = protocol_class.prior_test_results(
                     self._db, *extra_args
                 )
-            elif self.type == "patron authentication service":
-                library = None
-                if len(item.libraries):
-                    library = item.libraries[0]
-                    self_test_results = protocol_class.prior_test_results(
-                        self._db, None, library, item
-                    )
-                else:
-                    self_test_results = dict(
-                        exception=_(
-                            "You must associate this service with at least one library before you can run self tests for it."
-                        ),
-                        disabled=True,
-                    )
 
         except Exception as e:
             # This is bad, but not so bad that we should short-circuit

@@ -168,15 +168,6 @@ MISSING_ANALYTICS_NAME = pd(
     detail=_("You must identify the analytics service by its name."),
 )
 
-COLLECTION_NAME_ALREADY_IN_USE = pd(
-    "http://librarysimplified.org/terms/problem/collection-name-already-in-use",
-    status_code=400,
-    title=_("Collection name already in use"),
-    detail=_(
-        "The collection name must be unique, and there's already a collection with the specified name."
-    ),
-)
-
 CANNOT_DELETE_COLLECTION_WITH_CHILDREN = pd(
     "http://librarysimplified.org/terms/problem/cannot-delete-collection-with-children",
     status_code=400,

@@ -8,7 +8,7 @@ import os
 import random
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Dict
-from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from requests import Response
@@ -567,14 +567,6 @@ class TestOverdriveAPI:
             # The final result is a queue of availability data (from
             # this page) and a link to the next page.
             assert result == (["an availability queue"], "http://next-page/")
-
-    def test_external_integration(self, overdrive_api_fixture: OverdriveAPIFixture):
-        assert (
-            overdrive_api_fixture.collection.external_integration
-            == overdrive_api_fixture.api.external_integration(
-                overdrive_api_fixture.db.session
-            )
-        )
 
     def test_lock_in_format(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Verify which formats do or don't need to be locked in before
@@ -2127,25 +2119,12 @@ class TestOverdriveAPI:
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
-        db.default_collection().integration_configuration.protocol = "Overdrive"
-        db.default_collection().external_account_id = 1
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            **{
-                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
-                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
-                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
-            },
-        )
-        db.default_collection().integration_configuration.for_library(
-            patron.library.id, create=True
-        )
 
         # Mocked testing credentials
         encoded_auth = base64.b64encode(b"TestingKey:TestingSecret")
 
         # use a real Overdrive API
-        od_api = OverdriveAPI(db.session, db.default_collection())
+        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
         od_api._do_post = MagicMock()
@@ -2172,18 +2151,8 @@ class TestOverdriveAPI:
         db = overdrive_api_fixture.db
         patron = db.patron()
         patron.authorization_identifier = "barcode"
-        db.default_collection().integration_configuration.protocol = "Overdrive"
-        db.default_collection().external_account_id = 1
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            **{
-                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
-                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
-                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
-            },
-        )
         # use a real Overdrive API
-        od_api = OverdriveAPI(db.session, db.default_collection())
+        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
         od_api.get_download_link = MagicMock(return_value=None)
@@ -2207,21 +2176,8 @@ class TestOverdriveAPI:
         patron = db.patron()
         work = db.work(with_license_pool=True)
         patron.authorization_identifier = "barcode"
-        db.default_collection().integration_configuration.protocol = "Overdrive"
-        db.default_collection().external_account_id = 1
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            **{
-                OverdriveConstants.OVERDRIVE_CLIENT_KEY: "user",
-                OverdriveConstants.OVERDRIVE_CLIENT_SECRET: "password",
-                OverdriveConstants.OVERDRIVE_WEBSITE_ID: "100",
-            },
-        )
-        db.default_collection().integration_configuration.for_library(
-            patron.library.id, create=True
-        )
 
-        od_api = OverdriveAPI(db.session, db.default_collection())
+        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
 
         # Load the mock API data
@@ -2297,7 +2253,8 @@ class TestOverdriveAPICredentials:
         pin = "patron_pin"
 
         # clear out any collections added before we add ours
-        library.collections = []
+        for collection in library.collections:
+            collection.libraries = []
 
         # Distinct credentials for the two OverDrive collections in which our
         # library has membership.
@@ -3807,8 +3764,10 @@ class TestOverdriveAdvantageAccount:
         p, collection = account.to_collection(session)
         assert p == parent
         assert parent == collection.parent
-        assert collection.external_account_id == account.library_id
-        assert ExternalIntegration.LICENSE_GOAL == collection.external_integration.goal
+        assert (
+            collection.integration_configuration.settings_dict["external_account_id"]
+            == account.library_id
+        )
         assert ExternalIntegration.OVERDRIVE == collection.protocol
         assert Goals.LICENSE_GOAL == collection.integration_configuration.goal
         assert ExternalIntegration.OVERDRIVE == collection.protocol
@@ -3950,19 +3909,25 @@ class TestGenerateOverdriveAdvantageAccountList:
         client_secret = "cs"
         library_token = "lt"
 
-        parent: Collection = db.collection(
+        library = db.library()
+        parent: Collection = MockOverdriveAPI.mock_collection(
+            db.session,
+            library,
             name=parent_library_name,
-            protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id=parent_od_library_id,
+            library_id=parent_od_library_id,
+            client_key=client_key,
+            client_secret=client_secret,
         )
-        child1: Collection = db.collection(
+        child1: Collection = MockOverdriveAPI.mock_collection(
+            db.session,
+            library,
             name=child1_library_name,
-            protocol=ExternalIntegration.OVERDRIVE,
-            external_account_id=child1_advantage_library_id,
+            library_id=child1_advantage_library_id,
         )
         child1.parent = parent
-        overdrive_api = MagicMock()
-        overdrive_api.get_advantage_accounts.return_value = [
+        overdrive_api = MockOverdriveAPI(db.session, parent)
+        mock_get_advantage_accounts = MagicMock()
+        mock_get_advantage_accounts.return_value = [
             OverdriveAdvantageAccount(
                 parent_od_library_id,
                 child1_advantage_library_id,
@@ -3976,10 +3941,8 @@ class TestGenerateOverdriveAdvantageAccountList:
                 child2_token,
             ),
         ]
-
-        overdrive_api.client_key.return_value = bytes(client_key, "utf-8")
-        overdrive_api.client_secret.return_value = bytes(client_secret, "utf-8")
-        type(overdrive_api).collection_token = PropertyMock(return_value=library_token)
+        overdrive_api.get_advantage_accounts = mock_get_advantage_accounts
+        overdrive_api._collection_token = library_token
 
         with patch(
             "api.overdrive.GenerateOverdriveAdvantageAccountList._create_overdrive_api"
@@ -4034,6 +3997,4 @@ class TestGenerateOverdriveAdvantageAccountList:
 
             os.remove(output_file_path)
             assert last_index == 2
-            overdrive_api.client_key.assert_called_once()
-            overdrive_api.client_secret.assert_called_once()
             overdrive_api.get_advantage_accounts.assert_called_once()

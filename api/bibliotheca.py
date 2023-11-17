@@ -95,7 +95,7 @@ class BibliothecaSettings(BaseSettings):
             required=True,
         )
     )
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
@@ -171,7 +171,7 @@ class BibliothecaAPI(
         self.version = self.DEFAULT_VERSION
         self.account_id = settings.username
         self.account_key = settings.password
-        self.library_id = collection.external_account_id
+        self.library_id = settings.external_account_id
         self.base_url = self.DEFAULT_BASE_URL
 
         if not self.account_id or not self.account_key or not self.library_id:
@@ -338,9 +338,6 @@ class BibliothecaAPI(
     def _simple_http_get(self, url, headers, *args, **kwargs):
         """This will be overridden in MockBibliothecaAPI."""
         return Representation.simple_http_get(url, headers, *args, **kwargs)
-
-    def external_integration(self, _db):
-        return self.collection.external_integration
 
     def _run_self_tests(self, _db):
         def _count_events():

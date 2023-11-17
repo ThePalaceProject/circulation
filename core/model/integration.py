@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, overload
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy import ForeignKey, Integer, Unicode
+from sqlalchemy import ForeignKey, Index, Integer, Unicode, select
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, Session, relationship
+from sqlalchemy.orm.attributes import flag_modified
 
 from core.integration.goals import Goals
-from core.model import Base, get_one_or_create
+from core.model import Base
 
 if TYPE_CHECKING:
     from core.model import Collection, Library
@@ -49,6 +51,24 @@ class IntegrationConfiguration(Base):
         "settings", JSONB, nullable=False, default=dict
     )
 
+    # Integration specific context data. Stored as json. This is used to
+    # store configuration data that is not user supplied for a particular
+    # integration.
+    context: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index(
+            "ix_integration_configurations_settings_dict",
+            settings_dict,
+            postgresql_using="gin",
+        ),
+    )
+
+    def context_update(self, new_context: Dict[str, Any]) -> None:
+        """Update the context for this integration"""
+        self.context.update(new_context)
+        flag_modified(self, "context")
+
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
 
@@ -58,45 +78,44 @@ class IntegrationConfiguration(Base):
         "IntegrationLibraryConfiguration",
         back_populates="parent",
         uselist=True,
-        cascade="all, delete",
+        cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
-    collection: Mapped[Collection] = relationship("Collection", uselist=False)
+    collection: Mapped[Collection] = relationship(
+        "Collection", back_populates="integration_configuration", uselist=False
+    )
 
-    @overload
-    def for_library(
-        self, library_id: int, create: Literal[True]
-    ) -> IntegrationLibraryConfiguration:
-        ...
+    # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#simplifying-association-objects
+    libraries: Mapped[List[Library]] = association_proxy(
+        "library_configurations",
+        "library",
+        creator=lambda library: IntegrationLibraryConfiguration(library=library),
+    )
 
-    @overload
     def for_library(
-        self, library_id: int | None, create: bool = False
+        self, library: int | Library | None
     ) -> IntegrationLibraryConfiguration | None:
-        ...
+        """Fetch the library configuration for a specific library"""
+        from core.model import Library
 
-    def for_library(
-        self, library_id: int | None, create: bool = False
-    ) -> IntegrationLibraryConfiguration | None:
-        """Fetch the library configuration specifically by library_id"""
-        if library_id is None:
+        if library is None:
             return None
 
-        for config in self.library_configurations:
-            if config.library_id == library_id:
-                return config
-        if create:
-            session = Session.object_session(self)
-            config, _ = get_one_or_create(
-                session,
-                IntegrationLibraryConfiguration,
-                parent_id=self.id,
-                library_id=library_id,
+        db = Session.object_session(self)
+        if isinstance(library, Library):
+            if library.id is None:
+                return None
+            library_id = library.id
+        else:
+            library_id = library
+
+        return db.execute(
+            select(IntegrationLibraryConfiguration).where(
+                IntegrationLibraryConfiguration.library_id == library_id,
+                IntegrationLibraryConfiguration.parent_id == self.id,
             )
-            session.refresh(self)
-            return config
-        return None
+        ).scalar_one_or_none()
 
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
@@ -112,6 +131,10 @@ class IntegrationLibraryConfiguration(Base):
     It stores the configuration settings for each external integration in
     a single json row in the database. These settings are then serialized
     using Pydantic to a python object.
+
+    This is a many-to-many relationship between IntegrationConfiguration and
+    Library. Implementing the Association Object pattern:
+    https://docs.sqlalchemy.org/en/14/orm/basic_relationships.html#association-object
     """
 
     __tablename__ = "integration_library_configurations"
@@ -128,8 +151,7 @@ class IntegrationLibraryConfiguration(Base):
         "IntegrationConfiguration", back_populates="library_configurations"
     )
 
-    # The library this integration is associated with. This is optional
-    # and is only used for integrations that are specific to a library.
+    # The library this integration is associated with.
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", ondelete="CASCADE"),

@@ -189,35 +189,6 @@ class TestSiteConfigurationHasChanged:
         lane.add_genre("Science Fiction")
         data.mock.assert_was_called()
 
-    def test_configuration_relevant_collection_change_updates_configuration(
-        self,
-        example_site_configuration_changed_fixture: ExampleSiteConfigurationHasChangedFixture,
-    ):
-        """When you add a relevant item to a SQLAlchemy collection, such as
-        adding a Collection to library.collections,
-        site_configuration_has_changed is called.
-        """
-
-        data = example_site_configuration_changed_fixture
-        session = data.transaction.session
-        # Creating a collection calls the method via an 'after_insert'
-        # event on Collection.
-        library = data.transaction.default_library()
-        collection = data.transaction.collection()
-        session.commit()
-        data.mock.assert_was_called()
-
-        # Adding the collection to the library calls the method via
-        # an 'append' event on Collection.libraries.
-        library.collections.append(collection)
-        session.commit()
-        data.mock.assert_was_called()
-
-        # NOTE: test_work.py:TestWork.test_reindex_on_availability_change
-        # tests the circumstances under which a database change
-        # requires that a Work's entry in the search index be
-        # recreated.
-
 
 def _set_property(object, value, property_name):
     setattr(object, property_name, value)

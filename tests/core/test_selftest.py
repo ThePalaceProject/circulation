@@ -38,7 +38,7 @@ class TestSelfTestResult:
         )
 
         # A SelfTestResult may have an associated Collection.
-        db.default_collection().name = "CollectionA"
+        db.default_collection().integration_configuration.name = "CollectionA"
         result.collection = db.default_collection()
         assert (
             "<SelfTestResult: name='success1' collection='CollectionA' duration=5.00sec success=True result='The result'>"

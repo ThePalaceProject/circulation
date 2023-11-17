@@ -1,174 +1,179 @@
-from flask_babel import lazy_gettext as _
+from unittest.mock import MagicMock
 
-from api.admin.problem_details import *
-from api.axis import Axis360API
+import pytest
+from _pytest.monkeypatch import MonkeyPatch
+
+from api.admin.controller.collection_self_tests import CollectionSelfTestsController
+from api.admin.problem_details import (
+    FAILED_TO_RUN_SELF_TESTS,
+    MISSING_IDENTIFIER,
+    MISSING_SERVICE,
+    UNKNOWN_PROTOCOL,
+)
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
-from core.opds_import import OPDSImportMonitor
+from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
-from tests.fixtures.api_admin import SettingsControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> CollectionSelfTestsController:
+    return CollectionSelfTestsController(db.session)
 
 
 class TestCollectionSelfTests:
     def test_collection_self_tests_with_no_identifier(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self, controller: CollectionSelfTestsController
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                None
-            )
-            assert response.title == MISSING_IDENTIFIER.title
-            assert response.detail == MISSING_IDENTIFIER.detail
-            assert response.status_code == 400
+        response = controller.process_collection_self_tests(None)
+        assert isinstance(response, ProblemDetail)
+        assert response.title == MISSING_IDENTIFIER.title
+        assert response.detail == MISSING_IDENTIFIER.detail
+        assert response.status_code == 400
 
     def test_collection_self_tests_with_no_collection_found(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self, controller: CollectionSelfTestsController
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                -1
-            )
-            assert response == NO_SUCH_COLLECTION
-            assert response.status_code == 404
+        with pytest.raises(ProblemError) as excinfo:
+            controller.self_tests_process_get(-1)
+        assert excinfo.value.problem_detail == MISSING_SERVICE
+
+    def test_collection_self_tests_with_unknown_protocol(
+        self, db: DatabaseTransactionFixture, controller: CollectionSelfTestsController
+    ):
+        collection = db.collection(protocol="test")
+        assert collection.integration_configuration.id is not None
+        with pytest.raises(ProblemError) as excinfo:
+            controller.self_tests_process_get(collection.integration_configuration.id)
+        assert excinfo.value.problem_detail == UNKNOWN_PROTOCOL
+
+    def test_collection_self_tests_with_unsupported_protocol(
+        self, db: DatabaseTransactionFixture, controller: CollectionSelfTestsController
+    ):
+        registry = LicenseProvidersRegistry()
+        registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
+        collection = db.collection(protocol="mock_api")
+        controller = CollectionSelfTestsController(db.session, registry)
+        assert collection.integration_configuration.id is not None
+        result = controller.self_tests_process_get(
+            collection.integration_configuration.id
+        )
+
+        assert result.status_code == 200
+        assert isinstance(result.json, dict)
+        assert result.json["self_test_results"]["self_test_results"] == {
+            "disabled": True,
+            "exception": "Self tests are not supported for this integration.",
+        }
 
     def test_collection_self_tests_test_get(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
+        controller: CollectionSelfTestsController,
+        monkeypatch: MonkeyPatch,
     ):
-        old_prior_test_results = HasCollectionSelfTests.prior_test_results
-        setattr(
-            HasCollectionSelfTests,
-            "prior_test_results",
-            settings_ctrl_fixture.mock_prior_test_results,
-        )
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session,
-            settings_ctrl_fixture.ctrl.db.default_library(),
+            db.session,
+            db.default_library(),
+        )
+
+        self_test_results = dict(
+            duration=0.9,
+            start="2018-08-08T16:04:05Z",
+            end="2018-08-08T16:05:05Z",
+            results=[],
+        )
+        mock = MagicMock(return_value=self_test_results)
+        monkeypatch.setattr(
+            HasSelfTestsIntegrationConfiguration, "load_self_test_results", mock
         )
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's collection object.
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                collection.id
-            )
-
-            responseCollection = response.get("self_test_results")
-
-            assert responseCollection.get("id") == collection.id
-            assert responseCollection.get("name") == collection.name
-            assert responseCollection.get("protocol") == collection.protocol
-            assert (
-                responseCollection.get("self_test_results")
-                == settings_ctrl_fixture.self_test_results
-            )
-
-        setattr(HasCollectionSelfTests, "prior_test_results", old_prior_test_results)
-
-    def test_collection_self_tests_failed_post(
-        self, settings_ctrl_fixture: SettingsControllerFixture
-    ):
-        # This makes HasSelfTests.run_self_tests return no values
-        old_run_self_tests = HasCollectionSelfTests.run_self_tests
-        setattr(
-            HasCollectionSelfTests,
-            "run_self_tests",
-            settings_ctrl_fixture.mock_failed_run_self_tests,
+        assert collection.integration_configuration.id is not None
+        response = controller.self_tests_process_get(
+            collection.integration_configuration.id
         )
 
+        data = response.json
+        assert isinstance(data, dict)
+        test_results = data.get("self_test_results")
+        assert isinstance(test_results, dict)
+
+        assert test_results.get("id") == collection.integration_configuration.id
+        assert test_results.get("name") == collection.name
+        assert test_results.get("protocol") == collection.protocol
+        assert test_results.get("self_test_results") == self_test_results
+        assert mock.call_count == 1
+
+    def test_collection_self_tests_failed_post(
+        self,
+        db: DatabaseTransactionFixture,
+        controller: CollectionSelfTestsController,
+        monkeypatch: MonkeyPatch,
+    ):
         collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session,
-            settings_ctrl_fixture.ctrl.db.default_library(),
+            db.session,
+            db.default_library(),
+        )
+
+        # This makes HasSelfTests.run_self_tests return no values
+        self_test_results = (None, None)
+        mock = MagicMock(return_value=self_test_results)
+        monkeypatch.setattr(
+            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
         )
 
         # Failed to run self tests
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                collection.id
-            )
+        assert collection.integration_configuration.id is not None
 
-            (
-                run_self_tests_args,
-                run_self_tests_kwargs,
-            ) = settings_ctrl_fixture.failed_run_self_tests_called_with
-            assert response.title == FAILED_TO_RUN_SELF_TESTS.title
-            assert response.detail == "Failed to run self tests for this collection."
-            assert response.status_code == 400
+        with pytest.raises(ProblemError) as excinfo:
+            controller.self_tests_process_post(collection.integration_configuration.id)
 
-        setattr(HasCollectionSelfTests, "run_self_tests", old_run_self_tests)
+        assert excinfo.value.problem_detail == FAILED_TO_RUN_SELF_TESTS
+
+    def test_collection_self_tests_run_self_tests_unsupported_collection(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        registry = LicenseProvidersRegistry()
+        registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
+        collection = db.collection(protocol="mock_api")
+        controller = CollectionSelfTestsController(db.session, registry)
+        response = controller.run_self_tests(collection.integration_configuration)
+        assert response is None
 
     def test_collection_self_tests_post(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
     ):
-        old_run_self_tests = HasCollectionSelfTests.run_self_tests
-        setattr(
-            HasCollectionSelfTests,
-            "run_self_tests",
-            settings_ctrl_fixture.mock_run_self_tests,
+        mock = MagicMock()
+
+        class MockApi(HasCollectionSelfTests):
+            def __new__(cls, *args, **kwargs):
+                nonlocal mock
+                return mock(*args, **kwargs)
+
+            @property
+            def collection(self) -> None:
+                return None
+
+        registry = LicenseProvidersRegistry()
+        registry.register(MockApi, canonical="Foo")  # type: ignore[arg-type]
+
+        collection = db.collection(protocol="Foo")
+        controller = CollectionSelfTestsController(db.session, registry)
+
+        assert collection.integration_configuration.id is not None
+        response = controller.self_tests_process_post(
+            collection.integration_configuration.id
         )
 
-        collection = settings_ctrl_fixture.ctrl.db.collection()
-        # Successfully ran new self tests for the OPDSImportMonitor provider API
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                collection.id
-            )
+        assert response.get_data(as_text=True) == "Successfully ran new self tests"
+        assert response.status_code == 200
 
-            (
-                run_self_tests_args,
-                run_self_tests_kwargs,
-            ) = settings_ctrl_fixture.run_self_tests_called_with
-            assert response.response == _("Successfully ran new self tests")
-            assert response._status == "200 OK"
-
-            # The provider API class and the collection should be passed to
-            # the run_self_tests method of the provider API class.
-            assert run_self_tests_args[1] == OPDSImportMonitor
-            assert run_self_tests_args[3] == collection
-
-        collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-        )
-        # Successfully ran new self tests
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                collection.id
-            )
-
-            (
-                run_self_tests_args,
-                run_self_tests_kwargs,
-            ) = settings_ctrl_fixture.run_self_tests_called_with
-            assert response.response == _("Successfully ran new self tests")
-            assert response._status == "200 OK"
-
-            # The provider API class and the collection should be passed to
-            # the run_self_tests method of the provider API class.
-            assert run_self_tests_args[1] == Axis360API
-            assert run_self_tests_args[3] == collection
-
-        collection = MockAxis360API.mock_collection(
-            settings_ctrl_fixture.ctrl.db.session,
-            settings_ctrl_fixture.ctrl.db.default_library(),
-        )
-        collection.protocol = "Non existing protocol"
-        # clearing out previous call to mocked run_self_tests
-        settings_ctrl_fixture.run_self_tests_called_with = (None, None)
-
-        # No protocol found so run_self_tests was not called
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = settings_ctrl_fixture.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-                collection.id
-            )
-
-            (
-                run_self_tests_args,
-                run_self_tests_kwargs,
-            ) = settings_ctrl_fixture.run_self_tests_called_with
-            assert response.title == FAILED_TO_RUN_SELF_TESTS.title
-            assert response.detail == "Failed to run self tests for this collection."
-            assert response.status_code == 400
-
-            # The method returns None but it was not called
-            assert run_self_tests_args == None
-
-        setattr(HasCollectionSelfTests, "run_self_tests", old_run_self_tests)
+        mock.assert_called_once_with(db.session, collection)
+        mock()._run_self_tests.assert_called_once_with(db.session)
+        assert mock().store_self_test_results.call_count == 1

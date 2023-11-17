@@ -24,14 +24,14 @@ class MockEnkiAPI(EnkiAPI):
             assert collection is not None
             collection.protocol = EnkiAPI.ENKI
         if collection not in library.collections:
-            library.collections.append(collection)
+            collection.libraries.append(library)
 
         # Set the "Enki library ID" variable between the default library
         # and this Enki collection.
-        assert library.id is not None
+        library_config = collection.integration_configuration.for_library(library)
+        assert library_config is not None
         DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration.for_library(library.id, create=True),
-            **{self.ENKI_LIBRARY_ID_KEY: "c"}
+            library_config, **{self.ENKI_LIBRARY_ID_KEY: "c"}
         )
         _db.commit()
 

@@ -325,7 +325,7 @@ class APIAwareFulfillmentInfo(FulfillmentInfo, ABC):
 
     def __init__(
         self,
-        api: BaseCirculationAPI[BaseSettings, BaseSettings],
+        api: CirculationApiType,
         data_source_name: Optional[str],
         identifier_type: Optional[str],
         identifier: Optional[str],
@@ -625,10 +625,7 @@ class BaseCirculationAPI(
         return self.settings_load(self.integration_configuration())
 
     def library_settings(self, library: Library | int) -> LibrarySettingsType | None:
-        library_id = library.id if isinstance(library, Library) else library
-        if library_id is None:
-            return None
-        libconfig = self.integration_configuration().for_library(library_id=library_id)
+        libconfig = self.integration_configuration().for_library(library)
         if libconfig is None:
             return None
         config = self.library_settings_load(libconfig)
@@ -713,6 +710,9 @@ class BaseCirculationAPI(
         ...
 
 
+CirculationApiType = BaseCirculationAPI[BaseSettings, BaseSettings]
+
+
 class PatronActivityCirculationAPI(
     BaseCirculationAPI[SettingsType, LibrarySettingsType], ABC
 ):
@@ -740,9 +740,7 @@ class CirculationAPI:
         db: Session,
         library: Library,
         analytics: Optional[Analytics] = None,
-        registry: Optional[
-            IntegrationRegistry[BaseCirculationAPI[BaseSettings, BaseSettings]]
-        ] = None,
+        registry: Optional[IntegrationRegistry[CirculationApiType]] = None,
     ):
         """Constructor.
 
@@ -806,7 +804,7 @@ class CirculationAPI:
 
     def api_for_license_pool(
         self, licensepool: LicensePool
-    ) -> Optional[BaseCirculationAPI[BaseSettings, BaseSettings]]:
+    ) -> Optional[CirculationApiType]:
         """Find the API to use for the given license pool."""
         return self.api_for_collection.get(licensepool.collection.id)
 

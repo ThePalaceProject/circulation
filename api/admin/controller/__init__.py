@@ -83,7 +83,7 @@ def setup_admin_controllers(manager: CirculationManager):
     )
     manager.admin_collection_settings_controller = CollectionSettingsController(manager)
     manager.admin_collection_self_tests_controller = CollectionSelfTestsController(
-        manager
+        manager._db
     )
     manager.admin_sitewide_configuration_settings_controller = (
         SitewideConfigurationSettingsController(manager)

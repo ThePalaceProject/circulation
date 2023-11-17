@@ -1442,18 +1442,17 @@ class TestLoanController:
                 data_source_name=collection_data_source_name,
             )
 
+            collection.libraries.append(loan_fixture.db.default_library())
             if collection_default_loan_period:
-                library_id = loan_fixture.db.default_library().id
-                assert isinstance(library_id, int)
+                lib_config = collection.integration_configuration.for_library(
+                    loan_fixture.db.default_library()
+                )
+                assert lib_config is not None
                 DatabaseTransactionFixture.set_settings(
-                    collection.integration_configuration.for_library(
-                        library_id, create=True
-                    ),
+                    lib_config,
                     collection.loan_period_key(),
                     collection_default_loan_period,
                 )
-
-            loan_fixture.db.default_library().collections.append(collection)
 
             def create_work_and_return_license_pool_and_loan_info(**kwargs):
                 loan_start = kwargs.pop("loan_start", utc_now())

@@ -135,7 +135,7 @@ class TestSearchServices:
             session,
             ExternalIntegration,
             protocol="test",
-            goal=ExternalIntegration.LICENSE_GOAL,
+            goal="test",
             name="name",
         )
 

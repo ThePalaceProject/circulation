@@ -2,13 +2,12 @@ import json
 
 from sqlalchemy.orm import Session
 
-from api.overdrive import OverdriveAPI, OverdriveConstants
-from core.model import Library, get_one_or_create
+from api.overdrive import OverdriveAPI, OverdriveLibrarySettings, OverdriveSettings
+from core.model import Library
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
-from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class MockOverdriveResponse:
@@ -51,28 +50,24 @@ class MockOverdriveAPI(OverdriveAPI):
         ils_name: str = "e",
     ):
         """Create a mock Overdrive collection for use in tests."""
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(external_account_id=library_id),
+        collection, _ = Collection.by_name_and_protocol(
+            _db, name=name, protocol=ExternalIntegration.OVERDRIVE
         )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.OVERDRIVE
+        settings = OverdriveSettings(
+            external_account_id=library_id,
+            overdrive_website_id=website_id,
+            overdrive_client_key=client_key,
+            overdrive_client_secret=client_secret,
         )
-        config = collection.create_integration_configuration(
-            ExternalIntegration.OVERDRIVE
+        OverdriveAPI.settings_update(collection.integration_configuration, settings)
+        if library not in collection.libraries:
+            collection.libraries.append(library)
+        library_settings = OverdriveLibrarySettings(
+            ils_name=ils_name,
         )
-        config.settings_dict = {
-            OverdriveConstants.OVERDRIVE_CLIENT_KEY: client_key,
-            OverdriveConstants.OVERDRIVE_CLIENT_SECRET: client_secret,
-            OverdriveConstants.OVERDRIVE_WEBSITE_ID: website_id,
-        }
-        library.collections.append(collection)
-        db = DatabaseTransactionFixture
-        assert library.id is not None
-        db.set_settings(config.for_library(library.id, create=True), ils_name=ils_name)
-        _db.refresh(config)
+        library_config = collection.integration_configuration.for_library(library.id)
+        assert library_config is not None
+        OverdriveAPI.library_settings_update(library_config, library_settings)
         return collection
 
     def queue_collection_token(self):

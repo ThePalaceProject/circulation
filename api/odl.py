@@ -12,7 +12,7 @@ from dependency_injector.wiring import Provide, inject
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from lxml.etree import Element
-from pydantic import HttpUrl, PositiveInt
+from pydantic import AnyHttpUrl, HttpUrl, PositiveInt
 from requests import Response
 from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
@@ -79,7 +79,7 @@ class ODLAPIConstants:
 
 
 class ODLSettings(OPDSImporterSettings):
-    external_account_id: Optional[HttpUrl] = FormField(
+    external_account_id: AnyHttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
             required=True,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Generator, Iterable, Optional, Tuple, Union
 
 from sqlalchemy.orm.session import Session
@@ -120,7 +120,9 @@ class HasSelfTests(CoreHasSelfTests, HasPatronSelfTests):
     """Circulation specific self-tests, with the external integration paradigm"""
 
 
-class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelfTests):
+class HasCollectionSelfTests(
+    HasSelfTestsIntegrationConfiguration, HasPatronSelfTests, ABC
+):
     """Extra tests to verify the integrity of imported
     collections of books.
 
@@ -128,7 +130,14 @@ class HasCollectionSelfTests(HasSelfTestsIntegrationConfiguration, HasPatronSelf
     point to the Collection to be tested.
     """
 
+    @property
+    @abstractmethod
+    def collection(self) -> Collection | None:
+        ...
+
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
+        if not self.collection:
+            return None
         return self.collection.integration_configuration
 
     def _no_delivery_mechanisms_test(self):

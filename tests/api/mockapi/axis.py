@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from api.axis import Axis360API
-from core.model import Library, get_one_or_create
+from core.model import Library
 from core.model.collection import Collection
 from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
@@ -13,27 +13,17 @@ class MockAxis360API(Axis360API):
         cls, _db: Session, library: Library, name: str = "Test Axis 360 Collection"
     ) -> Collection:
         """Create a mock Axis 360 collection for use in tests."""
-        collection, ignore = get_one_or_create(
-            _db,
-            Collection,
-            name=name,
-            create_method_kwargs=dict(
-                external_account_id="c",
-            ),
+        collection, _ = Collection.by_name_and_protocol(
+            _db, name, ExternalIntegration.AXIS_360
         )
-        integration = collection.create_external_integration(
-            protocol=ExternalIntegration.AXIS_360
-        )
-        config = collection.create_integration_configuration(
-            ExternalIntegration.AXIS_360
-        )
-        config.settings_dict = {
+        collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",
             "url": "http://axis.test/",
+            "external_account_id": "c",
         }
-        config.for_library(library.id, create=True)
-        library.collections.append(collection)
+        if library not in collection.libraries:
+            collection.libraries.append(library)
         return collection
 
     def __init__(self, _db, collection, with_token=True, **kwargs):

@@ -48,6 +48,7 @@ from core.model import (
     DataSource,
     Edition,
     Genre,
+    IntegrationConfiguration,
     Library,
     LicensePool,
     Work,
@@ -57,11 +58,7 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.before_flush_decorator import Listener
-from core.model.configuration import (
-    ConfigurationAttributeValue,
-    ConfigurationSetting,
-    ExternalIntegration,
-)
+from core.model.configuration import ConfigurationAttributeValue, ExternalIntegration
 from core.model.constants import EditionConstants
 from core.model.hybrid import hybrid_property
 from core.model.listeners import site_configuration_has_changed
@@ -711,7 +708,7 @@ class Facets(FacetsWithEntryPoint):
                 self.collection_name
                 and self.collection_name != self.COLLECTION_NAME_ALL
             ):
-                collection = get_one(_db, Collection, name=self.collection_name)
+                collection = Collection.by_name(_db, self.collection_name)
                 if collection:
                     filter.collection_ids = [collection.id]
 
@@ -2301,22 +2298,21 @@ class DatabaseBackedWorkList(WorkList):
         # Modify the query to not show holds on collections
         # that don't allow it
         # This query looks like a prime candidate for some in-memory caching
-        restricted_collections = (
-            _db.query(Collection.id)
+        restricted_collections = _db.execute(
+            select(Collection.id)
             .join(
-                ConfigurationSetting,
-                Collection.external_integration_id
-                == ConfigurationSetting.external_integration_id,
+                IntegrationConfiguration,
+                Collection.integration_configuration_id == IntegrationConfiguration.id,
             )
-            .filter(
-                Collection.id.in_(self.collection_ids),
-                ConfigurationSetting.library_id == self.library_id,
-                ConfigurationSetting.key == ExternalIntegration.DISPLAY_RESERVES,
-                ConfigurationSetting.value == ConfigurationAttributeValue.NOVALUE.value,
+            .where(
+                IntegrationConfiguration.settings_dict.contains(
+                    {
+                        ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
+                    }
+                )
             )
-            .all()
-        )
-        restricted_collection_ids = (r[0] for r in restricted_collections)
+        ).all()
+        restricted_collection_ids = (r.id for r in restricted_collections)
 
         # If a licensepool is from a collection that restricts holds
         # and has no available copies, then we don't want to see it

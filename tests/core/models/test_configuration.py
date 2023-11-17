@@ -604,16 +604,3 @@ username='someuser'"""
         # If we pass in True for include_secrets, we see the passwords.
         with_secrets = integration.explain(include_secrets=True)
         assert "password='somepass'" in with_secrets
-
-    def test_custom_accept_header(
-        self, example_externalintegration_fixture: ExampleExternalIntegrationFixture
-    ):
-        db = example_externalintegration_fixture.database_fixture
-
-        integration = db.external_integration("protocol", "goal")
-        # Must be empty if not set
-        assert integration.custom_accept_header == None
-
-        # Must be the same value if set
-        integration.custom_accept_header = "custom header"
-        assert integration.custom_accept_header == "custom header"

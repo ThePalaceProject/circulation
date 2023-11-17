@@ -13,6 +13,7 @@ from api.admin.problem_details import (
 )
 from api.controller import CirculationManager
 from core.integration.base import (
+    HasChildIntegrationConfiguration,
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
 )
@@ -63,7 +64,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     @memoize(ttls=1800)
     def _cached_protocols(self) -> Dict[str, Dict[str, Any]]:
         """Cached result for integration implementations"""
-        protocols = {}
+        protocols = []
         for name, api in self.registry:
             protocol = {
                 "name": name,
@@ -75,14 +76,36 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 protocol[
                     "library_settings"
                 ] = api.library_settings_class().configuration_form(self._db)
+            if issubclass(api, HasChildIntegrationConfiguration):
+                protocol[
+                    "child_settings"
+                ] = api.child_settings_class().configuration_form(self._db)
             protocol.update(api.protocol_details(self._db))
-            protocols[name] = protocol
-        return protocols
+            protocols.append((name, protocol))
+        protocols.sort(key=lambda x: x[0])
+        return dict(protocols)
 
     @property
     def protocols(self) -> Dict[str, Dict[str, Any]]:
         """Use a property for implementations to allow expiring cached results"""
         return self._cached_protocols()
+
+    def configured_service_info(
+        self, service: IntegrationConfiguration
+    ) -> Optional[Dict[str, Any]]:
+        return {
+            "id": service.id,
+            "name": service.name,
+            "protocol": service.protocol,
+            "settings": service.settings_dict,
+        }
+
+    def configured_service_library_info(
+        self, library_configuration: IntegrationLibraryConfiguration
+    ) -> Optional[Dict[str, Any]]:
+        library_info = {"short_name": library_configuration.library.short_name}
+        library_info.update(library_configuration.settings_dict)
+        return library_info
 
     @property
     def configured_services(self) -> List[Dict[str, Any]]:
@@ -99,20 +122,19 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 )
                 continue
 
-            service_info = {
-                "id": service.id,
-                "name": service.name,
-                "protocol": service.protocol,
-                "settings": service.settings_dict,
-            }
+            service_info = self.configured_service_info(service)
+            if service_info is None:
+                continue
 
             api = self.registry[service.protocol]
             if issubclass(api, HasLibraryIntegrationConfiguration):
                 libraries = []
                 for library_settings in service.library_configurations:
-                    library_info = {"short_name": library_settings.library.short_name}
-                    library_info.update(library_settings.settings_dict)
-                    libraries.append(library_info)
+                    library_info = self.configured_service_library_info(
+                        library_settings
+                    )
+                    if library_info is not None:
+                        libraries.append(library_info)
                 service_info["libraries"] = libraries
 
             configured_services.append(service_info)

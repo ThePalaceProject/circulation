@@ -134,7 +134,7 @@ class TestLibrary:
 
         # If we remove the default collection from the default library,
         # it loses all its works.
-        db.default_library().collections = []
+        db.default_collection().libraries = []
         estimate = library.estimated_holdings_by_language(include_open_access=False)
         assert dict() == estimate
 

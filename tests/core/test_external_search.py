@@ -1326,7 +1326,7 @@ class TestSearchOrder:
         # Each work has one LicensePool associated with the default
         # collection.
         result.collection1 = transaction.default_collection()
-        result.collection1.name = "Collection 1 - ACB"
+        result.collection1.integration_configuration.name = "Collection 1 - ACB"
         [result.a1] = result.a.license_pools
         [result.b1] = result.b.license_pools
         [result.c1] = result.c.license_pools
@@ -3428,7 +3428,8 @@ class TestFilter:
 
         # If the library has no collections, the collection filter
         # will filter everything out.
-        transaction.default_library().collections = []
+        transaction.default_collection().libraries = []
+        assert transaction.default_library().collections == []
         library_filter = Filter(collections=transaction.default_library())
         assert [] == library_filter.collection_ids
 
@@ -3678,7 +3679,7 @@ class TestFilter:
         # library.
         library2 = transaction.library()
         collection2 = transaction.collection()
-        library2.collections.append(collection2)
+        collection2.libraries.append(library2)
         for_other_library = WorkList()
         for_other_library.initialize(library2)
         for_default_library.append_child(for_other_library)

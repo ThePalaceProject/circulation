@@ -3,9 +3,8 @@ from __future__ import annotations
 # ExternalIntegration, ExternalIntegrationLink, ConfigurationSetting
 import json
 import logging
-from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List
 
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
@@ -41,10 +40,6 @@ class ExternalIntegration(Base):
     # SIP2 which authenticate library patrons. Other constants related
     # to this are defined in the circulation manager.
     PATRON_AUTH_GOAL = "patron_auth"
-
-    # These integrations are associated with external services such
-    # as Overdrive which provide access to books.
-    LICENSE_GOAL = "licenses"
 
     # These integrations are associated with external services such as
     # the metadata wrangler, which provide information about books,
@@ -179,14 +174,6 @@ class ExternalIntegration(Base):
         back_populates="external_integration",
         cascade="all, delete",
         uselist=True,
-    )
-
-    # Any number of Collections may designate an ExternalIntegration
-    # as the source of their configuration
-    collections: Mapped[List[Collection]] = relationship(
-        "Collection",
-        backref="_external_integration",
-        foreign_keys="Collection.external_integration_id",
     )
 
     libraries: Mapped[List[Library]] = relationship(
@@ -330,24 +317,6 @@ class ExternalIntegration(Base):
     @password.setter
     def password(self, new_password):
         return self.set_setting(self.PASSWORD, new_password)
-
-    @hybrid_property
-    def custom_accept_header(self):
-        return self.setting(self.CUSTOM_ACCEPT_HEADER).value
-
-    @custom_accept_header.setter
-    def custom_accept_header(self, new_custom_accept_header):
-        return self.set_setting(self.CUSTOM_ACCEPT_HEADER, new_custom_accept_header)
-
-    @hybrid_property
-    def primary_identifier_source(self):
-        return self.setting(self.PRIMARY_IDENTIFIER_SOURCE).value
-
-    @primary_identifier_source.setter
-    def primary_identifier_source(self, new_primary_identifier_source):
-        return self.set_setting(
-            self.PRIMARY_IDENTIFIER_SOURCE, new_primary_identifier_source
-        )
 
     def explain(self, library=None, include_secrets=False):
         """Create a series of human-readable strings to explain an
@@ -677,20 +646,6 @@ class ConfigurationSetting(Base, HasSessionCache):
         if value is None:
             value = cls.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT
         return value
-
-
-class HasExternalIntegration(metaclass=ABCMeta):
-    """Interface allowing to get access to an external integration"""
-
-    @abstractmethod
-    def external_integration(self, db: Session) -> Optional[ExternalIntegration]:
-        """Returns an external integration associated with this object
-
-        :param db: Database session
-
-        :return: External integration associated with this object
-        """
-        raise NotImplementedError()
 
 
 class ConfigurationAttributeValue(Enum):

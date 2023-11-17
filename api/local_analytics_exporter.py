@@ -11,6 +11,7 @@ from core.model import (
     Edition,
     Genre,
     Identifier,
+    IntegrationConfiguration,
     Library,
     LicensePool,
     Work,
@@ -112,7 +113,7 @@ class LocalAnalyticsExporter:
                     Edition.imprint,
                     Edition.language,
                     CirculationEvent.location,
-                    Collection.name.label("collection_name"),
+                    IntegrationConfiguration.name.label("collection_name"),
                     Library.short_name.label("library_short_name"),
                     Library.name.label("library_name"),
                     Edition.medium,
@@ -130,6 +131,11 @@ class LocalAnalyticsExporter:
                 .join(Work, Work.id == LicensePool.work_id)
                 .join(Edition, Work.presentation_edition_id == Edition.id)
                 .join(Collection, LicensePool.collection_id == Collection.id)
+                .join(
+                    IntegrationConfiguration,
+                    Collection.integration_configuration_id
+                    == IntegrationConfiguration.id,
+                )
                 .join(DataSource, LicensePool.data_source_id == DataSource.id)
                 .outerjoin(Library, CirculationEvent.library_id == Library.id)
             )

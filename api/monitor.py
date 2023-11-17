@@ -8,6 +8,7 @@ from core.model import (
     Collection,
     ExternalIntegration,
     Hold,
+    IntegrationConfiguration,
     LicensePool,
     Loan,
 )
@@ -36,7 +37,7 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         """
         source_of_truth = or_(
             LicensePool.open_access == True,
-            ExternalIntegration.protocol.in_(self.SOURCE_OF_TRUTH_PROTOCOLS),
+            IntegrationConfiguration.protocol.in_(self.SOURCE_OF_TRUTH_PROTOCOLS),
         )
 
         source_of_truth_subquery = (
@@ -44,8 +45,8 @@ class LoanlikeReaperMonitor(ReaperMonitor):
             .join(self.MODEL_CLASS.license_pool)
             .join(LicensePool.collection)
             .join(
-                ExternalIntegration,
-                Collection.external_integration_id == ExternalIntegration.id,
+                IntegrationConfiguration,
+                Collection.integration_configuration_id == IntegrationConfiguration.id,
             )
             .filter(source_of_truth)
         )

@@ -106,7 +106,6 @@ class TestPatronAuth:
         protocols = response.get("protocols")
         assert isinstance(protocols, list)
         assert 7 == len(protocols)
-        assert SimpleAuthenticationProvider.__module__ == protocols[0].get("name")
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 

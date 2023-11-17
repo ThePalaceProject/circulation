@@ -11,7 +11,7 @@ from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -54,6 +54,13 @@ def pg_advisory_lock(
         connection.execute(text(f"SELECT pg_advisory_lock({lock_id});"))
         try:
             yield
+        except IntegrityError:
+            # If there was an IntegrityError, and we are in a transaction,
+            # we need to roll it back before we are able to release the lock.
+            transaction = connection.get_transaction()
+            if transaction is not None:
+                transaction.rollback()
+            raise
         finally:
             # Close the lock
             connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))

@@ -903,7 +903,7 @@ class TestCustomListsController:
         shared_with = admin_librarian_fixture.ctrl.db.library("shared_with")
         primary_library = admin_librarian_fixture.ctrl.db.library("primary")
         collection1 = admin_librarian_fixture.ctrl.db.collection("c1")
-        primary_library.collections.append(collection1)
+        collection1.libraries.append(primary_library)
 
         data_source = DataSource.lookup(
             admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
@@ -949,7 +949,7 @@ class TestCustomListsController:
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.shared_with.collections.append(s.collection1)
+        s.collection1.libraries.append(s.shared_with)
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
@@ -970,11 +970,11 @@ class TestCustomListsController:
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.shared_with.collections.append(s.collection1)
+        s.collection1.libraries.append(s.shared_with)
 
         # Second collection with work in list
         collection2 = admin_librarian_fixture.ctrl.db.collection()
-        s.primary_library.collections.append(collection2)
+        collection2.libraries.append(s.primary_library)
         w = admin_librarian_fixture.ctrl.db.work(collection=collection2)
         s.list.add_entry(w)
 
@@ -987,7 +987,7 @@ class TestCustomListsController:
     def test_share_locally_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Does the GET method fetch shared lists"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.shared_with.collections.append(s.collection1)
+        s.collection1.libraries.append(s.shared_with)
 
         resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
         assert resp["successes"] == 1
@@ -1022,7 +1022,7 @@ class TestCustomListsController:
     def test_share_locally_delete(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Test the deleting of a lists shared status"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.shared_with.collections.append(s.collection1)
+        s.collection1.libraries.append(s.shared_with)
 
         resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
         assert resp["successes"] == 1

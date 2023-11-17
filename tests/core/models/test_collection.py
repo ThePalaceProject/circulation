@@ -1,9 +1,13 @@
 import json
+from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import select
 
 from core.config import Configuration
-from core.model import create, get_one_or_create
+from core.external_search import ExternalSearchIndex
+from core.integration.goals import Goals
+from core.model import get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
@@ -11,10 +15,7 @@ from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
 from core.model.edition import Edition
-from core.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
+from core.model.integration import IntegrationLibraryConfiguration
 from core.model.licensing import Hold, License, LicensePool, Loan
 from core.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -48,10 +49,7 @@ def example_collection_fixture(
 
 
 class TestCollection:
-    def test_by_name_and_protocol(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
+    def test_by_name_and_protocol(self, db: DatabaseTransactionFixture):
         name = "A name"
         protocol = ExternalIntegration.OVERDRIVE
         key = (name, protocol)
@@ -91,7 +89,22 @@ class TestCollection:
             Collection.by_name_and_protocol(
                 db.session, name, ExternalIntegration.BIBLIOTHECA
             )
-        assert 'Collection "A name" does not use protocol "Bibliotheca".' in str(
+        assert 'Integration "A name" does not use protocol "Bibliotheca".' in str(
+            excinfo.value
+        )
+
+        # You'll get an exception if you look up an existing integration
+        # but the goal doesn't match.
+        db.integration_configuration(
+            protocol=protocol, goal=Goals.DISCOVERY_GOAL, name="another name"
+        )
+
+        with pytest.raises(ValueError) as excinfo:
+            Collection.by_name_and_protocol(
+                db.session, "another name", ExternalIntegration.OVERDRIVE
+            )
+
+        assert 'Integration "another name" does not have goal "LICENSE_GOAL".' in str(
             excinfo.value
         )
 
@@ -119,25 +132,6 @@ class TestCollection:
         c1.marked_for_deletion = True
         assert [test_collection] == Collection.by_protocol(db.session, overdrive).all()
 
-    def test_by_datasource(self, example_collection_fixture: ExampleCollectionFixture):
-        """Collections can be found by their associated DataSource"""
-        db = example_collection_fixture.database_fixture
-        c1 = db.collection(data_source_name=DataSource.GUTENBERG)
-        c2 = db.collection(data_source_name=DataSource.OVERDRIVE)
-
-        # Using the DataSource name
-        assert {c1} == set(
-            Collection.by_datasource(db.session, DataSource.GUTENBERG).all()
-        )
-
-        # Using the DataSource itself
-        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
-        assert {c2} == set(Collection.by_datasource(db.session, overdrive).all())
-
-        # A collection marked for deletion is filtered out.
-        c2.marked_for_deletion = True
-        assert 0 == Collection.by_datasource(db.session, overdrive).count()
-
     def test_parents(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
 
@@ -152,39 +146,6 @@ class TestCollection:
         c3 = db.collection()
         c3.parent_id = c2.id
         assert [c2, c1] == list(c3.parents)
-
-    def test_create_external_integration(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        # A newly created Collection has no associated ExternalIntegration.
-        db = example_collection_fixture.database_fixture
-        collection, ignore = get_one_or_create(
-            db.session, Collection, name=db.fresh_str()
-        )
-        assert None == collection.external_integration_id
-        with pytest.raises(ValueError) as excinfo:
-            getattr(collection, "external_integration")
-        assert "No known external integration for collection" in str(excinfo.value)
-
-        # We can create one with create_external_integration().
-        overdrive = ExternalIntegration.OVERDRIVE
-        integration = collection.create_external_integration(protocol=overdrive)
-        assert integration.id == collection.external_integration_id
-        assert overdrive == integration.protocol
-
-        # If we call create_external_integration() again we get the same
-        # ExternalIntegration as before.
-        integration2 = collection.create_external_integration(protocol=overdrive)
-        assert integration == integration2
-
-        # If we try to initialize an ExternalIntegration with a different
-        # protocol, we get an error.
-        with pytest.raises(ValueError) as excinfo:
-            collection.create_external_integration(protocol="blah")
-        assert (
-            "Located ExternalIntegration, but its protocol (Overdrive) does not match desired protocol (blah)."
-            in str(excinfo.value)
-        )
 
     def test_get_protocol(self, db: DatabaseTransactionFixture):
         test_collection = db.collection()
@@ -284,9 +245,7 @@ class TestCollection:
         test_collection = example_collection_fixture.collection
 
         library = db.default_library()
-        library.collections.append(test_collection)
-        assert isinstance(library.id, int)
-        test_collection.integration_configuration.for_library(library.id, create=True)
+        test_collection.libraries.append(library)
 
         ebook = Edition.BOOK_MEDIUM
         audio = Edition.AUDIO_MEDIUM
@@ -372,19 +331,20 @@ class TestCollection:
         about a Collection.
         """
         db = example_collection_fixture.database_fixture
-        test_collection = example_collection_fixture.collection
 
         library = db.default_library()
         library.name = "The only library"
         library.short_name = "only one"
-        library.collections.append(test_collection)
 
-        test_collection.external_account_id = "id"
+        test_collection = example_collection_fixture.collection
+        test_collection.libraries.append(library)
+
         test_collection.integration_configuration.settings_dict = {
             "url": "url",
             "username": "username",
             "password": "password",
             "setting": "value",
+            "external_account_id": "id",
         }
 
         data = test_collection.explain()
@@ -392,7 +352,7 @@ class TestCollection:
             'Name: "test collection"',
             'Protocol: "Overdrive"',
             'Used by library: "only one"',
-            'External account ID: "id"',
+            'Setting "external_account_id": "id"',
             'Setting "setting": "value"',
             'Setting "url": "url"',
             'Setting "username": "username"',
@@ -403,20 +363,21 @@ class TestCollection:
 
         # If the collection is the child of another collection,
         # its parent is mentioned.
-        child = Collection(name="Child", external_account_id="id2")
+        child = db.collection(
+            name="Child",
+            external_account_id="id2",
+            protocol=ExternalIntegration.OVERDRIVE,
+        )
         child.parent = test_collection
-
-        child.create_external_integration(protocol=ExternalIntegration.OVERDRIVE)
-        child.create_integration_configuration(protocol=ExternalIntegration.OVERDRIVE)
         data = child.explain()
         assert [
             'Name: "Child"',
             "Parent: test collection",
             'Protocol: "Overdrive"',
-            'External account ID: "id2"',
+            'Setting "external_account_id": "id2"',
         ] == data
 
-    def test_disassociate_library(
+    def test_disassociate_libraries(
         self, example_collection_fixture: ExampleCollectionFixture
     ):
         db = example_collection_fixture.database_fixture
@@ -428,60 +389,51 @@ class TestCollection:
         other_library = db.library()
         collection.libraries.append(other_library)
 
-        # It has an ExternalIntegration, which has some settings.
+        # It has an integration, which has some settings.
         integration = collection.integration_configuration
-        DatabaseTransactionFixture.set_settings(
-            integration, **{"integration setting": "value2"}
-        )
-        setting2 = integration.for_library(db.default_library().id)
-        DatabaseTransactionFixture.set_settings(
-            setting2, **{"default_library+integration setting": "value2"}
-        )
-        setting3 = integration.for_library(other_library.id, create=True)
-        DatabaseTransactionFixture.set_settings(
-            setting3, **{"other_library+integration setting": "value3"}
-        )
+        integration.settings_dict = {"key": "value"}
+
+        # And it has some library-specific settings.
+        default_library_settings = integration.for_library(db.default_library())
+        assert default_library_settings is not None
+        default_library_settings.settings_dict = {"a": "b"}
+        other_library_settings = integration.for_library(other_library)
+        assert other_library_settings is not None
+        other_library_settings.settings_dict = {"c": "d"}
 
         # Now, disassociate one of the libraries from the collection.
-        collection.disassociate_library(db.default_library())
+        collection.libraries.remove(db.default_library())
 
         # It's gone.
         assert db.default_library() not in collection.libraries
         assert collection not in db.default_library().collections
 
-        # Furthermore, ConfigurationSettings that configure that
-        # Library's relationship to this Collection's
-        # ExternalIntegration have been deleted.
-        all_settings = db.session.query(IntegrationConfiguration).all()
-        all_library_settings = db.session.query(IntegrationLibraryConfiguration).all()
-        assert setting2 not in all_library_settings
+        # The library-specific settings for that library have been deleted.
+        library_config_ids = [
+            l.library_id
+            for l in db.session.execute(
+                select(IntegrationLibraryConfiguration.library_id)
+            )
+        ]
+        assert db.default_library().id not in library_config_ids
 
-        # The other library is unaffected.
+        # But the library-specific settings for the other library are still there.
         assert other_library in collection.libraries
-        assert collection in other_library.collections
-        assert setting3 in all_library_settings
+        assert other_library.id in library_config_ids
+        assert collection.integration_configuration.library_configurations[
+            0
+        ].settings_dict == {"c": "d"}
 
-        # As is the library-independent configuration of this Collection's
-        # ExternalIntegration.
-        assert integration in all_settings
+        # We now disassociate all libraries from the collection.
+        collection.libraries.clear()
 
-        # Calling disassociate_library again is a no-op.
-        collection.disassociate_library(db.default_library())
-        assert db.default_library() not in collection.libraries
+        # All the library-specific settings have been deleted.
+        assert collection.integration_configuration.library_configurations == []
+        assert collection.integration_configuration.libraries == []
+        assert collection.libraries == []
 
-        # If you somehow manage to call disassociate_library on a Collection
-        # that has no associated ExternalIntegration, an exception is raised.
-        collection.integration_configuration_id = None
-        with pytest.raises(ValueError) as excinfo:
-            collection.disassociate_library(other_library)
-        assert "No known integration library configuration for collection" in str(
-            excinfo.value
-        )
-
-        collection.external_integration_id = None
-        with pytest.raises(ValueError) as excinfo:
-            collection.disassociate_library(other_library)
-        assert "No known external integration for collection" in str(excinfo.value)
+        # The integration settings are still there.
+        assert collection.integration_configuration.settings_dict == {"key": "value"}
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
@@ -611,17 +563,6 @@ class TestCollection:
         # It's associated with a library.
         assert db.default_library() in collection.libraries
 
-        # It has an ExternalIntegration, which has some settings.
-        integration = collection.external_integration
-        setting1 = integration.set_setting("integration setting", "value2")
-        setting2 = ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            "library+integration setting",
-            db.default_library(),
-            integration,
-        )
-        setting2.value = "value2"
-
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
         work = db.work(with_license_pool=True)
@@ -659,13 +600,7 @@ class TestCollection:
 
         # Finally, here's a mock ExternalSearchIndex so we can track when
         # Works are removed from the search index.
-        class MockExternalSearchIndex:
-            removed = []
-
-            def remove_work(self, work):
-                self.removed.append(work)
-
-        index = MockExternalSearchIndex()
+        index = MagicMock(spec=ExternalSearchIndex)
 
         # delete() will not work on a collection that's not marked for
         # deletion.
@@ -711,16 +646,7 @@ class TestCollection:
 
         # Our search index was told to remove the first work (which no longer
         # has any LicensePools), but not the second.
-        assert [work] == index.removed
-
-        # The collection ExternalIntegration and its settings have been deleted.
-        # The storage ExternalIntegration remains.
-        external_integrations = db.session.query(ExternalIntegration).all()
-        assert integration not in external_integrations
-
-        settings = db.session.query(ConfigurationSetting).all()
-        for setting in (setting1, setting2):
-            assert setting not in settings
+        index.remove_work.assert_called_once_with(work)
 
         # If no search_index is passed into delete() (the default behavior),
         # we try to instantiate the normal ExternalSearchIndex object. Since
@@ -733,22 +659,3 @@ class TestCollection:
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()
         assert [] == work2.license_pools
-
-
-class TestCollectionForMetadataWrangler:
-    """Tests that requirements to the metadata wrangler's use of Collection
-    are being met by continued development on the Collection class.
-
-    If any of these tests are failing, development will be required on the
-    metadata wrangler to meet the needs of the new Collection class.
-    """
-
-    def test_only_name_is_required(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        """Test that only name is a required field on
-        the Collection class.
-        """
-        db = example_collection_fixture.database_fixture
-        collection = create(db.session, Collection, name="banana")[0]
-        assert True == isinstance(collection, Collection)

@@ -44,7 +44,7 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.configuration import ConfigurationAttributeValue, ExternalIntegration
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -304,7 +304,7 @@ class TestFacets:
         library._settings = None
 
     def test_facet_groups(self, db: DatabaseTransactionFixture):
-        db.default_collection().data_source = DataSource.AMAZON
+        db.default_collection().data_source = DataSource.AMAZON  # type: ignore[assignment]
         facets = Facets(
             db.default_library(),
             Facets.COLLECTION_FULL,
@@ -2571,14 +2571,10 @@ class TestWorkList:
 
         w1.license_pools[0].licenses_available = 0
         collection1: Collection = w1.license_pools[0].collection
-        cs1 = ConfigurationSetting(
-            library_id=db.default_library().id,
-            external_integration_id=collection1.external_integration_id,
-            key=ExternalIntegration.DISPLAY_RESERVES,
-            _value="no",
-        )
-        db.session.add(cs1)
-        db.session.commit()
+        integration1 = collection1.integration_configuration
+        integration1.settings_dict = {
+            ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
+        }
 
         class MockHit:
             def __init__(self, work_id, has_last_update=False):
@@ -2612,7 +2608,7 @@ class TestWorkList:
 
         # Work1 now has 2 licensepools, one of which has availability
         alternate_collection = db.collection()
-        db.default_library().collections.append(alternate_collection)
+        alternate_collection.libraries.append(db.default_library())
         alternate_w1_lp: LicensePool = db.licensepool(
             w1.presentation_edition, collection=alternate_collection
         )
@@ -2625,13 +2621,9 @@ class TestWorkList:
         assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Now both collections are restricted and have no availability
-        cs2 = ConfigurationSetting(
-            library_id=db.default_library().id,
-            external_integration_id=alternate_collection.external_integration_id,
-            key=ExternalIntegration.DISPLAY_RESERVES,
-            _value="no",
-        )
-        db.session.add(cs2)
+        alternate_collection.integration_configuration.settings_dict = {
+            ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
+        }
         assert [[w2], []] == m(db.session, [[hit2], [hit1]])
 
         # Both restricted but one has availability
@@ -2863,14 +2855,17 @@ class TestDatabaseBackedWorkList:
 
         # A DatabaseBackedWorkList will only find books licensed
         # through one of its collections.
+        db.default_collection().libraries = []
         collection = db.collection()
-        db.default_library().collections = [collection]
+        collection.libraries.append(db.default_library())
+        assert db.default_library().collections == [collection]
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
 
         # If a DatabaseBackedWorkList has no collections, it has no
         # books.
-        db.default_library().collections = []
+        collection.libraries = []
+        assert db.default_library().collections == []
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
 

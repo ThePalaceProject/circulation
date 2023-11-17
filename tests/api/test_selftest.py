@@ -296,6 +296,10 @@ class TestHasCollectionSelfTests:
                 self._no_delivery_mechanisms_called = True
                 return "1"
 
+            @property
+            def collection(self) -> None:
+                return None
+
         mock = Mock()
         results = [x for x in mock._run_self_tests(MagicMock())]
         assert ["1"] == [x.result for x in results]

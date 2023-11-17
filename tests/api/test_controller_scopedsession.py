@@ -55,19 +55,15 @@ class ScopedHolder:
         """We need to create a test collection that
         uses the scoped session.
         """
-        collection, ignore = create(
+        collection, _ = Collection.by_name_and_protocol(
             session,
-            Collection,
-            name=self.fresh_id() + " (collection for scoped session)",
-        )
-        collection.create_external_integration(ExternalIntegration.OPDS_IMPORT)
-        integration = collection.create_integration_configuration(
-            ExternalIntegration.OPDS_IMPORT
+            self.fresh_id() + " (collection for scoped session)",
+            ExternalIntegration.OPDS_IMPORT,
         )
         settings = OPDSAPI.settings_class()(
             external_account_id="http://url.com", data_source="OPDS"
         )
-        OPDSAPI.settings_update(integration, settings)
+        OPDSAPI.settings_update(collection.integration_configuration, settings)
         library.collections.append(collection)
         return collection
 

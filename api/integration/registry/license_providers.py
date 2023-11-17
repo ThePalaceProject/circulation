@@ -6,13 +6,10 @@ from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from api.circulation import BaseCirculationAPI  # noqa: autoflake
-    from core.integration.settings import BaseSettings  # noqa: autoflake
+    from api.circulation import CirculationApiType  # noqa: autoflake
 
 
-class LicenseProvidersRegistry(
-    IntegrationRegistry["BaseCirculationAPI[BaseSettings, BaseSettings]"]
-):
+class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
