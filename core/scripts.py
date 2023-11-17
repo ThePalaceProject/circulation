@@ -16,13 +16,9 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
+from core.config import Configuration, ConfigurationConstants
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
-from core.external_search import (
-    ExternalSearchIndex,
-    Filter,
-    SearchIndexCoverageProvider,
-)
+from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
 from core.lane import Lane
 from core.metadata_layer import TimestampData
@@ -58,6 +54,7 @@ from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
 from core.opds_import import OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
+from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
 from core.service.container import Services, container_instance
 from core.util import fast_query_count
@@ -2472,13 +2469,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
         _db = _db or self._db
         super().__init__(_db)
         self.output = output or sys.stdout
-        try:
-            self.search = search or ExternalSearchIndex(_db)
-        except CannotLoadConfiguration:
-            self.out(
-                "Here's your problem: the search integration is missing or misconfigured."
-            )
-            raise
+        self.search = search or self.services.search.index()
 
     def out(self, s, *args):
         if not s.endswith("\n"):
@@ -2580,7 +2571,7 @@ class UpdateLaneSizeScript(LaneSweeperScript):
     def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, *args, **kwargs)
         search = kwargs.get("search_index_client", None)
-        self._search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
+        self._search: ExternalSearchIndex = search or self.services.search.index()
 
     def should_process_lane(self, lane):
         """We don't want to process generic WorkLists -- there's nowhere
@@ -2616,7 +2607,7 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
 
     def __init__(self, *args, **kwargs):
         search = kwargs.get("search_index_client", None)
-        self.search: ExternalSearchIndex = search or ExternalSearchIndex(self._db)
+        self.search: ExternalSearchIndex = search or self.services.search.index()
         super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
 
     def do_run(self):

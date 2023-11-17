@@ -260,7 +260,7 @@ class TestWork:
         assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
 
         # The index has not been updated.
-        assert [] == external_search_fake_fixture.search.documents_all()
+        assert [] == external_search_fake_fixture.service.documents_all()
 
         # The Work now has a complete set of WorkCoverageRecords
         # associated with it, reflecting all the operations that
@@ -480,7 +480,7 @@ class TestWork:
         assert True == work.presentation_ready
 
         # The work has not been added to the search index.
-        assert [] == external_search_fake_fixture.search.documents_all()
+        assert [] == external_search_fake_fixture.service.documents_all()
 
         # But the work of adding it to the search engine has been
         # registered.
@@ -1606,7 +1606,7 @@ class TestWork:
         # The work was not added to the search index when we called
         # external_index_needs_updating. That happens later, when the
         # WorkCoverageRecord is processed.
-        assert [] == external_search_fake_fixture.search.documents_all()
+        assert [] == external_search_fake_fixture.service.documents_all()
 
     def test_for_unchecked_subjects(self, db: DatabaseTransactionFixture):
         w1 = db.work(with_license_pool=True)

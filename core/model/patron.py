@@ -272,7 +272,7 @@ class Patron(Base):
             seconds=self.loan_activity_max_age
         )
 
-    @hybrid_property
+    @property
     def last_loan_activity_sync(self):
         """When was the last time we asked the vendors about
         this patron's loan activity?

@@ -746,7 +746,7 @@ class TestLibraryRegistrationScript:
             "--stage=testing",
             "--registry-url=http://registry.com/",
         ]
-        manager = MockCirculationManager(db.session)
+        manager = MockCirculationManager(db.session, MagicMock())
         script.do_run(cmd_args=cmd_args, manager=manager)
 
         # One library was processed.

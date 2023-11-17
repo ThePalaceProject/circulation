@@ -699,6 +699,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             # NOTE: This may not make a difference until the
             # works are actually re-indexed.
             for lane in affected_lanes:
-                lane.update_size(self._db, self.search_engine)
+                lane.update_size(self._db, search_engine=self.search_engine)
 
             return Response(str(_("Success")), 200)

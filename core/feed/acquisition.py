@@ -5,6 +5,7 @@ import logging
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any
 
+from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm import Query, Session
 
 from api.problem_details import NOT_FOUND_ON_REMOTE
@@ -426,6 +427,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     # Each classmethod creates a different kind of feed
 
     @classmethod
+    @inject
     def page(
         cls,
         _db: Session,
@@ -435,7 +437,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: CirculationManagerAnnotator,
         facets: FacetsWithEntryPoint | None,
         pagination: Pagination | None,
-        search_engine: ExternalSearchIndex | None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
     ) -> OPDSAcquisitionFeed:
         works = worklist.works(
             _db, facets=facets, pagination=pagination, search_engine=search_engine
@@ -653,6 +655,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             return None
 
     @classmethod
+    @inject
     def groups(
         cls,
         _db: Session,
@@ -662,7 +665,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: LibraryAnnotator,
         pagination: Pagination | None = None,
         facets: FacetsWithEntryPoint | None = None,
-        search_engine: ExternalSearchIndex | None = None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
         search_debug: bool = False,
     ) -> OPDSAcquisitionFeed:
         """Internal method called by groups() when a grouped feed

@@ -25,7 +25,7 @@ from core.model.measurement import Measurement
 from core.model.resource import Hyperlink, Resource
 from core.model.work import Work
 from core.util.datetime_helpers import datetime_utc, utc_now
-from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
+from tests.api.feed.conftest import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import (  # noqa
     DatabaseTransactionFixture,
     DBStatementCounter,

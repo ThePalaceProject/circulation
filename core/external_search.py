@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import contextlib
 import datetime
 import json
-import logging
 import re
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterable
-from typing import Any
+from collections.abc import Iterable
 
 from attr import define
 from flask_babel import lazy_gettext as _
-from opensearch_dsl import SF, Search
+from opensearch_dsl import SF
 from opensearch_dsl.query import (
     Bool,
     DisMax,
@@ -27,7 +24,6 @@ from opensearch_dsl.query import (
 )
 from opensearch_dsl.query import Query as BaseQuery
 from opensearch_dsl.query import Range, Regexp, Term, Terms
-from opensearchpy import OpenSearch
 from spellchecker import SpellChecker
 
 from core.classifier import (
@@ -36,131 +32,44 @@ from core.classifier import (
     GradeLevelClassifier,
     KeywordBasedClassifier,
 )
-from core.config import CannotLoadConfiguration
-from core.coverage import CoverageFailure, WorkPresentationProvider
 from core.facets import FacetConstants
 from core.lane import Pagination
 from core.metadata_layer import IdentifierData
 from core.model import (
-    Collection,
     ConfigurationSetting,
     Contributor,
     DataSource,
     Edition,
-    ExternalIntegration,
     Identifier,
     Library,
     Work,
-    WorkCoverageRecord,
     numericrange_to_tuple,
 )
 from core.problem_details import INVALID_INPUT
-from core.search.coverage_remover import RemovesSearchCoverage
 from core.search.migrator import (
     SearchDocumentReceiver,
-    SearchDocumentReceiverType,
     SearchMigrationInProgress,
     SearchMigrator,
 )
-from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
-from core.search.service import SearchService, SearchServiceOpensearch1
-from core.selftest import HasSelfTests
+from core.search.service import SearchService
 from core.util import Values
 from core.util.cache import CachedData
 from core.util.datetime_helpers import from_timestamp
 from core.util.languages import LanguageNames
+from core.util.log import LoggerMixin
 from core.util.personal_names import display_name_to_sort_name
 from core.util.problem_detail import ProblemDetail
 from core.util.stopwords import ENGLISH_STOPWORDS
 
 
-@contextlib.contextmanager
-def mock_search_index(mock=None):
-    """Temporarily mock the ExternalSearchIndex implementation
-    returned by the load() class method.
-    """
-    try:
-        ExternalSearchIndex.MOCK_IMPLEMENTATION = mock
-        yield mock
-    finally:
-        ExternalSearchIndex.MOCK_IMPLEMENTATION = None
-
-
-class ExternalSearchIndex(HasSelfTests):
-    NAME = ExternalIntegration.OPENSEARCH
-
-    # A test may temporarily set this to a mock of this class.
-    # While that's true, load() will return the mock instead of
-    # instantiating new ExternalSearchIndex objects.
-    MOCK_IMPLEMENTATION = None
-
-    WORKS_INDEX_PREFIX_KEY = "works_index_prefix"
-    DEFAULT_WORKS_INDEX_PREFIX = "circulation-works"
-
-    TEST_SEARCH_TERM_KEY = "a search term"
-    DEFAULT_TEST_SEARCH_TERM = "test"
-    CURRENT_ALIAS_SUFFIX = "current"
-
-    SETTINGS = [
-        {
-            "key": ExternalIntegration.URL,
-            "label": _("URL"),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": WORKS_INDEX_PREFIX_KEY,
-            "label": _("Index prefix"),
-            "default": DEFAULT_WORKS_INDEX_PREFIX,
-            "required": True,
-            "description": _(
-                "Any Search indexes needed for this application will be created with this unique prefix. In most cases, the default will work fine. You may need to change this if you have multiple application servers using a single Search server."
-            ),
-        },
-        {
-            "key": TEST_SEARCH_TERM_KEY,
-            "label": _("Test search term"),
-            "default": DEFAULT_TEST_SEARCH_TERM,
-            "description": _("Self tests will use this value as the search term."),
-        },
-    ]
-
-    SITEWIDE = True
-
-    @classmethod
-    def search_integration(cls, _db) -> ExternalIntegration | None:
-        """Look up the ExternalIntegration for Opensearch."""
-        return ExternalIntegration.lookup(
-            _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
-        )
-
-    @classmethod
-    def load(cls, _db, *args, **kwargs):
-        """Load a generic implementation."""
-        if cls.MOCK_IMPLEMENTATION:
-            return cls.MOCK_IMPLEMENTATION
-        return cls(_db, *args, **kwargs)
-
-    _bulk: Callable[..., Any]
-    _revision: SearchSchemaRevision
-    _revision_base_name: str
-    _revision_directory: SearchRevisionDirectory
-    _search: Search
-    _search_migrator: SearchMigrator
-    _search_service: SearchService
-    _search_read_pointer: str
-    _test_search_term: str
-
+class ExternalSearchIndex(LoggerMixin):
     def __init__(
         self,
-        _db,
-        url: str | None = None,
-        test_search_term: str | None = None,
-        revision_directory: SearchRevisionDirectory | None = None,
+        service: SearchService,
+        revision_directory: SearchRevisionDirectory,
         version: int | None = None,
-        custom_client_service: SearchService | None = None,
-    ):
+    ) -> None:
         """Constructor
 
         :param revision_directory Override the directory of revisions that will be used. If this isn't provided,
@@ -168,56 +77,15 @@ class ExternalSearchIndex(HasSelfTests):
         :param version The specific revision that will be used. If not specified, the highest version in the
                revision directory will be used.
         """
-        self.log = logging.getLogger("External search index")
-
-        # We can't proceed without a database.
-        if not _db:
-            raise CannotLoadConfiguration(
-                "Cannot load Search configuration without a database.",
-            )
-
-        # Load the search integration.
-        integration = self.search_integration(_db)
-        if not integration:
-            raise CannotLoadConfiguration("No search integration configured.")
-
-        if not url:
-            url = url or integration.url
-            test_search_term = integration.setting(self.TEST_SEARCH_TERM_KEY).value
-
-        self._test_search_term = test_search_term or self.DEFAULT_TEST_SEARCH_TERM
-
-        if not url:
-            raise CannotLoadConfiguration("No URL configured to the search server.")
-
-        # Determine the base name we're going to use for storing revisions.
-        self._revision_base_name = integration.setting(
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
-        ).value
-
-        # Create the necessary search client, and the service used by the schema migrator.
-        if custom_client_service:
-            self._search_service = custom_client_service
-        else:
-            use_ssl = url.startswith("https://")
-            self.log.info("Connecting to the search cluster at %s", url)
-            new_client = OpenSearch(url, use_ssl=use_ssl, timeout=20, maxsize=25)
-            self._search_service = SearchServiceOpensearch1(
-                new_client, self._revision_base_name
-            )
+        self._search_service = service
 
         # Locate the revision of the search index that we're going to use.
         # This will fail fast if the requested version isn't available.
-        self._revision_directory = (
-            revision_directory or SearchRevisionDirectory.create()
-        )
+        self._revision_directory = revision_directory
         if version:
             self._revision = self._revision_directory.find(version)
         else:
             self._revision = self._revision_directory.highest()
-
-        # initialize the cached data if not already done so
-        CachedData.initialize(_db)
 
         # Get references to the read and write pointers.
         self._search_read_pointer = self._search_service.read_pointer_name()
@@ -234,7 +102,8 @@ class ExternalSearchIndex(HasSelfTests):
             service=self._search_service,
         )
         return migrator.migrate(
-            base_name=self._revision_base_name, version=self._revision.version
+            base_name=self._search_service.base_revision_name,
+            version=self._revision.version,
         )
 
     def start_updating_search_documents(self) -> SearchDocumentReceiver:
@@ -245,9 +114,6 @@ class ExternalSearchIndex(HasSelfTests):
 
     def clear_search_documents(self) -> None:
         self._search_service.index_clear_documents(pointer=self._search_write_pointer)
-
-    def prime_query_values(self, _db):
-        JSONQuery.data_sources = _db.query(DataSource).all()
 
     def create_search_doc(self, query_string, filter, pagination, debug):
         if filter and filter.search_type == "json":
@@ -418,74 +284,6 @@ class ExternalSearchIndex(HasSelfTests):
         self._search_service.index_remove_document(
             pointer=self._search_read_pointer, id=work.id
         )
-
-    def _run_self_tests(self, _db):
-        # Helper methods for setting up the self-tests:
-
-        def _search():
-            return self.create_search_doc(
-                self._test_search_term, filter=None, pagination=None, debug=True
-            )
-
-        def _works():
-            return self.query_works(
-                self._test_search_term, filter=None, pagination=None, debug=True
-            )
-
-        # The self-tests:
-
-        def _search_for_term():
-            titles = [(f"{x.sort_title} ({x.sort_author})") for x in _works()]
-            return titles
-
-        yield self.run_test(
-            ("Search results for '%s':" % self._test_search_term), _search_for_term
-        )
-
-        def _get_raw_doc():
-            search = _search()
-            return json.dumps(search.to_dict(), indent=1)
-
-        yield self.run_test(
-            ("Search document for '%s':" % (self._test_search_term)), _get_raw_doc
-        )
-
-        def _get_raw_results():
-            return [json.dumps(x.to_dict(), indent=1) for x in _works()]
-
-        yield self.run_test(
-            ("Raw search results for '%s':" % (self._test_search_term)),
-            _get_raw_results,
-        )
-
-        def _count_docs():
-            service = self.search_service()
-            client = service.search_client()
-            return str(client.count())
-
-        yield self.run_test(
-            ("Total number of search results for '%s':" % (self._test_search_term)),
-            _count_docs,
-        )
-
-        def _total_count():
-            return str(self.count_works(None))
-
-        yield self.run_test(
-            "Total number of documents in this search index:", _total_count
-        )
-
-        def _collections():
-            result = {}
-
-            collections = _db.query(Collection)
-            for collection in collections:
-                filter = Filter(collections=[collection])
-                result[collection.name] = self.count_works(filter)
-
-            return json.dumps(result, indent=1)
-
-        yield self.run_test("Total number of documents per collection:", _collections)
 
     def initialize_indices(self) -> bool:
         """Attempt to initialize the indices and pointers for a first time run"""
@@ -2742,73 +2540,3 @@ class WorkSearchResult:
 
     def __getattr__(self, k):
         return getattr(self._work, k)
-
-
-class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvider):
-    """Make sure all Works have up-to-date representation in the
-    search index.
-    """
-
-    SERVICE_NAME = "Search index coverage provider"
-
-    DEFAULT_BATCH_SIZE = 500
-
-    OPERATION = WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-
-    def __init__(self, *args, **kwargs):
-        search_index_client = kwargs.pop("search_index_client", None)
-        super().__init__(*args, **kwargs)
-        self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
-
-        #
-        # Try to migrate to the latest schema. If the function returns None, it means
-        # that no migration is necessary, and we're already at the latest version. If
-        # we're already at the latest version, then simply upload search documents instead.
-        #
-        self.receiver = None
-        self.migration: None | (
-            SearchMigrationInProgress
-        ) = self.search_index_client.start_migration()
-        if self.migration is None:
-            self.receiver: SearchDocumentReceiver = (
-                self.search_index_client.start_updating_search_documents()
-            )
-        else:
-            # We do have a migration, we must clear out the index and repopulate the index
-            self.remove_search_coverage_records()
-
-    def on_completely_finished(self):
-        # Tell the search migrator that no more documents are going to show up.
-        target: SearchDocumentReceiverType = self.migration or self.receiver
-        target.finish()
-
-    def run_once_and_update_timestamp(self):
-        # We do not catch exceptions here, so that the on_completely finished should not run
-        # if there was a runtime error
-        result = super().run_once_and_update_timestamp()
-        self.on_completely_finished()
-        return result
-
-    def process_batch(self, works) -> list[Work | CoverageFailure]:
-        target: SearchDocumentReceiverType = self.migration or self.receiver
-        failures = target.add_documents(
-            documents=self.search_index_client.create_search_documents_from_works(works)
-        )
-
-        # Maintain a dictionary of works so that we can efficiently remove failed works later.
-        work_map: dict[int, Work] = {}
-        for work in works:
-            work_map[work.id] = work
-
-        # Remove all the works that failed and create failure records for them.
-        results: list[Work | CoverageFailure] = []
-        for failure in failures:
-            work = work_map[failure.id]
-            del work_map[failure.id]
-            results.append(CoverageFailure(work, repr(failure)))
-
-        # Append all the remaining works that didn't fail.
-        for work in work_map.values():
-            results.append(work)
-
-        return results

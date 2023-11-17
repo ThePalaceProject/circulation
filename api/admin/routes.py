@@ -484,32 +484,6 @@ def metadata_service_self_tests(identifier):
     )
 
 
-@app.route("/admin/search_services", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def search_services():
-    return app.manager.admin_search_services_controller.process_services()
-
-
-@app.route("/admin/search_service/<service_id>", methods=["DELETE"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def search_service(service_id):
-    return app.manager.admin_search_services_controller.process_delete(service_id)
-
-
-@app.route("/admin/search_service_self_tests/<identifier>", methods=["GET", "POST"])
-@returns_json_or_response_or_problem_detail
-@requires_admin
-@requires_csrf_token
-def search_service_self_tests(identifier):
-    return app.manager.admin_search_service_self_tests_controller.process_search_service_self_tests(
-        identifier
-    )
-
-
 @app.route("/admin/catalog_services", methods=["GET", "POST"])
 @returns_json_or_response_or_problem_detail
 @requires_admin

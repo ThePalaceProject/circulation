@@ -11,11 +11,9 @@ from api.circulation import (
     PatronActivityCirculationAPI,
 )
 from api.circulation_manager import CirculationManager
-from core.external_search import ExternalSearchIndex
 from core.integration.settings import BaseSettings
-from core.model import DataSource, Hold, Loan, get_one_or_create
-from core.model.configuration import ExternalIntegration
-from tests.mocks.search import ExternalSearchIndexFake
+from core.model import DataSource, Hold, Loan
+from core.service.container import Services
 
 
 class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI, ABC):
@@ -173,25 +171,8 @@ class MockCirculationAPI(CirculationAPI):
 class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationAPI
 
-    def __init__(self, db: Session):
-        super().__init__(db)
-
-    def setup_search(self):
-        """Set up a search client."""
-        integration, _ = get_one_or_create(
-            self._db,
-            ExternalIntegration,
-            goal=ExternalIntegration.SEARCH_GOAL,
-            protocol=ExternalIntegration.OPENSEARCH,
-        )
-        integration.set_setting(
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY, "test_index"
-        )
-        integration.set_setting(
-            ExternalSearchIndex.TEST_SEARCH_TERM_KEY, "a search term"
-        )
-        integration.url = "http://does-not-exist.com/"
-        return ExternalSearchIndexFake(self._db)
+    def __init__(self, db: Session, services: Services):
+        super().__init__(db, services)
 
     def setup_circulation(self, library, analytics):
         """Set up the Circulation object."""

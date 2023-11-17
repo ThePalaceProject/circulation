@@ -4,9 +4,10 @@ import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote_plus
 
+from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import (
@@ -68,6 +69,9 @@ from core.util.accept_language import parse_accept_language
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    from core.external_search import ExternalSearchIndex, WorkSearchResult
 
 
 class BaseFacets(FacetConstants):
@@ -1745,13 +1749,14 @@ class WorkList:
         """
         return facets
 
+    @inject
     def groups(
         self,
         _db,
         include_sublanes=True,
         pagination=None,
         facets=None,
-        search_engine=None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):
         """Extract a list of samples from each child of this WorkList.  This
@@ -1814,12 +1819,13 @@ class WorkList:
         ):
             yield work, worklist
 
+    @inject
     def works(
         self,
         _db,
         facets=None,
         pagination=None,
-        search_engine=None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
         **kwargs,
     ):
@@ -1842,9 +1848,6 @@ class WorkList:
             that generates such a list when executed.
 
         """
-        from core.external_search import ExternalSearchIndex
-
-        search_engine = search_engine or ExternalSearchIndex.load(_db)
         filter = self.filter(_db, facets)
         hits = search_engine.query_works(
             query_string=None, filter=filter, pagination=pagination, debug=debug
@@ -1997,6 +2000,7 @@ class WorkList:
 
         return results
 
+    @inject
     def _groups_for_lanes(
         self,
         _db,
@@ -2004,7 +2008,7 @@ class WorkList:
         queryable_lanes,
         pagination,
         facets,
-        search_engine=None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):
         """Ask the search engine for groups of featurable works in the
@@ -2041,10 +2045,6 @@ class WorkList:
         else:
             target_size = pagination.size
 
-        from core.external_search import ExternalSearchIndex
-
-        search_engine = search_engine or ExternalSearchIndex.load(_db)
-
         if isinstance(self, Lane):
             parent_lane = self
         else:
@@ -2075,15 +2075,15 @@ class WorkList:
                 by_lane[lane].extend(list(might_need_to_reuse.values())[:num_missing])
 
         used_works = set()
-        by_lane = defaultdict(list)
+        by_lane: dict[Lane, list[WorkSearchResult]] = defaultdict(list)
         working_lane = None
-        might_need_to_reuse = dict()
+        might_need_to_reuse: dict[int, WorkSearchResult] = dict()
         for work, lane in works_and_lanes:
             if lane != working_lane:
                 # Either we're done with the old lane, or we're just
                 # starting and there was no old lane.
                 if working_lane:
-                    _done_with_lane(working_lane)
+                    _done_with_lane(working_lane)  # type: ignore[unreachable]
                 working_lane = lane
                 used_works_this_lane = set()
                 might_need_to_reuse = dict()
@@ -2918,12 +2918,12 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             return True
         return False
 
-    def update_size(self, _db, search_engine=None):
+    @inject
+    def update_size(
+        self, _db, search_engine: ExternalSearchIndex = Provide["search.index"]
+    ):
         """Update the stored estimate of the number of Works in this Lane."""
         library = self.get_library(_db)
-        from core.external_search import ExternalSearchIndex
-
-        search_engine = search_engine or ExternalSearchIndex.load(_db)
 
         # Do the estimate for every known entry point.
         by_entrypoint = dict()
@@ -3130,13 +3130,14 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             size = self.size_by_entrypoint[entrypoint_name]
         return size
 
+    @inject
     def groups(
         self,
         _db,
         include_sublanes=True,
         pagination=None,
         facets=None,
-        search_engine=None,
+        search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):
         """Return a list of (Work, Lane) 2-tuples
@@ -3169,7 +3170,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             queryable_lanes,
             pagination=pagination,
             facets=facets,
-            search_engine=search_engine,
             debug=debug,
         )
 

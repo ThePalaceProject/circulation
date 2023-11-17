@@ -14,8 +14,9 @@ Migration Case
 
 import pytest
 
-from core.external_search import ExternalSearchIndex, SearchIndexCoverageProvider
+from core.external_search import ExternalSearchIndex
 from core.scripts import RunWorkCoverageProviderScript
+from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.document import SearchMappingDocument
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
@@ -29,20 +30,19 @@ class TestMigrationStates:
     ):
         fx = external_search_fixture
         db = fx.db
+        index = fx.index
+        service = fx.service
 
         # Ensure we are in the initial state, no test indices and pointer available
-        prefix = fx.integration.setting(
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY
-        ).value
-        all_indices = fx.search.indices.get("*")
+        prefix = fx.search_config.index_prefix
+        all_indices = fx.client.indices.get("*")
         for index_name in all_indices.keys():
-            assert prefix not in index_name
-
-        client = ExternalSearchIndex(db.session)
+            if prefix in index_name:
+                fx.client.indices.delete(index_name)
 
         # We cannot make any requests before we intitialize
         with pytest.raises(Exception) as raised:
-            client.query_works("")
+            index.query_works("")
         assert "index_not_found" in str(raised.value)
 
         # When a new sytem comes up the first code to run is the InstanceInitailization script
@@ -50,22 +50,22 @@ class TestMigrationStates:
         InstanceInitializationScript().initialize(db.session.connection())
 
         # Ensure we have created the index and pointers
-        new_index_name = client._revision.name_for_index(client._revision_base_name)
-        empty_index_name = client.search_service()._empty(client._revision_base_name)  # type: ignore [attr-defined]
-        all_indices = fx.search.indices.get("*")
+        new_index_name = index._revision.name_for_index(prefix)
+        empty_index_name = service._empty(prefix)
+        all_indices = fx.client.indices.get("*")
 
         assert prefix in new_index_name
         assert new_index_name in all_indices.keys()
         assert empty_index_name in all_indices.keys()
-        assert fx.search.indices.exists_alias(
-            client._search_read_pointer, index=new_index_name
+        assert fx.client.indices.exists_alias(
+            index._search_read_pointer, index=new_index_name
         )
-        assert fx.search.indices.exists_alias(
-            client._search_write_pointer, index=new_index_name
+        assert fx.client.indices.exists_alias(
+            index._search_write_pointer, index=new_index_name
         )
 
         # The same client should work without issue once the pointers are setup
-        assert client.query_works("").hits == []
+        assert index.query_works("").hits == []
 
     def test_migration_case(self, external_search_fixture: ExternalSearchFixture):
         fx = external_search_fixture
@@ -85,23 +85,24 @@ class TestMigrationStates:
                 return SearchMappingDocument()
 
         client = ExternalSearchIndex(
-            db.session,
+            fx.search_container.service(),
             revision_directory=SearchRevisionDirectory(
                 {MOCK_VERSION: MockSchema(MOCK_VERSION)}
             ),
         )
+
         # The search client works just fine
         assert client.query_works("") is not None
         receiver = client.start_updating_search_documents()
         receiver.add_documents([{"work_id": 123}])
         receiver.finish()
 
-        mock_index_name = client._revision.name_for_index(client._revision_base_name)
+        mock_index_name = client._revision.name_for_index(fx.service.base_revision_name)
         assert str(MOCK_VERSION) in mock_index_name
 
         # The mock index does not exist yet
         with pytest.raises(Exception) as raised:
-            fx.search.indices.get(mock_index_name)
+            fx.client.indices.get(mock_index_name)
         assert "index_not_found" in str(raised.value)
 
         # This should run the migration
@@ -110,10 +111,10 @@ class TestMigrationStates:
         ).run()
 
         # The new version is created, and the aliases point to the right index
-        assert fx.search.indices.get(mock_index_name) is not None
-        assert mock_index_name in fx.search.indices.get_alias(
+        assert fx.client.indices.get(mock_index_name) is not None
+        assert mock_index_name in fx.client.indices.get_alias(
             name=client._search_read_pointer
         )
-        assert mock_index_name in fx.search.indices.get_alias(
+        assert mock_index_name in fx.client.indices.get_alias(
             name=client._search_write_pointer
         )

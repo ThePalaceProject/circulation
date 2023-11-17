@@ -10,7 +10,6 @@ from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
-    from tests.fixtures.services import MockServicesFixture
 
 
 class LocalAnalyticsProviderFixture:
@@ -21,18 +20,16 @@ class LocalAnalyticsProviderFixture:
     def __init__(
         self,
         transaction: DatabaseTransactionFixture,
-        mock_services_fixture: MockServicesFixture,
     ):
         self.transaction = transaction
-        self.services = mock_services_fixture.services
         self.la = LocalAnalyticsProvider()
 
 
 @pytest.fixture()
 def local_analytics_provider_fixture(
-    db: DatabaseTransactionFixture, mock_services_fixture: MockServicesFixture
+    db: DatabaseTransactionFixture,
 ) -> LocalAnalyticsProviderFixture:
-    return LocalAnalyticsProviderFixture(db, mock_services_fixture)
+    return LocalAnalyticsProviderFixture(db)
 
 
 class TestLocalAnalyticsProvider:

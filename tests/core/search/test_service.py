@@ -30,7 +30,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Creating the empty index is idempotent."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         service.create_empty_index()
 
         # Log the index so that the fixture cleans it up afterward.
@@ -38,7 +38,7 @@ class TestService:
 
         service.create_empty_index()
 
-        indices = external_search_fixture.search.indices.client.indices
+        indices = external_search_fixture.client.indices.client.indices
         assert indices is not None
         assert indices.exists("base-empty")
 
@@ -46,7 +46,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Creating any index is idempotent."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         revision = BasicMutableRevision(23)
         service.index_create(revision)
         service.index_create(revision)
@@ -54,23 +54,23 @@ class TestService:
         # Log the index so that the fixture cleans it up afterward.
         external_search_fixture.record_index("base-v23")
 
-        indices = external_search_fixture.search.indices.client.indices
+        indices = external_search_fixture.client.indices.client.indices
         assert indices is not None
         assert indices.exists(revision.name_for_index("base"))
 
     def test_read_pointer_none(self, external_search_fixture: ExternalSearchFixture):
         """The read pointer is initially unset."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         assert None == service.read_pointer()
 
     def test_write_pointer_none(self, external_search_fixture: ExternalSearchFixture):
         """The write pointer is initially unset."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         assert None == service.write_pointer()
 
     def test_read_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the read pointer works."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         revision = BasicMutableRevision(23)
         service.index_create(revision)
 
@@ -84,7 +84,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Setting the read pointer to the empty index works."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         service.create_empty_index()
 
         # Log the index so that the fixture cleans it up afterward.
@@ -95,7 +95,7 @@ class TestService:
 
     def test_write_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the write pointer works."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         revision = BasicMutableRevision(23)
         service.index_create(revision)
 
@@ -112,7 +112,7 @@ class TestService:
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Populating an index is idempotent."""
-        service = SearchServiceOpensearch1(external_search_fixture.search, BASE_NAME)
+        service = SearchServiceOpensearch1(external_search_fixture.client, BASE_NAME)
         revision = BasicMutableRevision(23)
 
         mappings = revision.mapping_document()
@@ -150,7 +150,7 @@ class TestService:
         service.index_submit_documents("base-v23", documents)
         service.index_submit_documents("base-v23", documents)
 
-        indices = external_search_fixture.search.indices.client.indices
+        indices = external_search_fixture.client.indices.client.indices
         assert indices is not None
         assert indices.exists(revision.name_for_index("base"))
         assert indices.get(revision.name_for_index("base"))["base-v23"]["mappings"] == {

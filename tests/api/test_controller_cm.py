@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 from api.authenticator import LibraryAuthenticator
-from api.circulation_manager import CirculationManager
 from api.config import Configuration
 from api.custom_index import CustomIndexView
 from api.problem_details import *
@@ -18,7 +17,6 @@ from core.util.problem_detail import ProblemDetail
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import IntegrationConfigurationFixture
-from tests.mocks.search import SearchServiceFake
 
 
 class TestCirculationManager:
@@ -34,7 +32,6 @@ class TestCirculationManager:
 
         # Certain fields of the CirculationManager have certain values
         # which are about to be reloaded.
-        manager._external_search = object()
         manager.auth = object()
         manager.patron_web_domains = object()
 
@@ -109,9 +106,6 @@ class TestCirculationManager:
             LibraryAuthenticator,
         )
 
-        # The ExternalSearch object has been reset.
-        assert isinstance(manager.external_search.search_service(), SearchServiceFake)
-
         # So have the patron web domains, and their paths have been
         # removed.
         assert {"http://sitewide", "http://registration"} == manager.patron_web_domains
@@ -145,24 +139,6 @@ class TestCirculationManager:
 
         # Restore the CustomIndexView.for_library implementation
         CustomIndexView.for_library = old_for_library
-
-    def test_exception_during_external_search_initialization_is_stored(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        class BadSearch(CirculationManager):
-            @property
-            def setup_search(self):
-                raise Exception("doomed!")
-
-        circulation = BadSearch(circulation_fixture.db.session)
-
-        # We didn't get a search object.
-        assert None == circulation.external_search
-
-        # The reason why is stored here.
-        ex = circulation.external_search_initialization_exception
-        assert isinstance(ex, Exception)
-        assert "doomed!" == str(ex)
 
     def test_annotator(self, circulation_fixture: CirculationControllerFixture):
         # Test our ability to find an appropriate OPDSAnnotator for

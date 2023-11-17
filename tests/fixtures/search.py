@@ -1,74 +1,82 @@
-import logging
-import os
-from collections.abc import Iterable
+from __future__ import annotations
+
+from collections.abc import Generator
 
 import pytest
 from opensearchpy import OpenSearch
+from pydantic import AnyHttpUrl
 
-from core.external_search import ExternalSearchIndex, SearchIndexCoverageProvider
-from core.model import ExternalIntegration, Work
+from core.external_search import ExternalSearchIndex
+from core.model import Work
+from core.search.coverage_provider import SearchIndexCoverageProvider
+from core.search.service import SearchServiceOpensearch1
+from core.service.configuration import ServiceConfiguration
+from core.service.container import Services, wire_container
+from core.service.search.container import Search
+from core.util.log import LoggerMixin
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFake
 
 
-class ExternalSearchFixture:
+class SearchTestConfiguration(ServiceConfiguration):
+    url: AnyHttpUrl
+    index_prefix: str = "test_index"
+    timeout: int = 20
+    maxsize: int = 25
+
+    class Config:
+        env_prefix = "PALACE_TEST_SEARCH_"
+
+
+class ExternalSearchFixture(LoggerMixin):
     """
-    These tests require opensearch to be running locally. If it's not, or there's
-    an error creating the index, the tests will pass without doing anything.
+    These tests require opensearch to be running locally.
 
     Tests for opensearch are useful for ensuring that we haven't accidentally broken
     a type of search by changing analyzers or queries, but search needs to be tested manually
     to ensure that it works well overall, with a realistic index.
     """
 
-    integration: ExternalIntegration
-    db: DatabaseTransactionFixture
-    search: OpenSearch
-    _indexes_created: list[str]
+    def __init__(self, db: DatabaseTransactionFixture, services: Services):
+        self.search_config = SearchTestConfiguration()
+        self.services_container = services
 
-    def __init__(self):
+        # Set up our testing search instance in the services container
+        self.search_container = Search()
+        self.search_container.config.from_dict(self.search_config.dict())
+        self.services_container.search.override(self.search_container)
+
+        self._indexes_created: list[str] = []
+        self.db = db
+        self.client: OpenSearch = services.search.client()
+        self.service: SearchServiceOpensearch1 = services.search.service()
+        self.index: ExternalSearchIndex = services.search.index()
         self._indexes_created = []
-        self._logger = logging.getLogger(ExternalSearchFixture.__name__)
 
-    @classmethod
-    def create(cls, db: DatabaseTransactionFixture) -> "ExternalSearchFixture":
-        fixture = ExternalSearchFixture()
-        fixture.db = db
-        fixture.integration = db.external_integration(
-            ExternalIntegration.OPENSEARCH,
-            goal=ExternalIntegration.SEARCH_GOAL,
-            url=fixture.url,
-            settings={
-                ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
-                ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "test_search_term",
-            },
-        )
-        fixture.search = OpenSearch(fixture.url, use_ssl=False, timeout=20, maxsize=25)
-        return fixture
-
-    @property
-    def url(self) -> str:
-        env = os.environ.get("SIMPLIFIED_TEST_OPENSEARCH")
-        if env is None:
-            raise OSError("SIMPLIFIED_TEST_OPENSEARCH is not defined.")
-        return env
+        # Make sure the services container is wired up with the newly created search container
+        wire_container(self.services_container)
 
     def record_index(self, name: str):
-        self._logger.info(f"Recording index {name} for deletion")
+        self.log.info(f"Recording index {name} for deletion")
         self._indexes_created.append(name)
 
     def close(self):
         for index in self._indexes_created:
             try:
-                self._logger.info(f"Deleting index {index}")
-                self.search.indices.delete(index)
+                self.log.info(f"Deleting index {index}")
+                self.client.indices.delete(index)
             except Exception as e:
-                self._logger.info(f"Failed to delete index {index}: {e}")
+                self.log.info(f"Failed to delete index {index}: {e}")
 
         # Force test index deletion
-        self.search.indices.delete("test_index*")
-        self._logger.info("Waiting for operations to complete.")
-        self.search.indices.refresh()
+        self.client.indices.delete("test_index*")
+        self.log.info("Waiting for operations to complete.")
+        self.client.indices.refresh()
+
+        # Unwire the services container
+        self.services_container.unwire()
+        self.services_container.search.reset_override()
         return None
 
     def default_work(self, *args, **kwargs):
@@ -83,54 +91,38 @@ class ExternalSearchFixture:
         return work
 
     def init_indices(self):
-        client = ExternalSearchIndex(self.db.session)
-        client.initialize_indices()
+        self.index.initialize_indices()
 
 
 @pytest.fixture(scope="function")
 def external_search_fixture(
-    db: DatabaseTransactionFixture,
-) -> Iterable[ExternalSearchFixture]:
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> Generator[ExternalSearchFixture, None, None]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
-    data = ExternalSearchFixture.create(db)
-    yield data
-    data.close()
+    fixture = ExternalSearchFixture(db, services_fixture.services)
+    yield fixture
+    fixture.close()
 
 
 class EndToEndSearchFixture:
     """An external search system fixture that can be populated with data for end-to-end tests."""
 
     """Tests are expected to call the `populate()` method to populate the fixture with test-specific data."""
-    external_search: ExternalSearchFixture
-    external_search_index: ExternalSearchIndex
-    db: DatabaseTransactionFixture
 
-    def __init__(self):
-        self._logger = logging.getLogger(EndToEndSearchFixture.__name__)
-
-    @classmethod
-    def create(cls, transaction: DatabaseTransactionFixture) -> "EndToEndSearchFixture":
-        data = EndToEndSearchFixture()
-        data.db = transaction
-        data.external_search = ExternalSearchFixture.create(transaction)
-        data.external_search_index = ExternalSearchIndex(transaction.session)
-        return data
+    def __init__(self, search_fixture: ExternalSearchFixture):
+        self.db = search_fixture.db
+        self.external_search = search_fixture
+        self.external_search_index = search_fixture.index
 
     def populate_search_index(self):
         """Populate the search index with a set of works. The given callback is passed this fixture instance."""
-
-        # Create some works.
-        if not self.external_search.search:
-            # No search index is configured -- nothing to do.
-            return
-
         # Add all the works created in the setup to the search index.
         SearchIndexCoverageProvider(
             self.external_search.db.session,
             search_index_client=self.external_search_index,
         ).run()
-        self.external_search.search.indices.refresh()
+        self.external_search.client.indices.refresh()
 
     @staticmethod
     def assert_works(description, expect, actual, should_be_ordered=True):
@@ -249,48 +241,43 @@ class EndToEndSearchFixture:
         for index in self.external_search_index.search_service().indexes_created():
             self.external_search.record_index(index)
 
-        self.external_search.close()
-
 
 @pytest.fixture(scope="function")
 def end_to_end_search_fixture(
-    db: DatabaseTransactionFixture,
-) -> Iterable[EndToEndSearchFixture]:
+    external_search_fixture: ExternalSearchFixture,
+) -> Generator[EndToEndSearchFixture, None, None]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    data = EndToEndSearchFixture.create(db)
-    try:
-        yield data
-    except Exception:
-        raise
-    finally:
-        data.close()
+    fixture = EndToEndSearchFixture(external_search_fixture)
+    yield fixture
+    fixture.close()
 
 
 class ExternalSearchFixtureFake:
-    integration: ExternalIntegration
-    db: DatabaseTransactionFixture
-    search: SearchServiceFake
-    external_search: ExternalSearchIndex
+    def __init__(self, db: DatabaseTransactionFixture, services: Services):
+        self.db = db
+        self.services = services
+        self.search_container = Search()
+        self.services.search.override(self.search_container)
+
+        self.service = SearchServiceFake()
+        self.search_container.service.override(self.service)
+        self.external_search: ExternalSearchIndex = self.services.search.index()
+
+        wire_container(self.services)
+
+    def close(self):
+        self.services.unwire()
+        self.services.search.reset_override()
 
 
 @pytest.fixture(scope="function")
 def external_search_fake_fixture(
-    db: DatabaseTransactionFixture,
-) -> ExternalSearchFixtureFake:
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> Generator[ExternalSearchFixtureFake, None, None]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    data = ExternalSearchFixtureFake()
-    data.db = db
-    data.integration = db.external_integration(
-        ExternalIntegration.OPENSEARCH,
-        goal=ExternalIntegration.SEARCH_GOAL,
-        url="http://does-not-exist.com/",
-        settings={
-            ExternalSearchIndex.WORKS_INDEX_PREFIX_KEY: "test_index",
-            ExternalSearchIndex.TEST_SEARCH_TERM_KEY: "a search term",
-        },
+    fixture = ExternalSearchFixtureFake(
+        db=db,
+        services=services_fixture.services,
     )
-    data.search = SearchServiceFake()
-    data.external_search = ExternalSearchIndex(
-        _db=db.session, custom_client_service=data.search
-    )
-    return data
+    yield fixture
+    fixture.close()

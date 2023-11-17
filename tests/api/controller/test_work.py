@@ -1,6 +1,7 @@
 import datetime
 import json
 import urllib.parse
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -22,7 +23,7 @@ from api.novelist import MockNoveListAPI
 from api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
-from core.external_search import SortKeyPagination, mock_search_index
+from core.external_search import SortKeyPagination
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.types import WorkEntry
@@ -64,8 +65,10 @@ class WorkFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def work_fixture(db: DatabaseTransactionFixture):
-    return WorkFixture(db)
+def work_fixture(db: DatabaseTransactionFixture) -> Generator[WorkFixture, None, None]:
+    fixture = WorkFixture(db)
+    with fixture.wired_container():
+        yield fixture
 
 
 class TestWorkController:
@@ -99,11 +102,6 @@ class TestWorkController:
         assert "Unknown contributor: Unknown Author" == response.detail
 
         contributor = contributor.display_name
-
-        # Search index misconfiguration -> Problem detail
-        work_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: work_fixture.manager.work_controller.series(contributor, None, None)
-        )
 
         # Bad facet data -> ProblemDetail
         with work_fixture.request_context_with_library("/?order=nosuchorder"):
@@ -187,7 +185,7 @@ class TestWorkController:
         kwargs = self.called_with  # type: ignore
 
         assert work_fixture.db.session == kwargs.pop("_db")
-        assert work_fixture.manager._external_search == kwargs.pop("search_engine")
+        assert work_fixture.manager.external_search == kwargs.pop("search_engine")
 
         # The feed is named after the contributor the request asked
         # about.
@@ -517,13 +515,6 @@ class TestWorkController:
             )
             assert 400 == response.status_code
 
-        # Or if the search index is misconfigured.
-        work_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: work_fixture.manager.work_controller.recommendations(
-                *args, **kwargs
-            )
-        )
-
         # If no NoveList API is configured, the lane does not exist.
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.recommendations(*args)
@@ -666,13 +657,6 @@ class TestWorkController:
         # creation process -- an invalid entrypoint will simply be
         # ignored.
 
-        # Bad search index setup -> Problem detail
-        work_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: work_fixture.manager.work_controller.related(
-                identifier.type, identifier.identifier
-            )
-        )
-
         # The mock search engine will return this Work for every
         # search. That means this book will show up as a 'same author'
         # recommendation, a 'same series' recommentation, and a
@@ -699,13 +683,12 @@ class TestWorkController:
         mock_api.setup_method(metadata)
 
         # Now, ask for works related to work_fixture.english_1.
-        with mock_search_index(work_fixture.manager.external_search):
-            with work_fixture.request_context_with_library("/?entrypoint=Book"):
-                response = work_fixture.manager.work_controller.related(
-                    work_fixture.identifier.type,
-                    work_fixture.identifier.identifier,
-                    novelist_api=mock_api,
-                )
+        with work_fixture.request_context_with_library("/?entrypoint=Book"):
+            response = work_fixture.manager.work_controller.related(
+                work_fixture.identifier.type,
+                work_fixture.identifier.identifier,
+                novelist_api=mock_api,
+            )
         assert 200 == response.status_code
         assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["content-type"]
         feed = feedparser.parse(response.data)
@@ -869,11 +852,6 @@ class TestWorkController:
                 series_name, None, None
             )
             assert 400 == response.status_code
-
-        # Or if the search index isn't set up.
-        work_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: work_fixture.manager.work_controller.series(series_name, None, None)
-        )
 
         # Set up the mock search engine to return our work no matter
         # what query it's given. The fact that this book isn't

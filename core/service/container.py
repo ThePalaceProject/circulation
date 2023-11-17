@@ -6,6 +6,8 @@ from core.service.analytics.configuration import AnalyticsConfiguration
 from core.service.analytics.container import AnalyticsContainer
 from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
+from core.service.search.configuration import SearchConfiguration
+from core.service.search.container import Search
 from core.service.storage.configuration import StorageConfiguration
 from core.service.storage.container import Storage
 
@@ -29,6 +31,31 @@ class Services(DeclarativeContainer):
         storage=storage,
     )
 
+    search = Container(
+        Search,
+        config=config.search,
+    )
+
+
+def wire_container(container: Services) -> None:
+    container.wire(
+        modules=[
+            "api.axis",
+            "api.bibliotheca",
+            "api.circulation_manager",
+            "api.enki",
+            "api.odl",
+            "api.overdrive",
+            "core.feed.annotator.circulation",
+            "core.feed.acquisition",
+            "core.lane",
+            "core.metadata_layer",
+            "core.model.collection",
+            "core.model.work",
+            "core.query.customlist",
+        ]
+    )
+
 
 def create_container() -> Services:
     container = Services()
@@ -37,20 +64,10 @@ def create_container() -> Services:
             "storage": StorageConfiguration().dict(),
             "logging": LoggingConfiguration().dict(),
             "analytics": AnalyticsConfiguration().dict(),
+            "search": SearchConfiguration().dict(),
         }
     )
-    container.wire(
-        modules=[
-            "core.metadata_layer",
-            "api.odl",
-            "api.axis",
-            "api.bibliotheca",
-            "api.enki",
-            "api.circulation_manager",
-            "api.overdrive",
-            "core.feed.annotator.circulation",
-        ]
-    )
+    wire_container(container)
     return container
 
 

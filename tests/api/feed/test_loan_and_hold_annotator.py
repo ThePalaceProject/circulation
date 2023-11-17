@@ -16,6 +16,7 @@ from core.model.constants import EditionConstants, LinkRelations
 from core.model.licensing import LicensePool
 from core.model.patron import Loan
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import ExternalSearchFixtureFake
 
 
 class TestLibraryLoanAndHoldAnnotator:
@@ -195,7 +196,11 @@ class TestLibraryLoanAndHoldAnnotator:
             [hold_1, hold_2]
         )
 
-    def test_annotate_work_entry(self, db: DatabaseTransactionFixture):
+    def test_annotate_work_entry(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+    ):
         library = db.default_library()
         patron = db.patron()
         identifier = db.identifier()

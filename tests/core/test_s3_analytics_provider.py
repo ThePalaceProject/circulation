@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -11,29 +11,25 @@ from api.s3_analytics_provider import S3AnalyticsProvider
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.model import CirculationEvent, DataSource, MediaTypes
+from core.service.storage.s3 import S3Service
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
-    from tests.fixtures.services import MockServicesFixture
 
 
 class S3AnalyticsFixture:
-    def __init__(
-        self, db: DatabaseTransactionFixture, services_fixture: MockServicesFixture
-    ) -> None:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
-        self.services = services_fixture.services
-        self.analytics_storage = services_fixture.storage.analytics
+
+        self.analytics_storage = create_autospec(S3Service)
         self.analytics_provider = S3AnalyticsProvider(
-            services_fixture.services.storage.analytics(),
+            self.analytics_storage,
         )
 
 
 @pytest.fixture(scope="function")
-def s3_analytics_fixture(
-    db: DatabaseTransactionFixture, mock_services_fixture: MockServicesFixture
-):
-    return S3AnalyticsFixture(db, mock_services_fixture)
+def s3_analytics_fixture(db: DatabaseTransactionFixture):
+    return S3AnalyticsFixture(db)
 
 
 class TestS3AnalyticsProvider:
@@ -52,13 +48,8 @@ class TestS3AnalyticsProvider:
     def test_exception_is_raised_when_no_analytics_bucket_configured(
         self, s3_analytics_fixture: S3AnalyticsFixture
     ):
-        # The services container returns None when there is no analytics storage service configured,
-        # so we override the analytics storage service with None to simulate this situation.
-        s3_analytics_fixture.services.storage.analytics.override(None)
-
-        provider = S3AnalyticsProvider(
-            s3_analytics_fixture.services.storage.analytics()
-        )
+        # The services container returns None when there is no analytics storage service configured
+        provider = S3AnalyticsProvider(None)
 
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):

@@ -1,5 +1,6 @@
 import datetime
 import urllib.parse
+from collections.abc import Generator
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -84,8 +85,10 @@ class LoanFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def loan_fixture(db: DatabaseTransactionFixture):
-    return LoanFixture(db)
+def loan_fixture(db: DatabaseTransactionFixture) -> Generator[LoanFixture, None, None]:
+    fixture = LoanFixture(db)
+    with fixture.wired_container():
+        yield fixture
 
 
 class TestLoanController:

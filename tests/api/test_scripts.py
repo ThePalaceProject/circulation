@@ -15,7 +15,6 @@ from alembic.util import CommandError
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
 from api.novelist import NoveListAPI
-from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
 from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
 from core.model import (
@@ -41,7 +40,7 @@ from scripts import (
     NovelistSnapshotScript,
 )
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.search import EndToEndSearchFixture
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
@@ -615,15 +614,11 @@ class TestInstanceInitializationScript:
         with patch(
             "scripts.SessionManager", autospec=SessionManager
         ) as session_manager:
-            with patch(
-                "scripts.ExternalSearchIndex", autospec=ExternalSearchIndex
-            ) as search_index:
-                with patch("scripts.command") as alemic_command:
-                    script.initialize_database(mock_db)
+            with patch("scripts.command") as alemic_command:
+                script.initialize_database(mock_db)
 
         session_manager.initialize_data.assert_called_once()
         session_manager.initialize_schema.assert_called_once()
-        search_index.assert_called_once()
         alemic_command.stamp.assert_called_once()
 
     def test_migrate_database(self, db: DatabaseTransactionFixture):
@@ -645,66 +640,58 @@ class TestInstanceInitializationScript:
         assert conf.attributes["connection"] == mock_connection.engine
         assert conf.attributes["configure_logger"] is False
 
+    def test_initialize_search_indexes_mocked(
+        self,
+        external_search_fake_fixture: ExternalSearchFixtureFake,
+        caplog: LogCaptureFixture,
+    ):
+        caplog.set_level(logging.WARNING)
+
+        script = InstanceInitializationScript()
+
+        search_service = external_search_fake_fixture.external_search
+        search_service.start_migration = MagicMock()
+        search_service.search_service = MagicMock()
+
+        # To fake "no migration is available", mock all the values
+        search_service.start_migration.return_value = None
+        search_service.search_service().is_pointer_empty.return_value = True
+
+        # Migration should fail
+        assert script.initialize_search_indexes() is False
+
+        # Logs were emitted
+        record = caplog.records.pop()
+        assert "WARNING" in record.levelname
+        assert "no migration was available" in record.message
+
+        search_service.search_service.reset_mock()
+        search_service.start_migration.reset_mock()
+
+        # In case there is no need for a migration, read pointer exists as a non-empty pointer
+        search_service.search_service().is_pointer_empty.return_value = False
+
+        # Initialization should pass, as a no-op
+        assert script.initialize_search_indexes() is True
+        assert search_service.start_migration.call_count == 0
+
     def test_initialize_search_indexes(
         self, end_to_end_search_fixture: EndToEndSearchFixture
     ):
-        db = end_to_end_search_fixture.db
         search = end_to_end_search_fixture.external_search_index
-        base_name = search._revision_base_name
+        base_name = end_to_end_search_fixture.external_search.service.base_revision_name
         script = InstanceInitializationScript()
 
-        _mockable_search = ExternalSearchIndex(db.session)
-        _mockable_search.start_migration = MagicMock()  # type: ignore [method-assign]
-        _mockable_search.search_service = MagicMock()  # type: ignore [method-assign]
-        _mockable_search.log = MagicMock()
-
-        def mockable_search(*args):
-            return _mockable_search
-
         # Initially this should not exist, if InstanceInit has not been run
-        assert search.search_service().read_pointer() == None
-
-        with patch("scripts.ExternalSearchIndex", new=mockable_search):
-            # To fake "no migration is available", mock all the values
-
-            _mockable_search.start_migration.return_value = None
-            _mockable_search.search_service().is_pointer_empty.return_value = True
-            # Migration should fail
-            assert script.initialize_search_indexes(db.session) == False
-            # Logs were emitted
-            assert _mockable_search.log.warning.call_count == 1
-            assert (
-                "no migration was available"
-                in _mockable_search.log.warning.call_args[0][0]
-            )
-
-            _mockable_search.search_service.reset_mock()
-            _mockable_search.start_migration.reset_mock()
-            _mockable_search.log.reset_mock()
-
-            # In case there is no need for a migration, read pointer exists as a non-empty pointer
-            _mockable_search.search_service().is_pointer_empty.return_value = False
-            # Initialization should pass, as a no-op
-            assert script.initialize_search_indexes(db.session) == True
-            assert _mockable_search.start_migration.call_count == 0
+        assert search.search_service().read_pointer() is None
 
         # Initialization should work now
-        assert script.initialize_search_indexes(db.session) == True
+        assert script.initialize_search_indexes() is True
         # Then we have the latest version index
         assert (
             search.search_service().read_pointer()
             == search._revision.name_for_index(base_name)
         )
-
-    def test_initialize_search_indexes_no_integration(
-        self, db: DatabaseTransactionFixture
-    ):
-        script = InstanceInitializationScript()
-        script._log = MagicMock()
-        # No integration mean no migration
-        assert script.initialize_search_indexes(db.session) == False
-        assert script._log.error.call_count == 2
-        assert "No search integration" in script._log.error.call_args[0][0]
 
 
 class TestLanguageListScript:
