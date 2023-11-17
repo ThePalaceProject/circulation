@@ -1,7 +1,14 @@
 import threading
+from queue import Queue
 
 from core.model import Identifier, SessionManager
-from core.util.worker_pools import DatabaseJob, DatabasePool, Pool, Queue, Worker
+from core.util.worker_pools import (
+    DatabaseJob,
+    DatabasePool,
+    DatabaseWorker,
+    Pool,
+    Worker,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -73,6 +80,7 @@ class TestDatabasePool:
         pool = DatabasePool(2, session_factory)
         try:
             for worker in pool.workers:
+                assert isinstance(worker, DatabaseWorker)
                 assert worker._db
                 assert bind == worker._db.connection()
         finally:

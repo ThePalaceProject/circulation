@@ -29,9 +29,9 @@ from core.model import (
     get_one,
 )
 from core.opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
+from core.util import base64
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
-from core.util.string_helpers import base64
 
 if TYPE_CHECKING:
     from requests import Response

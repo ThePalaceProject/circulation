@@ -36,6 +36,7 @@ RUN install_clean \
       # needed for xmlsec
       libxmlsec1-dev \
       libxmlsec1-openssl \
+      tzdata \
       pkg-config && \
     curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version $POETRY_VERSION && \
     ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry && \
