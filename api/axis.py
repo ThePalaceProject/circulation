@@ -40,6 +40,7 @@ from api.admin.validator import Validator
 from api.circulation import (
     APIAwareFulfillmentInfo,
     BaseCirculationAPI,
+    BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
     CirculationInternalFormatsMixin,
     FulfillmentInfo,
@@ -54,7 +55,6 @@ from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
 from core.integration.settings import (
-    BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
@@ -109,7 +109,7 @@ class Axis360APIConstants:
     }
 
 
-class Axis360Settings(BaseSettings):
+class Axis360Settings(BaseCirculationApiSettings):
     username: str = FormField(
         form=ConfigurationFormItem(label=_("Username"), required=True)
     )

@@ -22,6 +22,7 @@ from pymarc import parse_xml_to_array
 
 from api.circulation import (
     BaseCirculationAPI,
+    BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
     FulfillmentInfo,
     HoldInfo,
@@ -35,7 +36,6 @@ from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider
 from core.integration.settings import (
-    BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
@@ -82,7 +82,7 @@ from core.util.http import HTTP
 from core.util.xmlparser import XMLParser, XMLProcessor
 
 
-class BibliothecaSettings(BaseSettings):
+class BibliothecaSettings(BaseCirculationApiSettings):
     username: str = FormField(
         form=ConfigurationFormItem(
             label=_("Account ID"),

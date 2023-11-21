@@ -32,9 +32,6 @@ HOME=/var/www/circulation
 # those works.
 30 22 * * * root core/bin/run work_classify_unchecked_subjects >> /var/log/cron.log 2>&1
 
-# If any works have out-of-date OPDS entries or MARC records, rebuild them,
-40 23 * * * root core/bin/run marc_record_coverage >> /var/log/cron.log 2>&1
-
 # Remove miscellaneous expired things from the database
 0 2 * * * root core/bin/run database_reaper >> /var/log/cron.log 2>&1
 

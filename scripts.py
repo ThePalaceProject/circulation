@@ -1,11 +1,12 @@
 import argparse
+import datetime
 import logging
 import os
 import sys
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Type
 
 from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
@@ -21,7 +22,6 @@ from api.bibliotheca import BibliothecaCirculationSweep
 from api.config import CannotLoadConfiguration, Configuration
 from api.lanes import create_default_lanes
 from api.local_analytics_exporter import LocalAnalyticsExporter
-from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from api.nyt import NYTBestSellerAPI
 from api.opds_for_distributors import (
@@ -32,15 +32,17 @@ from api.opds_for_distributors import (
 from api.overdrive import OverdriveAPI
 from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
-from core.lane import Lane, WorkList
+from core.lane import Lane
+from core.marc import Annotator as MarcAnnotator
 from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
 from core.model import (
     LOCK_ID_DB_INIT,
-    CachedMARCFile,
     CirculationEvent,
+    Collection,
     ConfigurationSetting,
     Contribution,
     DataSource,
+    DiscoveryServiceRegistration,
     Edition,
     Hold,
     Identifier,
@@ -49,6 +51,7 @@ from core.model import (
     Library,
     LicensePool,
     Loan,
+    MarcFile,
     Patron,
     SessionManager,
     get_one,
@@ -56,7 +59,6 @@ from core.model import (
 )
 from core.scripts import (
     IdentifierInputScript,
-    LaneSweeperScript,
     LibraryInputScript,
     OPDSImportScript,
     PatronInputScript,
@@ -148,20 +150,14 @@ class FillInAuthorScript(MetadataCalculationScript):
         )
 
 
-class CacheMARCFiles(LaneSweeperScript):
+class CacheMARCFiles(LibraryInputScript):
     """Generate and cache MARC files for each input library."""
 
     name = "Cache MARC files"
 
     @classmethod
     def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:  # type: ignore[override]
-        parser = LaneSweeperScript.arg_parser(_db)
-        parser.add_argument(
-            "--max-depth",
-            help="Stop processing lanes once you reach this depth.",
-            type=int,
-            default=0,
-        )
+        parser = super().arg_parser(_db)
         parser.add_argument(
             "--force",
             help="Generate new MARC files even if MARC files have already been generated recently enough",
@@ -174,18 +170,26 @@ class CacheMARCFiles(LaneSweeperScript):
         self,
         _db: Optional[Session] = None,
         cmd_args: Optional[Sequence[str]] = None,
+        exporter: Optional[MARCExporter] = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(_db, *args, **kwargs)
+        self.force = False
         self.parse_args(cmd_args)
+        self.storage_service = self.services.storage.public()
+
+        self.cm_base_url = ConfigurationSetting.sitewide(
+            self._db, Configuration.BASE_URL_KEY
+        ).value
+
+        self.exporter = exporter or MARCExporter(self._db, self.storage_service)
 
     def parse_args(
         self, cmd_args: Optional[Sequence[str]] = None
     ) -> argparse.Namespace:
         parser = self.arg_parser(self._db)
         parsed = parser.parse_args(cmd_args)
-        self.max_depth = parsed.max_depth
         self.force = parsed.force
         return parsed
 
@@ -208,80 +212,134 @@ class CacheMARCFiles(LaneSweeperScript):
 
         return settings, library_settings
 
-    def should_process_library(self, library: Library) -> bool:
-        try:
-            self.settings(library)
-            return True
-        except NoResultFound:
-            return False
+    def process_libraries(self, libraries: Sequence[Library]) -> None:
+        if not self.storage_service:
+            self.log.info("No storage service was found.")
+            return
 
-    def process_library(self, library):
-        if self.should_process_library(library):
-            super().process_library(library)
-            self.log.info("Processed library %s" % library.name)
+        super().process_libraries(libraries)
 
-    def should_process_lane(self, lane):
-        if isinstance(lane, Lane):
-            if self.max_depth is not None and lane.depth > self.max_depth:
-                return False
-            if lane.size == 0:
-                return False
-        return True
-
-    def process_lane(
-        self, lane: Union[Lane, WorkList], exporter: Optional[MARCExporter] = None
-    ) -> None:
-        # Generate a MARC file for this lane, if one has not been generated recently enough.
-        if isinstance(lane, Lane):
-            library = lane.library
-        else:
-            library = lane.get_library(self._db)
-
-        annotator = MARCLibraryAnnotator(library)
-
-        if exporter is None:
-            settings, library_settings = self.settings(library)
-            exporter = MARCExporter(self._db, library, settings, library_settings)
-
-        update_frequency = exporter.settings.update_frequency
-
-        last_updated_file = self._db.execute(
-            select(CachedMARCFile.end_time)
-            .where(
-                CachedMARCFile.library == library,
-                CachedMARCFile.lane == (lane if isinstance(lane, Lane) else None),
+    def get_collections(self, library: Library) -> Sequence[Collection]:
+        return self._db.scalars(
+            select(Collection).where(
+                Collection.libraries.contains(library),
+                Collection.export_marc_records == True,
             )
-            .order_by(CachedMARCFile.end_time.desc())
+        ).all()
+
+    def get_web_client_urls(
+        self, library: Library, url: Optional[str] = None
+    ) -> List[str]:
+        """Find web client URLs configured by the registry for this library."""
+        urls = [
+            s.web_client
+            for s in self._db.execute(
+                select(DiscoveryServiceRegistration.web_client).where(
+                    DiscoveryServiceRegistration.library == library,
+                    DiscoveryServiceRegistration.web_client != None,
+                )
+            ).all()
+        ]
+
+        if url:
+            urls.append(url)
+
+        return urls
+
+    def process_library(
+        self, library: Library, annotator_cls: Type[MarcAnnotator] = MarcAnnotator
+    ) -> None:
+        try:
+            settings, library_settings = self.settings(library)
+        except NoResultFound:
+            return
+
+        self.log.info("Processing library %s" % library.name)
+
+        update_frequency = int(settings.update_frequency)
+
+        # Find the collections for this library.
+        collections = self.get_collections(library)
+
+        # Find web client URLs configured by the registry for this library.
+        web_client_urls = self.get_web_client_urls(
+            library, library_settings.web_client_url
+        )
+
+        annotator = annotator_cls(
+            self.cm_base_url,
+            library.short_name or "",
+            web_client_urls,
+            library_settings.organization_code,
+            library_settings.include_summary,
+            library_settings.include_genres,
+        )
+
+        # We set the creation time to be the start of the batch. Any updates that happen during the batch will be
+        # included in the next batch.
+        creation_time = utc_now()
+
+        for collection in collections:
+            self.process_collection(
+                library,
+                collection,
+                annotator,
+                update_frequency,
+                creation_time,
+            )
+
+    def last_updated(
+        self, library: Library, collection: Collection
+    ) -> Optional[datetime.datetime]:
+        """Find the most recent MarcFile creation time."""
+        last_updated_file = self._db.execute(
+            select(MarcFile.created)
+            .where(
+                MarcFile.library == library,
+                MarcFile.collection == collection,
+            )
+            .order_by(MarcFile.created.desc())
         ).first()
 
-        last_update = last_updated_file.end_time if last_updated_file else None
+        return last_updated_file.created if last_updated_file else None
+
+    def process_collection(
+        self,
+        library: Library,
+        collection: Collection,
+        annotator: MarcAnnotator,
+        update_frequency: int,
+        creation_time: datetime.datetime,
+    ) -> None:
+        last_update = self.last_updated(library, collection)
 
         if (
             not self.force
             and last_update
-            and (last_update > utc_now() - timedelta(days=update_frequency))
+            and (last_update > creation_time - timedelta(days=update_frequency))
         ):
             self.log.info(
-                "Skipping lane %s because last update was less than %d days ago"
-                % (lane.display_name, update_frequency)
+                f"Skipping collection {collection.name} because last update was less than {update_frequency} days ago"
             )
             return
 
-        # Find the storage service
-        storage_service = self.services.storage.public()
-        if not storage_service:
-            self.log.info("No storage service was found.")
-            return
-
         # First update the file with ALL the records.
-        exporter.records(lane, annotator, storage_service)
+        self.exporter.records(
+            library, collection, annotator, creation_time=creation_time
+        )
 
         # Then create a new file with changes since the last update.
         if last_update:
-            # Allow one day of overlap to ensure we don't miss anything due to script timing.
-            start_time = last_update - timedelta(days=1)
+            self.exporter.records(
+                library,
+                collection,
+                annotator,
+                creation_time=creation_time,
+                since_time=last_update,
+            )
 
-            exporter.records(lane, annotator, storage_service, start_time=start_time)
+        self._db.commit()
+        self.log.info("Processed collection %s" % collection.name)
 
 
 class AdobeAccountIDResetScript(PatronInputScript):

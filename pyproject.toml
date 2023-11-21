@@ -109,6 +109,7 @@ module = [
     "core.util.notifications",
     "core.util.problem_detail",
     "core.util.string_helpers",
+    "core.util.uuid",
     "core.util.worker_pools",
     "core.util.xmlparser",
     "tests.fixtures.authenticator",

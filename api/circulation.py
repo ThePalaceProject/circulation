@@ -559,7 +559,21 @@ class CirculationInternalFormatsMixin:
         return internal_format
 
 
-SettingsType = TypeVar("SettingsType", bound=BaseSettings, covariant=True)
+class BaseCirculationApiSettings(BaseSettings):
+    _additional_form_fields = {
+        "export_marc_records": ConfigurationFormItem(
+            label="Generate MARC Records",
+            type=ConfigurationFormItemType.SELECT,
+            description="Generate MARC Records for this collection. This setting only applies if a MARC Exporter is configured.",
+            options={
+                "false": "Do not generate MARC records",
+                "true": "Generate MARC records",
+            },
+        )
+    }
+
+
+SettingsType = TypeVar("SettingsType", bound=BaseCirculationApiSettings, covariant=True)
 LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
 
 
@@ -710,7 +724,7 @@ class BaseCirculationAPI(
         ...
 
 
-CirculationApiType = BaseCirculationAPI[BaseSettings, BaseSettings]
+CirculationApiType = BaseCirculationAPI[BaseCirculationApiSettings, BaseSettings]
 
 
 class PatronActivityCirculationAPI(
@@ -1446,7 +1460,9 @@ class CirculationAPI:
         class PatronActivityThread(Thread):
             def __init__(
                 self,
-                api: PatronActivityCirculationAPI[BaseSettings, BaseSettings],
+                api: PatronActivityCirculationAPI[
+                    BaseCirculationApiSettings, BaseSettings
+                ],
                 patron: Patron,
                 pin: str,
             ) -> None:

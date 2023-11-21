@@ -136,6 +136,8 @@ class Collection(Base, HasSessionCache):
         "CustomList", secondary=lambda: collections_customlists, backref="collections"
     )
 
+    export_marc_records = Column(Boolean, default=False, nullable=False)
+
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to
     # every library.

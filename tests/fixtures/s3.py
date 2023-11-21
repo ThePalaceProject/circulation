@@ -2,17 +2,7 @@ from __future__ import annotations
 
 import functools
 import sys
-from types import TracebackType
-from typing import (
-    TYPE_CHECKING,
-    BinaryIO,
-    List,
-    Literal,
-    NamedTuple,
-    Optional,
-    Protocol,
-    Type,
-)
+from typing import TYPE_CHECKING, BinaryIO, List, NamedTuple, Optional, Protocol
 from unittest.mock import MagicMock
 
 import pytest
@@ -57,22 +47,19 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(
-        self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Literal[False]:
+    def upload_part(self, content: bytes) -> None:
+        self.content_parts.append(content)
+        self.content += content
+
+    def _upload_complete(self) -> None:
         if self.content:
             self._complete = True
             self.parent.uploads.append(
                 MockS3ServiceUpload(self.key, self.content, self.media_type)
             )
-        return False
 
-    def upload_part(self, content: bytes) -> None:
-        self.content_parts.append(content)
-        self.content += content
+    def _upload_abort(self) -> None:
+        ...
 
 
 class MockS3Service(S3Service):

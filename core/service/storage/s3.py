@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import logging
 import sys
 from io import BytesIO
 from string import Formatter
@@ -77,15 +76,13 @@ class MultipartS3ContextManager(LoggerMixin):
             )
             self._upload_abort()
             self._exception = exc_val
-            if isinstance(exc_val, (ClientError, BotoCoreError)):
-                return True
-        return False
+        return True
 
     def upload_part(self, content: bytes) -> None:
         if self.complete or self.exception or self.upload_id is None:
             raise RuntimeError("Upload already complete or aborted.")
 
-        logging.info(
+        self.log.info(
             f"Uploading part {self.part_number} of {self.key} to {self.bucket}"
         )
         result = self.client.upload_part(
@@ -100,7 +97,7 @@ class MultipartS3ContextManager(LoggerMixin):
 
     def _upload_complete(self) -> None:
         if not self.parts:
-            logging.info(f"Upload of {self.key} was empty.")
+            self.log.info(f"Upload of {self.key} was empty.")
             self._upload_abort()
         elif self.upload_id is None:
             raise RuntimeError("Upload ID not set.")
@@ -114,7 +111,7 @@ class MultipartS3ContextManager(LoggerMixin):
             self._complete = True
 
     def _upload_abort(self) -> None:
-        logging.info(f"Aborting upload of {self.key}.")
+        self.log.info(f"Aborting upload of {self.key}.")
         if self.upload_id is not None:
             self.client.abort_multipart_upload(
                 Bucket=self.bucket,
@@ -122,7 +119,7 @@ class MultipartS3ContextManager(LoggerMixin):
                 UploadId=self.upload_id,
             )
         else:
-            logging.error("Upload ID not set, unable to abort.")
+            self.log.error("Upload ID not set, unable to abort.")
 
     @property
     def url(self) -> str:

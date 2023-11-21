@@ -35,7 +35,13 @@ from lxml import etree
 from pydantic import AnyHttpUrl
 from sqlalchemy.orm.session import Session
 
-from api.circulation import BaseCirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    BaseCirculationAPI,
+    BaseCirculationApiSettings,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+)
 from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
 from api.saml.credential import SAMLCredentialManager
 from core.classifier import Classifier
@@ -112,6 +118,7 @@ class OPDSImporterSettings(
     ConnectionSetting,
     SAMLWAYFlessSetttings,
     FormatPrioritiesSettings,
+    BaseCirculationApiSettings,
 ):
     external_account_id: AnyHttpUrl = FormField(
         form=ConfigurationFormItem(

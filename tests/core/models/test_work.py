@@ -1634,13 +1634,6 @@ class TestWork:
         classification2.subject.checked = True
         assert [] == qu.all()
 
-    def test_calculate_marc_record(self, db: DatabaseTransactionFixture):
-        work = db.work(with_license_pool=True)
-
-        work.calculate_marc_record()
-        assert work.title in work.marc_record
-        assert "online resource" in work.marc_record
-
     def test_active_licensepool_ignores_superceded_licensepools(
         self, db: DatabaseTransactionFixture
     ):

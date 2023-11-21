@@ -1,8 +1,11 @@
 import datetime
+from unittest.mock import MagicMock
 
+from api.controller import MARCRecordController
 from core.integration.goals import Goals
 from core.marc import MARCExporter
-from core.model import CachedMARCFile, Representation, create
+from core.model import MarcFile, create
+from core.service.storage.s3 import S3Service
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 
@@ -17,7 +20,8 @@ class TestMARCRecordController:
         yesterday = now - datetime.timedelta(days=1)
 
         library = db.default_library()
-        lane = db.lane(display_name="Test Lane")
+        collection = db.default_collection()
+        collection.export_marc_records = True
 
         db.integration_configuration(
             MARCExporter.__name__,
@@ -25,81 +29,56 @@ class TestMARCRecordController:
             libraries=[library],
         )
 
-        rep1, ignore = create(
-            db.session,
-            Representation,
-            url="http://mirror1",
-            mirror_url="http://mirror1",
-            media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now,
-        )
         cache1, ignore = create(
             db.session,
-            CachedMARCFile,
-            library=db.default_library(),
-            lane=None,
-            representation=rep1,
-            end_time=now,
+            MarcFile,
+            library=library,
+            collection=collection,
+            created=now,
+            key="cache1",
         )
 
-        rep2, ignore = create(
-            db.session,
-            Representation,
-            url="http://mirror2",
-            mirror_url="http://mirror2",
-            media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=yesterday,
-        )
         cache2, ignore = create(
             db.session,
-            CachedMARCFile,
-            library=db.default_library(),
-            lane=lane,
-            representation=rep2,
-            end_time=yesterday,
+            MarcFile,
+            library=library,
+            collection=collection,
+            created=yesterday,
+            key="cache2",
         )
 
-        rep3, ignore = create(
-            db.session,
-            Representation,
-            url="http://mirror3",
-            mirror_url="http://mirror3",
-            media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now,
-        )
         cache3, ignore = create(
             db.session,
-            CachedMARCFile,
-            library=db.default_library(),
-            lane=None,
-            representation=rep3,
-            end_time=now,
-            start_time=yesterday,
+            MarcFile,
+            library=library,
+            collection=collection,
+            created=now,
+            since=yesterday,
+            key="cache3",
+        )
+
+        mock_s3_service = MagicMock(spec=S3Service)
+        mock_s3_service.generate_url = lambda x: x
+        marc_records = MARCRecordController(
+            circulation_fixture.manager, mock_s3_service
         )
 
         with circulation_fixture.request_context_with_library("/"):
-            response = circulation_fixture.manager.marc_records.download_page()
+            response = marc_records.download_page()
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
             assert ("Download MARC files for %s" % library.name) in html
 
-            assert "<h3>All Books</h3>" in html
+            assert f"<h3>{collection.name}</h3>" in html
             assert (
-                '<a href="http://mirror1">Full file - last updated %s</a>'
+                '<a href="cache1">Full file - last updated %s</a>'
                 % now.strftime("%B %-d, %Y")
                 in html
             )
             assert "<h4>Update-only files</h4>" in html
             assert (
-                '<a href="http://mirror3">Updates from %s to %s</a>'
+                '<a href="cache3">Updates from %s to %s</a>'
                 % (yesterday.strftime("%B %-d, %Y"), now.strftime("%B %-d, %Y"))
-                in html
-            )
-
-            assert "<h3>Test Lane</h3>" in html
-            assert (
-                '<a href="http://mirror2">Full file - last updated %s</a>'
-                % yesterday.strftime("%B %-d, %Y")
                 in html
             )
 
@@ -107,9 +86,6 @@ class TestMARCRecordController:
         self, circulation_fixture: CirculationControllerFixture
     ):
         db = circulation_fixture.db
-
-        now = utc_now()
-        yesterday = now - datetime.timedelta(days=1)
 
         library = db.default_library()
 
@@ -137,37 +113,25 @@ class TestMARCRecordController:
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
             assert ("Download MARC files for %s" % library.name) in html
-            assert ("No MARC exporter is currently configured") in html
+            assert "No MARC exporter is currently configured" in html
 
-        # If the exporter was deleted after some MARC files were cached,
-        # they will still be available to download.
-        now = utc_now()
-        rep, ignore = create(
-            db.session,
-            Representation,
-            url="http://mirror1",
-            mirror_url="http://mirror1",
-            media_type=Representation.MARC_MEDIA_TYPE,
-            mirrored_at=now,
+    def test_download_page_no_storage_service(
+        self, circulation_fixture: CirculationControllerFixture
+    ):
+        db = circulation_fixture.db
+        library = db.default_library()
+
+        db.integration_configuration(
+            MARCExporter.__name__,
+            Goals.CATALOG_GOAL,
+            libraries=[library],
         )
-        cache, ignore = create(
-            db.session,
-            CachedMARCFile,
-            library=db.default_library(),
-            lane=None,
-            representation=rep,
-            end_time=now,
-        )
+
+        marc_records = MARCRecordController(circulation_fixture.manager, None)
 
         with circulation_fixture.request_context_with_library("/"):
-            response = circulation_fixture.manager.marc_records.download_page()
+            response = marc_records.download_page()
             assert 200 == response.status_code
             html = response.get_data(as_text=True)
             assert ("Download MARC files for %s" % library.name) in html
-            assert "No MARC exporter is currently configured" in html
-            assert "<h3>All Books</h3>" in html
-            assert (
-                '<a href="http://mirror1">Full file - last updated %s</a>'
-                % now.strftime("%B %-d, %Y")
-                in html
-            )
+            assert "No storage service is currently configured" in html

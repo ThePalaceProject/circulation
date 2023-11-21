@@ -7,7 +7,6 @@ from core.coverage import (
     CoverageFailure,
     CoverageProviderProgress,
     IdentifierCoverageProvider,
-    MARCRecordWorkCoverageProvider,
     PresentationReadyWorkCoverageProvider,
     WorkClassificationCoverageProvider,
     WorkPresentationEditionCoverageProvider,
@@ -2193,22 +2192,3 @@ class TestWorkClassificationCoverageProvider:
                 policy.calculate_quality,
             ]
         )
-
-
-class TestMARCRecordWorkCoverageProvider:
-    def test_run(self, db: DatabaseTransactionFixture):
-        provider = MARCRecordWorkCoverageProvider(db.session)
-        work = db.work(with_license_pool=True)
-        work.marc_record = "old junk"
-        work.presentation_ready = False
-
-        # The work is not presentation-ready, so nothing happens.
-        provider.run()
-        assert "old junk" == work.marc_record
-
-        # The work is presentation-ready, so its MARC record is
-        # regenerated.
-        work.presentation_ready = True
-        provider.run()
-        assert work.title in work.marc_record
-        assert "online resource" in work.marc_record

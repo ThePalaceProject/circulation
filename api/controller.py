@@ -6,8 +6,10 @@ import logging
 import os
 import urllib.parse
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import datetime
 from time import mktime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
 from wsgiref.handlers import format_date_time
 
 import flask
@@ -52,7 +54,6 @@ from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.problem_details import *
 from api.saml.controller import SAMLController
-from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
@@ -89,6 +90,7 @@ from core.model import (
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
+    MarcFile,
     Patron,
     Representation,
     Session,
@@ -103,6 +105,7 @@ from core.model.discovery_service_registration import DiscoveryServiceRegistrati
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
 from core.service.container import Services
+from core.service.storage.s3 import S3Service
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -215,10 +218,11 @@ class CirculationManager:
     def __init__(
         self,
         _db,
-        analytics: Analytics = Provide[Services.analytics.analytics],
+        services: Services = Provide[Services],
     ):
         self._db = _db
-        self.analytics = analytics
+        self.services = services
+        self.analytics = services.analytics.analytics()
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -406,7 +410,7 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
-        self.marc_records = MARCRecordController(self)
+        self.marc_records = MARCRecordController(self, self.services.storage.public())
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
         self.urn_lookup = URNLookupController(self)
@@ -1261,6 +1265,25 @@ class FeedRequestParameters:
     problem: ProblemDetail | None = None
 
 
+@dataclass
+class MarcFileDeltaResult:
+    key: str
+    since: datetime
+    created: datetime
+
+
+@dataclass
+class MarcFileFullResult:
+    key: str
+    created: datetime
+
+
+@dataclass
+class MarcFileCollectionResult:
+    full: MarcFileFullResult | None = None
+    deltas: list[MarcFileDeltaResult] = field(default_factory=list)
+
+
 class MARCRecordController(CirculationManagerController):
     DOWNLOAD_TEMPLATE = """
 <html lang="en">
@@ -1270,9 +1293,13 @@ class MARCRecordController(CirculationManagerController):
 </body>
 </html>"""
 
-    def download_page(self):
-        library = flask.request.library
-        body = "<h2>Download MARC files for %s</h2>" % library.name
+    def __init__(
+        self, manager: CirculationManager, storage_service: Optional[S3Service]
+    ) -> None:
+        super().__init__(manager)
+        self.storage_service = storage_service
+
+    def download_page_body(self, session: Session, library: Library) -> str:
         time_format = "%B %-d, %Y"
 
         # Check if a MARC exporter is configured, so we can show a
@@ -1286,70 +1313,92 @@ class MARCRecordController(CirculationManagerController):
                 IntegrationLibraryConfiguration.library == library,
             )
         )
-
-        session = Session.object_session(library)
         integration = session.execute(integration_query).one_or_none()
 
         if not integration:
-            body += (
+            return (
                 "<p>"
                 + _("No MARC exporter is currently configured for this library.")
                 + "</p>"
             )
 
-        if len(library.cachedmarcfiles) < 1 and integration:
-            body += "<p>" + _("MARC files aren't ready to download yet.") + "</p>"
+        if not self.storage_service:
+            return "<p>" + _("No storage service is currently configured.") + "</p>"
 
-        files_by_lane = defaultdict(dict)
-        for file in library.cachedmarcfiles:
-            if file.start_time == None:
-                files_by_lane[file.lane]["full"] = file
-            else:
-                if not files_by_lane[file.lane].get("updates"):
-                    files_by_lane[file.lane]["updates"] = []
-                files_by_lane[file.lane]["updates"].append(file)
+        # Get the MARC files for this library.
+        marc_files = session.execute(
+            select(
+                IntegrationConfiguration.name,
+                MarcFile.key,
+                MarcFile.since,
+                MarcFile.created,
+            )
+            .select_from(MarcFile)
+            .join(Collection)
+            .join(IntegrationConfiguration)
+            .where(MarcFile.library == library)
+            .order_by(
+                IntegrationConfiguration.name,
+                MarcFile.created.desc(),
+            )
+        ).all()
 
-        # TODO: By default the MARC script only caches one level of lanes,
-        # so sorting by priority is good enough.
-        lanes = sorted(
-            list(files_by_lane.keys()), key=lambda x: x.priority if x else -1
+        if len(marc_files) == 0:
+            return "<p>" + _("MARC files aren't ready to download yet.") + "</p>"
+
+        body = ""
+        files_by_collection: Dict[str, MarcFileCollectionResult] = defaultdict(
+            MarcFileCollectionResult
         )
+        for file_row in marc_files:
+            if file_row.since is None:
+                full_file_result = MarcFileFullResult(
+                    key=file_row.key,
+                    created=file_row.created,
+                )
+                if files_by_collection[file_row.name].full is not None:
+                    # We already have a newer full file, so skip this one.
+                    continue
+                files_by_collection[file_row.name].full = full_file_result
+            else:
+                delta_file_result = MarcFileDeltaResult(
+                    key=file_row.key,
+                    since=file_row.since,
+                    created=file_row.created,
+                )
+                files_by_collection[file_row.name].deltas.append(delta_file_result)
 
-        for lane in lanes:
-            files = files_by_lane[lane]
+        for collection, files in files_by_collection.items():
             body += "<section>"
-            body += "<h3>%s</h3>" % (lane.display_name if lane else _("All Books"))
-            if files.get("full"):
-                file = files.get("full")
-                full_url = file.representation.mirror_url
-                full_label = _(
-                    "Full file - last updated %(update_time)s",
-                    update_time=file.end_time.strftime(time_format),
+            body += f"<h3>{collection}</h3>"
+            if files.full is not None:
+                file = files.full
+                full_url = self.storage_service.generate_url(file.key)
+                full_label = (
+                    f"Full file - last updated {file.created.strftime(time_format)}"
                 )
-                body += '<a href="{}">{}</a>'.format(
-                    files.get("full").representation.mirror_url,
-                    full_label,
-                )
+                body += f'<a href="{full_url}">{full_label}</a>'
 
-                if files.get("updates"):
-                    body += "<h4>%s</h4>" % _("Update-only files")
+                if files.deltas:
+                    body += f"<h4>Update-only files</h4>"
                     body += "<ul>"
-                    files.get("updates").sort(key=lambda x: x.end_time)
-                    for update in files.get("updates"):
-                        update_url = update.representation.mirror_url
-                        update_label = _(
-                            "Updates from %(start_time)s to %(end_time)s",
-                            start_time=update.start_time.strftime(time_format),
-                            end_time=update.end_time.strftime(time_format),
-                        )
-                        body += '<li><a href="{}">{}</a></li>'.format(
-                            update_url,
-                            update_label,
-                        )
+                    for update in files.deltas:
+                        update_url = self.storage_service.generate_url(update.key)
+                        update_label = f"Updates from {update.since.strftime(time_format)} to {update.created.strftime(time_format)}"
+                        body += f'<li><a href="{update_url}">{update_label}</a></li>'
                     body += "</ul>"
 
             body += "</section>"
             body += "<br />"
+
+        return body
+
+    def download_page(self) -> Response:
+        library = flask.request.library  # type: ignore[attr-defined]
+        body = "<h2>Download MARC files for %s</h2>" % library.name
+
+        session = Session.object_session(library)
+        body += self.download_page_body(session, library)
 
         html = self.DOWNLOAD_TEMPLATE % dict(body=body)
         headers = dict()

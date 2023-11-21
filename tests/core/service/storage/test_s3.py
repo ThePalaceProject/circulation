@@ -200,9 +200,7 @@ class TestS3Service:
         assert upload.exception is None
         s3_service_fixture.mock_s3_client.complete_multipart_upload.assert_called_once()
 
-    def test_multipart_upload_boto_exception(
-        self, s3_service_fixture: S3ServiceFixture
-    ):
+    def test_multipart_upload_exception(self, s3_service_fixture: S3ServiceFixture):
         service = s3_service_fixture.service()
         exception = BotoCoreError()
         s3_service_fixture.mock_s3_client.upload_part.side_effect = exception
@@ -219,28 +217,6 @@ class TestS3Service:
         assert upload.exception is exception
         s3_service_fixture.mock_s3_client.abort_multipart_upload.assert_called_once()
 
-    def test_multipart_upload_other_exception(
-        self, s3_service_fixture: S3ServiceFixture
-    ):
-        service = s3_service_fixture.service()
-        exception = ValueError("foo")
-        s3_service_fixture.mock_s3_client.upload_part.side_effect = exception
-
-        # A non-boto exception is raised during upload, the upload is aborted
-        # and the exception is raised.
-        with pytest.raises(ValueError) as excinfo:
-            with service.multipart(key="key") as upload:
-                assert upload.complete is False
-                assert upload.url == "https://region.test.com/bucket/key"
-                assert upload.exception is None
-                upload.upload_part(b"test")
-
-        assert upload.complete is False
-        assert upload.exception is exception
-        s3_service_fixture.mock_s3_client.abort_multipart_upload.assert_called_once()
-        assert excinfo.value is exception
-
-        # Calling upload_part after the upload is complete raises an error.
         with pytest.raises(RuntimeError):
             upload.upload_part(b"foo")
 

@@ -211,13 +211,13 @@ class PresentationCalculationPolicy:
 
     def __init__(
         self,
+        /,
         choose_edition=True,
         set_edition_metadata=True,
         classify=True,
         choose_summary=True,
         calculate_quality=True,
         choose_cover=True,
-        regenerate_marc_record=False,
         update_search_index=False,
         verbose=True,
         equivalent_identifier_levels=DEFAULT_LEVELS,
@@ -238,8 +238,6 @@ class PresentationCalculationPolicy:
            quality of the Work?
         :param choose_cover: Should we reconsider which of the
            available cover images is the best?
-        :param regenerate_marc_record: Should we regenerate the MARC record
-           for this Work?
         :param update_search_index: Should we reindex this Work's
            entry in the search index?
         :param verbose: Should we print out information about the work we're
@@ -272,11 +270,6 @@ class PresentationCalculationPolicy:
         self.calculate_quality = calculate_quality
         self.choose_cover = choose_cover
 
-        # Regenerate MARC records, except that they will
-        # never be generated unless a MARC organization code is set
-        # in a sitewide configuration setting.
-        self.regenerate_marc_record = regenerate_marc_record
-
         # Similarly for update_search_index.
         self.update_search_index = update_search_index
 
@@ -292,7 +285,6 @@ class PresentationCalculationPolicy:
         everything, even when it doesn't seem necessary.
         """
         return PresentationCalculationPolicy(
-            regenerate_marc_record=True,
             update_search_index=True,
         )
 
@@ -522,7 +514,7 @@ from api.saml.metadata.federations.model import (
     SAMLFederation,
 )
 from core.model.admin import Admin, AdminRole
-from core.model.cachedfeed import CachedMARCFile
+from core.model.cachedfeed import _CachedMARCFile_deprecated
 from core.model.circulationevent import CirculationEvent
 from core.model.classification import Classification, Genre, Subject
 from core.model.collection import (
@@ -561,6 +553,7 @@ from core.model.licensing import (
     RightsStatus,
 )
 from core.model.listeners import *
+from core.model.marcfiles import MarcFile
 from core.model.measurement import Measurement
 from core.model.patron import (
     Annotation,
