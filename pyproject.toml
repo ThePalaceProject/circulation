@@ -92,6 +92,7 @@ module = [
     "core.feed.*",
     "core.integration.*",
     "core.marc",
+    "core.migration.*",
     "core.model.announcements",
     "core.model.collection",
     "core.model.hassessioncache",
