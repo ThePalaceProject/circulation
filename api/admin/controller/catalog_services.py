@@ -1,29 +1,36 @@
+from typing import List, Type, Union
+
 import flask
 from flask import Response
-from flask_babel import lazy_gettext as _
 
-from api.admin.controller.settings import SettingsController
-from api.admin.problem_details import (
-    CANNOT_CHANGE_PROTOCOL,
-    INTEGRATION_NAME_ALREADY_IN_USE,
-    MISSING_SERVICE,
-    MULTIPLE_SERVICES_FOR_LIBRARY,
-    UNKNOWN_PROTOCOL,
+from api.admin.controller.base import AdminPermissionsControllerMixin
+from api.admin.controller.integration_settings import (
+    IntegrationSettingsController,
+    UpdatedLibrarySettingsTuple,
 )
+from api.admin.form_data import ProcessFormData
+from api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
+from api.integration.registry.catalog_services import CatalogServicesRegistry
+from core.integration.goals import Goals
+from core.integration.settings import BaseSettings
 from core.marc import MARCExporter
-from core.model import ExternalIntegration, get_one
-from core.util.problem_detail import ProblemDetail
+from core.model import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+    json_serializer,
+    site_configuration_has_changed,
+)
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
-class CatalogServicesController(SettingsController):
-    def __init__(self, manager):
-        super().__init__(manager)
-        service_apis = [MARCExporter]
-        self.protocols = self._get_integration_protocols(
-            service_apis, protocol_name_attr="NAME"
-        )
+class CatalogServicesController(
+    IntegrationSettingsController[MARCExporter],
+    AdminPermissionsControllerMixin,
+):
+    def default_registry(self) -> CatalogServicesRegistry:
+        return CatalogServicesRegistry()
 
-    def process_catalog_services(self):
+    def process_catalog_services(self) -> Union[Response, ProblemDetail]:
         self.require_system_admin()
 
         if flask.request.method == "GET":
@@ -31,104 +38,76 @@ class CatalogServicesController(SettingsController):
         else:
             return self.process_post()
 
-    def process_get(self):
-        services = self._get_integration_info(
-            ExternalIntegration.CATALOG_GOAL, self.protocols
+    def process_get(self) -> Response:
+        return Response(
+            json_serializer(
+                {
+                    "catalog_services": self.configured_services,
+                    "protocols": list(self.protocols.values()),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
         )
-        return dict(
-            catalog_services=services,
-            protocols=self.protocols,
+
+    def library_integration_validation(
+        self, integration: IntegrationLibraryConfiguration
+    ) -> None:
+        """Check that the library didn't end up with multiple MARC integrations."""
+
+        library = integration.library
+        integrations = (
+            self._db.query(IntegrationConfiguration)
+            .join(IntegrationLibraryConfiguration)
+            .filter(
+                IntegrationLibraryConfiguration.library_id == library.id,
+                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
+            )
+            .count()
         )
-
-    def process_post(self):
-        protocol = flask.request.form.get("protocol")
-        is_new = False
-        error = self.validate_form_fields(protocol)
-        if error:
-            return error
-
-        id = flask.request.form.get("id")
-        if id:
-            # Find an existing service to edit
-            service = get_one(
-                self._db,
-                ExternalIntegration,
-                id=id,
-                goal=ExternalIntegration.CATALOG_GOAL,
+        if integrations > 1:
+            raise ProblemError(
+                MULTIPLE_SERVICES_FOR_LIBRARY.detailed(
+                    f"You tried to add a MARC export service to {library.short_name}, but it already has one."
+                )
             )
-            if not service:
-                return MISSING_SERVICE
-            if protocol != service.protocol:
-                return CANNOT_CHANGE_PROTOCOL
-        else:
-            # Create a new service
-            service, is_new = self._create_integration(
-                self.protocols,
-                protocol,
-                ExternalIntegration.CATALOG_GOAL,
-            )
-            if isinstance(service, ProblemDetail):
-                return service
 
-        name = self.get_name(service)
-        if isinstance(name, ProblemDetail):
+    def process_updated_libraries(
+        self,
+        libraries: List[UpdatedLibrarySettingsTuple],
+        settings_class: Type[BaseSettings],
+    ) -> None:
+        super().process_updated_libraries(libraries, settings_class)
+        for integration, _ in libraries:
+            self.library_integration_validation(integration)
+
+    def process_post(self) -> Union[Response, ProblemDetail]:
+        try:
+            form_data = flask.request.form
+            libraries_data = self.get_libraries_data(form_data)
+            catalog_service, protocol, response_code = self.get_service(form_data)
+
+            # Update settings
+            impl_cls = self.registry[protocol]
+            settings_class = impl_cls.settings_class()
+            validated_settings = ProcessFormData.get_settings(settings_class, form_data)
+            catalog_service.settings_dict = validated_settings.dict()
+
+            # Update library settings
+            if libraries_data:
+                self.process_libraries(
+                    catalog_service, libraries_data, impl_cls.library_settings_class()
+                )
+
+            # Trigger a site configuration change
+            site_configuration_has_changed(self._db)
+
+        except ProblemError as e:
             self._db.rollback()
-            return name
-        elif name:
-            service.name = name
+            return e.problem_detail
 
-        [protocol] = [p for p in self.protocols if p.get("name") == protocol]
+        return Response(str(catalog_service.id), response_code)
 
-        result = self._set_integration_settings_and_libraries(service, protocol)
-        if isinstance(result, ProblemDetail):
-            return result
-
-        library_error = self.check_libraries(service)
-        if library_error:
-            self._db.rollback()
-            return library_error
-
-        if is_new:
-            return Response(str(service.id), 201)
-        else:
-            return Response(str(service.id), 200)
-
-    def validate_form_fields(self, protocol):
-        """Verify that the protocol which the user has selected is in the list
-        of recognized protocol options."""
-
-        if protocol and protocol not in [p.get("name") for p in self.protocols]:
-            return UNKNOWN_PROTOCOL
-
-    def get_name(self, service):
-        """Check that there isn't already a service with this name"""
-
-        name = flask.request.form.get("name")
-        if name:
-            if service.name != name:
-                service_with_name = get_one(self._db, ExternalIntegration, name=name)
-                if service_with_name:
-                    return INTEGRATION_NAME_ALREADY_IN_USE
-            return name
-
-    def check_libraries(self, service):
-        """Check that no library ended up with multiple MARC export integrations."""
-
-        for library in service.libraries:
-            marc_export_count = 0
-            for integration in library.integrations:
-                if (
-                    integration.goal == ExternalIntegration.CATALOG_GOAL
-                    and integration.protocol == ExternalIntegration.MARC_EXPORT
-                ):
-                    marc_export_count += 1
-                    if marc_export_count > 1:
-                        return MULTIPLE_SERVICES_FOR_LIBRARY.detailed(
-                            _(
-                                "You tried to add a MARC export service to %(library)s, but it already has one.",
-                                library=library.short_name,
-                            )
-                        )
-
-    def process_delete(self, service_id):
-        return self._delete_integration(service_id, ExternalIntegration.CATALOG_GOAL)
+    def process_delete(self, service_id: int) -> Response:
+        self.require_system_admin()
+        return self.delete_service(service_id)

@@ -9,3 +9,4 @@ class Goals(Enum):
     PATRON_AUTH_GOAL = "patron_auth"
     LICENSE_GOAL = "licenses"
     DISCOVERY_GOAL = "discovery"
+    CATALOG_GOAL = "catalog"

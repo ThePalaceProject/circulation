@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import functools
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 from urllib.parse import quote
@@ -9,8 +10,8 @@ import pytest
 from freezegun import freeze_time
 from pymarc import MARCReader, Record
 
-from core.config import CannotLoadConfiguration
 from core.external_search import Filter
+from core.integration.goals import Goals
 from core.lane import WorkList
 from core.marc import Annotator, MARCExporter, MARCExporterFacets
 from core.model import (
@@ -19,9 +20,9 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Genre,
     Identifier,
+    IntegrationConfiguration,
     LicensePoolDeliveryMechanism,
     Representation,
     RightsStatus,
@@ -38,28 +39,21 @@ if TYPE_CHECKING:
 
 
 class TestAnnotator:
-    def test_annotate_work_record(self, db: DatabaseTransactionFixture):
-        session = db.session
-
+    def test_annotate_work_record(self, db: DatabaseTransactionFixture) -> None:
         # Verify that annotate_work_record adds the distributor and formats.
-        class MockAnnotator(Annotator):
-            add_distributor_called_with = None
-            add_formats_called_with = None
+        annotator = Annotator()
+        annotator.add_distributor = MagicMock()
+        annotator.add_formats = MagicMock()
 
-            def add_distributor(self, record, pool):
-                self.add_distributor_called_with = [record, pool]
-
-            def add_formats(self, record, pool):
-                self.add_formats_called_with = [record, pool]
-
-        annotator = MockAnnotator()
         record = Record()
         work = db.work(with_license_pool=True)
         pool = work.license_pools[0]
 
-        annotator.annotate_work_record(work, pool, None, None, record)
-        assert [record, pool] == annotator.add_distributor_called_with
-        assert [record, pool] == annotator.add_formats_called_with
+        annotator.annotate_work_record(
+            work, pool, MagicMock(), MagicMock(), record, MagicMock()
+        )
+        annotator.add_distributor.assert_called_once_with(record, pool)
+        annotator.add_formats.assert_called_once_with(record, pool)
 
     def test_leader(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
@@ -479,7 +473,12 @@ class MarcExporterFixture:
 
         self.integration = self._integration(db)
         self.now = utc_now()
-        self.exporter = MARCExporter.from_config(db.default_library())
+        self.library = db.default_library()
+        self.settings = MagicMock()
+        self.library_settings = MagicMock()
+        self.exporter = MARCExporter(
+            self.db.session, self.library, self.settings, self.library_settings
+        )
         self.annotator = Annotator()
         self.w1 = db.work(genre="Mystery", with_open_access_download=True)
         self.w2 = db.work(genre="Mystery", with_open_access_download=True)
@@ -488,10 +487,10 @@ class MarcExporterFixture:
         self.search_engine.mock_query_works([self.w1, self.w2])
 
     @staticmethod
-    def _integration(db: DatabaseTransactionFixture):
-        return db.external_integration(
-            ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL,
+    def _integration(db: DatabaseTransactionFixture) -> IntegrationConfiguration:
+        return db.integration_configuration(
+            MARCExporter.__name__,
+            Goals.CATALOG_GOAL,
             libraries=[db.default_library()],
         )
 
@@ -506,31 +505,28 @@ def marc_exporter_fixture(
 
 
 class TestMARCExporter:
-    def test_from_config(self, db: DatabaseTransactionFixture):
-        pytest.raises(
-            CannotLoadConfiguration, MARCExporter.from_config, db.default_library()
-        )
-
-        integration = MarcExporterFixture._integration(db)
-        exporter = MARCExporter.from_config(db.default_library())
-        assert integration == exporter.integration
-        assert db.default_library() == exporter.library
-
-        other_library = db.library()
-        pytest.raises(CannotLoadConfiguration, MARCExporter.from_config, other_library)
-
-    def test_create_record(self, db: DatabaseTransactionFixture):
+    def test_create_record(
+        self, db: DatabaseTransactionFixture, marc_exporter_fixture: MarcExporterFixture
+    ):
         work = db.work(
             with_license_pool=True,
             title="old title",
             authors=["old author"],
             data_source_name=DataSource.OVERDRIVE,
         )
-        annotator = Annotator()
+
+        create_record = functools.partial(
+            MARCExporter.create_record,
+            work=work,
+            annotator=marc_exporter_fixture.annotator,
+            settings=marc_exporter_fixture.settings,
+            library_settings=marc_exporter_fixture.library_settings,
+        )
 
         # The record isn't cached yet, so a new record is created and cached.
-        assert None == work.marc_record
-        record = MARCExporter.create_record(work, annotator)
+        assert work.marc_record is None
+        record = create_record()
+        assert record is not None
         [title_field] = record.get_fields("245")
         assert "old title" == title_field.get_subfields("a")[0]
         [author_field] = record.get_fields("100")
@@ -538,7 +534,8 @@ class TestMARCExporter:
         [distributor_field] = record.get_fields("264")
         assert DataSource.OVERDRIVE == distributor_field.get_subfields("b")[0]
         cached = work.marc_record
-        assert "old title" in cached
+        assert cached is not None
+        assert "old title" in cached  # type: ignore[unreachable]
         assert "author, old" in cached
         # The distributor isn't part of the cached record.
         assert DataSource.OVERDRIVE not in cached
@@ -551,7 +548,7 @@ class TestMARCExporter:
         # Now that the record is cached, creating a record will
         # use the cache. Distributor will be updated since it's
         # not part of the cached record.
-        record = MARCExporter.create_record(work, annotator)
+        record = create_record()
         [title_field] = record.get_fields("245")
         assert "old title" == title_field.get_subfields("a")[0]
         [author_field] = record.get_fields("100")
@@ -560,7 +557,7 @@ class TestMARCExporter:
         assert DataSource.BIBLIOTHECA == distributor_field.get_subfields("b")[0]
 
         # But we can force an update to the cached record.
-        record = MARCExporter.create_record(work, annotator, force_create=True)
+        record = create_record(force_create=True)
         [title_field] = record.get_fields("245")
         assert "new title" == title_field.get_subfields("a")[0]
         [author_field] = record.get_fields("100")
@@ -573,23 +570,21 @@ class TestMARCExporter:
         assert "new title" in cached
         assert "author, new" in cached
 
-        # If we pass in an integration, it's passed along to the annotator.
-        integration = MarcExporterFixture._integration(db)
-
-        class MockAnnotator(Annotator):
-            integration = None
-
-            def annotate_work_record(
-                self, work, pool, edition, identifier, record, integration
-            ):
-                self.integration = integration
-
-        annotator = MockAnnotator()
-        record = MARCExporter.create_record(work, annotator, integration=integration)
-        assert integration == annotator.integration
+        # The settings we pass in get passed along to the annotator.
+        marc_exporter_fixture.annotator.annotate_work_record = MagicMock()
+        create_record(force_create=True)
+        assert marc_exporter_fixture.annotator.annotate_work_record.call_count == 1
+        assert (
+            marc_exporter_fixture.annotator.annotate_work_record.call_args.kwargs[
+                "settings"
+            ]
+            == marc_exporter_fixture.library_settings
+        )
 
     @freeze_time("2020-01-01 00:00:00")
-    def test_create_record_roundtrip(self, db: DatabaseTransactionFixture):
+    def test_create_record_roundtrip(
+        self, db: DatabaseTransactionFixture, marc_exporter_fixture: MarcExporterFixture
+    ):
         # Create a marc record from a work with special characters
         # in both the title and author name and round-trip it to
         # the DB and back again to make sure we are creating records
@@ -599,21 +594,29 @@ class TestMARCExporter:
         # a timestamp when it was created and we need the created
         # records to match.
 
-        annotator = Annotator()
-
         # Creates a new record and saves it to the database
         work = db.work(
             title="Little Mimi\u2019s First Counting Lesson",
             authors=["Lagerlo\xf6f, Selma Ottiliana Lovisa,"],
             with_license_pool=True,
         )
-        record = MARCExporter.create_record(work, annotator)
-        loaded_record = MARCExporter.create_record(work, annotator)
+        create_record = functools.partial(
+            MARCExporter.create_record,
+            work=work,
+            annotator=marc_exporter_fixture.annotator,
+            settings=marc_exporter_fixture.settings,
+            library_settings=marc_exporter_fixture.library_settings,
+        )
+        record = create_record()
+        loaded_record = create_record()
+        assert record is not None
+        assert loaded_record is not None
         assert record.as_marc() == loaded_record.as_marc()
 
-        # Loads a existing record from the DB
+        # Loads an existing record from the DB
         new_work = get_one(db.session, Work, id=work.id)
-        new_record = MARCExporter.create_record(new_work, annotator)
+        new_record = create_record(work=new_work)
+        assert new_record is not None
         assert record.as_marc() == new_record.as_marc()
 
     @pytest.mark.parametrize("object_type", ["lane", "worklist"])

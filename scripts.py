@@ -5,10 +5,11 @@ import sys
 import time
 from datetime import timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Sequence, Tuple, Union
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from alembic import command, config
@@ -30,8 +31,9 @@ from api.opds_for_distributors import (
 )
 from api.overdrive import OverdriveAPI
 from core.external_search import ExternalSearchIndex
-from core.lane import Lane
-from core.marc import MARCExporter
+from core.integration.goals import Goals
+from core.lane import Lane, WorkList
+from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
 from core.model import (
     LOCK_ID_DB_INIT,
     CachedMARCFile,
@@ -40,9 +42,11 @@ from core.model import (
     Contribution,
     DataSource,
     Edition,
-    ExternalIntegration,
     Hold,
     Identifier,
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+    Library,
     LicensePool,
     Loan,
     Patron,
@@ -150,7 +154,7 @@ class CacheMARCFiles(LaneSweeperScript):
     name = "Cache MARC files"
 
     @classmethod
-    def arg_parser(cls, _db):
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:  # type: ignore[override]
         parser = LaneSweeperScript.arg_parser(_db)
         parser.add_argument(
             "--max-depth",
@@ -166,25 +170,50 @@ class CacheMARCFiles(LaneSweeperScript):
         )
         return parser
 
-    def __init__(self, _db=None, cmd_args=None, *args, **kwargs):
+    def __init__(
+        self,
+        _db: Optional[Session] = None,
+        cmd_args: Optional[Sequence[str]] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(_db, *args, **kwargs)
         self.parse_args(cmd_args)
 
-    def parse_args(self, cmd_args=None):
+    def parse_args(
+        self, cmd_args: Optional[Sequence[str]] = None
+    ) -> argparse.Namespace:
         parser = self.arg_parser(self._db)
         parsed = parser.parse_args(cmd_args)
         self.max_depth = parsed.max_depth
         self.force = parsed.force
         return parsed
 
-    def should_process_library(self, library):
-        integration = ExternalIntegration.lookup(
-            self._db,
-            ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL,
-            library,
+    def settings(
+        self, library: Library
+    ) -> Tuple[MarcExporterSettings, MarcExporterLibrarySettings]:
+        integration_query = (
+            select(IntegrationLibraryConfiguration)
+            .join(IntegrationConfiguration)
+            .where(
+                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
+                IntegrationConfiguration.protocol == MARCExporter.__name__,
+                IntegrationLibraryConfiguration.library == library,
+            )
         )
-        return integration is not None
+        integration = self._db.execute(integration_query).scalar_one()
+
+        library_settings = MARCExporter.library_settings_load(integration)
+        settings = MARCExporter.settings_load(integration.parent)
+
+        return settings, library_settings
+
+    def should_process_library(self, library: Library) -> bool:
+        try:
+            self.settings(library)
+            return True
+        except NoResultFound:
+            return False
 
     def process_library(self, library):
         if self.should_process_library(library):
@@ -199,7 +228,9 @@ class CacheMARCFiles(LaneSweeperScript):
                 return False
         return True
 
-    def process_lane(self, lane, exporter=None):
+    def process_lane(
+        self, lane: Union[Lane, WorkList], exporter: Optional[MARCExporter] = None
+    ) -> None:
         # Generate a MARC file for this lane, if one has not been generated recently enough.
         if isinstance(lane, Lane):
             library = lane.library
@@ -207,26 +238,24 @@ class CacheMARCFiles(LaneSweeperScript):
             library = lane.get_library(self._db)
 
         annotator = MARCLibraryAnnotator(library)
-        exporter = exporter or MARCExporter.from_config(library)
 
-        update_frequency = ConfigurationSetting.for_library_and_externalintegration(
-            self._db, MARCExporter.UPDATE_FREQUENCY, library, exporter.integration
-        ).int_value
-        if update_frequency is None:
-            update_frequency = MARCExporter.DEFAULT_UPDATE_FREQUENCY
+        if exporter is None:
+            settings, library_settings = self.settings(library)
+            exporter = MARCExporter(self._db, library, settings, library_settings)
 
-        last_update = None
-        files_q = (
-            self._db.query(CachedMARCFile)
-            .filter(CachedMARCFile.library == library)
-            .filter(
+        update_frequency = exporter.settings.update_frequency
+
+        first_file = self._db.execute(
+            select(CachedMARCFile.end_time)
+            .where(
+                CachedMARCFile.library == library,
                 CachedMARCFile.lane == (lane if isinstance(lane, Lane) else None),
             )
             .order_by(CachedMARCFile.end_time.desc())
-        )
+        ).first()
 
-        if files_q.count() > 0:
-            last_update = files_q.first().end_time
+        last_update = first_file.end_time if first_file else None
+
         if (
             not self.force
             and last_update
@@ -245,17 +274,14 @@ class CacheMARCFiles(LaneSweeperScript):
             return
 
         # First update the file with ALL the records.
-        records = exporter.records(lane, annotator, storage_service)
+        exporter.records(lane, annotator, storage_service)
 
         # Then create a new file with changes since the last update.
-        start_time = None
         if last_update:
             # Allow one day of overlap to ensure we don't miss anything due to script timing.
             start_time = last_update - timedelta(days=1)
 
-            records = exporter.records(
-                lane, annotator, storage_service, start_time=start_time
-            )
+            exporter.records(lane, annotator, storage_service, start_time=start_time)
 
 
 class AdobeAccountIDResetScript(PatronInputScript):

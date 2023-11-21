@@ -1,6 +1,8 @@
 import datetime
 
-from core.model import CachedMARCFile, ExternalIntegration, Representation, create
+from core.integration.goals import Goals
+from core.marc import MARCExporter
+from core.model import CachedMARCFile, Representation, create
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 
@@ -17,10 +19,10 @@ class TestMARCRecordController:
         library = db.default_library()
         lane = db.lane(display_name="Test Lane")
 
-        exporter = db.external_integration(
-            ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL,
-            libraries=[db.default_library()],
+        db.integration_configuration(
+            MARCExporter.__name__,
+            Goals.CATALOG_GOAL,
+            libraries=[library],
         )
 
         rep1, ignore = create(
@@ -111,10 +113,10 @@ class TestMARCRecordController:
 
         library = db.default_library()
 
-        exporter = db.external_integration(
-            ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL,
-            libraries=[db.default_library()],
+        db.integration_configuration(
+            MARCExporter.__name__,
+            Goals.CATALOG_GOAL,
+            libraries=[library],
         )
 
         with circulation_fixture.request_context_with_library("/"):

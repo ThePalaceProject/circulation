@@ -62,10 +62,6 @@ class ExternalIntegration(Base):
     # collect logs of server-side events.
     LOGGING_GOAL = "logging"
 
-    # These integrations are associated with external services that
-    # a library uses to manage its catalog.
-    CATALOG_GOAL = "ils_catalog"
-
     # Supported protocols for ExternalIntegrations with LICENSE_GOAL.
     OPDS_IMPORT = "OPDS Import"
     OPDS2_IMPORT = "OPDS 2.0 Import"
@@ -119,9 +115,6 @@ class ExternalIntegration(Base):
 
     # Integrations with ANALYTICS_GOAL
     GOOGLE_ANALYTICS = "Google Analytics"
-
-    # Integrations with CATALOG_GOAL
-    MARC_EXPORT = "MARC Export"
 
     # Keys for common configuration settings
 

@@ -2719,7 +2719,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A Lane may have many CachedMARCFiles.
     cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
-        backref="lane",
+        back_populates="lane",
         cascade="all, delete-orphan",
     )
 
