@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import logging
 from typing import TYPE_CHECKING
 
 from api.admin.problem_details import (
@@ -14,20 +13,28 @@ from core.lane import SearchFacets, WorkList
 from core.model.customlist import CustomList, CustomListEntry
 from core.model.library import Library
 from core.model.licensing import LicensePool
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-class CustomListQueries:
+class CustomListQueries(LoggerMixin):
     @classmethod
     def share_locally_with_library(
         cls, _db, customlist: CustomList, library: Library
     ) -> ProblemDetail | bool:
         # All customlist collections must be present in the library
+        log = cls.logger()
+        log.info(
+            f"Attempting to share customlist '{customlist.name}' with library '{library.name}'."
+        )
         for collection in customlist.collections:
             if collection not in library.collections:
+                log.info(
+                    f"Unable to share: Collection '{collection.name}' is missing from the library."
+                )
                 return CUSTOMLIST_SOURCE_COLLECTION_MISSING
 
         # All entries must be valid for the library
@@ -43,14 +50,18 @@ class CustomListQueries:
                 .first()
             )
             if valid_license is None:
+                log.info(f"Unable to share: No license for work '{entry.work.title}'.")
                 return CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
 
         customlist.shared_locally_with_libraries.append(library)
+        log.info(
+            f"Successfully shared '{customlist.name}' with library '{library.name}'."
+        )
         return True
 
     @classmethod
     def populate_query_pages(
-        self,
+        cls,
         _db: Session,
         custom_list: CustomList,
         start_page: int = 1,
@@ -67,7 +78,7 @@ class CustomListQueries:
         :param json_query: If provided, use this json query rather than that of the custom list
         """
 
-        log = logging.getLogger("Auto Update Custom List")
+        log = cls.logger()
         search = ExternalSearchIndex(_db)
 
         if not custom_list.auto_update_query:
