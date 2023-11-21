@@ -254,7 +254,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
         if identifier is None:
             return default_value
 
-        if _is_usable_isbn_identifier(identifier):
+        if identifier.type == Identifier.ISBN:
             return cast(str, identifier.identifier)
 
         # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
@@ -270,24 +270,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
         )
 
         isbn = next(
-            map(
-                lambda id_: id_.identifier,
-                filter(
-                    lambda id_: _is_usable_isbn_identifier(id_), equivalent_identifiers
-                ),
-            ),
+            map(lambda id_: id_.identifier, equivalent_identifiers),
             None,
         )
         return isbn or default_value
-
-
-def _is_usable_isbn_identifier(id_: Identifier) -> bool:
-    """Is this a useful ISBN identifier?
-
-    :param identifier: The identifier to check.
-    """
-    return (
-        id_.type == Identifier.ISBN
-        and id_.identifier is not None
-        and id_.identifier != ""
-    )
