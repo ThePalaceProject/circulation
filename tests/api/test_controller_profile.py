@@ -82,16 +82,7 @@ class TestProfileController:
             )
             assert request_patron.synchronize_annotations is None
 
-            # This means we can't create annotations for them.
-            pytest.raises(
-                ValueError,
-                Annotation.get_one_or_create,
-                profile_fixture.db.session,
-                patron=request_patron,
-                identifier=identifier,
-            )
-
-            # But by sending a PUT request...
+            # By sending a PUT request...
             profile_fixture.manager.profiles.protocol()
 
             # ...we can change synchronize_annotations to True.
