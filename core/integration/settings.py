@@ -198,6 +198,8 @@ class ConfigurationFormItem:
 
     @staticmethod
     def get_form_value(value: Any) -> Any:
+        if value is None:
+            return ""
         if isinstance(value, Enum):
             return value.value
         if isinstance(value, bool):
