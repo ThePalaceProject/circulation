@@ -241,7 +241,21 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         existing_library_settings = {
             c.library.short_name: c for c in service.library_configurations
         }
-        submitted_library_settings = {l.get("short_name"): l for l in libraries}
+
+        submitted_library_settings = {}
+        for library in libraries:
+            short_name = library.get("short_name")
+            if short_name is None:
+                self.log.error(
+                    f"Library settings missing short_name. Settings: {library}."
+                )
+                raise ProblemError(
+                    INVALID_INPUT.detailed(
+                        "Invalid library settings, missing short_name."
+                    )
+                )
+            del library["short_name"]
+            submitted_library_settings[short_name] = library
 
         removed = [
             existing_library_settings[library]
