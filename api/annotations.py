@@ -149,9 +149,6 @@ class AnnotationWriter:
 class AnnotationParser:
     @classmethod
     def parse(cls, _db, data, patron):
-        if patron.synchronize_annotations != True:
-            return PATRON_NOT_OPTED_IN_TO_ANNOTATION_SYNC
-
         try:
             data = json.loads(data)
             if "id" in data and data["id"] is None:

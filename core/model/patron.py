@@ -729,9 +729,6 @@ class Annotation(Base):
         """Find or create an Annotation, but only if the patron has
         annotation sync turned on.
         """
-        if not patron.synchronize_annotations:
-            raise ValueError("Patron has opted out of synchronizing annotations.")
-
         return get_one_or_create(_db, Annotation, patron=patron, *args, **kwargs)
 
     def set_inactive(self):
