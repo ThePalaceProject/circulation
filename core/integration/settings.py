@@ -155,6 +155,9 @@ class ConfigurationFormItemType(Enum):
     IMAGE = "image"
 
 
+ConfigurationFormOptionsType = Mapping[Union[Enum, str, None], str]
+
+
 @dataclass(frozen=True)
 class ConfigurationFormItem:
     """
@@ -182,9 +185,9 @@ class ConfigurationFormItem:
     # When the type is SELECT, LIST, or MENU, the options are used to populate the
     # field in the admin interface. This can either be a callable that returns a
     # dictionary of options or a dictionary of options.
-    options: Callable[[Session], Dict[Enum | str, str]] | Mapping[
-        Enum | str, str
-    ] | None = None
+    options: Callable[
+        [Session], ConfigurationFormOptionsType
+    ] | ConfigurationFormOptionsType | None = None
 
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is

@@ -1,8 +1,7 @@
 import html
 from datetime import datetime
-from enum import Enum
 from threading import Lock
-from typing import Any, Dict, List, Optional, Pattern, Union
+from typing import Any, Dict, List, Optional, Pattern
 
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
@@ -33,6 +32,7 @@ from core.exceptions import BaseError
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
+    ConfigurationFormOptionsType,
     FormField,
     SettingsValidationError,
 )
@@ -52,9 +52,9 @@ class FederatedIdentityProviderOptions:
         """Initialize a new instance of FederatedIdentityProviderOptions class."""
         self._mutex = Lock()
         self._last_updated_at = datetime.min
-        self._options: Dict[Union[Enum, str], str] = {}
+        self._options: ConfigurationFormOptionsType = {}
 
-    def __call__(self, db: Session) -> Dict[Union[Enum, str], str]:
+    def __call__(self, db: Session) -> ConfigurationFormOptionsType:
         """Get federated identity provider options."""
         with self._mutex:
             if self._needs_refresh(db):
@@ -76,7 +76,7 @@ class FederatedIdentityProviderOptions:
         return needs_refresh
 
     @staticmethod
-    def _fetch(db: Session) -> Dict[Union[Enum, str], str]:
+    def _fetch(db: Session) -> ConfigurationFormOptionsType:
         """Fetch federated identity provider options."""
         identity_providers = (
             db.query(
