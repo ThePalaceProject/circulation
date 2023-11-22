@@ -6,10 +6,11 @@ from werkzeug.datastructures import Authorization
 from api.circulation_exceptions import *
 from api.problem_details import *
 from core.model import Library, Patron
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 
-class BaseCirculationManagerController:
+class BaseCirculationManagerController(LoggerMixin):
     """Define minimal standards for a circulation manager controller,
     mainly around authentication.
     """

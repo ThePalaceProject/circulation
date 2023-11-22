@@ -434,6 +434,7 @@ class CustomListsController(
     ) -> Union[ProblemDetail, Dict[str, int]]:
         successes = []
         failures = []
+        self.log.info(f"Begin sharing customlist '{customlist.name}'")
         for library in self._db.query(Library).all():
             # Do not share with self
             if library == customlist.library:
@@ -441,6 +442,9 @@ class CustomListsController(
 
             # Do not attempt to re-share
             if library in customlist.shared_locally_with_libraries:
+                self.log.info(
+                    f"Customlist '{customlist.name}' is already shared with library '{library.name}'"
+                )
                 continue
 
             # Attempt to share the list
@@ -454,6 +458,7 @@ class CustomListsController(
                 successes.append(library)
 
         self._db.commit()
+        self.log.info(f"Done sharing customlist {customlist.name}")
         return self.CustomListSharePostResponse(
             successes=len(successes), failures=len(failures)
         ).dict()
