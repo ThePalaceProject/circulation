@@ -112,8 +112,6 @@ class OPDSImporterSettings(
     SAMLWAYFlessSetttings,
     FormatPrioritiesSettings,
 ):
-    _NO_DEFAULT_AUDIENCE = ""
-
     external_account_id: AnyHttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("URL"),
@@ -125,8 +123,8 @@ class OPDSImporterSettings(
         form=ConfigurationFormItem(label=_("Data source name"), required=True)
     )
 
-    default_audience: str = FormField(
-        default=_NO_DEFAULT_AUDIENCE,
+    default_audience: Optional[str] = FormField(
+        None,
         form=ConfigurationFormItem(
             label=_("Default audience"),
             description=_(
@@ -135,7 +133,7 @@ class OPDSImporterSettings(
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                **{_NO_DEFAULT_AUDIENCE: _("No default audience")},
+                **{None: _("No default audience")},
                 **{audience: audience for audience in sorted(Classifier.AUDIENCES)},
             },
             required=False,
