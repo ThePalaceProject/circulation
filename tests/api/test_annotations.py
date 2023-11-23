@@ -749,4 +749,6 @@ class TestAnnotationParser:
             data_json,
             annotation_parser_fixture.patron_value,
         )
-        assert PATRON_NOT_OPTED_IN_TO_ANNOTATION_SYNC == annotation
+
+        # We no longer respect the patron settings for sync
+        assert isinstance(annotation, Annotation)

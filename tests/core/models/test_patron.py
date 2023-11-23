@@ -428,19 +428,6 @@ class TestPatron:
         db.session.commit()
         assert 0 == len(p1.annotations)
 
-        # Patron #1 can no longer use Annotation.get_one_or_create.
-        pytest.raises(
-            ValueError,
-            Annotation.get_one_or_create,
-            db.session,
-            patron=p1,
-            identifier=identifier,
-            motivation=Annotation.IDLING,
-        )
-
-        # Patron #2's annotation is unaffected.
-        assert 1 == len(p2.annotations)
-
         # But patron #2 can use Annotation.get_one_or_create.
         i2, is_new = Annotation.get_one_or_create(
             db.session,
