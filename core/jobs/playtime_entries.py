@@ -6,15 +6,17 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, cast
 
 import dateutil.parser
 import pytz
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.functions import sum
 
 from core.config import Configuration
 from core.model import get_one
 from core.model.edition import Edition
+from core.model.identifier import Identifier, RecursiveEquivalencyCache
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import previous_months, utc_now
 from core.util.email import EmailManager
@@ -154,7 +156,15 @@ class PlaytimeEntriesEmailReportsScript(Script):
             # Write the data as a CSV
             writer = csv.writer(temp)
             writer.writerow(
-                ["date", "urn", "collection", "library", "title", "total seconds"]
+                [
+                    "date",
+                    "urn",
+                    "isbn",
+                    "collection",
+                    "library",
+                    "title",
+                    "total seconds",
+                ]
             )
 
             for (
@@ -164,15 +174,25 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 identifier_id,
                 total,
             ) in self._fetch_report_records(start=start, until=until):
-                edition = None
+                edition: Optional[Edition] = None
+                identifier: Optional[Identifier] = None
                 if identifier_id:
                     edition = get_one(
                         self._db, Edition, primary_identifier_id=identifier_id
                     )
+                    # Use the identifier from the edition where available.
+                    # Otherwise, we'll have to look it up.
+                    identifier = (
+                        edition.primary_identifier
+                        if edition
+                        else get_one(self._db, Identifier, id=identifier_id)
+                    )
+                isbn = self._isbn_for_identifier(identifier)
                 title = edition and edition.title
                 row = (
                     report_date_label,
                     urn,
+                    isbn,
                     collection_name,
                     library_name,
                     title,
@@ -218,3 +238,39 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 PlaytimeSummary.identifier_id,
             )
         )
+
+    @staticmethod
+    def _isbn_for_identifier(
+        identifier: Optional[Identifier],
+        /,
+        *,
+        default_value: str = "",
+    ) -> str:
+        """Find the strongest ISBN match for the given identifier.
+
+        :param identifier: The identifier to match.
+        :param default_value: The default value to return if the identifier is missing or a match is not found.
+        """
+        if identifier is None:
+            return default_value
+
+        if identifier.type == Identifier.ISBN:
+            return cast(str, identifier.identifier)
+
+        # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
+        # mechanism to find the next best one that is, if available.
+        db = Session.object_session(identifier)
+        eq_subquery = db.query(RecursiveEquivalencyCache.identifier_id).filter(
+            RecursiveEquivalencyCache.parent_identifier_id == identifier.id
+        )
+        equivalent_identifiers = (
+            db.query(Identifier)
+            .filter(Identifier.id.in_(eq_subquery))
+            .filter(Identifier.type == Identifier.ISBN)
+        )
+
+        isbn = next(
+            map(lambda id_: id_.identifier, equivalent_identifiers),
+            None,
+        )
+        return isbn or default_value
