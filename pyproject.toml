@@ -13,7 +13,7 @@ exclude_also = [
 [tool.coverage.run]
 branch = true
 relative_files = true
-source = ["api", "core"]
+source = ["api", "core", "scripts"]
 
 [tool.isort]
 known_first_party = ["api", "core", "customlists"]
