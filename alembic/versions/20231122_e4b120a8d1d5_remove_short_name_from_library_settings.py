@@ -22,6 +22,7 @@ log = migration_logger(revision)
 def upgrade() -> None:
     conn = op.get_bind()
 
+    # Find all the library configurations that have a short_name key in their settings.
     rows = conn.execute(
         "select parent_id, library_id, settings from integration_library_configurations where settings ? 'short_name'"
     ).all()
