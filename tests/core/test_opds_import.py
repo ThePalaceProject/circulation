@@ -226,6 +226,9 @@ class TestOPDSImporter:
         assert data_source_name == c1._data_source
         assert data_source_name == c2._data_source
 
+        assert m1.circulation.should_track_playtime == True
+        assert m2.circulation.should_track_playtime == False
+
         [[failure]] = list(failures.values())
         assert isinstance(failure, CoverageFailure)
         assert (
