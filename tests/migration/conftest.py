@@ -4,7 +4,7 @@ import json
 import random
 import string
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union, cast
 
 import pytest
 import pytest_alembic
@@ -280,14 +280,14 @@ class CreateIntegrationConfiguration(Protocol):
 
 
 @pytest.fixture
-def create_integration_configuration() -> int:
+def create_integration_configuration() -> CreateIntegrationConfiguration:
     def fixture(
         connection: Connection,
         name: str,
         protocol: str,
         goal: str,
         settings: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> int:
         if settings is None:
             settings = {}
 
@@ -320,17 +320,18 @@ class CreateEdition(Protocol):
 
 
 @pytest.fixture
-def create_edition() -> int:
+def create_edition() -> CreateEdition:
     def fixture(
         connection: Connection, title: str, medium: str, primary_identifier_id: int
-    ):
+    ) -> int:
         edition = connection.execute(
             "INSERT INTO editions (title, medium, primary_identifier_id) VALUES (%s, %s, %s) returning id",
             title,
             medium,
             primary_identifier_id,
         ).fetchone()
-        return edition.id
+        assert edition is not None
+        return cast(int, edition.id)
 
     return fixture
 
@@ -346,18 +347,19 @@ class CreateIdentifier(Protocol):
 
 
 @pytest.fixture
-def create_identifier() -> int:
+def create_identifier() -> CreateIdentifier:
     def fixture(
         connection: Connection,
         identifier: str,
         type: str,
-    ):
+    ) -> int:
         identifier_row = connection.execute(
             "INSERT INTO identifiers (identifier, type) VALUES (%s, %s) returning id",
             identifier,
             type,
         ).fetchone()
-        return identifier_row.id
+        assert identifier_row is not None
+        return cast(int, identifier_row.id)
 
     return fixture
 
@@ -374,19 +376,20 @@ class CreateLicensePool(Protocol):
 
 
 @pytest.fixture
-def create_license_pool() -> int:
+def create_license_pool() -> CreateLicensePool:
     def fixture(
         connection: Connection,
         collection_id: int,
         identifier_id: Optional[int] = None,
         should_track_playtime: Optional[bool] = False,
-    ):
+    ) -> int:
         licensepool = connection.execute(
             "INSERT into licensepools (collection_id, identifier_id, should_track_playtime) VALUES (%(id)s, %(identifier_id)s, %(track)s) returning id",
             id=collection_id,
             identifier_id=identifier_id,
             track=should_track_playtime,
         ).fetchone()
-        return licensepool.id
+        assert licensepool is not None
+        return cast(int, licensepool.id)
 
     return fixture

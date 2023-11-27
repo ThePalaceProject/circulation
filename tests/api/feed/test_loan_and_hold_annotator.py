@@ -211,6 +211,7 @@ class TestLibraryLoanAndHoldAnnotator:
             protocol=ExternalIntegration.OPDS_FOR_DISTRIBUTORS
         )
         work = db.work(with_license_pool=True, collection=opds_for_distributors)
+        work.active_license_pool().should_track_playtime = True
         edition = work.presentation_edition
         edition.medium = EditionConstants.AUDIO_MEDIUM
         edition.primary_identifier = identifier
