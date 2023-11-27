@@ -36,6 +36,7 @@ from api.sip import SIP2AuthenticationProvider
 from core.integration.goals import Goals
 from core.model import AdminRole, Library, get_one
 from core.model.integration import IntegrationConfiguration
+from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
@@ -367,7 +368,7 @@ class TestPatronAuth:
         assert isinstance(response, ProblemDetail)
         assert response.uri == MISSING_PATRON_AUTH_NAME.uri
 
-    def test_patron_auth_services_post_missing_patron_auth_no_such_library(
+    def test_patron_auth_services_post_no_such_library(
         self,
         post_response: Callable[..., Response | ProblemDetail],
         common_args: list[tuple[str, str]],
@@ -383,6 +384,24 @@ class TestPatronAuth:
         response = post_response(form)
         assert isinstance(response, ProblemDetail)
         assert response.uri == NO_SUCH_LIBRARY.uri
+
+    def test_patron_auth_services_post_missing_short_name(
+        self,
+        post_response: Callable[..., Response | ProblemDetail],
+        common_args: list[tuple[str, str]],
+    ):
+        form = ImmutableMultiDict(
+            [
+                ("name", "testing auth name"),
+                ("protocol", SimpleAuthenticationProvider.__module__),
+                ("libraries", json.dumps([{}])),
+            ]
+            + common_args
+        )
+        response = post_response(form)
+        assert isinstance(response, ProblemDetail)
+        assert response.uri == INVALID_INPUT.uri
+        assert response.detail == "Invalid library settings, missing short_name."
 
     def test_patron_auth_services_post_missing_patron_auth_multiple_basic(
         self,
@@ -503,6 +522,7 @@ class TestPatronAuth:
         assert settings.test_password == "pass"
         [library_config] = auth_service.library_configurations
         assert library_config.library == default_library
+        assert "short_name" not in library_config.settings_dict
         assert (
             library_config.settings_dict["library_identifier_restriction_criteria"]
             == "^1234"

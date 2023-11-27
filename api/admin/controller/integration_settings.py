@@ -235,13 +235,49 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     ) -> ChangedLibrariesTuple:
         """
         Return a tuple of lists of libraries that have had their library settings
-        added, updated, or removed.
+        added, updated, or removed. No action is taken to add, update, or remove
+        the settings, this function just parses the submitted data and returns
+        the lists of libraries that need to be processed.
+
+        :param service: The IntegrationConfiguration that the library settings should be
+            associated with.
+        :param libraries_data: A JSON string containing a list of dictionaries.
+            Each dictionary has a 'short_name' key that identifies which
+            library the settings are for, and then the rest of the dictionary is the
+            settings for that library.
+
+        :return: A named tuple with three lists of libraries:
+            - new: A list of UpdatedLibrarySettingsTuple named tuples that contains the
+                IntegrationLibraryConfiguration and settings for each library with newly
+                added settings.
+            - updated: A list of UpdatedLibrarySettingsTuple named tuples that contains the
+                IntegrationLibraryConfiguration and settings for each library that had its
+                settings updated.
+            - removed: A list of IntegrationLibraryConfiguration objects for libraries that
+                had their settings removed.
         """
         libraries = json.loads(libraries_data)
         existing_library_settings = {
             c.library.short_name: c for c in service.library_configurations
         }
-        submitted_library_settings = {l.get("short_name"): l for l in libraries}
+
+        submitted_library_settings = {}
+        for library in libraries:
+            # Each library settings dictionary should have a 'short_name' key that identifies
+            # which library the settings are for. This key is removed from the dictionary as
+            # only the settings should be stored in the database.
+            short_name = library.get("short_name")
+            if short_name is None:
+                self.log.error(
+                    f"Library settings missing short_name. Settings: {library}."
+                )
+                raise ProblemError(
+                    INVALID_INPUT.detailed(
+                        "Invalid library settings, missing short_name."
+                    )
+                )
+            del library["short_name"]
+            submitted_library_settings[short_name] = library
 
         removed = [
             existing_library_settings[library]
