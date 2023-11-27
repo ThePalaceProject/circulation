@@ -697,6 +697,7 @@ class CirculationData:
         links=None,
         licenses=None,
         last_checked=None,
+        should_track_playtime=False,
     ):
         """Constructor.
 
@@ -746,6 +747,9 @@ class CirculationData:
         # given licenses then they are used to calculate values for the LicensePool
         # instead of directly using the values that are given to CirculationData.
         self.licenses = licenses
+
+        # Whether the license should contain a playtime tracking link
+        self.should_track_playtime = should_track_playtime
 
     @property
     def links(self):
@@ -877,6 +881,7 @@ class CirculationData:
             license_pool.open_access = self.has_open_access_link
             license_pool.availability_time = self.last_checked
             license_pool.last_checked = self.last_checked
+            license_pool.should_track_playtime = self.should_track_playtime
 
         return license_pool, is_new
 
@@ -969,6 +974,7 @@ class CirculationData:
         # with the book reflect the formats in self.formats.
         old_lpdms = new_lpdms = []
         if pool:
+            pool.should_track_playtime = self.should_track_playtime
             old_lpdms = list(pool.delivery_mechanisms)
 
         # Before setting and unsetting delivery mechanisms, which may

@@ -14,8 +14,9 @@ from api.circulation_exceptions import (
     LibraryAuthorizationFailedException,
 )
 from api.selftest import HasCollectionSelfTests
+from core.coverage import CoverageFailure
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
-from core.metadata_layer import FormatData, TimestampData
+from core.metadata_layer import FormatData, Metadata, TimestampData
 from core.model import (
     Collection,
     Credential,
@@ -28,6 +29,7 @@ from core.model import (
     Session,
     get_one,
 )
+from core.model.constants import EditionConstants
 from core.opds_import import OPDSImporter, OPDSImporterSettings, OPDSImportMonitor
 from core.util import base64
 from core.util.datetime_helpers import utc_now
@@ -421,6 +423,21 @@ class OPDSForDistributorsImporter(OPDSImporter):
                         rights_uri=RightsStatus.IN_COPYRIGHT,
                     )
                 )
+
+    def extract_feed_data(
+        self, feed: str | bytes, feed_url: str | None = None
+    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
+        metadatas, failures = super().extract_feed_data(feed, feed_url)
+
+        # Force all audiobook licensepools to track playtime
+        for _, metadata in metadatas.items():
+            if (
+                metadata.medium == EditionConstants.AUDIO_MEDIUM
+                and metadata.circulation is not None
+            ):
+                metadata.circulation.should_track_playtime = True
+
+        return metadatas, failures
 
 
 class OPDSForDistributorsImportMonitor(OPDSImportMonitor):

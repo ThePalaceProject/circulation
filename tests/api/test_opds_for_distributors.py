@@ -574,7 +574,9 @@ class TestOPDSForDistributorsImporter:
 
         # Both works were created, since we can use their acquisition links
         # to give copies to patrons.
-        [camelot, southern] = sorted(imported_works, key=lambda x: x.title)
+        [camelot, camelot_audio, southern] = sorted(
+            imported_works, key=lambda x: x.title
+        )
 
         # Each work has a license pool.
         [camelot_pool] = camelot.license_pools
@@ -598,6 +600,22 @@ class TestOPDSForDistributorsImporter:
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_owned
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_available
             assert (pool.work.last_update_time - now).total_seconds() <= 2
+            assert pool.should_track_playtime == False
+
+        # Audiobooks always track playtime
+        camelot_audio_pool = camelot_audio.license_pools[0]
+        assert camelot_audio_pool.should_track_playtime == True
+        [camelot_audio_acquisition_link] = [
+            l
+            for l in camelot_audio_pool.identifier.links
+            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+            and l.resource.representation.media_type
+            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        ]
+        assert (
+            "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"
+            == camelot_audio_acquisition_link.resource.representation.url
+        )
 
         [camelot_acquisition_link] = [
             l
