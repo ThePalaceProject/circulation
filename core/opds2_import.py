@@ -22,8 +22,20 @@ from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
-from webpub_manifest_parser.core.ast import Link, Manifestlike
+from webpub_manifest_parser.core.ast import (
+    ArrayOfCollectionsProperty,
+    Link,
+    Manifestlike,
+)
+from webpub_manifest_parser.core.properties import BooleanProperty
 from webpub_manifest_parser.errors import BaseError
+from webpub_manifest_parser.opds2 import (
+    ManifestParser,
+    OPDS2CollectionRolesRegistry,
+    OPDS2FeedParserFactory,
+    OPDS2SemanticAnalyzer,
+    OPDS2SyntaxAnalyzer,
+)
 from webpub_manifest_parser.opds2.registry import (
     OPDS2LinkRelationsRegistry,
     OPDS2MediaTypesRegistry,
@@ -133,6 +145,53 @@ class RWPMManifestParser:
             raise
 
         return result
+
+
+class PalaceOPDS2PresentationMetadata(opds2_ast.PresentationMetadata):  # type: ignore[misc]
+    time_tracking = BooleanProperty(
+        "http://palaceproject.io/terms/timeTracking", False, default_value=False
+    )
+
+
+class PalaceOPDS2Publication(opds2_ast.OPDS2Publication):  # type: ignore[misc]
+    metadata = opds2_ast.TypeProperty(
+        key="metadata", required=True, nested_type=PalaceOPDS2PresentationMetadata
+    )
+
+
+class PalaceOPDS2Feed(opds2_ast.OPDS2Feed):  # type: ignore[misc]
+    publications = ArrayOfCollectionsProperty(
+        "publications",
+        required=False,
+        role=OPDS2CollectionRolesRegistry.PUBLICATIONS,
+        collection_type=PalaceOPDS2Publication,
+    )
+
+
+class PalaceOPDS2SyntaxAnalyzer(OPDS2SyntaxAnalyzer):  # type: ignore[misc]
+    def _create_manifest(self) -> opds2_ast.OPDS2Feed:
+        return PalaceOPDS2Feed()
+
+
+class PalaceOPDS2FeedParserFactory(OPDS2FeedParserFactory):  # type: ignore[misc]
+    def create(self) -> ManifestParser:
+        """Create a new OPDS 2.0 parser.
+
+        :return: OPDS 2.0 parser
+        :rtype: Parser
+        """
+        media_types_registry = OPDS2MediaTypesRegistry()
+        link_relations_registry = OPDS2LinkRelationsRegistry()
+        collection_roles_registry = OPDS2CollectionRolesRegistry()
+        syntax_analyzer = (
+            PalaceOPDS2SyntaxAnalyzer()
+        )  # This is the only change from the base class
+        semantic_analyzer = OPDS2SemanticAnalyzer(
+            media_types_registry, link_relations_registry, collection_roles_registry
+        )
+        parser = ManifestParser(syntax_analyzer, semantic_analyzer)
+
+        return parser
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
@@ -764,6 +823,8 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         )
         # Audiobook duration
         duration = publication.metadata.duration
+        # Not all parsers support time_tracking
+        time_tracking = getattr(publication.metadata, "time_tracking", False)
 
         feed_self_url = first_or_default(
             feed.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
@@ -797,6 +858,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             licenses_reserved=0,
             patrons_in_hold_queue=0,
             formats=[],
+            should_track_playtime=time_tracking,
         )
 
         formats = self._find_formats_in_non_open_access_acquisition_links(

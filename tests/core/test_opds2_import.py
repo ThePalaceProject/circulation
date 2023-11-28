@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from _pytest.logging import LogCaptureFixture
 from requests import Response
-from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from api.circulation import CirculationAPI, FulfillmentInfo
 from api.circulation_exceptions import CannotFulfill
@@ -26,7 +25,12 @@ from core.model import (
 )
 from core.model.collection import Collection
 from core.model.constants import IdentifierType
-from core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
+from core.opds2_import import (
+    OPDS2API,
+    OPDS2Importer,
+    PalaceOPDS2FeedParserFactory,
+    RWPMManifestParser,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.opds2_files import OPDS2FilesFixture
 
@@ -107,7 +111,7 @@ def opds2_importer_fixture(
     )
     data.collection.data_source = data.data_source
     data.importer = OPDS2Importer(
-        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
+        db.session, data.collection, RWPMManifestParser(PalaceOPDS2FeedParserFactory())
     )
     return data
 
@@ -263,6 +267,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert moby_dick_license_pool.open_access
         assert LicensePool.UNLIMITED_ACCESS == moby_dick_license_pool.licenses_owned
         assert LicensePool.UNLIMITED_ACCESS == moby_dick_license_pool.licenses_available
+        assert True == moby_dick_license_pool.should_track_playtime
 
         assert 1 == len(moby_dick_license_pool.delivery_mechanisms)
         [moby_dick_delivery_mechanism] = moby_dick_license_pool.delivery_mechanisms
@@ -288,6 +293,7 @@ class TestOPDS2Importer(OPDS2Test):
             LicensePool.UNLIMITED_ACCESS
             == huckleberry_finn_license_pool.licenses_available
         )
+        assert False == huckleberry_finn_license_pool.should_track_playtime
 
         assert 2 == len(huckleberry_finn_license_pool.delivery_mechanisms)
         huckleberry_finn_delivery_mechanisms = (

@@ -18,6 +18,7 @@
         "identifier": "urn:isbn:978-3-16-148410-0",
         "duration": 100.2,
         "language": "en",
+        "http://palaceproject.io/terms/timeTracking": true,
         "publisher": {
           "name": "Test Publisher"
         },
