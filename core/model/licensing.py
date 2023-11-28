@@ -146,6 +146,15 @@ class License(Base, LicenseFunctions):
 
     __table_args__ = (UniqueConstraint("identifier", "license_pool_id"),)
 
+    @property
+    def is_available_for_borrowing(self) -> bool:
+        "Can this license currently be used to borrow a book?"
+        return (
+            not self.is_inactive
+            and self.checkouts_available is not None
+            and self.checkouts_available > 0
+        )
+
     def loan_to(self, patron: Patron, **kwargs) -> Tuple[Loan, bool]:
         loan, is_new = self.license_pool.loan_to(patron, **kwargs)
         loan.license = self
@@ -1081,21 +1090,8 @@ class LicensePool(Base):
         offer that model.
         """
         best: Optional[License] = None
-        now = utc_now()
 
-        for license in self.licenses:
-            if license.is_inactive:
-                continue
-
-            active_loan_count = len(
-                [l for l in license.loans if not l.end or l.end > now]
-            )
-            checkouts_available = (
-                license.checkouts_available if license.checkouts_available else 0
-            )
-            if active_loan_count >= checkouts_available:
-                continue
-
+        for license in (l for l in self.licenses if l.is_available_for_borrowing):
             if (
                 not best
                 or (license.is_time_limited and not best.is_time_limited)
