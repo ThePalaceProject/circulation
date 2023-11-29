@@ -1,18 +1,28 @@
+from __future__ import annotations
+
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from pymarc import Field, Subfield
+from pymarc import Field, Record, Subfield
 from sqlalchemy import select
 
 from core.config import Configuration
-from core.marc import Annotator, MARCExporter
-from core.model import ConfigurationSetting, Session
+from core.marc import Annotator, MarcExporterLibrarySettings
+from core.model import (
+    ConfigurationSetting,
+    Edition,
+    Identifier,
+    Library,
+    LicensePool,
+    Session,
+    Work,
+)
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 
 
 class LibraryAnnotator(Annotator):
-    def __init__(self, library):
+    def __init__(self, library: Library) -> None:
         super().__init__()
         self.library = library
         _db = Session.object_session(library)
@@ -20,55 +30,46 @@ class LibraryAnnotator(Annotator):
             _db, Configuration.BASE_URL_KEY
         ).value
 
-    def value(self, key, integration):
-        _db = Session.object_session(integration)
-        return ConfigurationSetting.for_library_and_externalintegration(
-            _db, key, self.library, integration
-        ).value
-
     def annotate_work_record(
         self,
-        work,
-        active_license_pool,
-        edition,
-        identifier,
-        record,
-        integration=None,
-        updated=None,
-    ):
+        work: Work,
+        active_license_pool: LicensePool,
+        edition: Edition,
+        identifier: Identifier,
+        record: Record,
+        settings: MarcExporterLibrarySettings | None,
+    ) -> None:
         super().annotate_work_record(
-            work, active_license_pool, edition, identifier, record, integration, updated
+            work, active_license_pool, edition, identifier, record, settings
         )
 
-        if integration:
-            marc_org = self.value(MARCExporter.MARC_ORGANIZATION_CODE, integration)
-            include_summary = (
-                self.value(MARCExporter.INCLUDE_SUMMARY, integration) == "true"
-            )
-            include_genres = (
-                self.value(MARCExporter.INCLUDE_SIMPLIFIED_GENRES, integration)
-                == "true"
-            )
+        if settings is None:
+            return
 
-            if marc_org:
-                self.add_marc_organization_code(record, marc_org)
+        if settings.organization_code:
+            self.add_marc_organization_code(record, settings.organization_code)
 
-            if include_summary:
-                self.add_summary(record, work)
+        if settings.include_summary:
+            self.add_summary(record, work)
 
-            if include_genres:
-                self.add_simplified_genres(record, work)
+        if settings.include_genres:
+            self.add_simplified_genres(record, work)
 
-        self.add_web_client_urls(record, self.library, identifier, integration)
+        self.add_web_client_urls(record, self.library, identifier, settings)
 
-    def add_web_client_urls(self, record, library, identifier, integration=None):
+    def add_web_client_urls(
+        self,
+        record: Record,
+        library: Library,
+        identifier: Identifier,
+        exporter_settings: MarcExporterLibrarySettings,
+    ) -> None:
         _db = Session.object_session(library)
         settings = []
 
-        if integration:
-            marc_setting = self.value(MARCExporter.WEB_CLIENT_URL, integration)
-            if marc_setting:
-                settings.append(marc_setting)
+        marc_setting = exporter_settings.web_client_url
+        if marc_setting:
+            settings.append(marc_setting)
 
         settings += [
             s.web_client
@@ -81,7 +82,7 @@ class LibraryAnnotator(Annotator):
         ]
 
         qualified_identifier = urllib.parse.quote(
-            identifier.type + "/" + identifier.identifier, safe=""
+            f"{identifier.type}/{identifier.identifier}", safe=""
         )
 
         for web_client_base_url in settings:

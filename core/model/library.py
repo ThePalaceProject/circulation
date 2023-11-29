@@ -114,7 +114,7 @@ class Library(Base, HasSessionCache):
     # A Library may have many CachedMARCFiles.
     cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
         "CachedMARCFile",
-        backref="library",
+        back_populates="library",
         cascade="all, delete-orphan",
     )
 

@@ -69,6 +69,7 @@ from core.feed.annotator.circulation import (
 )
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
+from core.integration.goals import Goals
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
 from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
@@ -1272,19 +1273,29 @@ class MARCRecordController(CirculationManagerController):
         body = "<h2>Download MARC files for %s</h2>" % library.name
         time_format = "%B %-d, %Y"
 
-        # Check if a MARC exporter is configured so we can show a
+        # Check if a MARC exporter is configured, so we can show a
         # message if it's not.
-        exporter = None
-        try:
-            exporter = MARCExporter.from_config(library)
-        except CannotLoadConfiguration as e:
+        integration_query = (
+            select(IntegrationLibraryConfiguration)
+            .join(IntegrationConfiguration)
+            .where(
+                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
+                IntegrationConfiguration.protocol == MARCExporter.__name__,
+                IntegrationLibraryConfiguration.library == library,
+            )
+        )
+
+        session = Session.object_session(library)
+        integration = session.execute(integration_query).one_or_none()
+
+        if not integration:
             body += (
                 "<p>"
                 + _("No MARC exporter is currently configured for this library.")
                 + "</p>"
             )
 
-        if len(library.cachedmarcfiles) < 1 and exporter:
+        if len(library.cachedmarcfiles) < 1 and integration:
             body += "<p>" + _("MARC files aren't ready to download yet.") + "</p>"
 
         files_by_lane = defaultdict(dict)

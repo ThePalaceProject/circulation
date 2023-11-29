@@ -722,10 +722,12 @@ class DatabaseTransactionFixture:
             goal=goal,
             name=(name or random_string(16)),
         )
-        if libraries and not isinstance(libraries, list):
-            libraries = [libraries]
-        else:
+
+        if libraries is None:
             libraries = []
+
+        if not isinstance(libraries, list):
+            libraries = [libraries]
 
         integration.libraries.extend(libraries)
 

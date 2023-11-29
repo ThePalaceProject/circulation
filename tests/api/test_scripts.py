@@ -16,15 +16,15 @@ from api.config import Configuration
 from api.marc import LibraryAnnotator as MARCLibraryAnnotator
 from api.novelist import NoveListAPI
 from core.external_search import ExternalSearchIndex
+from core.integration.goals import Goals
 from core.lane import WorkList
-from core.marc import MARCExporter
+from core.marc import MARCExporter, MarcExporterSettings
 from core.model import (
     LOCK_ID_DB_INIT,
     CachedMARCFile,
     ConfigurationSetting,
     Credential,
     DataSource,
-    ExternalIntegration,
     SessionManager,
     create,
 )
@@ -115,14 +115,24 @@ class TestCacheMARCFilesFixture:
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
         self.lane = db.lane(genres=["Science Fiction"])
-        self.integration = db.external_integration(
-            ExternalIntegration.MARC_EXPORT, ExternalIntegration.CATALOG_GOAL
-        )
+        self.integration = self.integration()
 
-        self.exporter = MARCExporter(None, None, self.integration)
+        self.mock_settings = MagicMock()
+        self.mock_library_settings = MagicMock()
+
+        self.exporter = MARCExporter(
+            MagicMock(), MagicMock(), self.mock_settings, self.mock_library_settings
+        )
         self.mock_records = MagicMock()
         self.mock_services = MagicMock()
         self.exporter.records = self.mock_records
+
+    def integration(self):
+        return self.db.integration_configuration(
+            protocol=MARCExporter.__name__,
+            goal=Goals.CATALOG_GOAL,
+            libraries=[self.db.default_library()],
+        )
 
     def script(self, cmd_args: Optional[list[str]] = None) -> CacheMARCFiles:
         cmd_args = cmd_args or []
@@ -157,13 +167,13 @@ class TestCacheMARCFiles:
     def test_should_process_library(self, lane_script_fixture: LaneScriptFixture):
         db = lane_script_fixture.db
         script = CacheMARCFiles(db.session, cmd_args=[])
-        assert False == script.should_process_library(db.default_library())
-        integration = db.external_integration(
-            ExternalIntegration.MARC_EXPORT,
-            ExternalIntegration.CATALOG_GOAL,
+        assert script.should_process_library(db.default_library()) is False
+        db.integration_configuration(
+            protocol=MARCExporter.__name__,
+            goal=Goals.CATALOG_GOAL,
             libraries=[db.default_library()],
         )
-        assert True == script.should_process_library(db.default_library())
+        assert script.should_process_library(db.default_library()) is True
 
     def test_should_process_lane(self, lane_script_fixture: LaneScriptFixture):
         db = lane_script_fixture.db
@@ -179,18 +189,18 @@ class TestCacheMARCFiles:
 
         script = CacheMARCFiles(db.session, cmd_args=[])
         script.max_depth = 1
-        assert True == script.should_process_lane(parent)
-        assert True == script.should_process_lane(child)
-        assert False == script.should_process_lane(grandchild)
-        assert True == script.should_process_lane(wl)
-        assert False == script.should_process_lane(empty)
+        assert script.should_process_lane(parent) is True
+        assert script.should_process_lane(child) is True
+        assert script.should_process_lane(grandchild) is False
+        assert script.should_process_lane(wl) is True
+        assert script.should_process_lane(empty) is False
 
         script.max_depth = 0
-        assert True == script.should_process_lane(parent)
-        assert False == script.should_process_lane(child)
-        assert False == script.should_process_lane(grandchild)
-        assert True == script.should_process_lane(wl)
-        assert False == script.should_process_lane(empty)
+        assert script.should_process_lane(parent) is True
+        assert script.should_process_lane(child) is False
+        assert script.should_process_lane(grandchild) is False
+        assert script.should_process_lane(wl) is True
+        assert script.should_process_lane(empty) is False
 
     def test_process_lane_never_run(self, cache_marc_files: TestCacheMARCFilesFixture):
         script = cache_marc_files.script()
@@ -207,16 +217,11 @@ class TestCacheMARCFiles:
         # If we have a cached file already, and it's old enough, the script will
         # run the exporter twice, first to update that file and second to create
         # a file with changes since that first file was originally created.
-        db = cache_marc_files.db
         now = utc_now()
         last_week = now - datetime.timedelta(days=7)
         cache_marc_files.create_cached_file(last_week)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MARCExporter.UPDATE_FREQUENCY,
-            db.default_library(),
-            cache_marc_files.integration,
-        ).value = 3
+        settings = MarcExporterSettings(update_frequency=3)
+        cache_marc_files.exporter.settings = settings
 
         script = cache_marc_files.script()
         script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
@@ -236,16 +241,11 @@ class TestCacheMARCFiles:
         self, cache_marc_files: TestCacheMARCFilesFixture
     ):
         # If we already have a recent cached file, the script won't do anything.
-        db = cache_marc_files.db
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         cache_marc_files.create_cached_file(yesterday)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MARCExporter.UPDATE_FREQUENCY,
-            db.default_library(),
-            cache_marc_files.integration,
-        ).value = 3
+        settings = MarcExporterSettings(update_frequency=3)
+        cache_marc_files.exporter.settings = settings
 
         script = cache_marc_files.script()
         script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
@@ -255,17 +255,12 @@ class TestCacheMARCFiles:
         self, cache_marc_files: TestCacheMARCFilesFixture
     ):
         # But we can force it to run anyway.
-        db = cache_marc_files.db
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         last_week = now - datetime.timedelta(days=7)
         cache_marc_files.create_cached_file(yesterday)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MARCExporter.UPDATE_FREQUENCY,
-            db.default_library(),
-            cache_marc_files.integration,
-        ).value = 3
+        settings = MarcExporterSettings(update_frequency=3)
+        cache_marc_files.exporter.settings = settings
 
         script = cache_marc_files.script(cmd_args=["--force"])
         script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
@@ -290,17 +285,12 @@ class TestCacheMARCFiles:
     ):
         # The update frequency can also be 0, in which case it will always run.
         # If we already have a recent cached file, the script won't do anything.
-        db = cache_marc_files.db
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         last_week = now - datetime.timedelta(days=7)
         cache_marc_files.create_cached_file(yesterday)
-        ConfigurationSetting.for_library_and_externalintegration(
-            db.session,
-            MARCExporter.UPDATE_FREQUENCY,
-            db.default_library(),
-            cache_marc_files.integration,
-        ).value = 0
+        settings = MarcExporterSettings(update_frequency=0)
+        cache_marc_files.exporter.settings = settings
         script = cache_marc_files.script()
         script.process_lane(cache_marc_files.lane, cache_marc_files.exporter)
 
@@ -318,6 +308,27 @@ class TestCacheMARCFiles:
         assert (
             cache_marc_files.mock_records.call_args_list[1].kwargs["start_time"]
             > last_week
+        )
+
+    def test_process_lane_creates_exporter(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
+        # If the exporter doesn't exist, the script will create it.
+        script = cache_marc_files.script()
+        script.settings = MagicMock(
+            return_value=(
+                cache_marc_files.mock_settings,
+                cache_marc_files.mock_library_settings,
+            )
+        )
+        with patch("scripts.MARCExporter") as exporter:
+            script.process_lane(cache_marc_files.lane)
+
+        exporter.assert_called_once_with(
+            cache_marc_files.db.session,
+            cache_marc_files.lane.library,
+            cache_marc_files.mock_settings,
+            cache_marc_files.mock_library_settings,
         )
 
 

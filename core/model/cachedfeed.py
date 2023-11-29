@@ -9,7 +9,8 @@ from sqlalchemy.orm import Mapped, relationship
 from core.model import Base
 
 if TYPE_CHECKING:
-    from core.model import Representation
+    from core.lane import Lane
+    from core.model import Library, Representation
 
 
 class CachedMARCFile(Base):
@@ -21,8 +22,16 @@ class CachedMARCFile(Base):
     # Every MARC file is associated with a library and a lane. If the
     # lane is null, the file is for the top-level WorkList.
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=False, index=True)
+    library: Mapped[Library] = relationship(
+        "Library",
+        back_populates="cachedmarcfiles",
+    )
 
     lane_id = Column(Integer, ForeignKey("lanes.id"), nullable=True, index=True)
+    lane: Mapped[Lane] = relationship(
+        "Lane",
+        back_populates="cachedmarcfiles",
+    )
 
     # The representation for this file stores the URL where it was mirrored.
     representation_id = Column(

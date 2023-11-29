@@ -10,12 +10,13 @@ import sqlalchemy as sa
 from alembic import op
 from api.discovery.opds_registration import OpdsRegistrationService
 from core.migration.migrate_external_integration import (
-    _migrate_external_integration,
+    _validate_and_load_settings,
     get_configuration_settings,
     get_integrations,
     get_library_for_integration,
 )
 from core.migration.util import drop_enum, pg_update_enum
+from core.model import json_serializer
 
 # revision identifiers, used by Alembic.
 revision = "0df58829fc1a"
@@ -29,6 +30,41 @@ old_goals_enum = [
 ]
 
 new_goals_enum = old_goals_enum + ["DISCOVERY_GOAL"]
+
+
+# This function is copied from core/migration/migrate_external_integration.py
+# because the integration_configurations table has changed and this migration
+# needs a copy of the function that references the old version of the table.
+#
+# It was copied here, because this old version can be deleted whenever this
+# migration is deleted, so it makes sense to keep them together.
+def _migrate_external_integration(
+    connection,
+    integration,
+    protocol_class,
+    goal,
+    settings_dict,
+    self_test_results,
+    name=None,
+):
+    # Load and validate the settings before storing them in the database.
+    settings_class = protocol_class.settings_class()
+    settings_obj = _validate_and_load_settings(settings_class, settings_dict)
+    integration_configuration = connection.execute(
+        "insert into integration_configurations "
+        "(protocol, goal, name, settings, self_test_results) "
+        "values (%s, %s, %s, %s, %s)"
+        "returning id",
+        (
+            integration.protocol,
+            goal,
+            name or integration.name,
+            json_serializer(settings_obj.dict()),
+            self_test_results,
+        ),
+    ).fetchone()
+    assert integration_configuration is not None
+    return integration_configuration[0]
 
 
 def upgrade() -> None:
