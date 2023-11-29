@@ -9,12 +9,9 @@ from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     MISSING_COLLECTION,
-    MISSING_COLLECTION_NAME,
     MISSING_PARENT,
     MISSING_SERVICE,
-    NO_PROTOCOL_FOR_NEW_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
-    UNKNOWN_PROTOCOL,
 )
 from api.circulation import CirculationApiType
 from api.integration.registry.license_providers import LicenseProvidersRegistry
@@ -79,37 +76,19 @@ class CollectionSettingsController(
             mimetype="application/json",
         )
 
+    def create_new_service(self, name: str, protocol: str) -> IntegrationConfiguration:
+        service = super().create_new_service(name, protocol)
+        # Make sure the new service is associated with a collection
+        create(self._db, Collection, integration_configuration=service)
+        return service
+
     def process_post(self) -> Union[Response, ProblemDetail]:
         self.require_system_admin()
         try:
             form_data = flask.request.form
-            protocol = form_data.get("protocol", None, str)
-            id = form_data.get("id", None, int)
-            name = form_data.get("name", None, str)
+            libraries_data = self.get_libraries_data(form_data)
             parent_id = form_data.get("parent_id", None, int)
-            libraries_data = form_data.get("libraries", None, str)
-
-            if protocol is None and id is None:
-                raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
-
-            if protocol is None or protocol not in self.registry:
-                self.log.warning(
-                    f"Unknown patron authentication service protocol: {protocol}"
-                )
-                raise ProblemError(UNKNOWN_PROTOCOL)
-
-            if id is not None:
-                # Find an existing service to edit
-                integration = self.get_existing_service(id, name, protocol)
-                response_code = 200
-            else:
-                # Create a new service
-                if not name:
-                    raise ProblemError(MISSING_COLLECTION_NAME)
-                integration = self.create_new_service(name, protocol)
-                # Make sure the service is associated with a collection
-                create(self._db, Collection, integration_configuration=integration)
-                response_code = 201
+            integration, protocol, response_code = self.get_service(form_data)
 
             impl_cls = self.registry[protocol]
 

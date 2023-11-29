@@ -12,9 +12,9 @@ from api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
-    MISSING_COLLECTION_NAME,
     MISSING_PARENT,
     MISSING_SERVICE,
+    MISSING_SERVICE_NAME,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
@@ -164,7 +164,7 @@ class TestCollectionSettings:
         [
             pytest.param(
                 {"protocol": "Overdrive"},
-                MISSING_COLLECTION_NAME,
+                MISSING_SERVICE_NAME,
                 False,
                 id="missing_name",
             ),

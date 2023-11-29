@@ -7,12 +7,7 @@ from sqlalchemy import and_, select
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.controller.integration_settings import IntegrationSettingsController
 from api.admin.form_data import ProcessFormData
-from api.admin.problem_details import (
-    INCOMPLETE_CONFIGURATION,
-    INTEGRATION_URL_ALREADY_IN_USE,
-    NO_PROTOCOL_FOR_NEW_SERVICE,
-    UNKNOWN_PROTOCOL,
-)
+from api.admin.problem_details import INTEGRATION_URL_ALREADY_IN_USE
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.model import (
@@ -68,27 +63,7 @@ class DiscoveryServicesController(
     def process_post(self) -> Union[Response, ProblemDetail]:
         try:
             form_data = flask.request.form
-            protocol = form_data.get("protocol", None, str)
-            id = form_data.get("id", None, int)
-            name = form_data.get("name", None, str)
-
-            if protocol is None and id is None:
-                raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
-
-            if protocol is None or protocol not in self.registry:
-                self.log.warning(f"Unknown service protocol: {protocol}")
-                raise ProblemError(UNKNOWN_PROTOCOL)
-
-            if id is not None:
-                # Find an existing service to edit
-                service = self.get_existing_service(id, name, protocol)
-                response_code = 200
-            else:
-                # Create a new service
-                if name is None:
-                    raise ProblemError(INCOMPLETE_CONFIGURATION)
-                service = self.create_new_service(name, protocol)
-                response_code = 201
+            service, protocol, response_code = self.get_service(form_data)
 
             impl_cls = self.registry[protocol]
             settings_class = impl_cls.settings_class()

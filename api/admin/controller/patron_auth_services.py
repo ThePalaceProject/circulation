@@ -62,30 +62,8 @@ class PatronAuthServicesController(
     def process_post(self) -> Union[Response, ProblemDetail]:
         try:
             form_data = flask.request.form
-            protocol = form_data.get("protocol", None, str)
-            id = form_data.get("id", None, int)
-            name = form_data.get("name", None, str)
-            libraries_data = form_data.get("libraries", None, str)
-
-            if protocol is None and id is None:
-                raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
-
-            if protocol is None or protocol not in self.registry:
-                self.log.warning(
-                    f"Unknown patron authentication service protocol: {protocol}"
-                )
-                raise ProblemError(UNKNOWN_PROTOCOL)
-
-            if id is not None:
-                # Find an existing service to edit
-                auth_service = self.get_existing_service(id, name, protocol)
-                response_code = 200
-            else:
-                # Create a new service
-                if name is None:
-                    raise ProblemError(MISSING_PATRON_AUTH_NAME)
-                auth_service = self.create_new_service(name, protocol)
-                response_code = 201
+            libraries_data = self.get_libraries_data(form_data)
+            auth_service, protocol, response_code = self.get_service(form_data)
 
             # Update settings
             impl_cls = self.registry[protocol]
