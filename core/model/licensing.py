@@ -148,7 +148,7 @@ class License(Base, LicenseFunctions):
 
     @property
     def is_available_for_borrowing(self) -> bool:
-        "Can this license currently be used to borrow a book?"
+        """Can this license currently be used to borrow a book?"""
         return (
             not self.is_inactive
             and self.checkouts_available is not None
