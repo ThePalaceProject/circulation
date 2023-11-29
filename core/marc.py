@@ -5,7 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Callable, Mapping, Optional, Tuple
 
-from pydantic import ConstrainedInt
+from pydantic import NonNegativeInt
 from pymarc import Field, Record, Subfield
 from sqlalchemy.orm.session import Session
 
@@ -511,10 +511,6 @@ class MARCExporterFacets(BaseFacets):
         filter.order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[self.ORDER_LAST_UPDATE]
         filter.order_ascending = True
         filter.updated_after = self.start_time
-
-
-class NonNegativeInt(ConstrainedInt):
-    ge = 0
 
 
 class MarcExporterSettings(BaseSettings):
