@@ -310,6 +310,27 @@ class TestCacheMARCFiles:
             > last_week
         )
 
+    def test_process_lane_creates_exporter(
+        self, cache_marc_files: TestCacheMARCFilesFixture
+    ):
+        # If the exporter doesn't exist, the script will create it.
+        script = cache_marc_files.script()
+        script.settings = MagicMock(
+            return_value=(
+                cache_marc_files.mock_settings,
+                cache_marc_files.mock_library_settings,
+            )
+        )
+        with patch("scripts.MARCExporter") as exporter:
+            script.process_lane(cache_marc_files.lane)
+
+        exporter.assert_called_once_with(
+            cache_marc_files.db.session,
+            cache_marc_files.lane.library,
+            cache_marc_files.mock_settings,
+            cache_marc_files.mock_library_settings,
+        )
+
 
 class TestInstanceInitializationScript:
     # These are some basic tests for the instance initialization script. It is tested

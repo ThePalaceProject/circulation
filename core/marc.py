@@ -201,7 +201,7 @@ class Annotator(LoggerMixin):
             stemmed = edition.sort_title[: edition.sort_title.rindex(",")]
             if edition.title is None:
                 cls.logger().warning(
-                    "Edition %s has a sort title but no title.", edition.id
+                    "Edition %s has a sort title, but no title.", edition.id
                 )
                 non_filing_characters = 0
             else:
@@ -513,7 +513,7 @@ class MARCExporterFacets(BaseFacets):
         filter.updated_after = self.start_time
 
 
-class PositiveInt(ConstrainedInt):
+class NonNegativeInt(ConstrainedInt):
     ge = 0
 
 
@@ -522,7 +522,7 @@ class MarcExporterSettings(BaseSettings):
     # automatically updated. Since the crontab in docker isn't easily
     # configurable, we can run a script daily but check this to decide
     # whether to do anything.
-    update_frequency: PositiveInt = FormField(
+    update_frequency: NonNegativeInt = FormField(
         30,
         form=ConfigurationFormItem(
             label="Update frequency (in days)",

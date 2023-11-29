@@ -245,7 +245,7 @@ class CacheMARCFiles(LaneSweeperScript):
 
         update_frequency = exporter.settings.update_frequency
 
-        first_file = self._db.execute(
+        last_updated_file = self._db.execute(
             select(CachedMARCFile.end_time)
             .where(
                 CachedMARCFile.library == library,
@@ -254,7 +254,7 @@ class CacheMARCFiles(LaneSweeperScript):
             .order_by(CachedMARCFile.end_time.desc())
         ).first()
 
-        last_update = first_file.end_time if first_file else None
+        last_update = last_updated_file.end_time if last_updated_file else None
 
         if (
             not self.force
