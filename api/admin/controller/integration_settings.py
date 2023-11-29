@@ -1,15 +1,21 @@
+from __future__ import annotations
+
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, NamedTuple, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, List, NamedTuple, Optional, Tuple, Type, TypeVar
 
 import flask
 from flask import Response
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     INTEGRATION_NAME_ALREADY_IN_USE,
     MISSING_SERVICE,
+    MISSING_SERVICE_NAME,
+    NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
+    UNKNOWN_PROTOCOL,
 )
 from api.controller import CirculationManager
 from core.integration.base import (
@@ -195,6 +201,39 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 )
             )
         return new_service
+
+    def get_libraries_data(
+        self, form_data: ImmutableMultiDict[str, str]
+    ) -> Optional[str]:
+        libraries_data = form_data.get("libraries", None, str)
+        return libraries_data
+
+    def get_service(
+        self, form_data: ImmutableMultiDict[str, str]
+    ) -> Tuple[IntegrationConfiguration, str, int]:
+        protocol = form_data.get("protocol", None, str)
+        _id = form_data.get("id", None, int)
+        name = form_data.get("name", None, str)
+
+        if protocol is None and _id is None:
+            raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
+
+        if protocol is None or protocol not in self.registry:
+            self.log.warning(f"Unknown service protocol: {protocol}")
+            raise ProblemError(UNKNOWN_PROTOCOL)
+
+        if _id is not None:
+            # Find an existing service to edit
+            service = self.get_existing_service(_id, name, protocol)
+            response_code = 200
+        else:
+            # Create a new service
+            if name is None:
+                raise ProblemError(MISSING_SERVICE_NAME)
+            service = self.create_new_service(name, protocol)
+            response_code = 201
+
+        return service, protocol, response_code
 
     def get_library(self, short_name: str) -> Library:
         """

@@ -17,8 +17,8 @@ from api.admin.problem_details import (
     INTEGRATION_NAME_ALREADY_IN_USE,
     INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
-    MISSING_PATRON_AUTH_NAME,
     MISSING_SERVICE,
+    MISSING_SERVICE_NAME,
     MULTIPLE_BASIC_AUTH_SERVICES,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
@@ -366,7 +366,7 @@ class TestPatronAuth:
         )
         response = post_response(form)
         assert isinstance(response, ProblemDetail)
-        assert response.uri == MISSING_PATRON_AUTH_NAME.uri
+        assert response == MISSING_SERVICE_NAME
 
     def test_patron_auth_services_post_no_such_library(
         self,
