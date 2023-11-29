@@ -481,32 +481,32 @@ class TestLicense:
 
         # First, we use the time-limited license that's expiring first.
         assert time_limited_2 == licenses.pool.best_available_license()
-        time_limited_2.loan_to(licenses.db.patron())
+        time_limited_2.checkout()
 
         # When that's not available, we use the next time-limited license.
         assert licenses.time_limited == licenses.pool.best_available_license()
-        licenses.time_limited.loan_to(licenses.db.patron())
+        licenses.time_limited.checkout()
 
         # The time-and-loan-limited license also counts as time-limited for this.
         assert licenses.time_and_loan_limited == licenses.pool.best_available_license()
-        licenses.time_and_loan_limited.loan_to(licenses.db.patron())
+        licenses.time_and_loan_limited.checkout()
 
         # Next is the perpetual license.
         assert licenses.perpetual == licenses.pool.best_available_license()
-        licenses.perpetual.loan_to(licenses.db.patron())
+        licenses.perpetual.checkout()
 
         # Then the loan-limited license with the most remaining checkouts.
         assert licenses.loan_limited == licenses.pool.best_available_license()
-        licenses.loan_limited.loan_to(licenses.db.patron())
+        licenses.loan_limited.checkout()
 
         # That license allows 2 concurrent checkouts, so it's still the
         # best license until it's checked out again.
         assert licenses.loan_limited == licenses.pool.best_available_license()
-        licenses.loan_limited.loan_to(licenses.db.patron())
+        licenses.loan_limited.checkout()
 
         # There's one more loan-limited license.
         assert loan_limited_2 == licenses.pool.best_available_license()
-        loan_limited_2.loan_to(licenses.db.patron())
+        loan_limited_2.checkout()
 
         # Now all licenses are either loaned out or expired.
         assert None == licenses.pool.best_available_license()
