@@ -4,7 +4,7 @@ import json
 import random
 import string
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union, cast
 
 import pytest
 import pytest_alembic
@@ -150,9 +150,7 @@ class CreateCollection(Protocol):
     def __call__(
         self,
         connection: Connection,
-        name: Optional[str] = None,
-        external_integration_id: Optional[int] = None,
-        external_account_id: Optional[str] = None,
+        integration_configuration_id: Optional[int] = None,
     ) -> int:
         ...
 
@@ -161,16 +159,11 @@ class CreateCollection(Protocol):
 def create_collection(random_name: RandomName) -> CreateCollection:
     def fixture(
         connection: Connection,
-        name: Optional[str] = None,
-        external_integration_id: Optional[int] = None,
-        external_account_id: Optional[str] = None,
+        integration_configuration_id: Optional[int] = None,
     ) -> int:
-        if name is None:
-            name = random_name()
         collection = connection.execute(
-            "INSERT INTO collections (name, external_account_id, external_integration_id) VALUES"
-            + "(%s, %s, %s) returning id",
-            (name, external_account_id, external_integration_id),
+            "INSERT INTO collections (integration_configuration_id) VALUES (%s) returning id",
+            integration_configuration_id,
         ).fetchone()
         assert collection is not None
         assert isinstance(collection.id, int)
@@ -256,5 +249,133 @@ def create_config_setting() -> CreateConfigSetting:
                 )
 
         return setting.id
+
+    return fixture
+
+
+class CreateIntegrationConfiguration(Protocol):
+    def __call__(
+        self,
+        connection: Connection,
+        name: str,
+        protocol: str,
+        goal: str,
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        ...
+
+
+@pytest.fixture
+def create_integration_configuration() -> CreateIntegrationConfiguration:
+    def fixture(
+        connection: Connection,
+        name: str,
+        protocol: str,
+        goal: str,
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        if settings is None:
+            settings = {}
+
+        settings_str = json_serializer(settings)
+
+        integration_configuration = connection.execute(
+            "INSERT INTO integration_configurations (name, protocol, goal, settings, self_test_results, context) "
+            "VALUES (%s, %s, %s, %s, '{}', '{}') returning id",
+            name,
+            protocol,
+            goal,
+            settings_str,
+        ).fetchone()
+        assert integration_configuration is not None
+        assert isinstance(integration_configuration.id, int)
+        return integration_configuration.id
+
+    return fixture
+
+
+class CreateEdition(Protocol):
+    def __call__(
+        self,
+        connection: Connection,
+        title: str,
+        medium: str,
+        primary_identifier_id: int,
+    ) -> int:
+        ...
+
+
+@pytest.fixture
+def create_edition() -> CreateEdition:
+    def fixture(
+        connection: Connection, title: str, medium: str, primary_identifier_id: int
+    ) -> int:
+        edition = connection.execute(
+            "INSERT INTO editions (title, medium, primary_identifier_id) VALUES (%s, %s, %s) returning id",
+            title,
+            medium,
+            primary_identifier_id,
+        ).fetchone()
+        assert edition is not None
+        return cast(int, edition.id)
+
+    return fixture
+
+
+class CreateIdentifier(Protocol):
+    def __call__(
+        self,
+        connection: Connection,
+        identifier: str,
+        type: str,
+    ) -> int:
+        ...
+
+
+@pytest.fixture
+def create_identifier() -> CreateIdentifier:
+    def fixture(
+        connection: Connection,
+        identifier: str,
+        type: str,
+    ) -> int:
+        identifier_row = connection.execute(
+            "INSERT INTO identifiers (identifier, type) VALUES (%s, %s) returning id",
+            identifier,
+            type,
+        ).fetchone()
+        assert identifier_row is not None
+        return cast(int, identifier_row.id)
+
+    return fixture
+
+
+class CreateLicensePool(Protocol):
+    def __call__(
+        self,
+        connection: Connection,
+        collection_id: int,
+        identifier_id: Optional[int] = None,
+        should_track_playtime: Optional[bool] = False,
+    ) -> int:
+        ...
+
+
+@pytest.fixture
+def create_license_pool() -> CreateLicensePool:
+    def fixture(
+        connection: Connection,
+        collection_id: int,
+        identifier_id: Optional[int] = None,
+        should_track_playtime: Optional[bool] = False,
+    ) -> int:
+        licensepool = connection.execute(
+            "INSERT into licensepools (collection_id, identifier_id, should_track_playtime) VALUES (%(id)s, %(identifier_id)s, %(track)s) returning id",
+            id=collection_id,
+            identifier_id=identifier_id,
+            track=should_track_playtime,
+        ).fetchone()
+        assert licensepool is not None
+        return cast(int, licensepool.id)
 
     return fixture

@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional
 
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.types import FeedData, Link, WorkEntry
-from core.model.configuration import ExternalIntegration
 from core.model.constants import EditionConstants, LinkRelations
 from core.model.patron import Hold, Patron
 
@@ -104,8 +103,7 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         if (
             edition.medium == EditionConstants.AUDIO_MEDIUM
             and active_license_pool
-            and active_license_pool.collection.protocol
-            == ExternalIntegration.OPDS_FOR_DISTRIBUTORS
+            and active_license_pool.should_track_playtime is True
             and work in self.active_loans_by_work
         ):
             entry.computed.other_links.append(

@@ -104,6 +104,7 @@ class OPDSXMLParser(XMLParser):
         "schema": "http://schema.org/",
         "atom": "http://www.w3.org/2005/Atom",
         "drm": "http://librarysimplified.org/terms/drm",
+        "palace": "http://palaceproject.io/terms",
     }
 
 
@@ -818,6 +819,19 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                     combined_circ["data_source"] = self.data_source_name
 
                 combined_circ["primary_identifier"] = identifier_obj
+
+                combined_circ["should_track_playtime"] = xml_data_dict.get(
+                    "should_track_playtime", False
+                )
+                if (
+                    combined_circ["should_track_playtime"]
+                    and xml_data_dict["medium"] != Edition.AUDIO_MEDIUM
+                ):
+                    combined_circ["should_track_playtime"] = False
+                    self.log.warning(
+                        f"Ignoring the time tracking flag for entry {identifier_obj.identifier}"
+                    )
+
                 circulation = CirculationData(**combined_circ)
 
                 self._add_format_data(circulation)
@@ -1379,6 +1393,10 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 # This entry had an issued tag, but it was in a format we couldn't parse.
                 pass
 
+        data["should_track_playtime"] = False
+        time_tracking_tag = parser._xpath(entry_tag, "palace:timeTracking")
+        if time_tracking_tag:
+            data["should_track_playtime"] = time_tracking_tag[0].text.lower() == "true"
         return data
 
     @classmethod

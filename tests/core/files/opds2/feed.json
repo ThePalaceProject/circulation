@@ -12,12 +12,13 @@
   "publications": [
     {
       "metadata": {
-        "@type": "http://schema.org/Book",
+        "@type": "http://schema.org/Audiobook",
         "title": "Moby-Dick",
         "author": "Herman Melville",
         "identifier": "urn:isbn:978-3-16-148410-0",
         "duration": 100.2,
         "language": "en",
+        "http://palaceproject.io/terms/timeTracking": true,
         "publisher": {
           "name": "Test Publisher"
         },
@@ -36,12 +37,12 @@
         {
           "rel": "self",
           "href": "http://example.org/publication.json",
-          "type": "application/opds-publication+json"
+          "type": "application/audiobook+json"
         },
         {
           "rel": "http://opds-spec.org/acquisition/open-access",
           "href": "http://example.org/moby-dick.epub",
-          "type": "application/epub+zip"
+          "type": "application/audiobook+json"
         }
       ],
       "images": [
@@ -68,6 +69,7 @@
         "@type": "http://schema.org/Book",
         "title": "Adventures of Huckleberry Finn",
         "description": "Adventures of Huckleberry Finn is a novel by Mark Twain, first published in the United Kingdom in December 1884 and in the United States in February 1885.",
+        "http://palaceproject.io/terms/timeTracking": true,
         "author": [
           {
             "name": "Mark Twain"

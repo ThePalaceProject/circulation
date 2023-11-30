@@ -226,6 +226,9 @@ class TestOPDSImporter:
         assert data_source_name == c1._data_source
         assert data_source_name == c2._data_source
 
+        assert m1.circulation.should_track_playtime == True
+        assert m2.circulation.should_track_playtime == False
+
         [[failure]] = list(failures.values())
         assert isinstance(failure, CoverageFailure)
         assert (
@@ -797,7 +800,7 @@ class TestOPDSImporter:
         assert crow.license_pools[0].collection == db.default_collection()
 
         assert mouse.work is not None
-        assert mouse.medium == Edition.PERIODICAL_MEDIUM
+        assert mouse.medium == Edition.AUDIO_MEDIUM
 
         # Four links have been added to the identifier of the 'mouse'
         # edition.
@@ -894,7 +897,10 @@ class TestOPDSImporter:
 
         # Bonus: make sure that delivery mechanisms are set appropriately.
         [mech] = mouse_pool.delivery_mechanisms
-        assert Representation.EPUB_MEDIA_TYPE == mech.delivery_mechanism.content_type
+        assert (
+            Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+            == mech.delivery_mechanism.content_type
+        )
         assert DeliveryMechanism.NO_DRM == mech.delivery_mechanism.drm_scheme
         assert "http://www.gutenberg.org/ebooks/10441.epub.images" == mech.resource.url
 
