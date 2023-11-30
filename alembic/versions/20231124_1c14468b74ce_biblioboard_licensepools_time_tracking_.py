@@ -1,4 +1,4 @@
-"""Bibliotheca licensepools time tracking flag
+"""Biblioboard licensepools time tracking flag
 
 Revision ID: 1c14468b74ce
 Revises: 6af9160a578e

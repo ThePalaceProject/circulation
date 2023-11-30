@@ -4,17 +4,7 @@ import json
 import random
 import string
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Generator,
-    Optional,
-    Protocol,
-    Tuple,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union, cast
 
 import pytest
 import pytest_alembic
@@ -98,22 +88,6 @@ def random_name() -> RandomName:
         return "".join(random.choices(string.ascii_lowercase, k=length))
 
     return fixture
-
-
-def flexible_insert_statement(
-    table_name: str, **values: str | int | None
-) -> Tuple[str, Tuple[Any, ...]]:
-    """Sometimes after a few migrations the tables go out of sync for testing.
-    A fixture may want to insert a column that doesn't yet exist.
-    This function allows any fixture to provide only the required number of values
-    it wants to insert, the method generates an INSERT statement with only the provided
-    column names and corresponding VALUES"""
-    keys = tuple(values.keys())
-    sses = ",".join(["%s" for _ in range(len(keys))])
-    return (
-        f"INSERT INTO {table_name} ({','.join(keys)}) VALUES ({sses}) returning id",
-        tuple(values.values()),
-    )
 
 
 class CreateLibrary(Protocol):
