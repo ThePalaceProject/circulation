@@ -1,7 +1,7 @@
 """Licensepools time tracking flag
 
 Revision ID: 6af9160a578e
-Revises: 2d72d6876c52
+Revises: 1e46a5bc33b5
 Create Date: 2023-11-24 08:08:12.636590+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "6af9160a578e"
-down_revision = "2d72d6876c52"
+down_revision = "1e46a5bc33b5"
 branch_labels = None
 depends_on = None
 

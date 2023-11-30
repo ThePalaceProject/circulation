@@ -188,16 +188,12 @@ class CreateCollection(Protocol):
 def create_collection(random_name: RandomName) -> CreateCollection:
     def fixture(
         connection: Connection,
-        name: Optional[str] = None,
+        _deprecated_name: str,
         external_integration_id: Optional[int] = None,
         external_account_id: Optional[str] = None,
         integration_configuration_id: Optional[int] = None,
     ) -> int:
-        if name is None:
-            name = random_name()
-
         values = dict(
-            name=name,
             external_account_id=external_account_id,
             external_integration_id=external_integration_id,
         )

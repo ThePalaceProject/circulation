@@ -20,7 +20,7 @@ def upgrade() -> None:
     log = migration_logger(revision)
 
     collections = connection.execute(
-        "select collections.id, collections.name from integration_configurations \
+        "select collections.id from integration_configurations \
         JOIN collections on collections.integration_configuration_id = integration_configurations.id \
         where integration_configurations.protocol = 'OPDS for Distributors'"
     ).all()
