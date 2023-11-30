@@ -819,9 +819,19 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                     combined_circ["data_source"] = self.data_source_name
 
                 combined_circ["primary_identifier"] = identifier_obj
+
                 combined_circ["should_track_playtime"] = xml_data_dict.get(
                     "should_track_playtime", False
                 )
+                if (
+                    combined_circ["should_track_playtime"]
+                    and xml_data_dict["medium"] != Edition.AUDIO_MEDIUM
+                ):
+                    combined_circ["should_track_playtime"] = False
+                    self.log.warning(
+                        f"Ignoring the time tracking flag for entry {identifier_obj.identifier}"
+                    )
+
                 circulation = CirculationData(**combined_circ)
 
                 self._add_format_data(circulation)

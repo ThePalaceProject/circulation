@@ -825,6 +825,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         duration = publication.metadata.duration
         # Not all parsers support time_tracking
         time_tracking = getattr(publication.metadata, "time_tracking", False)
+        if medium != Edition.AUDIO_MEDIUM and time_tracking is True:
+            time_tracking = False
+            self.log.warning(
+                f"Ignoring the time tracking flag for entry {publication.metadata.identifier}"
+            )
 
         feed_self_url = first_or_default(
             feed.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)

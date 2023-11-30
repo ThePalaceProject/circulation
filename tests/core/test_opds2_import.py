@@ -174,7 +174,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert "Moby-Dick" == moby_dick_edition.title
         assert "eng" == moby_dick_edition.language
         assert "eng" == moby_dick_edition.language
-        assert EditionConstants.BOOK_MEDIUM == moby_dick_edition.medium
+        assert EditionConstants.AUDIO_MEDIUM == moby_dick_edition.medium
         assert "Herman Melville" == moby_dick_edition.author
         assert moby_dick_edition.duration == 100.2
 
@@ -276,7 +276,7 @@ class TestOPDS2Importer(OPDS2Test):
             == moby_dick_delivery_mechanism.delivery_mechanism.drm_scheme
         )
         assert (
-            MediaTypes.EPUB_MEDIA_TYPE
+            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
             == moby_dick_delivery_mechanism.delivery_mechanism.content_type
         )
 

@@ -4,7 +4,7 @@
   <updated>2015-01-02T16:56:40Z</updated>
   <link href="http://localhost:5000/"/>
   <link href="http://localhost:5000/" rel="self"/>
-  <entry schema:additionalType="http://schema.org/PublicationIssue">
+  <entry schema:additionalType="http://schema.org/Audiobook">
     <id>urn:librarysimplified.org/terms/id/Gutenberg%20ID/10441</id>
     <bibframe:distribution bibframe:ProviderName="Gutenberg"/>
     <title>The Green Mouse</title>
@@ -31,7 +31,7 @@
     <category term="7" label="7" schema:ratingValue="100" scheme="http://schema.org/typicalAgeRange"/>
     <dcterms:language>en</dcterms:language>
     <dcterms:publisher>Project Gutenberg</dcterms:publisher>
-    <link href="http://www.gutenberg.org/ebooks/10441.epub.images" type="application/epub+zip" rel="http://opds-spec.org/acquisition/open-access"/>
+    <link href="http://www.gutenberg.org/ebooks/10441.epub.images" type="application/audiobook+json" rel="http://opds-spec.org/acquisition/open-access"/>
     <palace:timeTracking>true</palace:timeTracking>
   </entry>
 
@@ -54,6 +54,7 @@
     <dcterms:language>en</dcterms:language>
     <dcterms:publisher>Project Gutenberg</dcterms:publisher>
     <link href="http://www.gutenberg.org/ebooks/10557.epub.images" type="application/epub+zip" rel="http://opds-spec.org/acquisition/open-access"/>
+    <palace:timeTracking>true</palace:timeTracking>
   </entry>
 
   <simplified:message>
