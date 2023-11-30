@@ -176,9 +176,6 @@ class CreateCollection(Protocol):
     def __call__(
         self,
         connection: Connection,
-        name: Optional[str] = None,
-        external_integration_id: Optional[int] = None,
-        external_account_id: Optional[str] = None,
         integration_configuration_id: Optional[int] = None,
     ) -> int:
         ...
@@ -188,22 +185,11 @@ class CreateCollection(Protocol):
 def create_collection(random_name: RandomName) -> CreateCollection:
     def fixture(
         connection: Connection,
-        _deprecated_name: str,
-        external_integration_id: Optional[int] = None,
-        external_account_id: Optional[str] = None,
         integration_configuration_id: Optional[int] = None,
     ) -> int:
-        values = dict(
-            external_account_id=external_account_id,
-            external_integration_id=external_integration_id,
-        )
-        # This column was added later on, so we skip this column incase
-        # we're in a migration that doesn't need it/know about it
-        if integration_configuration_id is not None:
-            values["integration_configuration_id"] = integration_configuration_id
-
         collection = connection.execute(
-            *flexible_insert_statement("collections", **values)
+            "INSERT INTO collections (integration_configuration_id) VALUES (%s) returning id",
+            integration_configuration_id,
         ).fetchone()
         assert collection is not None
         assert isinstance(collection.id, int)

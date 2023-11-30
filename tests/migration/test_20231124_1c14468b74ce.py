@@ -39,7 +39,6 @@ def test_migration(
         )
         collection_id_incorrect_protocol = create_collection(
             connection,
-            "CollectionBadProtocol",
             integration_configuration_id=ic_id_incorrect_protocol,
         )
 
@@ -47,7 +46,7 @@ def test_migration(
             connection, "configuration1", "OPDS for Distributors", "LICENSE_GOAL", {}
         )
         collection_id = create_collection(
-            connection, "Collection1", integration_configuration_id=ic_id1
+            connection, integration_configuration_id=ic_id1
         )
 
         identifier_id1 = create_identifier(connection, "identifier-1", "type")
