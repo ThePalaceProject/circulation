@@ -4,7 +4,17 @@ import json
 import random
 import string
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Generator,
+    Optional,
+    Protocol,
+    Tuple,
+    Union,
+    cast,
+)
 
 import pytest
 import pytest_alembic
@@ -90,6 +100,22 @@ def random_name() -> RandomName:
     return fixture
 
 
+def flexible_insert_statement(
+    table_name: str, **values: str | int | None
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Sometimes after a few migrations the tables go out of sync for testing.
+    A fixture may want to insert a column that doesn't yet exist.
+    This function allows any fixture to provide only the required number of values
+    it wants to insert, the method generates an INSERT statement with only the provided
+    column names and corresponding VALUES"""
+    keys = tuple(values.keys())
+    sses = ",".join(["%s" for _ in range(len(keys))])
+    return (
+        f"INSERT INTO {table_name} ({','.join(keys)}) VALUES ({sses}) returning id",
+        tuple(values.values()),
+    )
+
+
 class CreateLibrary(Protocol):
     def __call__(
         self,
@@ -169,15 +195,19 @@ def create_collection(random_name: RandomName) -> CreateCollection:
     ) -> int:
         if name is None:
             name = random_name()
+
+        values = dict(
+            name=name,
+            external_account_id=external_account_id,
+            external_integration_id=external_integration_id,
+        )
+        # This column was added later on, so we skip this column incase
+        # we're in a migration that doesn't need it/know about it
+        if integration_configuration_id is not None:
+            values["integration_configuration_id"] = integration_configuration_id
+
         collection = connection.execute(
-            "INSERT INTO collections (name, external_account_id, external_integration_id, integration_configuration_id) VALUES"
-            + "(%s, %s, %s, %s) returning id",
-            (
-                name,
-                external_account_id,
-                external_integration_id,
-                integration_configuration_id,
-            ),
+            *flexible_insert_statement("collections", **values)
         ).fetchone()
         assert collection is not None
         assert isinstance(collection.id, int)
