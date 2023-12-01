@@ -1361,7 +1361,15 @@ class CrawlableFacets(Facets):
 
     @classmethod
     def available_facets(cls, config, facet_group_name):
-        return [cls.SETTINGS[facet_group_name]]
+        facets = [cls.SETTINGS[facet_group_name]]
+
+        if (
+            facet_group_name == Facets.DISTRIBUTOR_FACETS_GROUP_NAME
+            or facet_group_name == Facets.COLLECTION_NAME_FACETS_GROUP_NAME
+        ) and config is not None:
+            facets.extend(config.enabled_facets(facet_group_name))
+
+        return facets
 
     @classmethod
     def default_facet(cls, config, facet_group_name):
