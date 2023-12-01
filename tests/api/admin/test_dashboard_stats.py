@@ -95,7 +95,7 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
         assert 1 == patron_data.loans
         assert 1 == patron_data.holds
 
-    # These patrons are in a different library..
+    # These patrons are in a different library.
     l2 = db.library()
     patron4 = db.patron(library=l2)
     pool.loan_to(patron4, end=utc_now() + timedelta(days=5))
@@ -301,6 +301,8 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     # Initially, there is no inventory.
     response = session.get_statistics()
     assert response.inventory_summary == empty_inventory
+    assert {} == response.inventory_by_medium
+    assert 0 == len(response.libraries)
 
     default_library = db.library("Default Library", "default")
     default_collection = db.collection(name="Default Collection")
@@ -325,23 +327,36 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     expected_summary_inventory = expected_library_inventory.copy()
 
     response = session.get_statistics()
-    assert (
-        expected_library_inventory
-        == response.libraries_by_key.get(default_library.short_name).inventory_summary
-    )
+    library_stats_data = response.libraries_by_key.get(default_library.short_name)
+    # all_collections_by_id = {c.id: c for c in response.collections}
+    # library_collections_by_id = {
+    #     id_: all_collections_by_id[id_] for id_ in library_stats_data.collection_ids
+    # }
+    assert 1 == len(response.collections)
+    assert 1 == len(response.inventory_by_medium)
+    assert 1 == len(library_stats_data.collection_ids)
+    assert 1 == len(library_stats_data.inventory_by_medium)
     assert expected_summary_inventory == response.inventory_summary
+    assert "Book" in response.inventory_by_medium
+    assert expected_summary_inventory == response.inventory_by_medium.get("Book")
+    assert expected_library_inventory == library_stats_data.inventory_summary
+    assert "Book" in library_stats_data.inventory_by_medium
+    assert expected_library_inventory == library_stats_data.inventory_by_medium.get(
+        "Book"
+    )
 
     c2 = db.collection()
     c3 = db.collection()
     c3.libraries += [default_library]
 
     # c2 adds a 5/10 metered license title.
-    _, pool = db.edition(
+    edition, pool = db.edition(
         with_license_pool=True,
         with_open_access_download=False,
         data_source_name=DataSource.OVERDRIVE,
         collection=c2,
     )
+    edition.medium = "Audio"
     pool.open_access = False
     pool.licenses_owned = 10
     pool.licenses_available = 5
@@ -379,7 +394,8 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     pool.licenses_owned = 5
     pool.licenses_available = 5
 
-    added_library_inventory = empty_inventory.copy(
+    c1_previous_book_inventory = expected_library_inventory
+    c1_added_book_inventory = empty_inventory.copy(
         update={
             "titles": 1,
             "available_titles": 0,
@@ -389,18 +405,41 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
             "metered_licenses_available": 0,
         }
     )
-    added_summary_inventory = empty_inventory.copy(
+
+    c2_audio_inventory = empty_inventory.copy(
         update={
-            "titles": 3,
-            "available_titles": 2,
-            "licensed_titles": 3,
-            "metered_license_titles": 3,
-            "metered_licenses_owned": 18,
-            "metered_licenses_available": 10,
+            "titles": 1,
+            "available_titles": 1,
+            "licensed_titles": 1,
+            "metered_license_titles": 1,
+            "metered_licenses_owned": 10,
+            "metered_licenses_available": 5,
         }
     )
-    expected_library_inventory += added_library_inventory
-    expected_summary_inventory += added_summary_inventory
+    c2_book_inventory = empty_inventory.copy(
+        update={
+            "titles": 1,
+            "available_titles": 1,
+            "licensed_titles": 1,
+            "metered_license_titles": 1,
+            "metered_licenses_owned": 5,
+            "metered_licenses_available": 5,
+        }
+    )
+
+    c3_book_inventory = empty_inventory.copy()
+
+    # All collections are included in summaries, since our admin is a sysadmin.
+    expected_library_inventory = (
+        c1_previous_book_inventory + c1_added_book_inventory + c3_book_inventory
+    )
+    expected_summary_inventory = (
+        c1_previous_book_inventory
+        + c1_added_book_inventory
+        + c3_book_inventory
+        + c2_audio_inventory
+        + c2_book_inventory
+    )
 
     response = session.get_statistics()
     library_stats_data = response.libraries_by_key.get(default_library.short_name)
@@ -408,59 +447,128 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     library_collections_by_id = {
         id_: all_collections_by_id[id_] for id_ in library_stats_data.collection_ids
     }
-    assert expected_library_inventory == library_stats_data.inventory_summary
-    assert expected_summary_inventory == response.inventory_summary
-    assert 2 == len(library_stats_data.collection_ids)
     assert 3 == len(response.collections)
 
+    assert expected_summary_inventory == response.inventory_summary
+    assert 2 == len(response.inventory_by_medium)
+    assert "Audio" in response.inventory_by_medium
+    assert "Book" in response.inventory_by_medium
+    assert c2_audio_inventory == response.inventory_by_medium.get("Audio")
+    assert (
+        c1_previous_book_inventory
+        + c1_added_book_inventory
+        + c2_book_inventory
+        + c3_book_inventory
+        == response.inventory_by_medium.get("Book")
+    )
+    assert expected_summary_inventory == response.inventory_by_medium.get(
+        "Audio"
+    ) + response.inventory_by_medium.get("Book")
+
+    assert expected_library_inventory == library_stats_data.inventory_summary
+    assert 2 == len(library_stats_data.collection_ids)
+    assert 1 == len(library_stats_data.inventory_by_medium)
+    assert "Book" in library_stats_data.inventory_by_medium
+    assert (
+        c1_previous_book_inventory + c1_added_book_inventory + c3_book_inventory
+        == library_stats_data.inventory_by_medium.get("Book")
+    )
+    assert expected_library_inventory == library_stats_data.inventory_by_medium.get(
+        "Book"
+    )
+
     for collections in [library_collections_by_id, all_collections_by_id]:
-        default_inventory = collections[default_collection.id].inventory
-        c3_inventory = collections[c3.id].inventory
-        assert 1 == default_inventory.licensed_titles
-        assert 1 == default_inventory.open_access_titles
-        assert 3 == default_inventory.metered_licenses_owned
-        assert 0 == default_inventory.metered_licenses_available
+        default_stats = collections[default_collection.id]
+        assert (
+            c1_previous_book_inventory + c1_added_book_inventory
+            == default_stats.inventory
+        )
 
-        assert 0 == c3_inventory.licensed_titles
-        assert 0 == c3_inventory.open_access_titles
-        assert 0 == c3_inventory.metered_licenses_owned
-        assert 0 == c3_inventory.metered_licenses_available
+        default_inventory_by_medium = default_stats.inventory_by_medium
+        assert "Audio" not in default_inventory_by_medium
+        assert "Book" in default_inventory_by_medium
+        assert (
+            c1_previous_book_inventory + c1_added_book_inventory
+            == default_inventory_by_medium["Book"]
+        )
 
-    # assert None == library_collections_data.get(c2.name)
-    # c2_data = total_collections_data.get(c2.name)
+        c3_stats = collections[c3.id]
+        assert c3_book_inventory == c3_stats.inventory
+
+        c3_inventory_by_medium = c3_stats.inventory_by_medium
+        assert "Book" not in c3_inventory_by_medium
+        assert "Audio" not in c3_inventory_by_medium
+
     assert library_collections_by_id.get(c2.id) is None
-    c2_inventory = all_collections_by_id[c2.id].inventory
-    assert 2 == c2_inventory.licensed_titles
-    assert 0 == c2_inventory.open_access_titles
-    assert 15 == c2_inventory.metered_licenses_owned
-    assert 10 == c2_inventory.metered_licenses_available
+
+    c2_stats = all_collections_by_id[c2.id]
+    assert c2_audio_inventory + c2_book_inventory == c2_stats.inventory
+
+    c2_inventory_by_medium = c2_stats.inventory_by_medium
+    assert "Book" in c2_inventory_by_medium
+    assert "Audio" in c2_inventory_by_medium
+    assert c2_audio_inventory == c2_inventory_by_medium["Audio"]
+    assert c2_book_inventory == c2_inventory_by_medium["Book"]
 
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARY_MANAGER, default_library)
 
     # c2 is no longer included in the totals since the admin user's
     # library is not associated with it.
+    expected_library_inventory = (
+        c1_previous_book_inventory + c1_added_book_inventory + c3_book_inventory
+    )
+    expected_summary_inventory = expected_library_inventory
+
     response = session.get_statistics()
     library_stats_data = response.libraries_by_key.get(default_library.short_name)
     all_collections_by_id = {c.id: c for c in response.collections}
     library_collections_by_id = {
         id: all_collections_by_id[id] for id in library_stats_data.collection_ids
     }
+    assert 2 == len(response.collections)
+
+    assert expected_summary_inventory == response.inventory_summary
+    assert 1 == len(response.inventory_by_medium)
+    assert "Book" in response.inventory_by_medium
+    assert expected_summary_inventory == response.inventory_by_medium.get("Book")
+
+    assert expected_library_inventory == library_stats_data.inventory_summary
+    assert 2 == len(library_stats_data.collection_ids)
+    assert 1 == len(library_stats_data.inventory_by_medium)
+    assert "Book" in library_stats_data.inventory_by_medium
+    assert (
+        c1_previous_book_inventory + c1_added_book_inventory + c3_book_inventory
+        == library_stats_data.inventory_by_medium.get("Book")
+    )
+    assert expected_library_inventory == library_stats_data.inventory_by_medium.get(
+        "Book"
+    )
+
     for collections in [library_collections_by_id, all_collections_by_id]:
         assert 2 == len(collections)
         assert collections.get(c2.id) is None
 
-        default_inventory = collections[default_collection.id].inventory
-        assert 1 == default_inventory.licensed_titles
-        assert 1 == default_inventory.open_access_titles
-        assert 3 == default_inventory.metered_licenses_owned
-        assert 0 == default_inventory.metered_licenses_available
+        default_stats = collections[default_collection.id]
+        assert (
+            c1_previous_book_inventory + c1_added_book_inventory
+            == default_stats.inventory
+        )
 
-        c3_inventory = collections[c3.id].inventory
-        assert 0 == c3_inventory.licensed_titles
-        assert 0 == c3_inventory.open_access_titles
-        assert 0 == c3_inventory.metered_licenses_owned
-        assert 0 == c3_inventory.metered_licenses_available
+        default_inventory_by_medium = default_stats.inventory_by_medium
+        assert "Audio" not in default_inventory_by_medium
+        assert "Book" in default_inventory_by_medium
+        assert (
+            c1_previous_book_inventory + c1_added_book_inventory
+            == default_inventory_by_medium["Book"]
+        )
+
+        c3_stats = collections[c3.id]
+        assert c3_book_inventory == c3_stats.inventory
+
+        c3_inventory_by_medium = c3_stats.inventory_by_medium
+        assert "Book" not in c3_inventory_by_medium
+        assert "Audio" not in c3_inventory_by_medium
 
 
 def test_stats_parent_collection_permissions(
