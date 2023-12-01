@@ -1047,11 +1047,13 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        annotator = annotator or self.manager.annotator(worklist)
-
         # A crawlable feed has only one possible set of Facets,
         # so library settings are irrelevant.
-        facets = CrawlableFacets.default(None)
+        facets = self.manager.load_facets_from_request(
+            worklist=worklist,
+            base_class=CrawlableFacets,
+        )
+        annotator = annotator or self.manager.annotator(worklist, facets=facets)
 
         return feed_class.page(
             _db=self._db,

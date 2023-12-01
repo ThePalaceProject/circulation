@@ -242,7 +242,7 @@ class TestCrawlableFeed:
 
         # Good pagination data -> feed_class.page() is called.
         sort_key = ["sort", "pagination", "key"]
-        with circulation_fixture.app.test_request_context(
+        with circulation_fixture.request_context_with_library(
             "/?size=23&key=%s" % json.dumps(sort_key)
         ):
             response = circulation_fixture.manager.opds_feeds._crawlable_feed(
@@ -288,7 +288,7 @@ class TestCrawlableFeed:
         # If a custom Annotator is passed in to _crawlable_feed, it's
         # propagated to the page() call.
         mock_annotator = object()
-        with circulation_fixture.app.test_request_context("/"):
+        with circulation_fixture.request_context_with_library("/"):
             response = circulation_fixture.manager.opds_feeds._crawlable_feed(
                 annotator=mock_annotator, **in_kwargs
             )
@@ -306,3 +306,11 @@ class TestCrawlableFeed:
         # There is one entry with the expected title.
         [entry] = feed["entries"]
         assert entry["title"] == work.title
+
+        # The feed has the expected facet groups.
+        facet_groups = {
+            l["facetgroup"]
+            for l in feed["feed"]["links"]
+            if l["rel"] == "http://opds-spec.org/facet"
+        }
+        assert facet_groups == {"Collection Name", "Distributor"}
