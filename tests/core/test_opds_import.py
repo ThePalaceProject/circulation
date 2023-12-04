@@ -1406,7 +1406,7 @@ class TestOPDSImporter:
 
         [august_pool] = imported_pools
         assert True == august_pool.open_access
-        assert download_manifest_url == august_pool._open_access_download_url
+        assert download_manifest_url == august_pool.open_access_download_url
 
         [lpdm] = august_pool.delivery_mechanisms
         assert (
