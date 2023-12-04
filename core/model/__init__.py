@@ -553,7 +553,7 @@ from core.model.licensing import (
     RightsStatus,
 )
 from core.model.listeners import *
-from core.model.marcfiles import MarcFile
+from core.model.marcfile import MarcFile
 from core.model.measurement import Measurement
 from core.model.patron import (
     Annotation,
