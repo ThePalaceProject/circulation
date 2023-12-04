@@ -2000,7 +2000,7 @@ class TestRebuildSearchIndexScript:
         work = db.work(with_license_pool=True)
         work2 = db.work(with_license_pool=True)
         wcr = WorkCoverageRecord
-        decoys = [wcr.QUALITY_OPERATION, wcr.GENERATE_MARC_OPERATION]
+        decoys = [wcr.QUALITY_OPERATION, wcr.SUMMARY_OPERATION]
 
         # Set up some coverage records.
         for operation in decoys + [wcr.UPDATE_SEARCH_INDEX_OPERATION]:
@@ -2044,7 +2044,7 @@ class TestSearchIndexCoverageRemover:
         work = db.work()
         work2 = db.work()
         wcr = WorkCoverageRecord
-        decoys = [wcr.QUALITY_OPERATION, wcr.GENERATE_MARC_OPERATION]
+        decoys = [wcr.QUALITY_OPERATION, wcr.SUMMARY_OPERATION]
 
         # Set up some coverage records.
         for operation in decoys + [wcr.UPDATE_SEARCH_INDEX_OPERATION]:
