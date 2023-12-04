@@ -1,0 +1,226 @@
+from typing import Optional, Tuple
+from unittest.mock import MagicMock, call
+
+import pytest
+from _pytest.logging import LogCaptureFixture
+from pytest_alembic import MigrationContext
+from sqlalchemy import inspect
+from sqlalchemy.engine import Connection, Engine
+
+from core.service.container import container_instance
+from core.service.storage.s3 import S3Service
+from tests.migration.conftest import (
+    CreateCoverageRecord,
+    CreateIdentifier,
+    CreateLane,
+    CreateLibrary,
+)
+
+
+class CreateCachedMarcFile:
+    def __call__(
+        self,
+        connection: Connection,
+        url: str,
+        library_id: Optional[int] = None,
+        lane_id: Optional[int] = None,
+    ) -> Tuple[int, int]:
+        if library_id is None:
+            library_id = self.create_library(connection)
+
+        if lane_id is None:
+            lane_id = self.create_lane(connection, library_id)
+
+        representation_id = self.representation(connection, url)
+
+        row = connection.execute(
+            "INSERT INTO cachedmarcfiles (representation_id, start_time, end_time, lane_id, library_id) "
+            "VALUES (%s, %s, %s, %s, %s) returning id",
+            (representation_id, "2021-01-01", "2021-01-02", library_id, lane_id),
+        ).first()
+        assert row is not None
+        file_id = row.id
+
+        return representation_id, file_id
+
+    def representation(self, connection: Connection, url: str) -> int:
+        row = connection.execute(
+            "INSERT INTO representations (media_type, mirror_url) "
+            "VALUES ('application/marc', %s) returning id",
+            url,
+        ).first()
+        assert row is not None
+        return row.id
+
+    def __init__(
+        self,
+        create_library: CreateLibrary,
+        create_lane: CreateLane,
+    ) -> None:
+        self.create_library = create_library
+        self.create_lane = create_lane
+
+
+@pytest.fixture
+def create_cachedmarcfile(
+    create_library: CreateLibrary,
+    create_lane: CreateLane,
+    create_identifier: CreateIdentifier,
+) -> CreateCachedMarcFile:
+    return CreateCachedMarcFile(create_library, create_lane)
+
+
+def test_migration_no_s3_integration(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_cachedmarcfile: CreateCachedMarcFile,
+    caplog: LogCaptureFixture,
+) -> None:
+    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_one()
+
+    container = container_instance()
+    with container.storage.public.override(None):
+        # If there is no public s3 integration, and no cachedmarcfiles in the database, the migration should succeed
+        alembic_runner.migrate_up_one()
+
+    alembic_runner.migrate_down_one()
+    # If there is no public s3 integration, but there are cachedmarcfiles in the database, the migration should fail
+    with alembic_engine.connect() as connection:
+        create_cachedmarcfile(connection, "http://s3.amazonaws.com/test-bucket/1.mrc")
+
+    with pytest.raises(RuntimeError) as excinfo, container.storage.public.override(
+        None
+    ):
+        alembic_runner.migrate_up_one()
+
+    assert (
+        "There are cachedmarcfiles in the database, but no public s3 storage configured!"
+        in str(excinfo.value)
+    )
+
+
+def test_migration_bucket_url_not_found(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_cachedmarcfile: CreateCachedMarcFile,
+    caplog: LogCaptureFixture,
+) -> None:
+    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_one()
+
+    container = container_instance()
+    mock_storage = MagicMock(spec=S3Service)
+    mock_storage.bucket = "test-bucket42"
+
+    # If we can't parse the key from the URL, the migration should fail
+    with alembic_engine.connect() as connection:
+        create_cachedmarcfile(connection, "http://s3.amazonaws.com/test-bucket/1.mrc")
+
+    with pytest.raises(RuntimeError) as excinfo, container.storage.public.override(
+        mock_storage
+    ):
+        alembic_runner.migrate_up_one()
+
+    assert "Unexpected URL format" in str(excinfo.value)
+
+
+def test_migration_bucket_url_different(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_cachedmarcfile: CreateCachedMarcFile,
+    caplog: LogCaptureFixture,
+) -> None:
+    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_one()
+
+    container = container_instance()
+    mock_storage = MagicMock(spec=S3Service)
+
+    # If the generated URL doesn't match the original URL, the migration should fail
+    mock_storage.bucket = "test-bucket"
+    mock_storage.generate_url.return_value = (
+        "http://s3.amazonaws.com/test-bucket/different-url.mrc"
+    )
+
+    with alembic_engine.connect() as connection:
+        create_cachedmarcfile(connection, "http://s3.amazonaws.com/test-bucket/1.mrc")
+
+    with pytest.raises(RuntimeError) as excinfo, container.storage.public.override(
+        mock_storage
+    ):
+        alembic_runner.migrate_up_one()
+
+    assert "URL mismatch" in str(excinfo.value)
+
+
+def test_migration_success(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+    create_library: CreateLibrary,
+    create_lane: CreateLane,
+    caplog: LogCaptureFixture,
+    create_cachedmarcfile: CreateCachedMarcFile,
+    create_coverage_record: CreateCoverageRecord,
+) -> None:
+    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_one()
+
+    with alembic_engine.connect() as connection:
+        library_id = create_library(connection, "test-library")
+        lane_id = create_lane(connection, library_id, "test-lane")
+
+        create_cachedmarcfile(
+            connection,
+            library_id=library_id,
+            lane_id=lane_id,
+            url="http://s3.amazonaws.com/test-bucket/1.mrc",
+        )
+        create_cachedmarcfile(
+            connection,
+            library_id=library_id,
+            lane_id=lane_id,
+            url="http://s3.amazonaws.com/test-bucket/2.mrc",
+        )
+        create_cachedmarcfile(
+            connection,
+            library_id=library_id,
+            lane_id=lane_id,
+            url="http://s3.amazonaws.com/test-bucket/3.mrc",
+        )
+        unrelated_representation = create_cachedmarcfile.representation(
+            connection, "http://s3.amazonaws.com/test-bucket/4.mrc"
+        )
+
+        create_coverage_record(connection, "generate-marc")
+        unrelated_coverage_record = create_coverage_record(connection)
+
+    mock_storage = MagicMock(spec=S3Service)
+    mock_storage.bucket = "test-bucket"
+    mock_storage.client = MagicMock()
+    mock_storage.generate_url = lambda key: f"http://s3.amazonaws.com/test-bucket/{key}"
+
+    container = container_instance()
+    with container.storage.public.override(mock_storage):
+        alembic_runner.migrate_up_one()
+
+    with alembic_engine.connect() as connection:
+        # The representation and coveragerecord that were not associated should still be there
+        assert connection.execute("SELECT id FROM representations").fetchall() == [
+            (unrelated_representation,)
+        ]
+        assert connection.execute("SELECT id FROM coveragerecords").fetchall() == [
+            (unrelated_coverage_record,)
+        ]
+
+        # Cachedmarcfiles should be gone
+        inspector = inspect(connection)
+        assert inspector.has_table("cachedmarcfiles") is False
+
+    # We should have deleted the files from s3
+    assert mock_storage.client.delete_object.call_count == 3
+    assert mock_storage.client.delete_object.call_args_list == [
+        call(Bucket="test-bucket", Key="1.mrc"),
+        call(Bucket="test-bucket", Key="2.mrc"),
+        call(Bucket="test-bucket", Key="3.mrc"),
+    ]
