@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable, Iterable
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func, select
-from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql.expression import and_, false, or_, true
 
 from api.admin.model.dashboard_statistics import (
     CollectionInventory,
@@ -35,16 +35,16 @@ def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
 
 
 class Statistics:
-    METERED_LICENSE_FILTER = and_(  # type: ignore[type-var]
+    METERED_LICENSE_FILTER = and_(
         LicensePool.licenses_owned > 0,
-        LicensePool.unlimited_access == False,
-        LicensePool.open_access == False,
+        LicensePool.unlimited_access == false(),
+        LicensePool.open_access == false(),
     )
-    UNLIMITED_LICENSE_FILTER = and_(  # type: ignore[type-var]
-        LicensePool.unlimited_access == True,
-        LicensePool.open_access == False,
+    UNLIMITED_LICENSE_FILTER = and_(
+        LicensePool.unlimited_access == true(),
+        LicensePool.open_access == false(),
     )
-    OPEN_ACCESS_FILTER = LicensePool.open_access == True
+    OPEN_ACCESS_FILTER = LicensePool.open_access == true()
     AT_LEAST_ONE_LOANABLE_FILTER = or_(
         UNLIMITED_LICENSE_FILTER,
         OPEN_ACCESS_FILTER,
@@ -204,7 +204,7 @@ class Statistics:
         )
 
     def stats(self, admin: Admin) -> StatisticsResponse:
-        """Build and return a statistics response for admin's authorized libraries."""
+        """Build and return a statistics response for admin user's authorized libraries."""
 
         # Determine which libraries and collections are authorized for this user.
         authorized_libraries = self._libraries_for_admin(admin)
