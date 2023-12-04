@@ -5,11 +5,8 @@ import json
 import logging
 import os
 import urllib.parse
-from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime
 from time import mktime
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 from wsgiref.handlers import format_date_time
 
 import flask
@@ -32,6 +29,7 @@ from api.base_controller import BaseCirculationManagerController
 from api.circulation import CirculationAPI
 from api.circulation_exceptions import *
 from api.config import CannotLoadConfiguration, Configuration
+from api.controller_marc import MARCRecordController
 from api.custom_index import CustomIndexView
 from api.lanes import (
     ContributorFacets,
@@ -70,9 +68,7 @@ from core.feed.annotator.circulation import (
 )
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
-from core.integration.goals import Goals
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
     Annotation,
@@ -90,7 +86,6 @@ from core.model import (
     LicensePool,
     LicensePoolDeliveryMechanism,
     Loan,
-    MarcFile,
     Patron,
     Representation,
     Session,
@@ -105,7 +100,6 @@ from core.model.discovery_service_registration import DiscoveryServiceRegistrati
 from core.opensearch import OpenSearchDocument
 from core.query.playtime_entries import PlaytimeEntries
 from core.service.container import Services
-from core.service.storage.s3 import S3Service
 from core.user_profile import ProfileController as CoreProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.datetime_helpers import utc_now
@@ -410,7 +404,7 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
-        self.marc_records = MARCRecordController(self, self.services.storage.public())
+        self.marc_records = MARCRecordController(self.services.storage.public())
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
         self.urn_lookup = URNLookupController(self)
@@ -1263,147 +1257,6 @@ class FeedRequestParameters:
     pagination: Pagination | None = None
     facets: Facets | None = None
     problem: ProblemDetail | None = None
-
-
-@dataclass
-class MarcFileDeltaResult:
-    key: str
-    since: datetime
-    created: datetime
-
-
-@dataclass
-class MarcFileFullResult:
-    key: str
-    created: datetime
-
-
-@dataclass
-class MarcFileCollectionResult:
-    full: MarcFileFullResult | None = None
-    deltas: list[MarcFileDeltaResult] = field(default_factory=list)
-
-
-class MARCRecordController(CirculationManagerController):
-    DOWNLOAD_TEMPLATE = """
-<html lang="en">
-<head><meta charset="utf8"></head>
-<body>
-%(body)s
-</body>
-</html>"""
-
-    def __init__(
-        self, manager: CirculationManager, storage_service: Optional[S3Service]
-    ) -> None:
-        super().__init__(manager)
-        self.storage_service = storage_service
-
-    def download_page_body(self, session: Session, library: Library) -> str:
-        time_format = "%B %-d, %Y"
-
-        # Check if a MARC exporter is configured, so we can show a
-        # message if it's not.
-        integration_query = (
-            select(IntegrationLibraryConfiguration)
-            .join(IntegrationConfiguration)
-            .where(
-                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
-                IntegrationConfiguration.protocol == MARCExporter.__name__,
-                IntegrationLibraryConfiguration.library == library,
-            )
-        )
-        integration = session.execute(integration_query).one_or_none()
-
-        if not integration:
-            return (
-                "<p>"
-                + _("No MARC exporter is currently configured for this library.")
-                + "</p>"
-            )
-
-        if not self.storage_service:
-            return "<p>" + _("No storage service is currently configured.") + "</p>"
-
-        # Get the MARC files for this library.
-        marc_files = session.execute(
-            select(
-                IntegrationConfiguration.name,
-                MarcFile.key,
-                MarcFile.since,
-                MarcFile.created,
-            )
-            .select_from(MarcFile)
-            .join(Collection)
-            .join(IntegrationConfiguration)
-            .where(MarcFile.library == library)
-            .order_by(
-                IntegrationConfiguration.name,
-                MarcFile.created.desc(),
-            )
-        ).all()
-
-        if len(marc_files) == 0:
-            return "<p>" + _("MARC files aren't ready to download yet.") + "</p>"
-
-        body = ""
-        files_by_collection: Dict[str, MarcFileCollectionResult] = defaultdict(
-            MarcFileCollectionResult
-        )
-        for file_row in marc_files:
-            if file_row.since is None:
-                full_file_result = MarcFileFullResult(
-                    key=file_row.key,
-                    created=file_row.created,
-                )
-                if files_by_collection[file_row.name].full is not None:
-                    # We already have a newer full file, so skip this one.
-                    continue
-                files_by_collection[file_row.name].full = full_file_result
-            else:
-                delta_file_result = MarcFileDeltaResult(
-                    key=file_row.key,
-                    since=file_row.since,
-                    created=file_row.created,
-                )
-                files_by_collection[file_row.name].deltas.append(delta_file_result)
-
-        for collection, files in files_by_collection.items():
-            body += "<section>"
-            body += f"<h3>{collection}</h3>"
-            if files.full is not None:
-                file = files.full
-                full_url = self.storage_service.generate_url(file.key)
-                full_label = (
-                    f"Full file - last updated {file.created.strftime(time_format)}"
-                )
-                body += f'<a href="{full_url}">{full_label}</a>'
-
-                if files.deltas:
-                    body += f"<h4>Update-only files</h4>"
-                    body += "<ul>"
-                    for update in files.deltas:
-                        update_url = self.storage_service.generate_url(update.key)
-                        update_label = f"Updates from {update.since.strftime(time_format)} to {update.created.strftime(time_format)}"
-                        body += f'<li><a href="{update_url}">{update_label}</a></li>'
-                    body += "</ul>"
-
-            body += "</section>"
-            body += "<br />"
-
-        return body
-
-    def download_page(self) -> Response:
-        library = flask.request.library  # type: ignore[attr-defined]
-        body = "<h2>Download MARC files for %s</h2>" % library.name
-
-        session = Session.object_session(library)
-        body += self.download_page_body(session, library)
-
-        html = self.DOWNLOAD_TEMPLATE % dict(body=body)
-        headers = dict()
-        headers["Content-Type"] = "text/html"
-        return Response(html, 200, headers)
 
 
 class LoanController(CirculationManagerController):
