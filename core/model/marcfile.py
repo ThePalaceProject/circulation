@@ -19,13 +19,27 @@ class MarcFile(Base):
     __tablename__ = "marcfiles"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    library_id = Column(Integer, ForeignKey("libraries.id"), nullable=False, index=True)
+    # The library should never be null in normal operation, but if a library is deleted, we don't want to lose the
+    # record of the MARC file, so we set the library to null.
+    # TODO: We need a job to clean up these records.
+    library_id = Column(
+        Integer,
+        ForeignKey("libraries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     library: Mapped[Library] = relationship(
         "Library",
     )
 
+    # The collection should never be null in normal operation, but similar to the library, if a collection is deleted,
+    # we don't want to lose the record of the MARC file, so we set the collection to null.
+    # TODO: We need a job to clean up these records.
     collection_id = Column(
-        Integer, ForeignKey("collections.id"), nullable=False, index=True
+        Integer,
+        ForeignKey("collections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     collection: Mapped[Collection] = relationship(
         "Collection",

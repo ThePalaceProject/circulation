@@ -21,18 +21,20 @@ def upgrade() -> None:
     op.create_table(
         "marcfiles",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("library_id", sa.Integer(), nullable=False),
-        sa.Column("collection_id", sa.Integer(), nullable=False),
+        sa.Column("library_id", sa.Integer(), nullable=True),
+        sa.Column("collection_id", sa.Integer(), nullable=True),
         sa.Column("key", sa.Unicode(), nullable=False),
         sa.Column("created", sa.DateTime(timezone=True), nullable=False),
         sa.Column("since", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(
             ["collection_id"],
             ["collections.id"],
+            ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
             ["library_id"],
             ["libraries.id"],
+            ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id"),
     )
