@@ -50,6 +50,7 @@ class CreateCachedMarcFile:
             url,
         ).first()
         assert row is not None
+        assert isinstance(row.id, int)
         return row.id
 
     def __init__(
