@@ -54,9 +54,6 @@ class InventoryStatistics(StatisticsBaseModel):
     available_titles: NonNegativeInt = Field(
         description="Number of books available to lend."
     )
-    self_hosted_titles: NonNegativeInt = Field(
-        description="Number of books that are self-hosted."
-    )
     open_access_titles: NonNegativeInt = Field(
         description="Number of books with an Open Access license."
     )

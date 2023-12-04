@@ -144,15 +144,9 @@ class Statistics:
             statistics, "metered_license_stats", medium, "available"
         )
 
-        # TODO: We no longer support self-hosted books, so this should always be 0.
-        #  this value is still included in the response for backwards compatibility,
-        #  but should be removed in a future release.
-        self_hosted_titles = 0
-
         return InventoryStatistics(
             titles=metered_titles + unlimited_titles + open_access_titles,
             available_titles=loanable_titles,
-            self_hosted_titles=self_hosted_titles,
             open_access_titles=open_access_titles,
             licensed_titles=metered_titles + unlimited_titles,
             unlimited_license_titles=unlimited_titles,

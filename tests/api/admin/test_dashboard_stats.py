@@ -156,7 +156,6 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     for inventory_data in [library_inventory, summary_inventory]:
         assert 0 == inventory_data.titles
         assert 0 == inventory_data.available_titles
-        assert 0 == inventory_data.self_hosted_titles
         assert 0 == inventory_data.open_access_titles
         assert 0 == inventory_data.licensed_titles
         assert 0 == inventory_data.unlimited_license_titles
@@ -193,7 +192,6 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     for inventory_data in [library_inventory, summary_inventory]:
         assert 2 == inventory_data.titles
         assert 1 == inventory_data.available_titles
-        assert 0 == inventory_data.self_hosted_titles
         assert 0 == inventory_data.open_access_titles
         assert 2 == inventory_data.licensed_titles
         assert 0 == inventory_data.unlimited_license_titles
@@ -215,7 +213,6 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     summary_inventory = response.inventory_summary
     assert 2 == library_inventory.titles
     assert 1 == library_inventory.available_titles
-    assert 0 == library_inventory.self_hosted_titles
     assert 0 == library_inventory.open_access_titles
     assert 2 == library_inventory.licensed_titles
     assert 0 == library_inventory.unlimited_license_titles
@@ -225,7 +222,6 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
 
     assert 3 == summary_inventory.titles
     assert 2 == summary_inventory.available_titles
-    assert 0 == summary_inventory.self_hosted_titles
     assert 0 == summary_inventory.open_access_titles
     assert 3 == summary_inventory.licensed_titles
     assert 0 == summary_inventory.unlimited_license_titles
@@ -245,7 +241,6 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
     for inventory_data in [library_inventory, summary_inventory]:
         assert 2 == inventory_data.titles
         assert 1 == inventory_data.available_titles
-        assert 0 == inventory_data.self_hosted_titles
         assert 0 == inventory_data.open_access_titles
         assert 2 == inventory_data.licensed_titles
         assert 0 == inventory_data.unlimited_license_titles
@@ -265,7 +260,6 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     assert empty_inventory == InventoryStatistics(
         titles=0,
         available_titles=0,
-        self_hosted_titles=0,
         open_access_titles=0,
         licensed_titles=0,
         unlimited_license_titles=0,
@@ -287,7 +281,6 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     assert new_metered_inventory == InventoryStatistics(
         titles=2,
         available_titles=2,
-        self_hosted_titles=0,
         open_access_titles=0,
         licensed_titles=2,
         unlimited_license_titles=0,
