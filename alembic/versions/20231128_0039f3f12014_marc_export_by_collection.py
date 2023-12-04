@@ -1,7 +1,7 @@
 """MARC Export by collection.
 
 Revision ID: 0039f3f12014
-Revises: e4b120a8d1d5
+Revises: 1c14468b74ce
 Create Date: 2023-11-28 20:19:55.520740+00:00
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0039f3f12014"
-down_revision = "e4b120a8d1d5"
+down_revision = "1c14468b74ce"
 branch_labels = None
 depends_on = None
 
