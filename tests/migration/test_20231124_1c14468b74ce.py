@@ -26,7 +26,7 @@ def test_migration(
     create_identifier: CreateIdentifier,
     create_license_pool: CreateLicensePool,
 ) -> None:
-    alembic_runner.migrate_up_to(MIGRATION_UID)
+    alembic_runner.migrate_down_to(MIGRATION_UID)
     alembic_runner.migrate_down_one()
 
     with alembic_engine.connect() as connection:
