@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pytest
+from sqlalchemy import select
 
 from core.model import MarcFile
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -33,13 +34,9 @@ def test_delete_library_collection(
         session.delete(collection)
     session.commit()
 
-    assert session.query(MarcFile).count() == 1
+    marc_files = session.scalars(select(MarcFile)).all()
+    assert len(marc_files) == 1
+    [marc_file] = marc_files
 
-    assert (
-        session.query(MarcFile).first().library is None if delete_library else library
-    )
-    assert (
-        session.query(MarcFile).first().collection is None
-        if delete_collection
-        else collection
-    )
+    assert marc_file.library is None if delete_library else library
+    assert marc_file.collection is None if delete_collection else collection
