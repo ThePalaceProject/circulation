@@ -60,6 +60,70 @@ class Statistics:
     def __init__(self, session: Session):
         self._db = session
 
+    def stats(self, admin: Admin) -> StatisticsResponse:
+        """Build and return a statistics response for admin user's authorized libraries."""
+
+        # Determine which libraries and collections are authorized for this user.
+        authorized_libraries = self._libraries_for_admin(admin)
+        authorized_collections_by_library = {
+            lib.short_name: set(lib.all_collections) for lib in authorized_libraries
+        }
+        all_authorized_collections: list[Collection] = [
+            c for c in self._db.query(Collection) if admin.can_see_collection(c)
+        ]
+
+        collection_inventories = sorted(
+            (self._create_collection_inventory(c) for c in all_authorized_collections),
+            key=lambda c: c.id,
+        )
+        (
+            collection_inventory_summary,
+            collection_inventory_summary_by_medium,
+        ) = _summarize_collection_inventories(
+            collection_inventories, all_authorized_collections
+        )
+
+        inventories_by_library = {
+            library_key: _summarize_collection_inventories(
+                collection_inventories, collections
+            )
+            for library_key, collections in authorized_collections_by_library.items()
+        }
+        patron_stats_by_library = {
+            lib.short_name: self._gather_patron_stats(lib)
+            for lib in authorized_libraries
+        }
+        library_statistics = [
+            LibraryStatistics(
+                key=lib.short_name,
+                name=lib.name or "(missing library name)",
+                patron_statistics=patron_stats_by_library[lib.short_name],
+                inventory_summary=inventories_by_library[lib.short_name][0],
+                inventory_by_medium=inventories_by_library[lib.short_name][1],
+                collection_ids=sorted(
+                    [
+                        c.id
+                        for c in authorized_collections_by_library[lib.short_name]
+                        if c.id is not None
+                    ]
+                ),
+            )
+            for lib in authorized_libraries
+        ]
+
+        # Accumulate patron summary statistics from authorized libraries.
+        patron_summary = sum(
+            patron_stats_by_library.values(), PatronStatistics.zeroed()
+        )
+
+        return StatisticsResponse(
+            collections=collection_inventories,
+            libraries=library_statistics,
+            inventory_summary=collection_inventory_summary,
+            inventory_by_medium=collection_inventory_summary_by_medium,
+            patron_summary=patron_summary,
+        )
+
     def _libraries_for_admin(self, admin: Admin) -> list[Library]:
         """Return a list of libraries to which this user has access."""
         return [
@@ -125,50 +189,6 @@ class Statistics:
             ),
         )
 
-    @staticmethod
-    def _lookup_group_property(
-        stats: dict[str, dict[str, dict[str, int]]],
-        group: str,
-        medium: str,
-        column_name: str,
-    ) -> int:
-        """Return value for statistic, if present; else, return zero."""
-        return stats.get(group, {}).get(medium, {}).get(column_name, 0)
-
-    def _inventory_for_medium(
-        self, statistics: dict[str, dict[str, dict[str, int]]], medium: str
-    ) -> InventoryStatistics:
-        metered_titles = self._lookup_group_property(
-            statistics, "metered_title_counts", medium, "count"
-        )
-        unlimited_titles = self._lookup_group_property(
-            statistics, "unlimited_title_counts", medium, "count"
-        )
-        open_access_titles = self._lookup_group_property(
-            statistics, "open_access_title_counts", medium, "count"
-        )
-        loanable_titles = self._lookup_group_property(
-            statistics, "loanable_title_counts", medium, "count"
-        )
-
-        metered_owned_licenses = self._lookup_group_property(
-            statistics, "metered_license_stats", medium, "owned"
-        )
-        metered_available_licenses = self._lookup_group_property(
-            statistics, "metered_license_stats", medium, "available"
-        )
-
-        return InventoryStatistics(
-            titles=metered_titles + unlimited_titles + open_access_titles,
-            available_titles=loanable_titles,
-            open_access_titles=open_access_titles,
-            licensed_titles=metered_titles + unlimited_titles,
-            unlimited_license_titles=unlimited_titles,
-            metered_license_titles=metered_titles,
-            metered_licenses_owned=metered_owned_licenses,
-            metered_licenses_available=metered_available_licenses,
-        )
-
     def _create_collection_inventory(
         self, collection: Collection
     ) -> CollectionInventory:
@@ -177,7 +197,7 @@ class Statistics:
         statistics = self._run_collection_stats_queries(collection)
         mediums_present = set().union(*(stat.keys() for stat in statistics.values()))
         inventory_by_medium = {
-            medium: self._inventory_for_medium(statistics, medium)
+            medium: _inventory_for_medium(statistics, medium)
             for medium in mediums_present
         }
         summary_inventory = sum(
@@ -217,69 +237,50 @@ class Statistics:
             holds=hold_count,
         )
 
-    def stats(self, admin: Admin) -> StatisticsResponse:
-        """Build and return a statistics response for admin user's authorized libraries."""
 
-        # Determine which libraries and collections are authorized for this user.
-        authorized_libraries = self._libraries_for_admin(admin)
-        authorized_collections_by_library = {
-            lib.short_name: set(lib.all_collections) for lib in authorized_libraries
-        }
-        all_authorized_collections: list[Collection] = [
-            c for c in self._db.query(Collection) if admin.can_see_collection(c)
-        ]
+def _inventory_for_medium(
+    statistics: dict[str, dict[str, dict[str, int]]], medium: str
+) -> InventoryStatistics:
+    metered_titles = _lookup_group_property(
+        statistics, "metered_title_counts", medium, "count"
+    )
+    unlimited_titles = _lookup_group_property(
+        statistics, "unlimited_title_counts", medium, "count"
+    )
+    open_access_titles = _lookup_group_property(
+        statistics, "open_access_title_counts", medium, "count"
+    )
+    loanable_titles = _lookup_group_property(
+        statistics, "loanable_title_counts", medium, "count"
+    )
 
-        collection_inventories = sorted(
-            (self._create_collection_inventory(c) for c in all_authorized_collections),
-            key=lambda c: c.id,
-        )
-        (
-            collection_inventory_summary,
-            collection_inventory_summary_by_medium,
-        ) = _summarize_collection_inventories(
-            collection_inventories, all_authorized_collections
-        )
+    metered_owned_licenses = _lookup_group_property(
+        statistics, "metered_license_stats", medium, "owned"
+    )
+    metered_available_licenses = _lookup_group_property(
+        statistics, "metered_license_stats", medium, "available"
+    )
 
-        inventories_by_library = {
-            library_key: _summarize_collection_inventories(
-                collection_inventories, collections
-            )
-            for library_key, collections in authorized_collections_by_library.items()
-        }
-        patron_stats_by_library = {
-            lib.short_name: self._gather_patron_stats(lib)
-            for lib in authorized_libraries
-        }
-        library_statistics = [
-            LibraryStatistics(
-                key=lib.short_name,
-                name=lib.name or "(missing library name)",
-                patron_statistics=patron_stats_by_library[lib.short_name],
-                inventory_summary=inventories_by_library[lib.short_name][0],
-                inventory_by_medium=inventories_by_library[lib.short_name][1],
-                collection_ids=sorted(
-                    [
-                        c.id
-                        for c in authorized_collections_by_library[lib.short_name]
-                        if c.id is not None
-                    ]
-                ),
-            )
-            for lib in authorized_libraries
-        ]
+    return InventoryStatistics(
+        titles=metered_titles + unlimited_titles + open_access_titles,
+        available_titles=loanable_titles,
+        open_access_titles=open_access_titles,
+        licensed_titles=metered_titles + unlimited_titles,
+        unlimited_license_titles=unlimited_titles,
+        metered_license_titles=metered_titles,
+        metered_licenses_owned=metered_owned_licenses,
+        metered_licenses_available=metered_available_licenses,
+    )
 
-        # Accumulate patron summary statistics from authorized libraries.
-        patron_summary = sum(
-            patron_stats_by_library.values(), PatronStatistics.zeroed()
-        )
 
-        return StatisticsResponse(
-            collections=collection_inventories,
-            libraries=library_statistics,
-            inventory_summary=collection_inventory_summary,
-            inventory_by_medium=collection_inventory_summary_by_medium,
-            patron_summary=patron_summary,
-        )
+def _lookup_group_property(
+    stats: dict[str, dict[str, dict[str, int]]],
+    group: str,
+    medium: str,
+    column_name: str,
+) -> int:
+    """Return value for statistic, if present; else, return zero."""
+    return stats.get(group, {}).get(medium, {}).get(column_name, 0)
 
 
 def _summarize_collection_inventories(
