@@ -2,80 +2,213 @@ from __future__ import annotations
 
 import datetime
 import functools
+import logging
+import urllib
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
-from urllib.parse import quote
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from freezegun import freeze_time
+from _pytest.logging import LogCaptureFixture
 from pymarc import MARCReader, Record
 
-from core.external_search import Filter
-from core.integration.goals import Goals
-from core.lane import WorkList
-from core.marc import Annotator, MARCExporter, MARCExporterFacets
+from core.marc import Annotator, MARCExporter
 from core.model import (
-    CachedMARCFile,
     Contributor,
     DataSource,
     DeliveryMechanism,
     Edition,
     Genre,
     Identifier,
-    IntegrationConfiguration,
     LicensePoolDeliveryMechanism,
+    MarcFile,
     Representation,
     RightsStatus,
-    Work,
-    get_one,
 )
 from core.util.datetime_helpers import datetime_utc, utc_now
-from tests.mocks.search import ExternalSearchIndexFake
+from core.util.uuid import uuid_encode
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
-    from tests.fixtures.s3 import S3ServiceFixture
-    from tests.fixtures.search import ExternalSearchFixtureFake
+    from tests.fixtures.s3 import MockS3Service, S3ServiceFixture
+
+
+class AnnotateWorkRecordFixture:
+    def __init__(self):
+        self.cm_url = "http://cm.url"
+        self.short_name = "short_name"
+        self.web_client_urls = ["http://webclient.url"]
+        self.organization_name = "org"
+        self.include_summary = True
+        self.include_genres = True
+
+        self.annotator = Annotator(
+            self.cm_url,
+            self.short_name,
+            self.web_client_urls,
+            self.organization_name,
+            self.include_summary,
+            self.include_genres,
+        )
+
+        self.revised = MagicMock()
+        self.work = MagicMock()
+        self.pool = MagicMock()
+        self.edition = MagicMock()
+        self.identifier = MagicMock()
+
+        self.mock_leader = create_autospec(self.annotator.leader, return_value=" " * 24)
+        self.mock_add_control_fields = create_autospec(
+            self.annotator.add_control_fields
+        )
+        self.mock_add_marc_organization_code = create_autospec(
+            self.annotator.add_marc_organization_code
+        )
+        self.mock_add_isbn = create_autospec(self.annotator.add_isbn)
+        self.mock_add_title = create_autospec(self.annotator.add_title)
+        self.mock_add_contributors = create_autospec(self.annotator.add_contributors)
+        self.mock_add_publisher = create_autospec(self.annotator.add_publisher)
+        self.mock_add_distributor = create_autospec(self.annotator.add_distributor)
+        self.mock_add_physical_description = create_autospec(
+            self.annotator.add_physical_description
+        )
+        self.mock_add_audience = create_autospec(self.annotator.add_audience)
+        self.mock_add_series = create_autospec(self.annotator.add_series)
+        self.mock_add_system_details = create_autospec(
+            self.annotator.add_system_details
+        )
+        self.mock_add_formats = create_autospec(self.annotator.add_formats)
+        self.mock_add_summary = create_autospec(self.annotator.add_summary)
+        self.mock_add_genres = create_autospec(self.annotator.add_genres)
+        self.mock_add_ebooks_subject = create_autospec(
+            self.annotator.add_ebooks_subject
+        )
+        self.mock_add_web_client_urls = create_autospec(
+            self.annotator.add_web_client_urls
+        )
+
+        self.annotator.leader = self.mock_leader
+        self.annotator.add_control_fields = self.mock_add_control_fields
+        self.annotator.add_marc_organization_code = self.mock_add_marc_organization_code
+        self.annotator.add_isbn = self.mock_add_isbn
+        self.annotator.add_title = self.mock_add_title
+        self.annotator.add_contributors = self.mock_add_contributors
+        self.annotator.add_publisher = self.mock_add_publisher
+        self.annotator.add_distributor = self.mock_add_distributor
+        self.annotator.add_physical_description = self.mock_add_physical_description
+        self.annotator.add_audience = self.mock_add_audience
+        self.annotator.add_series = self.mock_add_series
+        self.annotator.add_system_details = self.mock_add_system_details
+        self.annotator.add_formats = self.mock_add_formats
+        self.annotator.add_summary = self.mock_add_summary
+        self.annotator.add_genres = self.mock_add_genres
+        self.annotator.add_ebooks_subject = self.mock_add_ebooks_subject
+        self.annotator.add_web_client_urls = self.mock_add_web_client_urls
+
+        self.annotate_work_record = functools.partial(
+            self.annotator.annotate_work_record,
+            self.revised,
+            self.work,
+            self.pool,
+            self.edition,
+            self.identifier,
+        )
+
+
+@pytest.fixture
+def annotate_work_record_fixture() -> AnnotateWorkRecordFixture:
+    return AnnotateWorkRecordFixture()
 
 
 class TestAnnotator:
-    def test_annotate_work_record(self, db: DatabaseTransactionFixture) -> None:
-        # Verify that annotate_work_record adds the distributor and formats.
-        annotator = Annotator()
-        annotator.add_distributor = MagicMock()
-        annotator.add_formats = MagicMock()
+    def test_annotate_work_record(
+        self, annotate_work_record_fixture: AnnotateWorkRecordFixture
+    ) -> None:
+        fixture = annotate_work_record_fixture
+        with patch("core.marc.Record") as mock_record:
+            fixture.annotate_work_record()
 
-        record = Record()
-        work = db.work(with_license_pool=True)
-        pool = work.license_pools[0]
-
-        annotator.annotate_work_record(
-            work, pool, MagicMock(), MagicMock(), record, MagicMock()
+        mock_record.assert_called_once_with(
+            force_utf8=True, leader=fixture.mock_leader.return_value
         )
-        annotator.add_distributor.assert_called_once_with(record, pool)
-        annotator.add_formats.assert_called_once_with(record, pool)
+        fixture.mock_leader.assert_called_once_with(fixture.revised)
+        record = mock_record()
+        fixture.mock_add_control_fields.assert_called_once_with(
+            record, fixture.identifier, fixture.pool, fixture.edition
+        )
+        fixture.mock_add_marc_organization_code.assert_called_once_with(
+            record, fixture.organization_name
+        )
+        fixture.mock_add_isbn.assert_called_once_with(record, fixture.identifier)
+        fixture.mock_add_title.assert_called_once_with(record, fixture.edition)
+        fixture.mock_add_contributors.assert_called_once_with(record, fixture.edition)
+        fixture.mock_add_publisher.assert_called_once_with(record, fixture.edition)
+        fixture.mock_add_distributor.assert_called_once_with(record, fixture.pool)
+        fixture.mock_add_physical_description.assert_called_once_with(
+            record, fixture.edition
+        )
+        fixture.mock_add_audience.assert_called_once_with(record, fixture.work)
+        fixture.mock_add_series.assert_called_once_with(record, fixture.edition)
+        fixture.mock_add_system_details.assert_called_once_with(record)
+        fixture.mock_add_formats.assert_called_once_with(record, fixture.pool)
+        fixture.mock_add_summary.assert_called_once_with(record, fixture.work)
+        fixture.mock_add_genres.assert_called_once_with(record, fixture.work)
+        fixture.mock_add_ebooks_subject.assert_called_once_with(record)
+        fixture.mock_add_web_client_urls.assert_called_once_with(
+            record,
+            fixture.identifier,
+            fixture.short_name,
+            fixture.cm_url,
+            fixture.web_client_urls,
+        )
 
-    def test_leader(self, db: DatabaseTransactionFixture):
-        work = db.work(with_license_pool=True)
-        leader = Annotator.leader(work)
-        assert "00000nam  2200000   4500" == leader
+    def test_annotate_work_record_no_summary(
+        self, annotate_work_record_fixture: AnnotateWorkRecordFixture
+    ) -> None:
+        fixture = annotate_work_record_fixture
+        fixture.annotator.include_summary = False
+        fixture.annotate_work_record()
 
-        # If there's already a marc record cached, the record status changes.
-        work.marc_record = "cached"
-        leader = Annotator.leader(work)
-        assert "00000cam  2200000   4500" == leader
+        assert fixture.mock_add_summary.call_count == 0
 
-    def _check_control_field(self, record, tag, expected):
+    def test_annotate_work_record_no_genres(
+        self, annotate_work_record_fixture: AnnotateWorkRecordFixture
+    ) -> None:
+        fixture = annotate_work_record_fixture
+        fixture.annotator.include_genres = False
+        fixture.annotate_work_record()
+
+        assert fixture.mock_add_genres.call_count == 0
+
+    def test_annotate_work_record_no_organization_code(
+        self, annotate_work_record_fixture: AnnotateWorkRecordFixture
+    ) -> None:
+        fixture = annotate_work_record_fixture
+        fixture.annotator.organization_code = None
+        fixture.annotate_work_record()
+
+        assert fixture.mock_add_marc_organization_code.call_count == 0
+
+    def test_leader(self):
+        leader = Annotator.leader(False)
+        assert leader == "00000nam  2200000   4500"
+
+        # If the record is revised, the leader is different.
+        leader = Annotator.leader(True)
+        assert leader == "00000cam  2200000   4500"
+
+    @staticmethod
+    def _check_control_field(record, tag, expected):
         [field] = record.get_fields(tag)
-        assert expected == field.value()
+        assert field.value() == expected
 
-    def _check_field(self, record, tag, expected_subfields, expected_indicators=None):
+    @staticmethod
+    def _check_field(record, tag, expected_subfields, expected_indicators=None):
         if not expected_indicators:
             expected_indicators = [" ", " "]
         [field] = record.get_fields(tag)
-        assert expected_indicators == field.indicators
+        assert field.indicators == expected_indicators
         for subfield, value in expected_subfields.items():
-            assert value == field.get_subfields(subfield)[0]
+            assert field.get_subfields(subfield)[0] == value
 
     def test_add_control_fields(self, db: DatabaseTransactionFixture):
         # This edition has one format and was published before 1900.
@@ -449,7 +582,7 @@ class TestAnnotator:
         work.genres = [fantasy, romance]
 
         record = Record()
-        Annotator.add_simplified_genres(record, work)
+        Annotator.add_genres(record, work)
         fields = record.get_fields("650")
         [fantasy_field, romance_field] = sorted(
             fields, key=lambda x: x.get_subfields("a")[0]
@@ -466,42 +599,111 @@ class TestAnnotator:
         Annotator.add_ebooks_subject(record)
         self._check_field(record, "655", {"a": "Electronic books."}, [" ", "0"])
 
+    def test_add_web_client_urls_empty(self):
+        record = MagicMock(spec=Record)
+        identifier = MagicMock()
+        Annotator.add_web_client_urls(record, identifier, "", "", [])
+        assert record.add_field.call_count == 0
+
+    def test_add_web_client_urls(self, db: DatabaseTransactionFixture):
+        record = Record()
+        identifier = db.identifier()
+        short_name = "short_name"
+        cm_url = "http://cm.url"
+        web_client_urls = ["http://webclient1.url", "http://webclient2.url"]
+        Annotator.add_web_client_urls(
+            record, identifier, short_name, cm_url, web_client_urls
+        )
+        fields = record.get_fields("856")
+        assert len(fields) == 2
+        [field1, field2] = fields
+        assert field1.indicators == ["4", "0"]
+        assert field2.indicators == ["4", "0"]
+
+        # The URL for a work is constructed as:
+        # - <cm-base>/<lib-short-name>/works/<qualified-identifier>
+        work_link_template = "{cm_base}/{lib}/works/{qid}"
+        # It is then encoded and the web client URL is constructed in this form:
+        # - <web-client-base>/book/<encoded-work-url>
+        client_url_template = "{client_base}/book/{work_link}"
+
+        qualified_identifier = urllib.parse.quote(
+            identifier.type + "/" + identifier.identifier, safe=""
+        )
+
+        expected_work_link = work_link_template.format(
+            cm_base=cm_url, lib=short_name, qid=qualified_identifier
+        )
+        encoded_work_link = urllib.parse.quote(expected_work_link, safe="")
+
+        expected_client_url_1 = client_url_template.format(
+            client_base=web_client_urls[0], work_link=encoded_work_link
+        )
+        expected_client_url_2 = client_url_template.format(
+            client_base=web_client_urls[1], work_link=encoded_work_link
+        )
+
+        # A few checks to ensure that our setup is useful.
+        assert web_client_urls[0] != web_client_urls[1]
+        assert expected_client_url_1 != expected_client_url_2
+        assert expected_client_url_1.startswith(web_client_urls[0])
+        assert expected_client_url_2.startswith(web_client_urls[1])
+
+        assert field1.get_subfields("u")[0] == expected_client_url_1
+        assert field2.get_subfields("u")[0] == expected_client_url_2
+
 
 class MarcExporterFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(self, db: DatabaseTransactionFixture, s3: MockS3Service):
         self.db = db
 
-        self.integration = self._integration(db)
         self.now = utc_now()
         self.library = db.default_library()
-        self.settings = MagicMock()
-        self.library_settings = MagicMock()
-        self.exporter = MARCExporter(
-            self.db.session, self.library, self.settings, self.library_settings
+        self.s3_service = s3
+        self.exporter = MARCExporter(self.db.session, s3)
+        self.mock_annotator = MagicMock(spec=Annotator)
+        assert self.library.short_name is not None
+        self.annotator = Annotator(
+            "http://cm.url",
+            self.library.short_name,
+            ["http://webclient.url"],
+            "org",
+            True,
+            True,
         )
-        self.annotator = Annotator()
-        self.w1 = db.work(genre="Mystery", with_open_access_download=True)
-        self.w2 = db.work(genre="Mystery", with_open_access_download=True)
 
-        self.search_engine = ExternalSearchIndexFake(db.session)
-        self.search_engine.mock_query_works([self.w1, self.w2])
+        self.library = db.library()
+        self.collection = db.collection()
+        self.collection.libraries.append(self.library)
 
-    @staticmethod
-    def _integration(db: DatabaseTransactionFixture) -> IntegrationConfiguration:
-        return db.integration_configuration(
-            MARCExporter.__name__,
-            Goals.CATALOG_GOAL,
-            libraries=[db.default_library()],
+        self.now = utc_now()
+        self.yesterday = self.now - datetime.timedelta(days=1)
+        self.last_week = self.now - datetime.timedelta(days=7)
+
+        self.w1 = db.work(
+            genre="Mystery", with_open_access_download=True, collection=self.collection
+        )
+        self.w1.last_update_time = self.yesterday
+        self.w2 = db.work(
+            genre="Mystery", with_open_access_download=True, collection=self.collection
+        )
+        self.w2.last_update_time = self.last_week
+
+        self.records = functools.partial(
+            self.exporter.records,
+            self.library,
+            self.collection,
+            annotator=self.annotator,
+            creation_time=self.now,
         )
 
 
 @pytest.fixture
 def marc_exporter_fixture(
     db: DatabaseTransactionFixture,
-    external_search_fake_fixture: ExternalSearchFixtureFake,
+    s3_service_fixture: S3ServiceFixture,
 ) -> MarcExporterFixture:
-    # external_search_fake_fixture is used only for the integration it creates
-    return MarcExporterFixture(db)
+    return MarcExporterFixture(db, s3_service_fixture.mock_service())
 
 
 class TestMARCExporter:
@@ -515,263 +717,156 @@ class TestMARCExporter:
             data_source_name=DataSource.OVERDRIVE,
         )
 
+        mock_revised = MagicMock()
+
         create_record = functools.partial(
             MARCExporter.create_record,
+            revised=mock_revised,
             work=work,
-            annotator=marc_exporter_fixture.annotator,
-            settings=marc_exporter_fixture.settings,
-            library_settings=marc_exporter_fixture.library_settings,
+            annotator=marc_exporter_fixture.mock_annotator,
         )
 
-        # The record isn't cached yet, so a new record is created and cached.
-        assert work.marc_record is None
         record = create_record()
         assert record is not None
-        [title_field] = record.get_fields("245")
-        assert "old title" == title_field.get_subfields("a")[0]
-        [author_field] = record.get_fields("100")
-        assert "author, old" == author_field.get_subfields("a")[0]
-        [distributor_field] = record.get_fields("264")
-        assert DataSource.OVERDRIVE == distributor_field.get_subfields("b")[0]
-        cached = work.marc_record
-        assert cached is not None
-        assert "old title" in cached  # type: ignore[unreachable]
-        assert "author, old" in cached
-        # The distributor isn't part of the cached record.
-        assert DataSource.OVERDRIVE not in cached
 
-        work.presentation_edition.title = "new title"
-        work.presentation_edition.sort_author = "author, new"
-        new_data_source = DataSource.lookup(db.session, DataSource.BIBLIOTHECA)
-        work.license_pools[0].data_source = new_data_source
-
-        # Now that the record is cached, creating a record will
-        # use the cache. Distributor will be updated since it's
-        # not part of the cached record.
-        record = create_record()
-        [title_field] = record.get_fields("245")
-        assert "old title" == title_field.get_subfields("a")[0]
-        [author_field] = record.get_fields("100")
-        assert "author, old" == author_field.get_subfields("a")[0]
-        [distributor_field] = record.get_fields("264")
-        assert DataSource.BIBLIOTHECA == distributor_field.get_subfields("b")[0]
-
-        # But we can force an update to the cached record.
-        record = create_record(force_create=True)
-        [title_field] = record.get_fields("245")
-        assert "new title" == title_field.get_subfields("a")[0]
-        [author_field] = record.get_fields("100")
-        assert "author, new" == author_field.get_subfields("a")[0]
-        [distributor_field] = record.get_fields("264")
-        assert DataSource.BIBLIOTHECA == distributor_field.get_subfields("b")[0]
-        cached = work.marc_record
-        assert "old title" not in cached
-        assert "author, old" not in cached
-        assert "new title" in cached
-        assert "author, new" in cached
-
-        # The settings we pass in get passed along to the annotator.
-        marc_exporter_fixture.annotator.annotate_work_record = MagicMock()
-        create_record(force_create=True)
-        assert marc_exporter_fixture.annotator.annotate_work_record.call_count == 1
-        assert (
-            marc_exporter_fixture.annotator.annotate_work_record.call_args.kwargs[
-                "settings"
-            ]
-            == marc_exporter_fixture.library_settings
+        # Make sure we pass the expected arguments to Annotator.annotate_work_record
+        marc_exporter_fixture.mock_annotator.annotate_work_record.assert_called_once_with(
+            mock_revised,
+            work,
+            work.license_pools[0],
+            work.license_pools[0].presentation_edition,
+            work.license_pools[0].identifier,
         )
 
-    @freeze_time("2020-01-01 00:00:00")
-    def test_create_record_roundtrip(
-        self, db: DatabaseTransactionFixture, marc_exporter_fixture: MarcExporterFixture
-    ):
-        # Create a marc record from a work with special characters
-        # in both the title and author name and round-trip it to
-        # the DB and back again to make sure we are creating records
-        # we can understand.
-        #
-        # We freeze the current time here, because a MARC record has
-        # a timestamp when it was created and we need the created
-        # records to match.
-
-        # Creates a new record and saves it to the database
-        work = db.work(
-            title="Little Mimi\u2019s First Counting Lesson",
-            authors=["Lagerlo\xf6f, Selma Ottiliana Lovisa,"],
-            with_license_pool=True,
-        )
-        create_record = functools.partial(
-            MARCExporter.create_record,
-            work=work,
-            annotator=marc_exporter_fixture.annotator,
-            settings=marc_exporter_fixture.settings,
-            library_settings=marc_exporter_fixture.library_settings,
-        )
-        record = create_record()
-        loaded_record = create_record()
-        assert record is not None
-        assert loaded_record is not None
-        assert record.as_marc() == loaded_record.as_marc()
-
-        # Loads an existing record from the DB
-        new_work = get_one(db.session, Work, id=work.id)
-        new_record = create_record(work=new_work)
-        assert new_record is not None
-        assert record.as_marc() == new_record.as_marc()
-
-    @pytest.mark.parametrize("object_type", ["lane", "worklist"])
-    def test_records_lane(
+    def test_records(
         self,
-        object_type: str,
         db: DatabaseTransactionFixture,
-        s3_service_fixture: S3ServiceFixture,
         marc_exporter_fixture: MarcExporterFixture,
     ):
-        if object_type == "lane":
-            lane_or_wl = db.lane("Test Lane", genres=["Mystery"])
-        elif object_type == "worklist":
-            lane_or_wl = WorkList()
-            lane_or_wl.initialize(db.default_library(), display_name="All Books")
-        else:
-            raise RuntimeError()
-        exporter = marc_exporter_fixture.exporter
-        annotator = marc_exporter_fixture.annotator
-        search_engine = marc_exporter_fixture.search_engine
+        storage_service = marc_exporter_fixture.s3_service
+        creation_time = marc_exporter_fixture.now
 
-        # If there's a storage protocol but not corresponding storage integration,
-        # it raises an exception.
-        pytest.raises(Exception, exporter.records, lane_or_wl, annotator)
+        marc_exporter_fixture.records()
 
-        storage_service = s3_service_fixture.mock_service()
-        exporter.records(
-            lane_or_wl,
-            annotator,
-            storage_service,
-            query_batch_size=1,
-            search_engine=search_engine,
-        )
-
-        # The file was mirrored and a CachedMARCFile was created to track the mirrored file.
+        # The file was mirrored and a MarcFile was created to track the mirrored file.
         assert len(storage_service.uploads) == 1
-        [cache] = db.session.query(CachedMARCFile).all()
-        assert cache.library == db.default_library()
-        if object_type == "lane":
-            assert cache.lane == lane_or_wl
-        else:
-            assert cache.lane is None
-        assert cache.representation.content is None
-        assert storage_service.uploads[0].key == "{}/{}/{}.mrc".format(
-            db.default_library().short_name,
-            str(cache.representation.fetched_at),
-            lane_or_wl.display_name,
+        [cache] = db.session.query(MarcFile).all()
+        assert cache.library == marc_exporter_fixture.library
+        assert cache.collection == marc_exporter_fixture.collection
+
+        short_name = marc_exporter_fixture.library.short_name
+        collection_name = marc_exporter_fixture.collection.name
+        date_str = creation_time.strftime("%Y-%m-%d")
+        uuid_str = uuid_encode(cache.id)
+
+        assert (
+            cache.key
+            == f"marc/{short_name}/{collection_name}.full.{date_str}.{uuid_str}.mrc"
         )
-        assert quote(storage_service.uploads[0].key) in cache.representation.mirror_url
-        assert cache.start_time is None
-        assert marc_exporter_fixture.now < cache.end_time
+        assert cache.created == creation_time
+        assert cache.since is None
 
         records = list(MARCReader(storage_service.uploads[0].content))
         assert len(records) == 2
 
         title_fields = [record.get_fields("245") for record in records]
         titles = [fields[0].get_subfields("a")[0] for fields in title_fields]
-        assert set(titles) == {
+        assert titles == [
             marc_exporter_fixture.w1.title,
             marc_exporter_fixture.w2.title,
-        }
+        ]
 
-        assert marc_exporter_fixture.w1.title in marc_exporter_fixture.w1.marc_record
-        assert marc_exporter_fixture.w2.title in marc_exporter_fixture.w2.marc_record
-
-    def test_records_start_time(
+    def test_records_since_time(
         self,
         db: DatabaseTransactionFixture,
-        s3_service_fixture: S3ServiceFixture,
         marc_exporter_fixture: MarcExporterFixture,
     ):
-        # If a start time is set, it's used in the mirror url.
-        #
-        # (Our mock search engine returns everthing in its 'index',
-        # so this doesn't test that the start time is actually used to
-        # find works -- that's in the search index tests and the
-        # tests of MARCExporterFacets.)
-        start_time = marc_exporter_fixture.now - datetime.timedelta(days=3)
-        exporter = marc_exporter_fixture.exporter
-        annotator = marc_exporter_fixture.annotator
-        search_engine = marc_exporter_fixture.search_engine
-        lane = db.lane("Test Lane", genres=["Mystery"])
-        storage_service = s3_service_fixture.mock_service()
+        # If the `since` parameter is set, only works updated since that time
+        # are included in the export and the filename reflects that we created
+        # a partial export.
+        since = marc_exporter_fixture.now - datetime.timedelta(days=3)
+        storage_service = marc_exporter_fixture.s3_service
+        creation_time = marc_exporter_fixture.now
 
-        exporter.records(
-            lane,
-            annotator,
-            storage_service,
-            start_time=start_time,
-            query_batch_size=2,
-            search_engine=search_engine,
+        marc_exporter_fixture.records(
+            since_time=since,
         )
-        [cache] = db.session.query(CachedMARCFile).all()
+        [cache] = db.session.query(MarcFile).all()
+        assert cache.library == marc_exporter_fixture.library
+        assert cache.collection == marc_exporter_fixture.collection
 
-        assert cache.library == db.default_library()
-        assert cache.lane == lane
-        assert cache.representation.content is None
-        assert storage_service.uploads[0].key == "{}/{}-{}/{}.mrc".format(
-            db.default_library().short_name,
-            str(start_time),
-            str(cache.representation.fetched_at),
-            lane.display_name,
+        short_name = marc_exporter_fixture.library.short_name
+        collection_name = marc_exporter_fixture.collection.name
+        from_date = since.strftime("%Y-%m-%d")
+        to_date = creation_time.strftime("%Y-%m-%d")
+        uuid_str = uuid_encode(cache.id)
+
+        assert (
+            cache.key
+            == f"marc/{short_name}/{collection_name}.delta.{from_date}.{to_date}.{uuid_str}.mrc"
         )
-        assert cache.start_time == start_time
-        assert marc_exporter_fixture.now < cache.end_time
+        assert cache.created == creation_time
+        assert cache.since == since
 
-    def test_records_empty_search(
+        # Only the work updated since the `since` time is included in the export.
+        [record] = list(MARCReader(storage_service.uploads[0].content))
+        [title_field] = record.get_fields("245")
+        assert title_field.get_subfields("a")[0] == marc_exporter_fixture.w1.title
+
+    def test_records_none(
         self,
         db: DatabaseTransactionFixture,
-        s3_service_fixture: S3ServiceFixture,
         marc_exporter_fixture: MarcExporterFixture,
+        caplog: LogCaptureFixture,
     ):
-        # If the search engine returns no contents for the lane,
-        # nothing will be mirrored, but a CachedMARCFile is still
-        # created to track that we checked for updates.
-        exporter = marc_exporter_fixture.exporter
-        annotator = marc_exporter_fixture.annotator
-        empty_search_engine = ExternalSearchIndexFake(db.session)
-        lane = db.lane("Test Lane", genres=["Mystery"])
-        storage_service = s3_service_fixture.mock_service()
+        # If there are no works to export, no file is created and a log message is generated.
+        caplog.set_level(logging.INFO)
 
-        exporter.records(
-            lane,
-            annotator,
-            storage_service,
-            search_engine=empty_search_engine,
-        )
+        storage_service = marc_exporter_fixture.s3_service
+
+        # Remove the works from the database.
+        db.session.delete(marc_exporter_fixture.w1)
+        db.session.delete(marc_exporter_fixture.w2)
+
+        marc_exporter_fixture.records()
 
         assert [] == storage_service.uploads
-        [cache] = db.session.query(CachedMARCFile).all()
-        assert cache.library == db.default_library()
-        assert cache.lane == lane
-        assert cache.representation.content is None
-        assert cache.start_time is None
-        assert marc_exporter_fixture.now < cache.end_time
+        assert db.session.query(MarcFile).count() == 0
+        assert len(caplog.records) == 1
+        assert "No MARC records to upload" in caplog.text
+
+    def test_records_exception(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        caplog: LogCaptureFixture,
+    ):
+        # If an exception occurs while exporting, no file is created and a log message is generated.
+        caplog.set_level(logging.ERROR)
+
+        exporter = marc_exporter_fixture.exporter
+        storage_service = marc_exporter_fixture.s3_service
+
+        # Mock our query function to raise an exception.
+        exporter.query_works = MagicMock(side_effect=Exception("Boom!"))
+
+        marc_exporter_fixture.records()
+
+        assert [] == storage_service.uploads
+        assert db.session.query(MarcFile).count() == 0
+        assert len(caplog.records) == 1
+        assert "Failed to upload MARC file" in caplog.text
+        assert "Boom!" in caplog.text
 
     def test_records_minimum_size(
         self,
-        db: DatabaseTransactionFixture,
-        s3_service_fixture: S3ServiceFixture,
         marc_exporter_fixture: MarcExporterFixture,
     ):
-        lane = db.lane(genres=["Mystery"])
-        storage_service = s3_service_fixture.mock_service()
         exporter = marc_exporter_fixture.exporter
-        annotator = marc_exporter_fixture.annotator
-        search_engine = marc_exporter_fixture.search_engine
-
-        # Make sure we page exactly how many times we need to
-        works = [
-            db.work(genre="Mystery", with_open_access_download=True) for _ in range(4)
-        ]
-        search_engine.mock_query_works(works)
+        storage_service = marc_exporter_fixture.s3_service
 
         exporter.MINIMUM_UPLOAD_BATCH_SIZE_BYTES = 100
+
         # Mock the "records" generated, and force the response to be of certain sizes
         created_record_mock = MagicMock()
         created_record_mock.as_marc = MagicMock(
@@ -779,13 +874,12 @@ class TestMARCExporter:
         )
         exporter.create_record = lambda *args: created_record_mock
 
-        exporter.records(
-            lane,
-            annotator,
-            storage_service,
-            search_engine=search_engine,
-            query_batch_size=1,
+        # Mock the query_works to return 4 works
+        exporter.query_works = MagicMock(
+            return_value=[MagicMock(), MagicMock(), MagicMock(), MagicMock()]
         )
+
+        marc_exporter_fixture.records()
 
         assert storage_service.mocked_multipart_upload is not None
         # Even though there are 4 parts, we upload in 3 batches due to minimum size limitations
@@ -796,26 +890,3 @@ class TestMARCExporter:
             b"2" * 20 + b"3" * 500,
             b"4" * 10,
         ]
-
-
-class TestMARCExporterFacets:
-    def test_modify_search_filter(self):
-        # A facet object.
-        facets = MARCExporterFacets("some start time")
-
-        # A filter about to be modified by the facet object.
-        filter = Filter()
-        filter.order_ascending = False
-
-        facets.modify_search_filter(filter)
-
-        # updated_after has been set and results are to be returned in
-        # order of increasing last_update_time.
-        assert "last_update_time" == filter.order
-        assert True == filter.order_ascending
-        assert "some start time" == filter.updated_after
-
-    def test_scoring_functions(self):
-        # A no-op.
-        facets = MARCExporterFacets("some start time")
-        assert [] == facets.scoring_functions(object())

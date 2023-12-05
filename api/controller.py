@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import urllib.parse
-from collections import defaultdict
 from time import mktime
 from typing import TYPE_CHECKING, Any
 from wsgiref.handlers import format_date_time
@@ -30,6 +29,7 @@ from api.base_controller import BaseCirculationManagerController
 from api.circulation import CirculationAPI
 from api.circulation_exceptions import *
 from api.config import CannotLoadConfiguration, Configuration
+from api.controller_marc import MARCRecordController
 from api.custom_index import CustomIndexView
 from api.lanes import (
     ContributorFacets,
@@ -52,7 +52,6 @@ from api.odl import ODLAPI
 from api.odl2 import ODL2API
 from api.problem_details import *
 from api.saml.controller import SAMLController
-from core.analytics import Analytics
 from core.app_server import ApplicationVersionController
 from core.app_server import URNLookupController as CoreURNLookupController
 from core.app_server import (
@@ -69,9 +68,7 @@ from core.feed.annotator.circulation import (
 )
 from core.feed.navigation import NavigationFeed
 from core.feed.opds import NavigationFacets
-from core.integration.goals import Goals
 from core.lane import Facets, FeaturedFacets, Lane, Pagination, SearchFacets, WorkList
-from core.marc import MARCExporter
 from core.metadata_layer import ContributorData
 from core.model import (
     Annotation,
@@ -215,10 +212,11 @@ class CirculationManager:
     def __init__(
         self,
         _db,
-        analytics: Analytics = Provide[Services.analytics.analytics],
+        services: Services = Provide[Services],
     ):
         self._db = _db
-        self.analytics = analytics
+        self.services = services
+        self.analytics = services.analytics.analytics()
         self.site_configuration_last_update = (
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
@@ -406,7 +404,7 @@ class CirculationManager:
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
-        self.marc_records = MARCRecordController(self)
+        self.marc_records = MARCRecordController(self.services.storage.public())
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
         self.urn_lookup = URNLookupController(self)
@@ -1259,102 +1257,6 @@ class FeedRequestParameters:
     pagination: Pagination | None = None
     facets: Facets | None = None
     problem: ProblemDetail | None = None
-
-
-class MARCRecordController(CirculationManagerController):
-    DOWNLOAD_TEMPLATE = """
-<html lang="en">
-<head><meta charset="utf8"></head>
-<body>
-%(body)s
-</body>
-</html>"""
-
-    def download_page(self):
-        library = flask.request.library
-        body = "<h2>Download MARC files for %s</h2>" % library.name
-        time_format = "%B %-d, %Y"
-
-        # Check if a MARC exporter is configured, so we can show a
-        # message if it's not.
-        integration_query = (
-            select(IntegrationLibraryConfiguration)
-            .join(IntegrationConfiguration)
-            .where(
-                IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
-                IntegrationConfiguration.protocol == MARCExporter.__name__,
-                IntegrationLibraryConfiguration.library == library,
-            )
-        )
-
-        session = Session.object_session(library)
-        integration = session.execute(integration_query).one_or_none()
-
-        if not integration:
-            body += (
-                "<p>"
-                + _("No MARC exporter is currently configured for this library.")
-                + "</p>"
-            )
-
-        if len(library.cachedmarcfiles) < 1 and integration:
-            body += "<p>" + _("MARC files aren't ready to download yet.") + "</p>"
-
-        files_by_lane = defaultdict(dict)
-        for file in library.cachedmarcfiles:
-            if file.start_time == None:
-                files_by_lane[file.lane]["full"] = file
-            else:
-                if not files_by_lane[file.lane].get("updates"):
-                    files_by_lane[file.lane]["updates"] = []
-                files_by_lane[file.lane]["updates"].append(file)
-
-        # TODO: By default the MARC script only caches one level of lanes,
-        # so sorting by priority is good enough.
-        lanes = sorted(
-            list(files_by_lane.keys()), key=lambda x: x.priority if x else -1
-        )
-
-        for lane in lanes:
-            files = files_by_lane[lane]
-            body += "<section>"
-            body += "<h3>%s</h3>" % (lane.display_name if lane else _("All Books"))
-            if files.get("full"):
-                file = files.get("full")
-                full_url = file.representation.mirror_url
-                full_label = _(
-                    "Full file - last updated %(update_time)s",
-                    update_time=file.end_time.strftime(time_format),
-                )
-                body += '<a href="{}">{}</a>'.format(
-                    files.get("full").representation.mirror_url,
-                    full_label,
-                )
-
-                if files.get("updates"):
-                    body += "<h4>%s</h4>" % _("Update-only files")
-                    body += "<ul>"
-                    files.get("updates").sort(key=lambda x: x.end_time)
-                    for update in files.get("updates"):
-                        update_url = update.representation.mirror_url
-                        update_label = _(
-                            "Updates from %(start_time)s to %(end_time)s",
-                            start_time=update.start_time.strftime(time_format),
-                            end_time=update.end_time.strftime(time_format),
-                        )
-                        body += '<li><a href="{}">{}</a></li>'.format(
-                            update_url,
-                            update_label,
-                        )
-                    body += "</ul>"
-
-            body += "</section>"
-            body += "<br />"
-
-        html = self.DOWNLOAD_TEMPLATE % dict(body=body)
-        headers = dict()
-        headers["Content-Type"] = "text/html"
-        return Response(html, 200, headers)
 
 
 class LoanController(CirculationManagerController):

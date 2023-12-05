@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from typing import Callable, Mapping, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
+from uuid import UUID, uuid4
 
+import pytz
 from pydantic import NonNegativeInt
 from pymarc import Field, Record, Subfield
+from sqlalchemy import select
+from sqlalchemy.engine import ScalarResult
 from sqlalchemy.orm.session import Session
 
 from core.classifier import Classifier
-from core.external_search import ExternalSearchIndex, Filter, SortKeyPagination
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import (
     BaseSettings,
@@ -18,29 +22,28 @@ from core.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from core.lane import BaseFacets, Lane, WorkList
 from core.model import (
-    CachedMARCFile,
+    Collection,
     DeliveryMechanism,
     Edition,
     Identifier,
     Library,
     LicensePool,
+    MarcFile,
     Representation,
     Work,
-    get_one_or_create,
+    create,
 )
-from core.service.storage.s3 import MultipartS3ContextManager, S3Service
+from core.service.storage.s3 import S3Service
 from core.util import LanguageCodes
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
+from core.util.uuid import uuid_encode
 
 
 class Annotator(LoggerMixin):
     """The Annotator knows how to add information about a Work to
     a MARC record."""
-
-    marc_cache_field = Work.marc_record.name
 
     # From https://www.loc.gov/standards/valuelist/marctarget.html
     AUDIENCE_TERMS: Mapping[str, str] = {
@@ -63,17 +66,33 @@ class Annotator(LoggerMixin):
         (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM): "Adobe PDF eBook",
     }
 
+    def __init__(
+        self,
+        cm_url: str,
+        library_short_name: str,
+        web_client_urls: List[str],
+        organization_code: Optional[str],
+        include_summary: bool,
+        include_genres: bool,
+    ) -> None:
+        self.cm_url = cm_url
+        self.library_short_name = library_short_name
+        self.web_client_urls = web_client_urls
+        self.organization_code = organization_code
+        self.include_summary = include_summary
+        self.include_genres = include_genres
+
     def annotate_work_record(
         self,
+        revised: bool,
         work: Work,
         active_license_pool: LicensePool,
         edition: Edition,
         identifier: Identifier,
-        record: Record,
-        settings: MarcExporterLibrarySettings | None,
-    ) -> None:
+    ) -> Record:
         """Add metadata from this work to a MARC record.
 
+        :param revised: Whether this record is being revised.
         :param work: The Work whose record is being annotated.
         :param active_license_pool: Of all the LicensePools associated with this
            Work, the client has expressed interest in this one.
@@ -81,19 +100,56 @@ class Annotator(LoggerMixin):
            metadata with this entry.
         :param identifier: Of all the Identifiers associated with this
            Work, the client has expressed interest in this one.
-        :param record: A MARCRecord object to be annotated.
+
+        :return: A pymarc Record object.
         """
+        record = Record(leader=self.leader(revised), force_utf8=True)
+        self.add_control_fields(record, identifier, active_license_pool, edition)
+        self.add_isbn(record, identifier)
+
+        # TODO: The 240 and 130 fields are for translated works, so they can be grouped even
+        #  though they have different titles. We do not group editions of the same work in
+        #  different languages, so we can't use those yet.
+
+        self.add_title(record, edition)
+        self.add_contributors(record, edition)
+        self.add_publisher(record, edition)
+        self.add_physical_description(record, edition)
+        self.add_audience(record, work)
+        self.add_series(record, edition)
+        self.add_system_details(record)
+        self.add_ebooks_subject(record)
         self.add_distributor(record, active_license_pool)
         self.add_formats(record, active_license_pool)
 
+        if self.organization_code:
+            self.add_marc_organization_code(record, self.organization_code)
+
+        if self.include_summary:
+            self.add_summary(record, work)
+
+        if self.include_genres:
+            self.add_genres(record, work)
+
+        self.add_web_client_urls(
+            record,
+            identifier,
+            self.library_short_name,
+            self.cm_url,
+            self.web_client_urls,
+        )
+
+        return record
+
     @classmethod
-    def leader(cls, work: Work) -> str:
+    def leader(cls, revised: bool) -> str:
         # The record length is automatically updated once fields are added.
         initial_record_length = "00000"
 
-        record_status = "n"  # New record
-        if getattr(work, cls.marc_cache_field):
+        if revised:
             record_status = "c"  # Corrected or revised
+        else:
+            record_status = "n"  # New record
 
         # Distributors consistently seem to use type "a" - language material - for
         # ebooks, though there is also type "m" for computer files.
@@ -469,7 +525,7 @@ class Annotator(LoggerMixin):
             )
 
     @classmethod
-    def add_simplified_genres(cls, record: Record, work: Work) -> None:
+    def add_genres(cls, record: Record, work: Work) -> None:
         """Create subject fields for this work."""
         genres = work.genres
 
@@ -498,19 +554,34 @@ class Annotator(LoggerMixin):
             )
         )
 
+    @classmethod
+    def add_web_client_urls(
+        cls,
+        record: Record,
+        identifier: Identifier,
+        library_short_name: str,
+        cm_url: str,
+        web_client_urls: List[str],
+    ) -> None:
+        qualified_identifier = urllib.parse.quote(
+            f"{identifier.type}/{identifier.identifier}", safe=""
+        )
 
-class MARCExporterFacets(BaseFacets):
-    """A faceting object used to configure the search engine so that
-    it only works updated since a certain time.
-    """
-
-    def __init__(self, start_time: Optional[datetime]):
-        self.start_time = start_time
-
-    def modify_search_filter(self, filter: Filter) -> None:
-        filter.order = self.SORT_ORDER_TO_OPENSEARCH_FIELD_NAME[self.ORDER_LAST_UPDATE]
-        filter.order_ascending = True
-        filter.updated_after = self.start_time
+        for web_client_base_url in web_client_urls:
+            link = "{}/{}/works/{}".format(
+                cm_url,
+                library_short_name,
+                qualified_identifier,
+            )
+            encoded_link = urllib.parse.quote(link, safe="")
+            url = f"{web_client_base_url}/book/{encoded_link}"
+            record.add_field(
+                Field(
+                    tag="856",
+                    indicators=["4", "0"],
+                    subfields=[Subfield(code="u", value=url)],
+                )
+            )
 
 
 class MarcExporterSettings(BaseSettings):
@@ -579,7 +650,8 @@ class MarcExporterLibrarySettings(BaseSettings):
 class MARCExporter(
     HasLibraryIntegrationConfiguration[
         MarcExporterSettings, MarcExporterLibrarySettings
-    ]
+    ],
+    LoggerMixin,
 ):
     """Turn a work into a record for a MARC file."""
 
@@ -589,14 +661,10 @@ class MARCExporter(
     def __init__(
         self,
         _db: Session,
-        library: Library,
-        settings: MarcExporterSettings,
-        library_settings: MarcExporterLibrarySettings,
+        storage_service: S3Service,
     ):
         self._db = _db
-        self.library = library
-        self.settings = settings
-        self.library_settings = library_settings
+        self.storage_service = storage_service
 
     @classmethod
     def label(cls) -> str:
@@ -619,16 +687,11 @@ class MARCExporter(
     @classmethod
     def create_record(
         cls,
+        revised: bool,
         work: Work,
-        annotator: Annotator | Callable[[], Annotator],
-        settings: MarcExporterSettings | None = None,
-        library_settings: MarcExporterLibrarySettings | None = None,
-        force_create: bool = False,
+        annotator: Annotator,
     ) -> Optional[Record]:
         """Build a complete MARC record for a given work."""
-        if callable(annotator):
-            annotator = annotator()
-
         pool = work.active_license_pool()
         if not pool:
             return None
@@ -636,161 +699,127 @@ class MARCExporter(
         edition = pool.presentation_edition
         identifier = pool.identifier
 
-        _db = Session.object_session(work)
+        return annotator.annotate_work_record(revised, work, pool, edition, identifier)
 
-        record = None
-        existing_record = getattr(work, annotator.marc_cache_field)
-        if existing_record and not force_create:
-            record = Record(data=existing_record.encode("utf-8"), force_utf8=True)
-
-        if not record:
-            record = Record(leader=annotator.leader(work), force_utf8=True)
-            annotator.add_control_fields(record, identifier, pool, edition)
-            annotator.add_isbn(record, identifier)
-
-            # TODO: The 240 and 130 fields are for translated works, so they can be grouped even
-            #  though they have different titles. We do not group editions of the same work in
-            #  different languages, so we can't use those yet.
-
-            annotator.add_title(record, edition)
-            annotator.add_contributors(record, edition)
-            annotator.add_publisher(record, edition)
-            annotator.add_physical_description(record, edition)
-            annotator.add_audience(record, work)
-            annotator.add_series(record, edition)
-            annotator.add_system_details(record)
-            annotator.add_ebooks_subject(record)
-
-            data = record.as_marc()
-            setattr(work, annotator.marc_cache_field, data.decode("utf8"))
-
-        # Add additional fields that should not be cached.
-        annotator.annotate_work_record(
-            work, pool, edition, identifier, record, settings=library_settings
-        )
-        return record
+    @staticmethod
+    def _date_to_string(date: datetime) -> str:
+        return date.astimezone(pytz.UTC).strftime("%Y-%m-%d")
 
     def _file_key(
         self,
+        uuid: UUID,
         library: Library,
-        lane: Lane | WorkList,
-        end_time: datetime,
-        start_time: Optional[datetime] = None,
+        collection: Collection,
+        creation_time: datetime,
+        since_time: Optional[datetime] = None,
     ) -> str:
-        """The path to the hosted MARC file for the given library, lane,
+        """The path to the hosted MARC file for the given library, collection,
         and date range."""
-        root = str(library.short_name)
-        if start_time:
-            time_part = str(start_time) + "-" + str(end_time)
+        root = "marc"
+        short_name = str(library.short_name)
+        creation = self._date_to_string(creation_time)
+
+        if since_time:
+            file_type = f"delta.{self._date_to_string(since_time)}.{creation}"
         else:
-            time_part = str(end_time)
-        parts = [root, time_part, lane.display_name]
-        return "/".join(parts) + ".mrc"
+            file_type = f"full.{creation}"
+
+        uuid_encoded = uuid_encode(uuid)
+        collection_name = collection.name.replace(" ", "_")
+        filename = f"{collection_name}.{file_type}.{uuid_encoded}.mrc"
+        parts = [root, short_name, filename]
+        return "/".join(parts)
+
+    def query_works(
+        self,
+        collection: Collection,
+        since_time: Optional[datetime],
+        creation_time: datetime,
+        batch_size: int,
+    ) -> ScalarResult:
+        query = (
+            select(Work)
+            .join(LicensePool)
+            .join(Collection)
+            .where(
+                Collection.id == collection.id,
+                Work.last_update_time <= creation_time,
+            )
+        )
+
+        if since_time is not None:
+            query = query.where(Work.last_update_time >= since_time)
+
+        return self._db.execute(query).unique().yield_per(batch_size).scalars()
 
     def records(
         self,
-        lane: Lane | WorkList,
-        annotator: Annotator | Callable[[], Annotator],
-        storage_service: Optional[S3Service],
-        start_time: Optional[datetime] = None,
-        force_refresh: bool = False,
-        search_engine: Optional[ExternalSearchIndex] = None,
-        query_batch_size: int = 500,
+        library: Library,
+        collection: Collection,
+        annotator: Annotator,
+        *,
+        creation_time: datetime,
+        since_time: Optional[datetime] = None,
+        batch_size: int = 500,
     ) -> None:
         """
-        Create and export a MARC file for the books in a lane.
-
-        :param lane: The Lane to export books from.
-        :param annotator: The Annotator to use when creating MARC records.
-        :param storage_service: The storage service integration to use for MARC files.
-        :param start_time: Only include records that were created or modified after this time.
-        :param force_refresh: Create new records even when cached records are available.
-        :param query_batch_size: Number of works to retrieve with a single Opensearch query.
+        Create and export a MARC file for the books in a collection.
         """
+        uuid = uuid4()
+        key = self._file_key(uuid, library, collection, creation_time, since_time)
 
-        # We store the content, if it's not empty. If it's empty, we create a CachedMARCFile
-        # and Representation, but don't actually store it.
-        if storage_service is None:
-            raise Exception("No storage service is configured")
-
-        search_engine = search_engine or ExternalSearchIndex(self._db)
-
-        # End time is before we start the query, because if any records are changed
-        # during the processing we may not catch them, and they should be handled
-        # again on the next run.
-        end_time = utc_now()
-
-        facets = MARCExporterFacets(start_time=start_time)
-        pagination = SortKeyPagination(size=query_batch_size)
-
-        key = self._file_key(self.library, lane, end_time, start_time)
-
-        with storage_service.multipart(
+        with self.storage_service.multipart(
             key,
             content_type=Representation.MARC_MEDIA_TYPE,
         ) as upload:
             this_batch = BytesIO()
-            while pagination is not None:
-                # Retrieve one 'page' of works from the search index.
-                works = lane.works(
-                    self._db,
-                    pagination=pagination,
-                    facets=facets,
-                    search_engine=search_engine,
+
+            works = self.query_works(collection, since_time, creation_time, batch_size)
+            for work in works:
+                # Create a record for each work and add it to the MARC file in progress.
+                record = self.create_record(
+                    since_time is not None,
+                    work,
+                    annotator,
                 )
-                for work in works:
-                    # Create a record for each work and add it to the
-                    # MARC file in progress.
-                    record = self.create_record(
-                        work,
-                        annotator,
-                        self.settings,
-                        self.library_settings,
-                        force_refresh,
-                    )
-                    if record:
-                        record_bytes = record.as_marc()
-                        this_batch.write(record_bytes)
-                if (
-                    this_batch.getbuffer().nbytes
-                    >= self.MINIMUM_UPLOAD_BATCH_SIZE_BYTES
-                ):
-                    # We've reached or exceeded the upload threshold.
-                    # Upload one part of the multipart document.
-                    self._upload_batch(this_batch, upload)
-                    this_batch = BytesIO()
-                pagination = pagination.next_page
+                if record:
+                    record_bytes = record.as_marc()
+                    this_batch.write(record_bytes)
+                    if (
+                        this_batch.getbuffer().nbytes
+                        >= self.MINIMUM_UPLOAD_BATCH_SIZE_BYTES
+                    ):
+                        # We've reached or exceeded the upload threshold.
+                        # Upload one part of the multipart document.
+                        upload.upload_part(this_batch.getvalue())
+                        this_batch.seek(0)
+                        this_batch.truncate()
 
             # Upload the final part of the multi-document, if
             # necessary.
-            self._upload_batch(this_batch, upload)  # type: ignore[unreachable]
+            if this_batch.getbuffer().nbytes > 0:
+                upload.upload_part(this_batch.getvalue())
 
-        representation, ignore = get_one_or_create(
-            self._db,
-            Representation,
-            url=upload.url,
-            media_type=Representation.MARC_MEDIA_TYPE,
-        )
-        representation.fetched_at = end_time
-        if not upload.exception:
-            cached, is_new = get_one_or_create(
+        if upload.complete:
+            create(
                 self._db,
-                CachedMARCFile,
-                library=self.library,
-                lane=(lane if isinstance(lane, Lane) else None),
-                start_time=start_time,
-                create_method_kwargs=dict(representation=representation),
+                MarcFile,
+                id=uuid,
+                library=library,
+                collection=collection,
+                created=creation_time,
+                since=since_time,
+                key=key,
             )
-            if not is_new:
-                cached.representation = representation
-            cached.end_time = end_time
-            representation.set_as_mirrored(upload.url)
         else:
-            representation.mirror_exception = str(upload.exception)
-
-    def _upload_batch(self, output: BytesIO, upload: MultipartS3ContextManager) -> None:
-        """Upload a batch of MARC records as one part of a multi-part upload."""
-        content = output.getvalue()
-        if content:
-            upload.upload_part(content)
-        output.close()
+            if upload.exception:
+                # Log the exception and move on to the next file. We will try again next script run.
+                self.log.error(
+                    f"Failed to upload MARC file for {library.short_name}/{collection.name}: {upload.exception}",
+                    exc_info=upload.exception,
+                )
+            else:
+                # There were no records to upload. This is not an error, but we should log it.
+                self.log.info(
+                    f"No MARC records to upload for {library.short_name}/{collection.name}."
+                )

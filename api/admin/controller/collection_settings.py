@@ -43,7 +43,11 @@ class CollectionSettingsController(
         if service_info:
             # Add 'marked_for_deletion' to the service info
             service_info["marked_for_deletion"] = service.collection.marked_for_deletion
+
             service_info["parent_id"] = service.collection.parent_id
+            service_info["settings"]["export_marc_records"] = str(
+                service.collection.export_marc_records
+            ).lower()
             if user and user.can_see_collection(service.collection):
                 return service_info
         return None
@@ -88,6 +92,9 @@ class CollectionSettingsController(
             form_data = flask.request.form
             libraries_data = self.get_libraries_data(form_data)
             parent_id = form_data.get("parent_id", None, int)
+            export_marc_records = (
+                form_data.get("export_marc_records", None, str) == "true"
+            )
             integration, protocol, response_code = self.get_service(form_data)
 
             impl_cls = self.registry[protocol]
@@ -109,6 +116,9 @@ class CollectionSettingsController(
                     raise ProblemError(PROTOCOL_DOES_NOT_SUPPORT_PARENTS)
             else:
                 settings_class = impl_cls.settings_class()
+
+            # Set export_marc_records flag on the collection
+            integration.collection.export_marc_records = export_marc_records
 
             # Update settings
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)

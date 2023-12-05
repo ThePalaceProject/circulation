@@ -212,12 +212,13 @@ class Work(Base):
     # A precalculated MARC record containing metadata about this
     # work that would be relevant to display in a library's public
     # catalog.
-    marc_record = Column(String, default=None)
+    # TODO: This field has been deprecated and will be removed in a future release.
+    _marc_record = Column("marc_record", String, default=None)
 
     # These fields are potentially large and can be deferred if you
     # don't need all the data in a Work.
     LARGE_FIELDS = [
-        "marc_record",
+        "_marc_record",
         "summary_text",
     ]
 
@@ -1017,9 +1018,6 @@ class Work(Base):
             # change it.
             self.last_update_time = utc_now()
 
-        if changed or policy.regenerate_marc_record:
-            self.calculate_marc_record()
-
         if (changed or policy.update_search_index) and not exclude_search:
             self.external_index_needs_updating()
 
@@ -1146,17 +1144,6 @@ class Work(Base):
 
         l = [_ensure(s) for s in l]
         return "\n".join(l)
-
-    def calculate_marc_record(self):
-        from core.marc import Annotator, MARCExporter
-
-        _db = Session.object_session(self)
-        record = MARCExporter.create_record(
-            self, annotator=Annotator, force_create=True
-        )
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.GENERATE_MARC_OPERATION
-        )
 
     def active_license_pool(self, library: Library | None = None) -> LicensePool | None:
         # The active license pool is the one that *would* be

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from api.circulation import (
     BaseCirculationAPI,
+    BaseCirculationApiSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -65,7 +66,7 @@ class EnkiConstants:
     PRODUCTION_BASE_URL = "https://enkilibrary.org/API/"
 
 
-class EnkiSettings(BaseSettings):
+class EnkiSettings(BaseCirculationApiSettings):
     url: HttpUrl = FormField(
         default=EnkiConstants.PRODUCTION_BASE_URL,
         form=ConfigurationFormItem(

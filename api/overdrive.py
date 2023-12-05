@@ -25,6 +25,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from api.circulation import (
     BaseCirculationAPI,
+    BaseCirculationApiSettings,
     BaseCirculationEbookLoanSettings,
     CirculationInternalFormatsMixin,
     DeliveryMechanismInfo,
@@ -125,7 +126,7 @@ class OverdriveConstants:
     ILS_NAME_DEFAULT = "default"
 
 
-class OverdriveSettings(ConnectionSetting):
+class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
     """The basic Overdrive configuration"""
 
     external_account_id: Optional[str] = FormField(

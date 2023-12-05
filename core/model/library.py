@@ -50,9 +50,8 @@ from core.model.work import Work
 
 if TYPE_CHECKING:
     from core.lane import Lane
-    from core.model import (  # noqa: autoflake
+    from core.model import (
         AdminRole,
-        CachedMARCFile,
         CirculationEvent,
         Collection,
         ConfigurationSetting,
@@ -109,13 +108,6 @@ class Library(Base, HasSessionCache):
     # An Library may have many admin roles.
     adminroles: Mapped[List[AdminRole]] = relationship(
         "AdminRole", back_populates="library", cascade="all, delete-orphan"
-    )
-
-    # A Library may have many CachedMARCFiles.
-    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
-        "CachedMARCFile",
-        back_populates="library",
-        cascade="all, delete-orphan",
     )
 
     # A Library may have many CustomLists.

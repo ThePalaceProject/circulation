@@ -614,7 +614,6 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
     CLASSIFY_OPERATION = "classify"
     SUMMARY_OPERATION = "summary"
     QUALITY_OPERATION = "quality"
-    GENERATE_MARC_OPERATION = "generate-marc"
     UPDATE_SEARCH_INDEX_OPERATION = "update-search-index"
 
     id = Column(Integer, primary_key=True)

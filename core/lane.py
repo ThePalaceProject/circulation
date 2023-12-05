@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import Any, List, Optional
 from urllib.parse import quote_plus
 
 from flask_babel import lazy_gettext as _
@@ -68,9 +68,6 @@ from core.util.accept_language import parse_accept_language
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
-
-if TYPE_CHECKING:
-    from core.model import CachedMARCFile  # noqa: autoflake
 
 
 class BaseFacets(FacetConstants):
@@ -2715,13 +2712,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # Only a visible lane will show up in the user interface.  The
     # admin interface can see all the lanes, visible or not.
     _visible = Column("visible", Boolean, default=True, nullable=False)
-
-    # A Lane may have many CachedMARCFiles.
-    cachedmarcfiles: Mapped[List[CachedMARCFile]] = relationship(
-        "CachedMARCFile",
-        back_populates="lane",
-        cascade="all, delete-orphan",
-    )
 
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
 

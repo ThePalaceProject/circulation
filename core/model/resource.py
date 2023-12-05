@@ -10,7 +10,7 @@ import time
 import traceback
 from hashlib import md5
 from io import BytesIO
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import Dict, List, Tuple
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -41,9 +41,6 @@ from core.model.edition import Edition
 from core.model.licensing import LicensePoolDeliveryMechanism
 from core.util.datetime_helpers import utc_now
 from core.util.http import HTTP
-
-if TYPE_CHECKING:
-    from core.model import CachedMARCFile
 
 
 class Resource(Base):
@@ -541,13 +538,6 @@ class Representation(Base, MediaTypes):
     # representation may be stored on a local file relative to the
     # data root.
     local_content_path = Column(Unicode)
-
-    # A Representation may be a CachedMARCFile.
-    marc_file: Mapped[CachedMARCFile] = relationship(
-        "CachedMARCFile",
-        back_populates="representation",
-        cascade="all, delete-orphan",
-    )
 
     # At any given time, we will have a single representation for a
     # given URL and media type.
