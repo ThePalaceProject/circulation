@@ -56,16 +56,16 @@ class QuickSightController(CirculationManagerController):
             if admin.is_librarian(library):
                 allowed_libraries.append(library)
 
-        if request_data.library_ids:
-            allowed_library_ids = list(
-                set(request_data.library_ids).intersection(
-                    {l.id for l in allowed_libraries}
+        if request_data.library_uuids:
+            allowed_library_uuids = list(
+                set(map(str, request_data.library_uuids)).intersection(
+                    {l.uuid for l in allowed_libraries}
                 )
             )
         else:
-            allowed_library_ids = [l.id for l in allowed_libraries]
+            allowed_library_uuids = [l.uuid for l in allowed_libraries]
 
-        if not allowed_library_ids:
+        if not allowed_library_uuids:
             raise ProblemError(
                 NOT_FOUND_ON_REMOTE.detailed(
                     "No library was found for this Admin that matched the request."
@@ -74,7 +74,7 @@ class QuickSightController(CirculationManagerController):
 
         libraries = self._db.execute(
             select(Library.name)
-            .where(Library.id.in_(allowed_library_ids))
+            .where(Library.uuid.in_(allowed_library_uuids))
             .order_by(Library.name)
         ).all()
 
@@ -96,19 +96,19 @@ class QuickSightController(CirculationManagerController):
                 ],
             )
         except Exception as ex:
-            log.error(f"Error while fetching the Quisksight Embed url: {ex}")
+            log.error(f"Error while fetching the Quicksight Embed url: {ex}")
             raise ProblemError(
                 INTERNAL_SERVER_ERROR.detailed(
-                    "Error while fetching the Quisksight Embed url."
+                    "Error while fetching the Quicksight Embed url."
                 )
             )
 
         embed_url = response.get("EmbedUrl")
         if response.get("Status") // 100 != 2 or embed_url is None:
-            log.error(f"QuiskSight Embed url error response {response}")
+            log.error(f"Quicksight Embed url error response {response}")
             raise ProblemError(
                 INTERNAL_SERVER_ERROR.detailed(
-                    "Error while fetching the Quisksight Embed url."
+                    "Error while fetching the Quicksight Embed url."
                 )
             )
 

@@ -1,3 +1,4 @@
+import uuid
 from unittest import mock
 
 import pytest
@@ -54,8 +55,9 @@ class TestQuicksightController:
             )
             generate_method.return_value = {"Status": 201, "EmbedUrl": "https://embed"}
 
+            random_uuid = str(uuid.uuid4())
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_ids={default.id},{library1.id},30000",
+                f"/?library_uuids={default.uuid},{library1.uuid},{random_uuid}",
                 admin=system_admin,
             ) as ctx:
                 response = ctrl.generate_quicksight_url("primary")
@@ -86,7 +88,7 @@ class TestQuicksightController:
             admin1.add_role(AdminRole.LIBRARY_MANAGER, library1)
 
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_ids=1,{library1.id}",
+                f"/?library_uuids={default.uuid},{library1.uuid}",
                 admin=admin1,
             ) as ctx:
                 generate_method.reset_mock()
@@ -129,7 +131,7 @@ class TestQuicksightController:
             mock_qs_arns.return_value = arns
 
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_ids={library.id}",
+                f"/?library_uuids={library.uuid}",
                 admin=admin,
             ) as ctx:
                 with pytest.raises(ProblemError) as raised:
@@ -148,7 +150,7 @@ class TestQuicksightController:
                 )
 
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_ids={library_not_allowed.id}",
+                f"/?library_uuids={library_not_allowed.uuid}",
                 admin=admin,
             ) as ctx:
                 mock_qs_arns.return_value = arns
@@ -160,7 +162,7 @@ class TestQuicksightController:
                 )
 
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_ids={library.id}",
+                f"/?library_uuids={library.uuid}",
                 admin=admin,
             ) as ctx:
                 # Bad response from boto
@@ -171,7 +173,7 @@ class TestQuicksightController:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
-                    == "Error while fetching the Quisksight Embed url."
+                    == "Error while fetching the Quicksight Embed url."
                 )
 
                 # 200 status, but no url
@@ -182,7 +184,7 @@ class TestQuicksightController:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
-                    == "Error while fetching the Quisksight Embed url."
+                    == "Error while fetching the Quicksight Embed url."
                 )
 
                 # Boto threw an error
@@ -193,7 +195,7 @@ class TestQuicksightController:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
-                    == "Error while fetching the Quisksight Embed url."
+                    == "Error while fetching the Quicksight Embed url."
                 )
 
     def test_get_dashboard_names(self, quicksight_fixture: QuickSightControllerFixture):
