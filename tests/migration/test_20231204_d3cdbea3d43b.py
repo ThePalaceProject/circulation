@@ -171,23 +171,26 @@ def test_migration_success(
         library_id = create_library(connection, "test-library")
         lane_id = create_lane(connection, library_id, "test-lane")
 
+        url1 = "http://s3.amazonaws.com/test-bucket/1.mrc"
         create_cachedmarcfile(
             connection,
             library_id=library_id,
             lane_id=lane_id,
-            url="http://s3.amazonaws.com/test-bucket/1.mrc",
+            url=url1,
         )
+        url2 = "http://test-bucket.us-west-2.s3.amazonaws.com/2.mrc"
         create_cachedmarcfile(
             connection,
             library_id=library_id,
             lane_id=lane_id,
-            url="http://s3.amazonaws.com/test-bucket/2.mrc",
+            url=url2,
         )
+        url3 = "http://test-bucket.custom-domain.com/3.mrc"
         create_cachedmarcfile(
             connection,
             library_id=library_id,
             lane_id=lane_id,
-            url="http://s3.amazonaws.com/test-bucket/3.mrc",
+            url=url3,
         )
         unrelated_representation = create_cachedmarcfile.representation(
             connection, "http://s3.amazonaws.com/test-bucket/4.mrc"
@@ -198,8 +201,7 @@ def test_migration_success(
 
     mock_storage = MagicMock(spec=S3Service)
     mock_storage.bucket = "test-bucket"
-    mock_storage.client = MagicMock()
-    mock_storage.generate_url = lambda key: f"http://s3.amazonaws.com/test-bucket/{key}"
+    mock_storage.generate_url.side_effect = [url1, url2, url3]
 
     container = container_instance()
     with container.storage.public.override(mock_storage):
@@ -218,10 +220,11 @@ def test_migration_success(
         inspector = inspect(connection)
         assert inspector.has_table("cachedmarcfiles") is False
 
-    # We should have deleted the files from s3
-    assert mock_storage.client.delete_object.call_count == 3
-    assert mock_storage.client.delete_object.call_args_list == [
-        call(Bucket="test-bucket", Key="1.mrc"),
-        call(Bucket="test-bucket", Key="2.mrc"),
-        call(Bucket="test-bucket", Key="3.mrc"),
+    # We should have checked that the generated url is the same and deleted the files from s3
+    assert mock_storage.generate_url.call_count == 3
+    assert mock_storage.delete.call_count == 3
+    assert mock_storage.delete.call_args_list == [
+        call("1.mrc"),
+        call("2.mrc"),
+        call("3.mrc"),
     ]

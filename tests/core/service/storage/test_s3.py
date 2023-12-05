@@ -99,6 +99,15 @@ class TestS3Service:
         url = service.generate_url(key)
         assert url == expected
 
+    def test_delete(self, s3_service_fixture: S3ServiceFixture):
+        """The S3Service.delete method deletes the object from the bucket."""
+        service = s3_service_fixture.service()
+        service.client.delete_object = MagicMock()
+        service.delete("key")
+        service.client.delete_object.assert_called_once_with(
+            Bucket=s3_service_fixture.bucket, Key="key"
+        )
+
     @pytest.mark.parametrize(
         "content",
         ["foo bar baz", b"byte string"],
@@ -288,6 +297,24 @@ def s3_service_integration_fixture() -> (
 
 @pytest.mark.minio
 class TestS3ServiceIntegration:
+    def test_delete(self, s3_service_integration_fixture: S3ServiceIntegrationFixture):
+        """The S3Service.delete method deletes the object from the bucket."""
+        service = s3_service_integration_fixture.public
+        bucket = service.bucket
+
+        raw_client = s3_service_integration_fixture.s3_client
+        content = BytesIO()
+        content.write(b"foo bar baz")
+        raw_client.upload_fileobj(content, bucket, "key")
+
+        bucket_contents = raw_client.list_objects(Bucket=bucket).get("Contents", [])
+        assert len(bucket_contents) == 1
+        assert bucket_contents[0]["Key"] == "key"
+
+        service.delete("key")
+        bucket_contents = raw_client.list_objects(Bucket=bucket).get("Contents", [])
+        assert len(bucket_contents) == 0
+
     @pytest.mark.parametrize(
         "key, bucket, content, content_type",
         [

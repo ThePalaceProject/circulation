@@ -5,6 +5,9 @@ Revises: 0039f3f12014
 Create Date: 2023-12-04 17:23:26.396526+00:00
 
 """
+from typing import Optional
+from urllib.parse import urlparse
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -17,6 +20,23 @@ revision = "d3cdbea3d43b"
 down_revision = "0039f3f12014"
 branch_labels = None
 depends_on = None
+
+
+def parse_key_from_url(url: str, bucket: str) -> Optional[str]:
+    """Parse the key from a URL.
+
+    :param url: The URL to parse.
+    :return: The key, or None if the URL is not a valid S3 URL.
+    """
+    parsed_url = urlparse(url)
+
+    if f"/{bucket}/" in parsed_url.path:
+        return parsed_url.path.split(f"/{bucket}/", 1)[1]
+
+    if bucket in parsed_url.netloc:
+        return parsed_url.path.lstrip("/")
+
+    return None
 
 
 def upgrade() -> None:
@@ -40,10 +60,9 @@ def upgrade() -> None:
     for cached_file in cached_files:
         url = cached_file.mirror_url
         bucket = public_s3.bucket
-        split_url = url.split(f"/{bucket}/", 1)
-        if len(split_url) != 2:
+        key = parse_key_from_url(url, bucket)
+        if key is None:
             raise RuntimeError(f"Unexpected URL format: {url} (bucket: {bucket})")
-        key = split_url[1]
         generated_url = public_s3.generate_url(key)
         if generated_url != url:
             raise RuntimeError(f"URL mismatch: {url} != {generated_url}")
@@ -51,7 +70,7 @@ def upgrade() -> None:
 
     for key in keys_to_delete:
         log.info(f"Deleting {key} from s3 bucket {public_s3.bucket}")
-        public_s3.client.delete_object(Bucket=public_s3.bucket, Key=key)
+        public_s3.delete(key)
 
     # remove the coverage records for the cachedmarcfiles
     op.execute("DELETE FROM coveragerecords WHERE operation = 'generate-marc'")
