@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Callable, Iterable
@@ -161,13 +162,13 @@ class Statistics:
 
     def _run_collection_stats_queries(
         self, collection: Collection
-    ) -> dict[str, dict[str, dict[str, int]]]:
+    ) -> _CollectionStatisticsQueryResults:
         collection_filter = LicensePool.collection_id == collection.id
         _query_stats_group: Callable[..., dict[str, dict[str, int]]] = partial(
             self._collection_statistics_by_medium_query, collection_filter
         )
         count = func.count().label("count")
-        return dict(
+        return _CollectionStatisticsQueryResults(
             metered_title_counts=_query_stats_group(
                 self.METERED_LICENSE_FILTER, columns=[count]
             ),
@@ -195,11 +196,7 @@ class Statistics:
         """Return a CollectionInventory for the given collection."""
 
         statistics = self._run_collection_stats_queries(collection)
-        mediums_present = set().union(*(stat.keys() for stat in statistics.values()))
-        inventory_by_medium = {
-            medium: _inventory_for_medium(statistics, medium)
-            for medium in mediums_present
-        }
+        inventory_by_medium = statistics.inventories_by_medium()
         summary_inventory = sum(
             inventory_by_medium.values(), InventoryStatistics.zeroed()
         )
@@ -238,51 +235,6 @@ class Statistics:
         )
 
 
-def _inventory_for_medium(
-    statistics: dict[str, dict[str, dict[str, int]]], medium: str
-) -> InventoryStatistics:
-    metered_titles = _lookup_group_property(
-        statistics, "metered_title_counts", medium, "count"
-    )
-    unlimited_titles = _lookup_group_property(
-        statistics, "unlimited_title_counts", medium, "count"
-    )
-    open_access_titles = _lookup_group_property(
-        statistics, "open_access_title_counts", medium, "count"
-    )
-    loanable_titles = _lookup_group_property(
-        statistics, "loanable_title_counts", medium, "count"
-    )
-
-    metered_owned_licenses = _lookup_group_property(
-        statistics, "metered_license_stats", medium, "owned"
-    )
-    metered_available_licenses = _lookup_group_property(
-        statistics, "metered_license_stats", medium, "available"
-    )
-
-    return InventoryStatistics(
-        titles=metered_titles + unlimited_titles + open_access_titles,
-        available_titles=loanable_titles,
-        open_access_titles=open_access_titles,
-        licensed_titles=metered_titles + unlimited_titles,
-        unlimited_license_titles=unlimited_titles,
-        metered_license_titles=metered_titles,
-        metered_licenses_owned=metered_owned_licenses,
-        metered_licenses_available=metered_available_licenses,
-    )
-
-
-def _lookup_group_property(
-    stats: dict[str, dict[str, dict[str, int]]],
-    group: str,
-    medium: str,
-    column_name: str,
-) -> int:
-    """Return value for statistic, if present; else, return zero."""
-    return stats.get(group, {}).get(medium, {}).get(column_name, 0)
-
-
 def _summarize_collection_inventories(
     collection_inventories: Iterable[CollectionInventory],
     collections: Iterable[Collection],
@@ -312,3 +264,64 @@ def _summarize_collection_inventories(
                 + inventory
             )
     return summary_inventory, summary_inventory_by_medium
+
+
+@dataclasses.dataclass(frozen=True)
+class _CollectionStatisticsQueryResults:
+    unlimited_title_counts: dict[str, dict[str, int]]
+    open_access_title_counts: dict[str, dict[str, int]]
+    loanable_title_counts: dict[str, dict[str, int]]
+    metered_title_counts: dict[str, dict[str, int]]
+    metered_license_stats: dict[str, dict[str, int]]
+
+    def inventories_by_medium(self) -> dict[str, InventoryStatistics]:
+        """Return a mapping of all mediums present to their associated inventories."""
+        return {
+            medium: self.inventory_for_medium(medium)
+            for medium in self.mediums_present()
+        }
+
+    def mediums_present(self) -> set[str]:
+        """Returns a list of the mediums present in these collection statistics."""
+        statistics = dataclasses.asdict(self)
+        return set().union(*(stat.keys() for stat in statistics.values()))
+
+    def inventory_for_medium(self, medium: str) -> InventoryStatistics:
+        """Return statistics for the specified medium."""
+        unlimited_titles = self._lookup_property(
+            "unlimited_title_counts", medium, "count"
+        )
+        open_access_titles = self._lookup_property(
+            "open_access_title_counts", medium, "count"
+        )
+        loanable_titles = self._lookup_property(
+            "loanable_title_counts", medium, "count"
+        )
+        metered_titles = self._lookup_property("metered_title_counts", medium, "count")
+        metered_owned_licenses = self._lookup_property(
+            "metered_license_stats", medium, "owned"
+        )
+        metered_available_licenses = self._lookup_property(
+            "metered_license_stats", medium, "available"
+        )
+
+        return InventoryStatistics(
+            titles=metered_titles + unlimited_titles + open_access_titles,
+            available_titles=loanable_titles,
+            open_access_titles=open_access_titles,
+            licensed_titles=metered_titles + unlimited_titles,
+            unlimited_license_titles=unlimited_titles,
+            metered_license_titles=metered_titles,
+            metered_licenses_owned=metered_owned_licenses,
+            metered_licenses_available=metered_available_licenses,
+        )
+
+    def _lookup_property(
+        self,
+        group: str,
+        medium: str,
+        column_name: str,
+    ) -> int:
+        """Return value for a statistic, if present; else, return zero."""
+        field: dict[str, dict[str, int]] = getattr(self, group, {})
+        return field.get(medium, {}).get(column_name, 0)
