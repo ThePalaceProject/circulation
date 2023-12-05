@@ -321,10 +321,6 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
 
     response = session.get_statistics()
     library_stats_data = response.libraries_by_key.get(default_library.short_name)
-    # all_collections_by_id = {c.id: c for c in response.collections}
-    # library_collections_by_id = {
-    #     id_: all_collections_by_id[id_] for id_ in library_stats_data.collection_ids
-    # }
     assert 1 == len(response.collections)
     assert 1 == len(response.inventory_by_medium)
     assert 1 == len(library_stats_data.collection_ids)
