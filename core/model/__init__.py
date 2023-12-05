@@ -211,7 +211,7 @@ class PresentationCalculationPolicy:
 
     def __init__(
         self,
-        /,
+        *,
         choose_edition=True,
         set_edition_metadata=True,
         classify=True,
