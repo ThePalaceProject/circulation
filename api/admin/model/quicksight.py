@@ -12,10 +12,8 @@ class QuicksightGenerateUrlRequest(CustomBaseModel):
     )
 
     @validator("library_uuids", pre=True)
-    def parse_library_uuids(cls, value) -> List[UUID]:
-        uuid_list = str_comma_list_validator(value)
-        # verify that all strings in the list are UUIDs
-        return list(map(UUID, uuid_list))
+    def parse_library_uuids(cls, value) -> List[str]:
+        return str_comma_list_validator(value)
 
 
 class QuicksightGenerateUrlResponse(CustomBaseModel):
