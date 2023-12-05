@@ -27,7 +27,13 @@ from core.model import (
 )
 
 if TYPE_CHECKING:
+    from sqlalchemy.sql.elements import (
+        BinaryExpression,
+        BooleanClauseList,
+        ClauseElement,
+    )
     from sqlalchemy.sql.expression import ColumnElement
+    from sqlalchemy.sql.type_api import TypeEngine
 
 
 def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
@@ -64,13 +70,11 @@ class Statistics:
 
     def _collection_statistics_by_medium_query(
         self,
-        collection_filter,
-        query_filter,
+        collection_filter: BinaryExpression[TypeEngine[bool]],
+        query_filter: BooleanClauseList[ClauseElement],
         /,
-        columns: list[ColumnElement] | None = None,
+        columns: list[ColumnElement[TypeEngine[int]]],
     ) -> dict[str, dict[str, int]]:
-        if columns is None:
-            columns = [func.count().label("count")]
         stats_with_medium = (
             self._db.execute(
                 select(
@@ -91,16 +95,27 @@ class Statistics:
             for row in stats_with_medium
         }
 
-    def _run_collection_stats_queries(self, collection):
+    def _run_collection_stats_queries(
+        self, collection: Collection
+    ) -> dict[str, dict[str, dict[str, int]]]:
         collection_filter = LicensePool.collection_id == collection.id
-        _query_stats_group: Callable = partial(
+        _query_stats_group: Callable[..., dict[str, dict[str, int]]] = partial(
             self._collection_statistics_by_medium_query, collection_filter
         )
+        count = func.count().label("count")
         return dict(
-            metered_title_counts=_query_stats_group(self.METERED_LICENSE_FILTER),
-            unlimited_title_counts=_query_stats_group(self.UNLIMITED_LICENSE_FILTER),
-            open_access_title_counts=_query_stats_group(self.OPEN_ACCESS_FILTER),
-            loanable_title_counts=_query_stats_group(self.AT_LEAST_ONE_LOANABLE_FILTER),
+            metered_title_counts=_query_stats_group(
+                self.METERED_LICENSE_FILTER, columns=[count]
+            ),
+            unlimited_title_counts=_query_stats_group(
+                self.UNLIMITED_LICENSE_FILTER, columns=[count]
+            ),
+            open_access_title_counts=_query_stats_group(
+                self.OPEN_ACCESS_FILTER, columns=[count]
+            ),
+            loanable_title_counts=_query_stats_group(
+                self.AT_LEAST_ONE_LOANABLE_FILTER, columns=[count]
+            ),
             metered_license_stats=_query_stats_group(
                 self.METERED_LICENSE_FILTER,
                 columns=[
@@ -116,10 +131,9 @@ class Statistics:
         group: str,
         medium: str,
         column_name: str,
-        default=0,
     ) -> int:
-        """Return value for statistic, if present; else, return the default."""
-        return stats.get(group, {}).get(medium, {}).get(column_name, default)
+        """Return value for statistic, if present; else, return zero."""
+        return stats.get(group, {}).get(medium, {}).get(column_name, 0)
 
     def _inventory_for_medium(
         self, statistics: dict[str, dict[str, dict[str, int]]], medium: str

@@ -76,6 +76,7 @@ module = [
     "api.admin.controller.library_settings",
     "api.admin.controller.patron_auth_service_self_tests",
     "api.admin.controller.patron_auth_services",
+    "api.admin.dashboard_stats",
     "api.admin.form_data",
     "api.admin.model.dashboard_statistics",
     "api.adobe_vendor_id",
