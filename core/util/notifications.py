@@ -195,9 +195,11 @@ class PushNotifications(LoggerMixin):
             loans_api = f"{url}/{hold.patron.library.short_name}/loans"
             work: Work = hold.work
             identifier: Identifier = hold.license_pool.identifier
-            title = f'Your hold on "{work.title}" is available!'
+            title = "Your hold is available!"
+            body = f'Your hold on "{work.title}" is available!'
             data = dict(
                 title=title,
+                body=body,
                 event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
                 loans_endpoint=loans_api,
                 identifier=identifier.identifier,
@@ -209,7 +211,9 @@ class PushNotifications(LoggerMixin):
             if hold.patron.authorization_identifier:
                 data["authorization_identifier"] = hold.patron.authorization_identifier
 
-            resp = cls.send_messages(tokens, messaging.Notification(title=title), data)
+            resp = cls.send_messages(
+                tokens, messaging.Notification(title=title, body=body), data
+            )
             if len(resp) > 0:
                 # Atleast one notification succeeded
                 hold.patron_last_notified = utc_now().date()

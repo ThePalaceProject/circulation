@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import datetime
-from typing import Generator
+from typing import Any, Generator
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -14,7 +14,7 @@ from google.auth import credentials
 from requests_mock import Mocker
 
 from core.config import Configuration
-from core.model import create, get_one, get_one_or_create
+from core.model import Hold, create, get_one, get_one_or_create
 from core.model.configuration import ConfigurationSetting
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -272,68 +272,73 @@ class TestPushNotifications:
         work1: Work = db.work(with_license_pool=True)
         work2: Work = db.work(with_license_pool=True)
         p1 = work1.active_license_pool()
+        assert p1 is not None
         p2 = work2.active_license_pool()
-        if p1 and p2:  # mypy complains if we don't do this
-            hold1, _ = p1.on_hold_to(patron1, position=0)
-            hold2, _ = p2.on_hold_to(patron2, position=0)
+        assert p2 is not None
+        hold1, _ = p1.on_hold_to(patron1, position=0)
+        hold2, _ = p2.on_hold_to(patron2, position=0)
 
-        with mock.patch("core.util.notifications.messaging") as messaging:
+        with mock.patch("core.util.notifications.messaging") as mock_messaging:
+            # Mock the notification method to return the kwargs passed to it
+            # so that we can make sure we are making the expected calls
+            mock_messaging.Notification.side_effect = lambda **kwargs: kwargs
             PushNotifications.send_holds_notifications([hold1, hold2])
 
         assert (
             hold1.patron_last_notified == hold2.patron_last_notified == utc_now().date()
         )
         loans_api = "http://localhost/default/loans"
-        assert messaging.Message.call_count == 3
-        assert messaging.Message.call_args_list == [
-            mock.call(
-                token="test-token-1",
-                notification=messaging.Notification(
-                    title=f'Your hold on "{work1.title}" is available!',
-                ),
-                data=dict(
-                    title=f'Your hold on "{work1.title}" is available!',
-                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
-                    loans_endpoint=loans_api,
-                    external_identifier=hold1.patron.external_identifier,
-                    authorization_identifier=hold1.patron.authorization_identifier,
-                    identifier=hold1.license_pool.identifier.identifier,
-                    type=hold1.license_pool.identifier.type,
-                    library=hold1.patron.library.short_name,
-                ),
-            ),
-            mock.call(
-                token="test-token-2",
-                notification=messaging.Notification(
-                    title=f'Your hold on "{work1.title}" is available!',
-                ),
-                data=dict(
-                    title=f'Your hold on "{work1.title}" is available!',
-                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
-                    loans_endpoint=loans_api,
-                    external_identifier=hold1.patron.external_identifier,
-                    authorization_identifier=hold1.patron.authorization_identifier,
-                    identifier=hold1.license_pool.identifier.identifier,
-                    type=hold1.license_pool.identifier.type,
-                    library=hold1.patron.library.short_name,
-                ),
-            ),
-            mock.call(
-                token="test-token-3",
-                notification=messaging.Notification(
-                    title=f'Your hold on "{work2.title}" is available!',
-                ),
-                data=dict(
-                    title=f'Your hold on "{work2.title}" is available!',
-                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
-                    loans_endpoint=loans_api,
-                    external_identifier=hold2.patron.external_identifier,
-                    identifier=hold2.license_pool.identifier.identifier,
-                    type=hold2.license_pool.identifier.type,
-                    library=hold2.patron.library.short_name,
-                ),
-            ),
-        ]
+
+        def assert_message_call(
+            actual: Any,
+            token: str,
+            work: Work,
+            hold: Hold,
+            include_auth_id: bool = True,
+        ) -> None:
+            data = dict(
+                title="Your hold is available!",
+                body=f'Your hold on "{work.title}" is available!',
+                event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                loans_endpoint=loans_api,
+                identifier=hold.license_pool.identifier.identifier,
+                type=hold.license_pool.identifier.type,
+                library=hold.patron.library.short_name,
+                external_identifier=hold.patron.external_identifier,
+            )
+
+            if include_auth_id:
+                data["authorization_identifier"] = hold.patron.authorization_identifier
+
+            notification = dict(
+                title=data["title"],
+                body=data["body"],
+            )
+
+            assert actual == mock.call(
+                token=token,
+                notification=notification,
+                data=data,
+            )
+
+        # We should have sent 3 messages, one for each token
+        assert mock_messaging.Message.call_count == 3
+
+        # We should have sent 2 notifications, one for each patron.
+        # Because patron1 has 2 tokens, they will get the same notification for
+        # each token.
+        assert mock_messaging.Notification.call_count == 2
+
+        [
+            message_call1,
+            message_call2,
+            message_call3,
+        ] = mock_messaging.Message.call_args_list
+        assert_message_call(message_call1, "test-token-1", work1, hold1)
+        assert_message_call(message_call2, "test-token-2", work1, hold1)
+        assert_message_call(
+            message_call3, "test-token-3", work2, hold2, include_auth_id=False
+        )
 
     def test_send_messages(
         self,
