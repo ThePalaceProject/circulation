@@ -138,7 +138,7 @@ def test_migration(
         integration_3_settings: Dict[str, str] = {}
         integration_3 = create_integration_configuration(
             connection,
-            "collection_3",
+            "collection_1",
             "Overdrive",
             "LICENSE_GOAL",
             settings=integration_3_settings,

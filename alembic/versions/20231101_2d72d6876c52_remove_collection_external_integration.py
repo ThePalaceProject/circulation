@@ -5,6 +5,8 @@ Revises: cc084e35e037
 Create Date: 2023-11-01 22:42:06.754873+00:00
 
 """
+from collections import deque
+from dataclasses import dataclass
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -25,6 +27,15 @@ depends_on = None
 log = migration_logger(revision)
 
 
+@dataclass
+class RenameQueryRow:
+    collection_id: int
+    integration_id: int
+    integration_name: str
+    collection_name: str
+    deferral_count: int = 0
+
+
 def upgrade() -> None:
     conn = op.get_bind()
 
@@ -39,14 +50,31 @@ def upgrade() -> None:
         "ON c.integration_configuration_id = ic.id WHERE c.name != ic.name"
     ).all()
 
-    for row in rows:
+    integration_names = {row.integration_name for row in rows}
+    collection_renames = deque(RenameQueryRow(**r) for r in rows)
+    while collection_renames:
+        rename = collection_renames.popleft()
+        if rename.collection_name in integration_names:
+            # The collection name is already in use by an integration, so we need to rename the
+            # integration first.
+            log.info(
+                f"Collection name {rename.collection_name} is already in use. Deferring rename."
+            )
+            rename.deferral_count += 1
+            if rename.deferral_count > 3:
+                raise RuntimeError(
+                    f"Unable to rename collection {rename.collection_id}. Max deferral count reached."
+                )
+            collection_renames.append(rename)
+            continue
         log.info(
-            f"Updating name for collection {row.collection_id} from {row.integration_name} to {row.collection_name}."
+            f"Updating name for collection {rename.collection_id} from {rename.integration_name} to {rename.collection_name}."
         )
         conn.execute(
             "UPDATE integration_configurations SET name = (%s) WHERE id = (%s)",
-            (row.collection_name, row.integration_id),
+            (rename.collection_name, rename.integration_id),
         )
+        integration_names.remove(rename.integration_name)
 
     op.alter_column("collections", "name", existing_type=sa.VARCHAR(), nullable=True)
     op.drop_index("ix_collections_name", table_name="collections")
