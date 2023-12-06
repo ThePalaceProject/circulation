@@ -745,7 +745,8 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
 
 #### Profiling tests suite
 
-PyInstrument can be used to profile the test suite, as well as the main application code.
+PyInstrument can also be used to profile the test suite. This can be useful to identify slow tests, or to identify
+performance regressions.
 
 To profile the core test suite, run the following command:
 
