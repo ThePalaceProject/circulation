@@ -71,13 +71,16 @@ def create_cachedmarcfile(
     return CreateCachedMarcFile(create_library, create_lane)
 
 
+MIGRATION_ID = "e06f965879ab"
+
+
 def test_migration_no_s3_integration(
     alembic_runner: MigrationContext,
     alembic_engine: Engine,
     create_cachedmarcfile: CreateCachedMarcFile,
     caplog: LogCaptureFixture,
 ) -> None:
-    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_to(MIGRATION_ID)
     alembic_runner.migrate_down_one()
 
     container = container_instance()
@@ -107,7 +110,7 @@ def test_migration_bucket_url_not_found(
     create_cachedmarcfile: CreateCachedMarcFile,
     caplog: LogCaptureFixture,
 ) -> None:
-    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_to(MIGRATION_ID)
     alembic_runner.migrate_down_one()
 
     container = container_instance()
@@ -132,7 +135,7 @@ def test_migration_bucket_url_different(
     create_cachedmarcfile: CreateCachedMarcFile,
     caplog: LogCaptureFixture,
 ) -> None:
-    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_to(MIGRATION_ID)
     alembic_runner.migrate_down_one()
 
     container = container_instance()
@@ -164,7 +167,7 @@ def test_migration_success(
     create_cachedmarcfile: CreateCachedMarcFile,
     create_coverage_record: CreateCoverageRecord,
 ) -> None:
-    alembic_runner.migrate_down_to("d3cdbea3d43b")
+    alembic_runner.migrate_down_to(MIGRATION_ID)
     alembic_runner.migrate_down_one()
 
     with alembic_engine.connect() as connection:
@@ -207,6 +210,23 @@ def test_migration_success(
     with container.storage.public.override(mock_storage):
         alembic_runner.migrate_up_one()
 
+    # We should have checked that the generated url is the same and deleted the files from s3
+    assert mock_storage.generate_url.call_count == 3
+    assert mock_storage.delete.call_count == 3
+    assert mock_storage.delete.call_args_list == [
+        call("1.mrc"),
+        call("2.mrc"),
+        call("3.mrc"),
+    ]
+
+    # But the representations and coveragerecords should still be there
+    with alembic_engine.connect() as connection:
+        assert connection.execute("SELECT id FROM representations").rowcount == 4
+        assert connection.execute("SELECT id FROM coveragerecords").rowcount == 2
+
+    # The next migration takes care of those
+    alembic_runner.migrate_up_one()
+
     with alembic_engine.connect() as connection:
         # The representation and coveragerecord that were not associated should still be there
         assert connection.execute("SELECT id FROM representations").fetchall() == [
@@ -219,12 +239,3 @@ def test_migration_success(
         # Cachedmarcfiles should be gone
         inspector = inspect(connection)
         assert inspector.has_table("cachedmarcfiles") is False
-
-    # We should have checked that the generated url is the same and deleted the files from s3
-    assert mock_storage.generate_url.call_count == 3
-    assert mock_storage.delete.call_count == 3
-    assert mock_storage.delete.call_args_list == [
-        call("1.mrc"),
-        call("2.mrc"),
-        call("3.mrc"),
-    ]
