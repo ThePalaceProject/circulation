@@ -5,6 +5,7 @@ Revises: cc084e35e037
 Create Date: 2023-11-01 22:42:06.754873+00:00
 
 """
+from collections import deque
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -39,7 +40,19 @@ def upgrade() -> None:
         "ON c.integration_configuration_id = ic.id WHERE c.name != ic.name"
     ).all()
 
-    for row in rows:
+    integration_names = {row.integration_name for row in rows}
+
+    collection_renames = deque(rows)
+    while collection_renames:
+        row = collection_renames.popleft()
+        if row.collection_name in integration_names:
+            # The collection name is already in use by an integration, so we need to rename the
+            # integration first.
+            log.info(
+                f"Collection name {row.collection_name} is already in use. Deferring rename."
+            )
+            collection_renames.append(row)
+            continue
         log.info(
             f"Updating name for collection {row.collection_id} from {row.integration_name} to {row.collection_name}."
         )
@@ -47,6 +60,7 @@ def upgrade() -> None:
             "UPDATE integration_configurations SET name = (%s) WHERE id = (%s)",
             (row.collection_name, row.integration_id),
         )
+        integration_names.remove(row.integration_name)
 
     op.alter_column("collections", "name", existing_type=sa.VARCHAR(), nullable=True)
     op.drop_index("ix_collections_name", table_name="collections")
