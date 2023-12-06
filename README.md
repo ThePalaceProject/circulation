@@ -743,6 +743,22 @@ module under the hood to do the profiling.
 
 This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/) to profile the code.
 
+#### Profiling tests suite
+
+PyInstrument can be used to profile the test suite, as well as the main application code.
+
+To profile the core test suite, run the following command:
+
+```sh
+pyinstrument -m pytest --no-cov tests/core/
+```
+
+To profile the API test suite, run the following command:
+
+```sh
+pyinstrument -m pytest --no-cov tests/api/
+```
+
 #### Environment Variables
 
 - `PALACE_PYINSTRUMENT`: Profiling will the enabled if this variable is set. The saved profile data will be available at
