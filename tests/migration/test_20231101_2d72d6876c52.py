@@ -75,16 +75,18 @@ def create_collection(
     integration_configuration_id: int,
     external_account_id: Optional[str] = None,
     external_integration_id: Optional[int] = None,
+    parent_id: Optional[int] = None,
 ) -> int:
     collection = connection.execute(
         "INSERT INTO collections "
-        "(name, external_account_id, integration_configuration_id, external_integration_id) VALUES "
-        "(%s, %s, %s, %s) "
+        "(name, external_account_id, integration_configuration_id, external_integration_id, parent_id) VALUES "
+        "(%s, %s, %s, %s, %s) "
         "returning id",
         name,
         external_account_id,
         integration_configuration_id,
         external_integration_id,
+        parent_id,
     ).fetchone()
     assert collection is not None
     assert isinstance(collection.id, int)
@@ -133,9 +135,18 @@ def test_migration(
             "LICENSE_GOAL",
             settings=integration_2_settings,
         )
+        integration_3_settings: Dict[str, str] = {}
+        integration_3 = create_integration_configuration(
+            connection,
+            "collection_3",
+            "Overdrive",
+            "LICENSE_GOAL",
+            settings=integration_3_settings,
+        )
 
         external_1 = create_external_integration(connection)
         external_2 = create_external_integration(connection)
+        external_3 = create_external_integration(connection)
 
         create_config_setting(
             connection, "token_auth_endpoint", "http://token.com/auth", external_1
@@ -147,6 +158,9 @@ def test_migration(
         collection_2 = create_collection(
             connection, "collection_2", integration_2, "1", external_2
         )
+        collection_3 = create_collection(
+            connection, "collection_3", integration_3, "5656", external_3, collection_2
+        )
 
         create_integration_library_configuration(connection, integration_1, library_1)
         create_integration_library_configuration(connection, integration_1, library_2)
@@ -156,7 +170,7 @@ def test_migration(
         create_integration_library_configuration(connection, integration_2, library_2)
         create_collection_library(connection, collection_2, library_2)
 
-        # Test that the collections_libraries table has the correct forign key constraints
+        # Test that the collections_libraries table has the correct foreign key constraints
         with pytest.raises(IntegrityError) as excinfo:
             create_collection_library(connection, 99, 99)
         assert "violates foreign key constraint" in str(excinfo.value)
@@ -221,6 +235,18 @@ def test_migration(
             "external_account_id": "1",
         }
         assert integration_2_actual.context == {}
+
+        integration_3_actual = connection.execute(
+            "select name, settings, context from integration_configurations where id = (%s)",
+            integration_3,
+        ).fetchone()
+        assert integration_3_actual is not None
+        assert integration_3_actual.name == "collection_3"
+        assert integration_3_actual.settings != integration_3_settings
+        assert integration_3_actual.settings == {
+            "external_account_id": "5656",
+        }
+        assert integration_3_actual.context == {}
 
         # The foreign key constraints have been removed from the collections_libraries table
         create_collection_library(connection, 99, 99)
