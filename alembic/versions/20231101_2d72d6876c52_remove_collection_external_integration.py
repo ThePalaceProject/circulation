@@ -11,6 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 from api.integration.registry.license_providers import LicenseProvidersRegistry
+from core.integration.base import HasChildIntegrationConfiguration
 from core.migration.util import migration_logger
 from core.model import json_serializer
 
@@ -88,8 +89,8 @@ def upgrade() -> None:
     # also make sure that the new settings are valid for the integration before saving them
     # to the database.
     rows = conn.execute(
-        "SELECT ic.id as integration_id, ic.settings, ic.protocol, ic.goal, c.external_account_id FROM collections c "
-        "JOIN integration_configurations ic ON c.integration_configuration_id = ic.id"
+        "SELECT ic.id as integration_id, ic.settings, ic.protocol, ic.goal, c.external_account_id, c.parent_id "
+        "FROM collections c JOIN integration_configurations ic ON c.integration_configuration_id = ic.id"
     ).all()
 
     registry = LicenseProvidersRegistry()
@@ -103,7 +104,16 @@ def upgrade() -> None:
             raise RuntimeError(
                 f"Could not find implementation for protocol {row.protocol}"
             )
-        settings_obj = impl_class.settings_class()(**settings_dict)
+        if row.parent_id is not None:
+            if issubclass(impl_class, HasChildIntegrationConfiguration):
+                settings_obj = impl_class.child_settings_class()(**settings_dict)
+            else:
+                raise RuntimeError(
+                    f"Integration {row.integration_id} is a child integration, "
+                    f"but {row.protocol} does not support child integrations."
+                )
+        else:
+            settings_obj = impl_class.settings_class()(**settings_dict)
         new_settings_dict = settings_obj.dict()
         if row.settings != new_settings_dict:
             new_settings = json_serializer(new_settings_dict)
