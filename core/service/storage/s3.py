@@ -177,6 +177,9 @@ class S3Service(LoggerMixin):
             bucket=self.bucket, key=quote(key), region=self.region
         )
 
+    def delete(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=key)
+
     def store(
         self,
         key: str,

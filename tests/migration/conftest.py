@@ -314,32 +314,31 @@ def create_edition() -> CreateEdition:
     return fixture
 
 
-class CreateIdentifier(Protocol):
+class CreateIdentifier:
     def __call__(
         self,
         connection: Connection,
-        identifier: str,
-        type: str,
+        identifier: Optional[str] = None,
+        type: Optional[str] = None,
     ) -> int:
-        ...
-
-
-@pytest.fixture
-def create_identifier() -> CreateIdentifier:
-    def fixture(
-        connection: Connection,
-        identifier: str,
-        type: str,
-    ) -> int:
+        identifier = identifier or self.random_name()
+        type = type or self.random_name()
         identifier_row = connection.execute(
             "INSERT INTO identifiers (identifier, type) VALUES (%s, %s) returning id",
             identifier,
             type,
         ).fetchone()
         assert identifier_row is not None
-        return cast(int, identifier_row.id)
+        assert isinstance(identifier_row.id, int)
+        return identifier_row.id
 
-    return fixture
+    def __init__(self, random_name: RandomName) -> None:
+        self.random_name = random_name
+
+
+@pytest.fixture
+def create_identifier(random_name: RandomName) -> CreateIdentifier:
+    return CreateIdentifier(random_name)
 
 
 class CreateLicensePool(Protocol):
@@ -371,3 +370,79 @@ def create_license_pool() -> CreateLicensePool:
         return cast(int, licensepool.id)
 
     return fixture
+
+
+class CreateLane:
+    def __call__(
+        self,
+        connection: Connection,
+        library_id: int,
+        name: Optional[str] = None,
+        priority: int = 0,
+        inherit_parent_restrictions: bool = False,
+        include_self_in_grouped_feed: bool = False,
+        visible: bool = True,
+    ) -> int:
+        name = name or self.random_name()
+        lane = connection.execute(
+            "INSERT INTO lanes "
+            "(library_id, display_name, priority, size, inherit_parent_restrictions, "
+            "include_self_in_grouped_feed, visible) "
+            " VALUES (%s, %s, %s, 0, %s, %s, %s) returning id",
+            library_id,
+            name,
+            priority,
+            inherit_parent_restrictions,
+            include_self_in_grouped_feed,
+            visible,
+        ).fetchone()
+        assert lane is not None
+        assert isinstance(lane.id, int)
+        return lane.id
+
+    def __init__(self, random_name: RandomName) -> None:
+        self.random_name = random_name
+
+
+@pytest.fixture
+def create_lane(random_name: RandomName) -> CreateLane:
+    return CreateLane(random_name)
+
+
+class CreateCoverageRecord:
+    def __call__(
+        self,
+        connection: Connection,
+        operation: Optional[str] = None,
+        identifier_id: Optional[int] = None,
+        collection_id: Optional[int] = None,
+    ) -> int:
+        if identifier_id is None:
+            identifier_id = self.create_identifier(connection)
+
+        if operation is None:
+            operation = self.random_name()
+
+        row = connection.execute(
+            "INSERT INTO coveragerecords (operation, identifier_id, collection_id, timestamp) "
+            "VALUES (%s, %s, %s, '2021-01-01') returning id",
+            operation,
+            identifier_id,
+            collection_id,
+        ).first()
+        assert row is not None
+        assert isinstance(row.id, int)
+        return row.id
+
+    def __init__(
+        self, create_identifier: CreateIdentifier, random_name: RandomName
+    ) -> None:
+        self.create_identifier = create_identifier
+        self.random_name = random_name
+
+
+@pytest.fixture
+def create_coverage_record(
+    create_identifier: CreateIdentifier, random_name: RandomName
+) -> CreateCoverageRecord:
+    return CreateCoverageRecord(create_identifier, random_name)

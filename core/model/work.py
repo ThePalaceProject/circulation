@@ -19,7 +19,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
-    String,
     Unicode,
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
@@ -209,16 +208,9 @@ class Work(Base):
     # will be made to make the Work presentation ready.
     presentation_ready_exception = Column(Unicode, default=None, index=True)
 
-    # A precalculated MARC record containing metadata about this
-    # work that would be relevant to display in a library's public
-    # catalog.
-    # TODO: This field has been deprecated and will be removed in a future release.
-    _marc_record = Column("marc_record", String, default=None)
-
     # These fields are potentially large and can be deferred if you
     # don't need all the data in a Work.
     LARGE_FIELDS = [
-        "_marc_record",
         "summary_text",
     ]
 
