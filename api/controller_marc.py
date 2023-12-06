@@ -140,7 +140,15 @@ class MARCRecordController:
         marc_files = self.get_files(session, library)
 
         if len(marc_files) == 0:
-            return "<p>" + "MARC files aren't ready to download yet." + "</p>"
+            # Are there any collections configured to export MARC records?
+            if any(c.export_marc_records for c in library.collections):
+                return "<p>" + "MARC files aren't ready to download yet." + "</p>"
+            else:
+                return (
+                    "<p>"
+                    + "No collections are configured to export MARC records."
+                    + "</p>"
+                )
 
         body = ""
         for collection_name, files in marc_files.items():
