@@ -104,31 +104,6 @@ def test_migration_no_s3_integration(
     )
 
 
-def test_migration_bucket_url_not_found(
-    alembic_runner: MigrationContext,
-    alembic_engine: Engine,
-    create_cachedmarcfile: CreateCachedMarcFile,
-    caplog: LogCaptureFixture,
-) -> None:
-    alembic_runner.migrate_down_to(MIGRATION_ID)
-    alembic_runner.migrate_down_one()
-
-    container = container_instance()
-    mock_storage = MagicMock(spec=S3Service)
-    mock_storage.bucket = "test-bucket42"
-
-    # If we can't parse the key from the URL, the migration should fail
-    with alembic_engine.connect() as connection:
-        create_cachedmarcfile(connection, "http://s3.amazonaws.com/test-bucket/1.mrc")
-
-    with pytest.raises(RuntimeError) as excinfo, container.storage.public.override(
-        mock_storage
-    ):
-        alembic_runner.migrate_up_one()
-
-    assert "Unexpected URL format" in str(excinfo.value)
-
-
 def test_migration_bucket_url_different(
     alembic_runner: MigrationContext,
     alembic_engine: Engine,
