@@ -43,7 +43,7 @@ class CreateCachedMarcFile:
 
         return representation_id, file_id
 
-    def representation(self, connection: Connection, url: str) -> int:
+    def representation(self, connection: Connection, url: Optional[str]) -> int:
         row = connection.execute(
             "INSERT INTO representations (media_type, url) "
             "VALUES ('application/marc', %s) returning id",
