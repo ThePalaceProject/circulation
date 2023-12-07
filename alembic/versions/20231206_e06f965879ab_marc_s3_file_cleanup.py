@@ -6,7 +6,7 @@ Create Date: 2023-12-06 16:04:36.936466+00:00
 
 """
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from alembic import op
 from core.migration.util import migration_logger
@@ -19,28 +19,33 @@ branch_labels = None
 depends_on = None
 
 
-def parse_key_from_url(url: str, bucket: str) -> Optional[str]:
+def parse_key_from_url(url: Optional[str], bucket: str) -> Optional[str]:
     """Parse the key from a URL.
 
     :param url: The URL to parse.
     :return: The key, or None if the URL is not a valid S3 URL.
     """
+    if url is None:
+        return None
+
     parsed_url = urlparse(url)
 
     if f"/{bucket}/" in parsed_url.path:
-        return parsed_url.path.split(f"/{bucket}/", 1)[1]
+        key = parsed_url.path.split(f"/{bucket}/", 1)[1]
+    elif bucket in parsed_url.netloc:
+        key = parsed_url.path.lstrip("/")
+    else:
+        return None
 
-    if bucket in parsed_url.netloc:
-        return parsed_url.path.lstrip("/")
-
-    return None
+    # The key stored in the DB is URL encoded, so we need to decode it
+    return unquote(key)
 
 
 def upgrade() -> None:
     # Before removing the cachedmarcfiles table, we want to clean up
     # the cachedmarcfiles stored in s3.
     #
-    # Note: if you are running this migration on a development system and you want
+    # Note: if you are running this migration on a development system, and you want
     # to skip deleting these files you can just comment out the migration code below.
     services = container_instance()
     public_s3 = services.storage.public()
@@ -49,7 +54,7 @@ def upgrade() -> None:
     # Check if there are any cachedmarcfiles in s3
     connection = op.get_bind()
     cached_files = connection.execute(
-        "SELECT r.mirror_url FROM cachedmarcfiles cmf JOIN representations r ON cmf.representation_id = r.id"
+        "SELECT r.url FROM cachedmarcfiles cmf JOIN representations r ON cmf.representation_id = r.id"
     ).all()
     if public_s3 is None and len(cached_files) > 0:
         raise RuntimeError(
@@ -58,11 +63,12 @@ def upgrade() -> None:
 
     keys_to_delete = []
     for cached_file in cached_files:
-        url = cached_file.mirror_url
+        url = cached_file.url
         bucket = public_s3.bucket
         key = parse_key_from_url(url, bucket)
         if key is None:
-            raise RuntimeError(f"Unexpected URL format: {url} (bucket: {bucket})")
+            log.info(f"Skipping cachedmarcfile with invalid URL: {url}")
+            continue
         generated_url = public_s3.generate_url(key)
         if generated_url != url:
             raise RuntimeError(f"URL mismatch: {url} != {generated_url}")
