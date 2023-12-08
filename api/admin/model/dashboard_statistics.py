@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, List
+from typing import Any, Dict, List
 
 from pydantic import Field, NonNegativeInt
 
@@ -54,9 +54,6 @@ class InventoryStatistics(StatisticsBaseModel):
     available_titles: NonNegativeInt = Field(
         description="Number of books available to lend."
     )
-    self_hosted_titles: NonNegativeInt = Field(
-        description="Number of books that are self-hosted."
-    )
     open_access_titles: NonNegativeInt = Field(
         description="Number of books with an Open Access license."
     )
@@ -90,6 +87,9 @@ class LibraryStatistics(CustomBaseModel):
     inventory_summary: InventoryStatistics = Field(
         description="Summary of inventory statistics for this library."
     )
+    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+        description="Per-medium inventory statistics for this library."
+    )
     collection_ids: List[int] = Field(
         description="List of associated collection identifiers."
     )
@@ -102,6 +102,9 @@ class CollectionInventory(CustomBaseModel):
     name: str = Field(description="Collection name.")
     inventory: InventoryStatistics = Field(
         description="Inventory statistics for this collection."
+    )
+    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+        description="Per-medium inventory statistics for this collection."
     )
 
 
@@ -116,6 +119,9 @@ class StatisticsResponse(CustomBaseModel):
     )
     inventory_summary: InventoryStatistics = Field(
         description="Summary inventory across all included collections."
+    )
+    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+        description="Per-medium summary inventory across all included collections."
     )
     patron_summary: PatronStatistics = Field(
         description="Summary patron statistics across all libraries."

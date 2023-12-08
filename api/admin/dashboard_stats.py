@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import typing
+import dataclasses
 from datetime import datetime
 from functools import partial
-from typing import Callable, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable
 
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql import func, select
+from sqlalchemy.sql.expression import and_, false, or_, true
 
 from api.admin.model.dashboard_statistics import (
     CollectionInventory,
@@ -16,7 +16,25 @@ from api.admin.model.dashboard_statistics import (
     PatronStatistics,
     StatisticsResponse,
 )
-from core.model import Admin, Collection, Hold, Library, LicensePool, Loan, Patron
+from core.model import (
+    Admin,
+    Collection,
+    Edition,
+    Hold,
+    Library,
+    LicensePool,
+    Loan,
+    Patron,
+)
+
+if TYPE_CHECKING:
+    from sqlalchemy.sql.elements import (
+        BinaryExpression,
+        BooleanClauseList,
+        ClauseElement,
+    )
+    from sqlalchemy.sql.expression import ColumnElement
+    from sqlalchemy.sql.type_api import TypeEngine
 
 
 def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
@@ -24,17 +42,17 @@ def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
 
 
 class Statistics:
-    METERED_LICENSE_FILTER = and_(  # type: ignore[type-var]
+    METERED_LICENSE_FILTER = and_(
         LicensePool.licenses_owned > 0,
-        LicensePool.unlimited_access == False,
-        LicensePool.open_access == False,
+        LicensePool.unlimited_access == false(),
+        LicensePool.open_access == false(),
     )
-    UNLIMITED_LICENSE_FILTER = and_(  # type: ignore[type-var]
-        LicensePool.unlimited_access == True,
-        LicensePool.open_access == False,
+    UNLIMITED_LICENSE_FILTER = and_(
+        LicensePool.unlimited_access == true(),
+        LicensePool.open_access == false(),
     )
-    OPEN_ACCESS_FILTER = LicensePool.open_access == True
-    AT_LEAST_ONE_LENDABLE_FILTER = or_(
+    OPEN_ACCESS_FILTER = LicensePool.open_access == true()
+    AT_LEAST_ONE_LOANABLE_FILTER = or_(
         UNLIMITED_LICENSE_FILTER,
         OPEN_ACCESS_FILTER,
         and_(METERED_LICENSE_FILTER, LicensePool.licenses_available > 0),
@@ -42,6 +60,70 @@ class Statistics:
 
     def __init__(self, session: Session):
         self._db = session
+
+    def stats(self, admin: Admin) -> StatisticsResponse:
+        """Build and return a statistics response for admin user's authorized libraries."""
+
+        # Determine which libraries and collections are authorized for this user.
+        authorized_libraries = self._libraries_for_admin(admin)
+        authorized_collections_by_library = {
+            lib.short_name: set(lib.all_collections) for lib in authorized_libraries
+        }
+        all_authorized_collections: list[Collection] = [
+            c for c in self._db.query(Collection) if admin.can_see_collection(c)
+        ]
+
+        collection_inventories = sorted(
+            (self._create_collection_inventory(c) for c in all_authorized_collections),
+            key=lambda c: c.id,
+        )
+        (
+            collection_inventory_summary,
+            collection_inventory_summary_by_medium,
+        ) = _summarize_collection_inventories(
+            collection_inventories, all_authorized_collections
+        )
+
+        inventories_by_library = {
+            library_key: _summarize_collection_inventories(
+                collection_inventories, collections
+            )
+            for library_key, collections in authorized_collections_by_library.items()
+        }
+        patron_stats_by_library = {
+            lib.short_name: self._gather_patron_stats(lib)
+            for lib in authorized_libraries
+        }
+        library_statistics = [
+            LibraryStatistics(
+                key=lib.short_name,
+                name=lib.name or "(missing library name)",
+                patron_statistics=patron_stats_by_library[lib.short_name],
+                inventory_summary=inventories_by_library[lib.short_name][0],
+                inventory_by_medium=inventories_by_library[lib.short_name][1],
+                collection_ids=sorted(
+                    [
+                        c.id
+                        for c in authorized_collections_by_library[lib.short_name]
+                        if c.id is not None
+                    ]
+                ),
+            )
+            for lib in authorized_libraries
+        ]
+
+        # Accumulate patron summary statistics from authorized libraries.
+        patron_summary = sum(
+            patron_stats_by_library.values(), PatronStatistics.zeroed()
+        )
+
+        return StatisticsResponse(
+            collections=collection_inventories,
+            libraries=library_statistics,
+            inventory_summary=collection_inventory_summary,
+            inventory_by_medium=collection_inventory_summary_by_medium,
+            patron_summary=patron_summary,
+        )
 
     def _libraries_for_admin(self, admin: Admin) -> list[Library]:
         """Return a list of libraries to which this user has access."""
@@ -51,55 +133,78 @@ class Statistics:
             if admin.is_librarian(library)
         ]
 
-    def _collection_count(self, collection_filter, query_filter) -> int:
-        return (
-            self._db.query(LicensePool)
-            .filter(collection_filter)
-            .filter(query_filter)
-            .count()
-        )
-
-    def _gather_collection_stats(self, collection: Collection) -> CollectionInventory:
-        collection_filter = LicensePool.collection_id == collection.id
-        _count: Callable = partial(self._collection_count, collection_filter)
-
-        metered_license_title_count = _count(self.METERED_LICENSE_FILTER)
-        unlimited_license_title_count = _count(self.UNLIMITED_LICENSE_FILTER)
-        open_access_title_count = _count(self.OPEN_ACCESS_FILTER)
-        # TODO: We no longer support self-hosted books, so this should always be 0.
-        #  this value is still included in the response for backwards compatibility,
-        #  but should be removed in a future release.
-        self_hosted_title_count = 0
-        at_least_one_loanable_count = _count(self.AT_LEAST_ONE_LENDABLE_FILTER)
-
-        licenses_owned_count, licenses_available_count = map(
-            lambda x: x if x is not None else 0,
-            self._db.query(
-                func.sum(LicensePool.licenses_owned),
-                func.sum(LicensePool.licenses_available),
+    def _collection_statistics_by_medium_query(
+        self,
+        collection_filter: BinaryExpression[TypeEngine[bool]],
+        query_filter: BooleanClauseList[ClauseElement],
+        /,
+        columns: list[ColumnElement[TypeEngine[int]]],
+    ) -> dict[str, dict[str, int]]:
+        stats_with_medium = (
+            self._db.execute(
+                select(
+                    Edition.medium,
+                    *columns,
+                )
+                .select_from(LicensePool)
+                .join(Edition, Edition.id == LicensePool.presentation_edition_id)
+                .where(collection_filter)
+                .where(query_filter)
+                .group_by(Edition.medium)
             )
-            .filter(collection_filter)
-            .filter(self.METERED_LICENSE_FILTER)
-            .all()[0],
+            .mappings()
+            .all()
+        )
+        return {
+            row["medium"]: {k: v for k, v in row.items() if k != "medium"}
+            for row in stats_with_medium
+        }
+
+    def _run_collection_stats_queries(
+        self, collection: Collection
+    ) -> _CollectionStatisticsQueryResults:
+        collection_filter = LicensePool.collection_id == collection.id
+        _query_stats_group: Callable[..., dict[str, dict[str, int]]] = partial(
+            self._collection_statistics_by_medium_query, collection_filter
+        )
+        count = func.count().label("count")
+        return _CollectionStatisticsQueryResults(
+            metered_title_counts=_query_stats_group(
+                self.METERED_LICENSE_FILTER, columns=[count]
+            ),
+            unlimited_title_counts=_query_stats_group(
+                self.UNLIMITED_LICENSE_FILTER, columns=[count]
+            ),
+            open_access_title_counts=_query_stats_group(
+                self.OPEN_ACCESS_FILTER, columns=[count]
+            ),
+            loanable_title_counts=_query_stats_group(
+                self.AT_LEAST_ONE_LOANABLE_FILTER, columns=[count]
+            ),
+            metered_license_stats=_query_stats_group(
+                self.METERED_LICENSE_FILTER,
+                columns=[
+                    func.sum(LicensePool.licenses_owned).label("owned"),
+                    func.sum(LicensePool.licenses_available).label("available"),
+                ],
+            ),
         )
 
+    def _create_collection_inventory(
+        self, collection: Collection
+    ) -> CollectionInventory:
+        """Return a CollectionInventory for the given collection."""
+
+        statistics = self._run_collection_stats_queries(collection)
+        inventory_by_medium = statistics.inventories_by_medium()
+        summary_inventory = sum(
+            inventory_by_medium.values(), InventoryStatistics.zeroed()
+        )
         return CollectionInventory(
             id=collection.id,
             name=collection.name,
-            inventory=InventoryStatistics(
-                titles=metered_license_title_count
-                + unlimited_license_title_count
-                + open_access_title_count,
-                available_titles=at_least_one_loanable_count,
-                self_hosted_titles=self_hosted_title_count,
-                open_access_titles=open_access_title_count,
-                licensed_titles=metered_license_title_count
-                + unlimited_license_title_count,
-                unlimited_license_titles=unlimited_license_title_count,
-                metered_license_titles=metered_license_title_count,
-                metered_licenses_owned=licenses_owned_count,
-                metered_licenses_available=licenses_available_count,
-            ),
+            inventory=summary_inventory,
+            inventory_by_medium=inventory_by_medium,
         )
 
     def _gather_patron_stats(self, library: Library) -> PatronStatistics:
@@ -129,95 +234,94 @@ class Statistics:
             holds=hold_count,
         )
 
-    def _collection_level_statistics(
+
+def _summarize_collection_inventories(
+    collection_inventories: Iterable[CollectionInventory],
+    collections: Iterable[Collection],
+) -> tuple[InventoryStatistics, dict[str, InventoryStatistics]]:
+    """Summarize the inventories associated with the specified collections.
+
+    The collections represented by the specified `collection_inventories`
+    must be a superset of the specified `collections`.
+
+    :param collections: `collections` for which to summarize inventory information.
+    :param collection_inventories: `CollectionInventory`s for the collections.
+    :return: Summary inventory and summary inventory by medium.
+    """
+    included_collection_inventories = (
+        inv for inv in collection_inventories if inv.id in {c.id for c in collections}
+    )
+
+    summary_inventory = InventoryStatistics.zeroed()
+    summary_inventory_by_medium: dict[str, InventoryStatistics] = {}
+
+    for ci in included_collection_inventories:
+        summary_inventory += ci.inventory
+        inventory_by_medium = ci.inventory_by_medium or {}
+        for medium, inventory in inventory_by_medium.items():
+            summary_inventory_by_medium[medium] = (
+                summary_inventory_by_medium.get(medium, InventoryStatistics.zeroed())
+                + inventory
+            )
+    return summary_inventory, summary_inventory_by_medium
+
+
+@dataclasses.dataclass(frozen=True)
+class _CollectionStatisticsQueryResults:
+    unlimited_title_counts: dict[str, dict[str, int]]
+    open_access_title_counts: dict[str, dict[str, int]]
+    loanable_title_counts: dict[str, dict[str, int]]
+    metered_title_counts: dict[str, dict[str, int]]
+    metered_license_stats: dict[str, dict[str, int]]
+
+    def inventories_by_medium(self) -> dict[str, InventoryStatistics]:
+        """Return a mapping of all mediums present to their associated inventories."""
+        return {
+            medium: self.inventory_for_medium(medium)
+            for medium in self.mediums_present()
+        }
+
+    def mediums_present(self) -> set[str]:
+        """Returns a list of the mediums present in these collection statistics."""
+        statistics = dataclasses.asdict(self)
+        return set().union(*(stat.keys() for stat in statistics.values()))
+
+    def inventory_for_medium(self, medium: str) -> InventoryStatistics:
+        """Return statistics for the specified medium."""
+        unlimited_titles = self._lookup_property(
+            "unlimited_title_counts", medium, "count"
+        )
+        open_access_titles = self._lookup_property(
+            "open_access_title_counts", medium, "count"
+        )
+        loanable_titles = self._lookup_property(
+            "loanable_title_counts", medium, "count"
+        )
+        metered_titles = self._lookup_property("metered_title_counts", medium, "count")
+        metered_owned_licenses = self._lookup_property(
+            "metered_license_stats", medium, "owned"
+        )
+        metered_available_licenses = self._lookup_property(
+            "metered_license_stats", medium, "available"
+        )
+
+        return InventoryStatistics(
+            titles=metered_titles + unlimited_titles + open_access_titles,
+            available_titles=loanable_titles,
+            open_access_titles=open_access_titles,
+            licensed_titles=metered_titles + unlimited_titles,
+            unlimited_license_titles=unlimited_titles,
+            metered_license_titles=metered_titles,
+            metered_licenses_owned=metered_owned_licenses,
+            metered_licenses_available=metered_available_licenses,
+        )
+
+    def _lookup_property(
         self,
-        collections: typing.Collection[Collection],
-    ) -> tuple[list[CollectionInventory], InventoryStatistics]:
-        """Return individual and summary statistics for the given collections.
-
-        The list of per-collection statistics is sorted by the collection `id`.
-        """
-        collection_stats = [self._gather_collection_stats(c) for c in collections]
-        summary_stats = sum(
-            (c.inventory for c in collection_stats), InventoryStatistics.zeroed()
-        )
-        return sorted(collection_stats, key=lambda c: c.id), summary_stats
-
-    @staticmethod
-    def lookup_stats(
-        collection_inventories: Iterable[CollectionInventory],
-        collections: Iterable[Collection],
-        defaults: Iterable[InventoryStatistics] | None = None,
-    ) -> Iterable[InventoryStatistics]:
-        """Return the inventory dictionaries for the specified collections."""
-        defaults = defaults if defaults is not None else [InventoryStatistics.zeroed()]
-        collection_ids = {c.id for c in collections}
-        return (
-            (
-                stats.inventory
-                for stats in collection_inventories
-                if stats.id in collection_ids
-            )
-            if collection_ids
-            else defaults
-        )
-
-    def stats(self, admin: Admin) -> StatisticsResponse:
-        """Build and return a statistics response for user's authorized libraries."""
-
-        # Determine which libraries and collections are authorized for this user.
-        authorized_libraries = self._libraries_for_admin(admin)
-        authorized_collections_by_library = {
-            lib.short_name: set(lib.all_collections) for lib in authorized_libraries
-        }
-        all_authorized_collections: list[Collection] = [
-            c for c in self._db.query(Collection) if admin.can_see_collection(c)
-        ]
-
-        # Gather collection-level statistics for authorized collections.
-        (
-            collection_inventories,
-            collection_inventory_summary,
-        ) = self._collection_level_statistics(all_authorized_collections)
-
-        # Gather library-level statistics for the authorized libraries by
-        # summing up the values of each of libraries associated collections.
-        inventory_by_library = {
-            library_key: sum(
-                self.lookup_stats(collection_inventories, collections),
-                InventoryStatistics.zeroed(),
-            )
-            for library_key, collections in authorized_collections_by_library.items()
-        }
-        patron_stats_by_library = {
-            lib.short_name: self._gather_patron_stats(lib)
-            for lib in authorized_libraries
-        }
-        library_statistics = [
-            LibraryStatistics(
-                key=lib.short_name,
-                name=lib.name or "(missing library name)",
-                patron_statistics=patron_stats_by_library[lib.short_name],
-                inventory_summary=inventory_by_library[lib.short_name],
-                collection_ids=sorted(
-                    [
-                        c.id
-                        for c in authorized_collections_by_library[lib.short_name]
-                        if c.id is not None
-                    ]
-                ),
-            )
-            for lib in authorized_libraries
-        ]
-
-        # Accumulate patron summary statistics from authorized libraries.
-        patron_summary = sum(
-            patron_stats_by_library.values(), PatronStatistics.zeroed()
-        )
-
-        return StatisticsResponse(
-            collections=collection_inventories,
-            libraries=library_statistics,
-            inventory_summary=collection_inventory_summary,
-            patron_summary=patron_summary,
-        )
+        group: str,
+        medium: str,
+        column_name: str,
+    ) -> int:
+        """Return value for a statistic, if present; else, return zero."""
+        field: dict[str, dict[str, int]] = getattr(self, group, {})
+        return field.get(medium, {}).get(column_name, 0)
