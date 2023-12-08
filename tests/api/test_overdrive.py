@@ -59,9 +59,9 @@ from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
 from tests.api.mockapi.overdrive import MockOverdriveAPI
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
-from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 
 if TYPE_CHECKING:
     from tests.fixtures.api_overdrive_files import OverdriveAPIFilesFixture

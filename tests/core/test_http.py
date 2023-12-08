@@ -1,57 +1,66 @@
-import logging
+import functools
+from dataclasses import dataclass
+from typing import Callable
 
 import pytest
+import requests
 
 from core.util.http import HTTP, RequestNetworkException
 from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
 
 
+@dataclass
+class TestHttpFixture:
+    server: MockAPIServer
+    request_with_timeout: Callable[..., requests.Response]
+
+
 @pytest.fixture
-def mock_web_server():
-    """A test fixture that yields a usable mock web server for the lifetime of the test."""
-    _server = MockAPIServer("127.0.0.1", 10256)
-    _server.start()
-    logging.info(f"starting mock web server on {_server.address()}:{_server.port()}")
-    yield _server
-    logging.info(
-        f"shutting down mock web server on {_server.address()}:{_server.port()}"
+def test_http_fixture(mock_web_server: MockAPIServer):
+    # Make sure we don't wait for retries, as that will slow down the tests.
+    request_with_timeout = functools.partial(
+        HTTP.request_with_timeout, timeout=1, backoff_factor=0
     )
-    _server.stop()
+    return TestHttpFixture(
+        server=mock_web_server, request_with_timeout=request_with_timeout
+    )
 
 
 class TestHTTP:
-    def test_retries_unspecified(self, mock_web_server: MockAPIServer):
+    def test_retries_unspecified(self, test_http_fixture: TestHttpFixture):
         for i in range(1, 7):
             response = MockAPIServerResponse()
             response.content = b"Ouch."
             response.status_code = 502
-            mock_web_server.enqueue_response("GET", "/test", response)
+            test_http_fixture.server.enqueue_response("GET", "/test", response)
 
         with pytest.raises(RequestNetworkException):
-            HTTP.request_with_timeout("GET", mock_web_server.url("/test"))
+            test_http_fixture.request_with_timeout(
+                "GET", test_http_fixture.server.url("/test")
+            )
 
-        assert len(mock_web_server.requests()) == 6
-        request = mock_web_server.requests().pop()
+        assert len(test_http_fixture.server.requests()) == 6
+        request = test_http_fixture.server.requests().pop()
         assert request.path == "/test"
         assert request.method == "GET"
 
-    def test_retries_none(self, mock_web_server: MockAPIServer):
+    def test_retries_none(self, test_http_fixture: TestHttpFixture):
         response = MockAPIServerResponse()
         response.content = b"Ouch."
         response.status_code = 502
 
-        mock_web_server.enqueue_response("GET", "/test", response)
+        test_http_fixture.server.enqueue_response("GET", "/test", response)
         with pytest.raises(RequestNetworkException):
-            HTTP.request_with_timeout(
-                "GET", mock_web_server.url("/test"), max_retry_count=0
+            test_http_fixture.request_with_timeout(
+                "GET", test_http_fixture.server.url("/test"), max_retry_count=0
             )
 
-        assert len(mock_web_server.requests()) == 1
-        request = mock_web_server.requests().pop()
+        assert len(test_http_fixture.server.requests()) == 1
+        request = test_http_fixture.server.requests().pop()
         assert request.path == "/test"
         assert request.method == "GET"
 
-    def test_retries_3(self, mock_web_server: MockAPIServer):
+    def test_retries_3(self, test_http_fixture: TestHttpFixture):
         response0 = MockAPIServerResponse()
         response0.content = b"Ouch."
         response0.status_code = 502
@@ -64,24 +73,24 @@ class TestHTTP:
         response2.content = b"OK!"
         response2.status_code = 200
 
-        mock_web_server.enqueue_response("GET", "/test", response0)
-        mock_web_server.enqueue_response("GET", "/test", response1)
-        mock_web_server.enqueue_response("GET", "/test", response2)
+        test_http_fixture.server.enqueue_response("GET", "/test", response0)
+        test_http_fixture.server.enqueue_response("GET", "/test", response1)
+        test_http_fixture.server.enqueue_response("GET", "/test", response2)
 
-        response = HTTP.request_with_timeout(
-            "GET", mock_web_server.url("/test"), max_retry_count=3
+        response = test_http_fixture.request_with_timeout(
+            "GET", test_http_fixture.server.url("/test"), max_retry_count=3
         )
         assert response.status_code == 200
 
-        assert len(mock_web_server.requests()) == 3
-        request = mock_web_server.requests().pop()
+        assert len(test_http_fixture.server.requests()) == 3
+        request = test_http_fixture.server.requests().pop()
         assert request.path == "/test"
         assert request.method == "GET"
 
-        request = mock_web_server.requests().pop()
+        request = test_http_fixture.server.requests().pop()
         assert request.path == "/test"
         assert request.method == "GET"
 
-        request = mock_web_server.requests().pop()
+        request = test_http_fixture.server.requests().pop()
         assert request.path == "/test"
         assert request.method == "GET"

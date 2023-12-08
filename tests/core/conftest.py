@@ -12,4 +12,5 @@ pytest_plugins = [
     "tests.fixtures.services",
     "tests.fixtures.time",
     "tests.fixtures.tls_server",
+    "tests.fixtures.webserver",
 ]
