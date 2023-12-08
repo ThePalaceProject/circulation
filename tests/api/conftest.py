@@ -1,3 +1,4 @@
+from freezegun.config import configure as fg_configure
 from pytest import register_assert_rewrite
 
 register_assert_rewrite("tests.fixtures.database")
@@ -39,3 +40,8 @@ pytest_plugins = [
     "tests.fixtures.tls_server",
     "tests.fixtures.vendor_id",
 ]
+
+# Make sure if we are using pyinstrument to profile tests, that
+# freezegun doesn't interfere with it.
+# See: https://github.com/spulec/freezegun#ignore-packages
+fg_configure(extend_ignore_list=["pyinstrument"])
