@@ -14,6 +14,7 @@ pytest_plugins = [
     "tests.fixtures.services",
     "tests.fixtures.time",
     "tests.fixtures.tls_server",
+    "tests.fixtures.webserver",
 ]
 
 # Make sure if we are using pyinstrument to profile tests, that

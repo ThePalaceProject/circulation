@@ -1,5 +1,4 @@
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -9,20 +8,7 @@ from customlists.customlist_export import (
     CustomListExportFailed,
     CustomListExports,
 )
-from tests.core.util.test_mock_web_server import MockAPIServer, MockAPIServerResponse
-
-
-@pytest.fixture
-def mock_web_server():
-    """A test fixture that yields a usable mock web server for the lifetime of the test."""
-    _server = MockAPIServer("127.0.0.1", 10256)
-    _server.start()
-    logging.info(f"starting mock web server on {_server.address()}:{_server.port()}")
-    yield _server
-    logging.info(
-        f"shutting down mock web server on {_server.address()}:{_server.port()}"
-    )
-    _server.stop()
+from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 
 
 class TestExports:
