@@ -114,6 +114,7 @@ module = [
     "core.util.worker_pools",
     "core.util.xmlparser",
     "tests.fixtures.authenticator",
+    "tests.fixtures.webserver",
     "tests.migration.*",
 ]
 no_implicit_reexport = true

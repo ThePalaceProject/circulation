@@ -1,6 +1,6 @@
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 import pytest
 
@@ -15,7 +15,7 @@ class MockAPIServerRequest:
     method: str
     path: str
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.headers = {}
         self.payload = b""
         self.method = "GET"
@@ -30,13 +30,13 @@ class MockAPIServerResponse:
     headers: Dict[str, str]
     close_obnoxiously: bool
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.status_code = 200
         self.content = b""
         self.headers = {}
         self.close_obnoxiously = False
 
-    def set_content(self, data: bytes):
+    def set_content(self, data: bytes) -> None:
         """A convenience method that automatically sets the correct content length for data."""
         self.content = data
         self.headers["content-length"] = str(len(data))
@@ -45,7 +45,7 @@ class MockAPIServerResponse:
 class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
     """Basic request handler."""
 
-    def _send_everything(self, _response: MockAPIServerResponse):
+    def _send_everything(self, _response: MockAPIServerResponse) -> None:
         if _response.close_obnoxiously:
             return
 
@@ -72,8 +72,9 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
             _request.payload = self.rfile.read(_readable)
         return _request
 
-    def _handle_everything(self):
+    def _handle_everything(self) -> None:
         _request = self._read_everything()
+        assert isinstance(self.server, MockAPIInternalServer)
         _response = self.server.mock_api_server.dequeue_response(_request)
         if _response is None:
             self.log.error(
@@ -84,15 +85,15 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
             )
         self._send_everything(_response)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         self.log.info("GET")
         self._handle_everything()
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         self.log.info("POST")
         self._handle_everything()
 
-    def do_PUT(self):
+    def do_PUT(self) -> None:
         self.log.info("PUT")
         self._handle_everything()
 
@@ -146,7 +147,7 @@ class MockAPIServer(LoggerMixin):
 
     def enqueue_response(
         self, request_method: str, request_path: str, response: MockAPIServerResponse
-    ):
+    ) -> None:
         _by_method = self._responses.get(request_method) or {}
         _by_path = _by_method.get(request_path) or []
         _by_path.append(response)
@@ -177,7 +178,7 @@ class MockAPIServer(LoggerMixin):
 
 
 @pytest.fixture
-def mock_web_server():
+def mock_web_server() -> Generator[MockAPIServer, None, None]:
     """A test fixture that yields a usable mock web server for the lifetime of the test."""
     _server = MockAPIServer("127.0.0.1", 10256)
     _server.start()
