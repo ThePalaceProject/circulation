@@ -1,8 +1,8 @@
 from unittest.mock import MagicMock
 
 from api.authenticator import LibraryAuthenticator
+from api.circulation_manager import CirculationManager
 from api.config import Configuration
-from api.controller import CirculationManager
 from api.custom_index import CustomIndexView
 from api.problem_details import *
 from core.feed.annotator.circulation import (

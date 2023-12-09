@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
-from api.controller import CirculationManager
+from api.circulation_manager import CirculationManager
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals

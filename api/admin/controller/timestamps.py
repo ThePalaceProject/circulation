@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from core.model import Timestamp
 
 

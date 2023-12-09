@@ -8,8 +8,8 @@ from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
 
 from api.admin.controller import setup_admin_controllers
+from api.circulation_manager import CirculationManager
 from api.config import Configuration
-from api.controller import CirculationManager
 from api.util.flask import PalaceFlask
 from api.util.profilers import (
     PalaceCProfileProfiler,

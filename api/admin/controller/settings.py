@@ -23,7 +23,7 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.admin.validator import Validator
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from core.external_search import ExternalSearchIndex
 from core.integration.base import (
     HasChildIntegrationConfiguration,

@@ -8,7 +8,7 @@ from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 if TYPE_CHECKING:
-    from api.controller import PatronAuthTokenController
+    from api.controller.patron_auth_token import PatronAuthTokenController
 
 
 class PatronAuthTokenControllerFixture(CirculationControllerFixture):

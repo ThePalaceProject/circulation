@@ -86,7 +86,7 @@ class TestBaseController:
 
         # No authorization header -> 401 error.
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authorization_header",
+            "api.controller.base.BaseCirculationManagerController.authorization_header",
             lambda x: None,
         ):
             with circulation_fixture.request_context_with_library("/"):
@@ -101,7 +101,7 @@ class TestBaseController:
             raise RemoteInitiatedServerError("argh", "service")
 
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            "api.controller.base.BaseCirculationManagerController.authenticated_patron",
             remote_failure,
         ):
             with circulation_fixture.request_context_with_library(
@@ -118,7 +118,7 @@ class TestBaseController:
         # Credentials provided but don't identify anyone in particular
         # -> 401 error.
         with patch(
-            "api.base_controller.BaseCirculationManagerController.authenticated_patron",
+            "api.controller.base.BaseCirculationManagerController.authenticated_patron",
             lambda self, x: None,
         ):
             with circulation_fixture.request_context_with_library(

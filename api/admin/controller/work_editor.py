@@ -6,7 +6,7 @@ from flask_babel import lazy_gettext as _
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.problem_details import *
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.admin import AdminAnnotator

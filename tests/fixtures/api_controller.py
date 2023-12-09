@@ -11,8 +11,9 @@ from werkzeug.datastructures import Authorization
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
+from api.circulation_manager import CirculationManager
 from api.config import Configuration
-from api.controller import CirculationManager, CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.lanes import create_default_lanes
 from api.simple_authentication import SimpleAuthenticationProvider

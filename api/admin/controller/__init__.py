@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from api.admin.controller.quicksight import QuickSightController
 
 if TYPE_CHECKING:
-    from api.controller import CirculationManager
+    from api.circulation_manager import CirculationManager
 
 
 def setup_admin_controllers(manager: CirculationManager):

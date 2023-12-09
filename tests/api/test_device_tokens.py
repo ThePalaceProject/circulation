@@ -5,7 +5,7 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from tests.fixtures.api_controller import ControllerFixture
 
 
-@patch("api.controller.flask")
+@patch("api.controller.device_tokens.flask")
 class TestDeviceTokens:
     def test_create_invalid_type(self, flask, controller_fixture: ControllerFixture):
         db = controller_fixture.db
