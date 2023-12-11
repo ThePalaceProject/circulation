@@ -196,7 +196,10 @@ class Statistics:
         """Return a CollectionInventory for the given collection."""
 
         statistics = self._run_collection_stats_queries(collection)
-        inventory_by_medium = statistics.inventories_by_medium()
+        # Ensure that the key is a string, even if the medium is null.
+        inventory_by_medium = {
+            str(m): inv for m, inv in statistics.inventories_by_medium().items()
+        }
         summary_inventory = sum(
             inventory_by_medium.values(), InventoryStatistics.zeroed()
         )
