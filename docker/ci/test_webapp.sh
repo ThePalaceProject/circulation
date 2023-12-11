@@ -17,10 +17,10 @@ check_service_status "$container" /etc/service/nginx
 check_service_status "$container" /etc/service/uwsgi
 
 # Wait for UWSGI to be ready to accept connections.
-timeout 240s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker logs "$container" -f 2>&1)
+timeout 240s grep -q 'WSGI app .* ready in [0-9]* seconds' <(docker compose logs "$container" -f 2>&1)
 
 # Make sure the web server is running.
-healthcheck=$(docker exec "$container" curl --write-out "%{http_code}" --silent --output /dev/null http://localhost/healthcheck.html)
+healthcheck=$(docker compose exec "$container" curl --write-out "%{http_code}" --silent --output /dev/null http://localhost/healthcheck.html)
 if ! [[ ${healthcheck} == "200" ]]; then
   exit 1
 else
@@ -28,7 +28,7 @@ else
 fi
 
 # Also make sure the app server is running.
-feed_type=$(docker exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
+feed_type=$(docker compose exec "$container" curl --write-out "%{content_type}" --silent --output /dev/null http://localhost/version.json)
 if ! [[ ${feed_type} == "application/json" ]]; then
   exit 1
 else

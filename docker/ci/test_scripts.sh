@@ -12,6 +12,9 @@ source "${dir}/check_service_status.sh"
 # Wait for container to start
 wait_for_runit "$container"
 
+# Make sure database initialization completed successfully
+timeout 240s grep -q 'Initialization complete' <(docker compose logs "$container" -f 2>&1)
+
 # Make sure that cron is running in the scripts container
 check_service_status "$container" /etc/service/cron
 
