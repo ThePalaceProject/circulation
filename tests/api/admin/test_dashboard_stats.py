@@ -350,6 +350,18 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     pool.licenses_owned = 10
     pool.licenses_available = 5
 
+    # We currently have active BiblioBoard editions with no (null) medium,
+    # so let's add one of those to make sure we handle those.
+    edition, pool = db.edition(
+        with_license_pool=True,
+        with_open_access_download=False,
+        collection=c2,
+    )
+    edition.medium = None
+    pool.open_access = False
+    pool.licenses_owned = 2
+    pool.licenses_available = 0
+
     # c3 does not add a title, since no licenses owned.
     _, pool = db.edition(
         with_license_pool=True,
@@ -415,6 +427,16 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
             "metered_licenses_available": 5,
         }
     )
+    c2_no_medium_inventory = empty_inventory.copy(
+        update={
+            "titles": 1,
+            "available_titles": 0,
+            "licensed_titles": 1,
+            "metered_license_titles": 1,
+            "metered_licenses_owned": 2,
+            "metered_licenses_available": 0,
+        }
+    )
 
     c3_book_inventory = empty_inventory.copy()
 
@@ -428,6 +450,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         + c3_book_inventory
         + c2_audio_inventory
         + c2_book_inventory
+        + c2_no_medium_inventory
     )
 
     response = session.get_statistics()
@@ -439,10 +462,12 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     assert 3 == len(response.collections)
 
     assert expected_summary_inventory == response.inventory_summary
-    assert 2 == len(response.inventory_by_medium)
+    assert 3 == len(response.inventory_by_medium)
     assert "Audio" in response.inventory_by_medium
     assert "Book" in response.inventory_by_medium
+    assert "None" in response.inventory_by_medium
     assert c2_audio_inventory == response.inventory_by_medium.get("Audio")
+    assert c2_no_medium_inventory == response.inventory_by_medium.get("None")
     assert (
         c1_previous_book_inventory
         + c1_added_book_inventory
@@ -450,9 +475,11 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         + c3_book_inventory
         == response.inventory_by_medium.get("Book")
     )
-    assert expected_summary_inventory == response.inventory_by_medium.get(
-        "Audio"
-    ) + response.inventory_by_medium.get("Book")
+    assert expected_summary_inventory == (
+        response.inventory_by_medium.get("Audio")
+        + response.inventory_by_medium.get("Book")
+        + response.inventory_by_medium.get("None")
+    )
 
     assert expected_library_inventory == library_stats_data.inventory_summary
     assert 2 == len(library_stats_data.collection_ids)
@@ -491,13 +518,18 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     assert library_collections_by_id.get(c2.id) is None
 
     c2_stats = all_collections_by_id[c2.id]
-    assert c2_audio_inventory + c2_book_inventory == c2_stats.inventory
+    assert (
+        c2_audio_inventory + c2_book_inventory + c2_no_medium_inventory
+        == c2_stats.inventory
+    )
 
     c2_inventory_by_medium = c2_stats.inventory_by_medium
     assert "Book" in c2_inventory_by_medium
     assert "Audio" in c2_inventory_by_medium
+    assert "None" in c2_inventory_by_medium
     assert c2_audio_inventory == c2_inventory_by_medium["Audio"]
     assert c2_book_inventory == c2_inventory_by_medium["Book"]
+    assert c2_no_medium_inventory == c2_inventory_by_medium["None"]
 
     admin.remove_role(AdminRole.SYSTEM_ADMIN)
     admin.add_role(AdminRole.LIBRARY_MANAGER, default_library)
@@ -545,7 +577,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         )
 
         default_inventory_by_medium = default_stats.inventory_by_medium
-        assert "Audio" not in default_inventory_by_medium
+        assert 1 == len(default_inventory_by_medium)
         assert "Book" in default_inventory_by_medium
         assert (
             c1_previous_book_inventory + c1_added_book_inventory
@@ -555,9 +587,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         c3_stats = collections[c3.id]
         assert c3_book_inventory == c3_stats.inventory
 
-        c3_inventory_by_medium = c3_stats.inventory_by_medium
-        assert "Book" not in c3_inventory_by_medium
-        assert "Audio" not in c3_inventory_by_medium
+        assert 0 == len(c3_stats.inventory_by_medium)
 
 
 def test_stats_parent_collection_permissions(
