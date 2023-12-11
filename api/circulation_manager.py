@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import urllib.parse
 from typing import TYPE_CHECKING
 
@@ -40,7 +41,7 @@ from core.lane import Lane, WorkList
 from core.model import ConfigurationSetting, Library
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.service.container import Services
-from core.util.log import LoggerMixin, elapsed_time_logging
+from core.util.log import elapsed_time_logging, log_elapsed_time
 
 if TYPE_CHECKING:
     from api.admin.controller.admin_search import AdminSearchController
@@ -89,7 +90,9 @@ if TYPE_CHECKING:
     from api.admin.controller.work_editor import WorkController as AdminWorkController
 
 
-class CirculationManager(LoggerMixin):
+class CirculationManager:
+    log = logging.getLogger("api.circulation_manager.CirculationManager")
+
     # API Controllers
     index_controller: IndexController
     opds_feeds: OPDSFeedController
@@ -185,6 +188,7 @@ class CirculationManager(LoggerMixin):
             self.load_settings()
             self.site_configuration_last_update = last_update
 
+    @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
@@ -195,102 +199,98 @@ class CirculationManager(LoggerMixin):
         interface.
         """
         with elapsed_time_logging(
-            log_method=self.log.info,
-            message_prefix="load_settings",
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - load libraries",
         ):
-            with elapsed_time_logging(
-                log_method=self.log.debug,
-                skip_start=True,
-                message_prefix="load_settings - load libraries",
-            ):
-                libraries = self._db.query(Library).all()
+            libraries = self._db.query(Library).all()
 
-            with elapsed_time_logging(
-                log_method=self.log.debug,
-                skip_start=True,
-                message_prefix="load_settings - populate caches",
-            ):
-                # Populate caches
-                Library.cache_warm(self._db, lambda: libraries)
-                ConfigurationSetting.cache_warm(self._db)
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - populate caches",
+        ):
+            # Populate caches
+            Library.cache_warm(self._db, lambda: libraries)
+            ConfigurationSetting.cache_warm(self._db)
 
-            self.auth = Authenticator(self._db, libraries, self.analytics)
+        self.auth = Authenticator(self._db, libraries, self.analytics)
 
-            self.setup_external_search()
+        self.setup_external_search()
 
-            # Track the Lane configuration for each library by mapping its
-            # short name to the top-level lane.
-            new_top_level_lanes = {}
-            # Create a CirculationAPI for each library.
-            new_circulation_apis = {}
-            # Potentially load a CustomIndexView for each library
-            new_custom_index_views = {}
+        # Track the Lane configuration for each library by mapping its
+        # short name to the top-level lane.
+        new_top_level_lanes = {}
+        # Create a CirculationAPI for each library.
+        new_circulation_apis = {}
+        # Potentially load a CustomIndexView for each library
+        new_custom_index_views = {}
 
-            with elapsed_time_logging(
-                log_method=self.log.debug,
-                message_prefix="load_settings - per-library lanes, custom indexes, api",
-            ):
-                for library in libraries:
-                    new_top_level_lanes[library.id] = load_lanes(self._db, library)
-                    new_custom_index_views[library.id] = CustomIndexView.for_library(
-                        library
-                    )
-                    new_circulation_apis[library.id] = self.setup_circulation(
-                        library, self.analytics
-                    )
-
-            self.top_level_lanes = new_top_level_lanes
-            self.circulation_apis = new_circulation_apis
-            self.custom_index_views = new_custom_index_views
-
-            # Assemble the list of patron web client domains from individual
-            # library registration settings as well as a sitewide setting.
-            patron_web_domains = set()
-
-            def get_domain(url):
-                url = url.strip()
-                if url == "*":
-                    return url
-                (
-                    scheme,
-                    netloc,
-                    path,
-                    parameters,
-                    query,
-                    fragment,
-                ) = urllib.parse.urlparse(url)
-                if scheme and netloc:
-                    return scheme + "://" + netloc
-                else:
-                    return None
-
-            sitewide_patron_web_client_urls = ConfigurationSetting.sitewide(
-                self._db, Configuration.PATRON_WEB_HOSTNAMES
-            ).value
-            if sitewide_patron_web_client_urls:
-                for url in sitewide_patron_web_client_urls.split("|"):
-                    domain = get_domain(url)
-                    if domain:
-                        patron_web_domains.add(domain)
-
-            domains = self._db.execute(
-                select(DiscoveryServiceRegistration.web_client).where(
-                    DiscoveryServiceRegistration.web_client != None
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            message_prefix="load_settings - per-library lanes, custom indexes, api",
+        ):
+            for library in libraries:
+                new_top_level_lanes[library.id] = load_lanes(self._db, library)
+                new_custom_index_views[library.id] = CustomIndexView.for_library(
+                    library
                 )
-            ).all()
-            for row in domains:
-                patron_web_domains.add(get_domain(row.web_client))
+                new_circulation_apis[library.id] = self.setup_circulation(
+                    library, self.analytics
+                )
 
-            self.patron_web_domains = patron_web_domains
-            self.setup_configuration_dependent_controllers()
-            authentication_document_cache_time = int(
-                ConfigurationSetting.sitewide(
-                    self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
-                ).value_or_default(3600)
+        self.top_level_lanes = new_top_level_lanes
+        self.circulation_apis = new_circulation_apis
+        self.custom_index_views = new_custom_index_views
+
+        # Assemble the list of patron web client domains from individual
+        # library registration settings as well as a sitewide setting.
+        patron_web_domains = set()
+
+        def get_domain(url):
+            url = url.strip()
+            if url == "*":
+                return url
+            (
+                scheme,
+                netloc,
+                path,
+                parameters,
+                query,
+                fragment,
+            ) = urllib.parse.urlparse(url)
+            if scheme and netloc:
+                return scheme + "://" + netloc
+            else:
+                return None
+
+        sitewide_patron_web_client_urls = ConfigurationSetting.sitewide(
+            self._db, Configuration.PATRON_WEB_HOSTNAMES
+        ).value
+        if sitewide_patron_web_client_urls:
+            for url in sitewide_patron_web_client_urls.split("|"):
+                domain = get_domain(url)
+                if domain:
+                    patron_web_domains.add(domain)
+
+        domains = self._db.execute(
+            select(DiscoveryServiceRegistration.web_client).where(
+                DiscoveryServiceRegistration.web_client != None
             )
-            self.authentication_for_opds_documents = ExpiringDict(
-                max_len=1000, max_age_seconds=authentication_document_cache_time
-            )
+        ).all()
+        for row in domains:
+            patron_web_domains.add(get_domain(row.web_client))
+
+        self.patron_web_domains = patron_web_domains
+        self.setup_configuration_dependent_controllers()
+        authentication_document_cache_time = int(
+            ConfigurationSetting.sitewide(
+                self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
+            ).value_or_default(3600)
+        )
+        self.authentication_for_opds_documents = ExpiringDict(
+            max_len=1000, max_age_seconds=authentication_document_cache_time
+        )
 
     @property
     def external_search(self):
