@@ -2,7 +2,7 @@ import logging
 import sys
 from io import StringIO
 from multiprocessing import Process
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
@@ -11,15 +11,19 @@ from sqlalchemy.engine import Engine
 from core.model import SessionManager
 from scripts import InstanceInitializationScript
 from tests.fixtures.database import ApplicationFixture
+from tests.fixtures.services import mock_services_container
 
 
 def _run_script() -> None:
     try:
-        # Run the script, capturing the log output
-        script = InstanceInitializationScript()
+        # Capturing the log output
         stream = StringIO()
         logging.basicConfig(stream=stream, level=logging.INFO, force=True)
-        script.run()
+
+        mock_services = MagicMock()
+        with mock_services_container(mock_services):
+            script = InstanceInitializationScript()
+            script.run()
 
         # Set our exit code to the number of upgrades we ran
         sys.exit(stream.getvalue().count("Running upgrade"))
