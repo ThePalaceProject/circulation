@@ -1,6 +1,6 @@
 import threading
+from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, Generator, List, Optional, Tuple
 
 import pytest
 
@@ -10,7 +10,7 @@ from core.util.log import LoggerMixin
 class MockAPIServerRequest:
     """A request made to a server."""
 
-    headers: Dict[str, str]
+    headers: dict[str, str]
     payload: bytes
     method: str
     path: str
@@ -27,7 +27,7 @@ class MockAPIServerResponse:
 
     status_code: int
     content: bytes
-    headers: Dict[str, str]
+    headers: dict[str, str]
     close_obnoxiously: bool
 
     def __init__(self) -> None:
@@ -100,14 +100,14 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
     def version_string(self) -> str:
         return ""
 
-    def date_time_string(self, timestamp: Optional[int] = 0) -> str:
+    def date_time_string(self, timestamp: int | None = 0) -> str:
         return "Sat, 1 January 2000 00:00:00 UTC"
 
 
 class MockAPIInternalServer(HTTPServer):
     mock_api_server: "MockAPIServer"
 
-    def __init__(self, server_address: Tuple[str, int], bind_and_activate: bool):
+    def __init__(self, server_address: tuple[str, int], bind_and_activate: bool):
         super().__init__(server_address, MockAPIServerRequestHandler, bind_and_activate)
         self.allow_reuse_address = True
 
@@ -119,8 +119,8 @@ class MockAPIServer(LoggerMixin):
     _port: int
     _server: HTTPServer
     _server_thread: threading.Thread
-    _responses: Dict[str, Dict[str, List[MockAPIServerResponse]]]
-    _requests: List[MockAPIServerRequest]
+    _responses: dict[str, dict[str, list[MockAPIServerResponse]]]
+    _requests: list[MockAPIServerRequest]
 
     def __init__(self, address: str, port: int):
         self._address = address
@@ -156,7 +156,7 @@ class MockAPIServer(LoggerMixin):
 
     def dequeue_response(
         self, request: MockAPIServerRequest
-    ) -> Optional[MockAPIServerResponse]:
+    ) -> MockAPIServerResponse | None:
         self._requests.append(request)
         _by_method = self._responses.get(request.method) or {}
         _by_path = _by_method.get(request.path) or []
@@ -173,7 +173,7 @@ class MockAPIServer(LoggerMixin):
     def url(self, path: str) -> str:
         return f"http://{self.address()}:{self.port()}{path}"
 
-    def requests(self) -> List[MockAPIServerRequest]:
+    def requests(self) -> list[MockAPIServerRequest]:
         return list(self._requests)
 
 

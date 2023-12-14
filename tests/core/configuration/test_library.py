@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional
 
 import pytest
 
@@ -31,8 +31,8 @@ def library_settings() -> LibrarySettingsFixture:
     ],
 )
 def test_validate_language_codes(
-    languages: Optional[List[str]],
-    expected: Optional[List[str]],
+    languages: list[str] | None,
+    expected: list[str] | None,
     library_settings: LibrarySettingsFixture,
 ) -> None:
     settings = library_settings(large_collection_languages=languages)

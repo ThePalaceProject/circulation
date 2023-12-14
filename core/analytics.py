@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from api.s3_analytics_provider import S3AnalyticsProvider
 from core.local_analytics_provider import LocalAnalyticsProvider
@@ -17,7 +17,7 @@ class Analytics(LoggerMixin):
     def __init__(
         self,
         s3_analytics_enabled: bool = False,
-        s3_service: Optional[S3Service] = None,
+        s3_service: S3Service | None = None,
     ) -> None:
         self.providers = [LocalAnalyticsProvider()]
 

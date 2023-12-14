@@ -1,11 +1,8 @@
-from typing import Optional
-
-
 class BaseError(Exception):
     """Base class for all errors"""
 
     def __init__(
-        self, message: Optional[str] = None, inner_exception: Optional[Exception] = None
+        self, message: str | None = None, inner_exception: Exception | None = None
     ):
         """Initializes a new instance of BaseError class
 
@@ -23,7 +20,7 @@ class BaseError(Exception):
         return hash(str(self))
 
     @property
-    def inner_exception(self) -> Optional[str]:
+    def inner_exception(self) -> str | None:
         """Returns an inner exception
 
         :return: Inner exception

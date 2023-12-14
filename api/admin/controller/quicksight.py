@@ -1,5 +1,4 @@
 import logging
-from typing import Dict
 
 import boto3
 import flask
@@ -20,7 +19,7 @@ from core.util.problem_detail import ProblemError
 
 
 class QuickSightController(CirculationManagerController):
-    def generate_quicksight_url(self, dashboard_name) -> Dict:
+    def generate_quicksight_url(self, dashboard_name) -> dict:
         log = logging.getLogger(self.__class__.__name__)
         admin: Admin = getattr(flask.request, "admin")
         request_data = QuicksightGenerateUrlRequest(**flask.request.args)

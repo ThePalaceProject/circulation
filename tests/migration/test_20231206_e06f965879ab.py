@@ -1,4 +1,3 @@
-from typing import Optional, Tuple
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -21,10 +20,10 @@ class CreateCachedMarcFile:
     def __call__(
         self,
         connection: Connection,
-        url: Optional[str],
-        library_id: Optional[int] = None,
-        lane_id: Optional[int] = None,
-    ) -> Tuple[int, int]:
+        url: str | None,
+        library_id: int | None = None,
+        lane_id: int | None = None,
+    ) -> tuple[int, int]:
         if library_id is None:
             library_id = self.create_library(connection)
 
@@ -43,7 +42,7 @@ class CreateCachedMarcFile:
 
         return representation_id, file_id
 
-    def representation(self, connection: Connection, url: Optional[str]) -> int:
+    def representation(self, connection: Connection, url: str | None) -> int:
         row = connection.execute(
             "INSERT INTO representations (media_type, url) "
             "VALUES ('application/marc', %s) returning id",

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from flask_babel import lazy_gettext as _
 
 from api.problem_details import *
@@ -143,7 +141,7 @@ class LimitReached(CirculationException):
     """
 
     status_code = 403
-    BASE_DOC: Optional[ProblemDetail] = None
+    BASE_DOC: ProblemDetail | None = None
     MESSAGE_WITH_LIMIT = None
 
     def __init__(self, message=None, debug_info=None, limit=None):

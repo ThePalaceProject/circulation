@@ -1,6 +1,5 @@
 import datetime
 from collections import defaultdict
-from typing import List
 from unittest.mock import create_autospec, patch
 
 import dateutil
@@ -712,7 +711,7 @@ class TestLibraryAnnotator:
         def get_link_by_rel(rel):
             if isinstance(entry, WorkEntry):
                 links = entry.computed.other_links + entry.computed.acquisition_links
-            elif isinstance(entry, List):
+            elif isinstance(entry, list):
                 links = [e.link for e in entry]
             else:
                 links = [entry.link]

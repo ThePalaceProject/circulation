@@ -5,7 +5,7 @@ import datetime
 import logging
 import sys
 import uuid
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import jwt
 from jwt.algorithms import HMACAlgorithm
@@ -99,9 +99,7 @@ class AuthdataUtility:
         self.short_token_signing_key = self.short_token_signer.prepare_key(self.secret)
 
     @classmethod
-    def from_config(
-        cls, library: Library, _db: Optional[Session] = None
-    ) -> Optional[Self]:
+    def from_config(cls, library: Library, _db: Session | None = None) -> Self | None:
         """Initialize an AuthdataUtility from site configuration.
 
         The library must be successfully registered with a discovery
@@ -173,7 +171,7 @@ class AuthdataUtility:
             )
         )
 
-    def encode(self, patron_identifier: Optional[str]) -> Tuple[str, bytes]:
+    def encode(self, patron_identifier: str | None) -> tuple[str, bytes]:
         """Generate an authdata JWT suitable for putting in an OPDS feed, where
         it can be picked up by a client and sent to the delegation
         authority to look up an Adobe ID.
@@ -193,12 +191,12 @@ class AuthdataUtility:
     def _encode(
         self,
         iss: str,
-        sub: Optional[str] = None,
-        iat: Optional[datetime.datetime] = None,
-        exp: Optional[datetime.datetime] = None,
+        sub: str | None = None,
+        iat: datetime.datetime | None = None,
+        exp: datetime.datetime | None = None,
     ) -> bytes:
         """Helper method split out separately for use in tests."""
-        payload: Dict[str, Any] = dict(iss=iss)  # Issuer
+        payload: dict[str, Any] = dict(iss=iss)  # Issuer
         if sub:
             payload["sub"] = sub  # Subject
         if iat:
@@ -213,7 +211,7 @@ class AuthdataUtility:
         )
 
     @classmethod
-    def adobe_base64_encode(cls, str_to_encode: Union[str, bytes]) -> str:
+    def adobe_base64_encode(cls, str_to_encode: str | bytes) -> str:
         """A modified base64 encoding that avoids triggering an Adobe bug.
 
         The bug seems to happen when the 'password' portion of a
@@ -232,7 +230,7 @@ class AuthdataUtility:
         encoded = str_to_decode.replace(":", "+").replace(";", "/").replace("@", "=")
         return base64.decodebytes(encoded.encode("utf-8"))
 
-    def decode(self, authdata: bytes) -> Tuple[str, str]:
+    def decode(self, authdata: bytes) -> tuple[str, str]:
         """Decode and verify an authdata JWT from one of the libraries managed
         by `secrets_by_library`.
 
@@ -266,7 +264,7 @@ class AuthdataUtility:
         # in the list.
         raise exceptions[-1]
 
-    def _decode(self, authdata: bytes) -> Tuple[str, str]:
+    def _decode(self, authdata: bytes) -> tuple[str, str]:
         # First, decode the authdata without checking the signature.
         authdata_str = authdata.decode("utf-8")
         decoded = jwt.decode(
@@ -295,7 +293,7 @@ class AuthdataUtility:
         return library_uri, decoded["sub"]
 
     @classmethod
-    def _adobe_patron_identifier(cls, patron: Patron) -> Optional[str]:
+    def _adobe_patron_identifier(cls, patron: Patron) -> str | None:
         """Take patron object and return identifier for Adobe ID purposes"""
         _db = Session.object_session(patron)
         internal = DataSource.lookup(_db, DataSource.INTERNAL_PROCESSING)
@@ -314,8 +312,8 @@ class AuthdataUtility:
         return patron_identifier.credential
 
     def short_client_token_for_patron(
-        self, patron_information: Union[Patron, str]
-    ) -> Tuple[str, str]:
+        self, patron_information: Patron | str
+    ) -> tuple[str, str]:
         """Generate short client token for patron, or for a patron's identifier
         for Adobe ID purposes"""
 
@@ -333,8 +331,8 @@ class AuthdataUtility:
         return utc_now()
 
     def encode_short_client_token(
-        self, patron_identifier: Optional[str], expires: Optional[Dict[str, int]] = None
-    ) -> Tuple[str, str]:
+        self, patron_identifier: str | None, expires: dict[str, int] | None = None
+    ) -> tuple[str, str]:
         """Generate a short client token suitable for putting in an OPDS feed,
         where it can be picked up by a client and sent to the
         delegation authority to look up an Adobe ID.
@@ -357,7 +355,7 @@ class AuthdataUtility:
         self,
         library_short_name: str,
         patron_identifier: str,
-        expires: Union[int, float],
+        expires: int | float,
     ) -> str:
         base = library_short_name + "|" + str(expires) + "|" + patron_identifier
         signature = self.short_token_signer.sign(
@@ -374,7 +372,7 @@ class AuthdataUtility:
             )
         return base + "|" + signature_encoded
 
-    def decode_short_client_token(self, token: str) -> Tuple[str, str]:
+    def decode_short_client_token(self, token: str) -> tuple[str, str]:
         """Attempt to interpret a 'username' and 'password' as a short
         client token identifying a patron of a specific library.
 
@@ -392,7 +390,7 @@ class AuthdataUtility:
 
     def decode_two_part_short_client_token(
         self, username: str, password: str
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Decode a short client token that has already been split into
         two parts.
         """
@@ -401,7 +399,7 @@ class AuthdataUtility:
 
     def _decode_short_client_token(
         self, token: str, supposed_signature: bytes
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Make sure a client token is properly formatted, correctly signed,
         and not expired.
         """

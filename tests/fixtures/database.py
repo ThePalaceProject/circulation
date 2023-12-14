@@ -7,8 +7,9 @@ import shutil
 import tempfile
 import time
 import uuid
+from collections.abc import Generator, Iterable
 from textwrap import dedent
-from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Any
 
 import pytest
 import sqlalchemy
@@ -98,7 +99,7 @@ class DatabaseFixture:
         self._connection = connection
 
     @staticmethod
-    def _get_database_connection() -> Tuple[Engine, Connection]:
+    def _get_database_connection() -> tuple[Engine, Connection]:
         url = Configuration.database_url()
         engine = SessionManager.engine(url)
         connection = engine.connect()
@@ -139,12 +140,12 @@ class DatabaseTransactionFixture:
     """A fixture representing a single transaction. The transaction is automatically rolled back."""
 
     _database: DatabaseFixture
-    _default_library: Optional[Library]
-    _default_collection: Optional[Collection]
+    _default_library: Library | None
+    _default_collection: Collection | None
     _session: Session
     _transaction: Transaction
     _counter: int
-    _isbns: List[str]
+    _isbns: list[str]
 
     def __init__(
         self, database: DatabaseFixture, session: Session, transaction: Transaction
@@ -240,9 +241,9 @@ class DatabaseTransactionFixture:
 
     def library(
         self,
-        name: Optional[str] = None,
-        short_name: Optional[str] = None,
-        settings: Optional[LibrarySettings] = None,
+        name: str | None = None,
+        short_name: str | None = None,
+        settings: LibrarySettings | None = None,
     ) -> Library:
         # Just a dummy key used for testing.
         key_string = """\
@@ -295,7 +296,7 @@ class DatabaseTransactionFixture:
         username=None,
         password=None,
         data_source_name=None,
-        settings: Dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
     ) -> Collection:
         name = name or self.fresh_str()
         collection, _ = Collection.by_name_and_protocol(self.session, name, protocol)
@@ -972,7 +973,7 @@ class IntegrationConfigurationFixture:
         self.db = db
 
     def __call__(
-        self, protocol: Optional[str], goal: Goals, settings_dict: Optional[dict] = None
+        self, protocol: str | None, goal: Goals, settings_dict: dict | None = None
     ) -> IntegrationConfiguration:
         integration, _ = create(
             self.db.session,
@@ -985,7 +986,7 @@ class IntegrationConfigurationFixture:
         return integration
 
     def discovery_service(
-        self, protocol: Optional[str] = None, url: Optional[str] = None
+        self, protocol: str | None = None, url: str | None = None
     ) -> IntegrationConfiguration:
         registry = DiscoveryRegistry()
         if protocol is None:
@@ -1019,7 +1020,7 @@ class IntegrationLibraryConfigurationFixture:
         self,
         library: Library,
         parent: IntegrationConfiguration,
-        settings_dict: Optional[dict] = None,
+        settings_dict: dict | None = None,
     ) -> IntegrationLibraryConfiguration:
         settings_dict = settings_dict or {}
         integration, _ = create(

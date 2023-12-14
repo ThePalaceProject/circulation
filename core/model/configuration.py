@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
@@ -162,14 +162,14 @@ class ExternalIntegration(Base):
 
     # Any additional configuration information goes into
     # ConfigurationSettings.
-    settings: Mapped[List[ConfigurationSetting]] = relationship(
+    settings: Mapped[list[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         back_populates="external_integration",
         cascade="all, delete",
         uselist=True,
     )
 
-    libraries: Mapped[List[Library]] = relationship(
+    libraries: Mapped[list[Library]] = relationship(
         "Library",
         back_populates="integrations",
         secondary=lambda: externalintegrations_libraries,

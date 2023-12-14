@@ -5,7 +5,8 @@ import datetime
 import json
 import uuid
 from abc import ABC
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type, TypeVar
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar
 
 import dateutil
 from dependency_injector.wiring import Provide, inject
@@ -101,7 +102,7 @@ class ODLSettings(OPDSImporterSettings):
         ),
     )
 
-    default_reservation_period: Optional[PositiveInt] = FormField(
+    default_reservation_period: PositiveInt | None = FormField(
         default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
         form=ConfigurationFormItem(
             label=_("Default Reservation Period (in Days)"),
@@ -226,7 +227,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
-        self._hasher_instance: Optional[Hasher] = None
+        self._hasher_instance: Hasher | None = None
 
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
@@ -241,7 +242,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
         return self._hasher_instance
 
-    def _get(self, url: str, headers: Optional[Dict[str, str]] = None) -> Response:
+    def _get(self, url: str, headers: dict[str, str] | None = None) -> Response:
         """Make a normal HTTP request, but include an authentication
         header with the credentials for the collection.
         """
@@ -258,7 +259,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         """Wrapper around flask's url_for to be overridden for tests."""
         return url_for(*args, **kwargs)
 
-    def get_license_status_document(self, loan: Loan) -> Dict[str, Any]:
+    def get_license_status_document(self, loan: Loan) -> dict[str, Any]:
         """Get the License Status Document for a loan.
 
         For a new loan, create a local loan with no external identifier and
@@ -422,7 +423,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         )
 
     def _checkout(
-        self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
+        self, patron: Patron, licensepool: LicensePool, hold: Hold | None = None
     ) -> Loan:
         _db = Session.object_session(patron)
 
@@ -510,9 +511,9 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
     @staticmethod
     def _find_content_link_and_type(
-        links: List[Dict[str, str]],
-        drm_scheme: Optional[str],
-    ) -> Tuple[Optional[str], Optional[str]]:
+        links: list[dict[str, str]],
+        drm_scheme: str | None,
+    ) -> tuple[str | None, str | None]:
         """Find a content link with the type information corresponding to the selected delivery mechanism.
 
         :param links: List of dict-like objects containing information about available links in the LCP license file
@@ -741,7 +742,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        notification_email_address: Optional[str],
+        notification_email_address: str | None,
     ) -> HoldInfo:
         """Create a new hold."""
         return self._place_hold(patron, licensepool)
@@ -813,7 +814,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         self.update_licensepool(licensepool)
         return True
 
-    def patron_activity(self, patron: Patron, pin: str) -> List[LoanInfo | HoldInfo]:
+    def patron_activity(self, patron: Patron, pin: str) -> list[LoanInfo | HoldInfo]:
         """Look up non-expired loans for this collection in the database."""
         _db = Session.object_session(patron)
         loans = (
@@ -865,9 +866,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
             for hold in remaining_holds
         ]
 
-    def update_loan(
-        self, loan: Loan, status_doc: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def update_loan(self, loan: Loan, status_doc: dict[str, Any] | None = None) -> None:
         """Check a loan's status, and if it is no longer active, delete the loan
         and update its pool's availability.
         """
@@ -919,11 +918,11 @@ class ODLAPI(
     """
 
     @classmethod
-    def settings_class(cls) -> Type[ODLSettings]:
+    def settings_class(cls) -> type[ODLSettings]:
         return ODLSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
+    def library_settings_class(cls) -> type[ODLLibrarySettings]:
         return ODLLibrarySettings
 
     @classmethod
@@ -957,8 +956,8 @@ class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
 
     @classmethod
     def fetch_license_info(
-        cls, document_link: str, do_get: Callable[..., Tuple[int, Any, bytes]]
-    ) -> Optional[Dict[str, Any]]:
+        cls, document_link: str, do_get: Callable[..., tuple[int, Any, bytes]]
+    ) -> dict[str, Any] | None:
         status_code, _, response = do_get(document_link, headers={})
         if status_code in (200, 201):
             license_info_document = json.loads(response)
@@ -973,10 +972,10 @@ class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
     @classmethod
     def parse_license_info(
         cls,
-        license_info_document: Dict[str, Any],
+        license_info_document: dict[str, Any],
         license_info_link: str,
-        checkout_link: Optional[str],
-    ) -> Optional[LicenseData]:
+        checkout_link: str | None,
+    ) -> LicenseData | None:
         """Check the license's attributes passed as parameters:
         - if they're correct, turn them into a LicenseData object
         - otherwise, return a None
@@ -1061,12 +1060,12 @@ class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
     def get_license_data(
         cls,
         license_info_link: str,
-        checkout_link: Optional[str],
-        feed_license_identifier: Optional[str],
-        feed_license_expires: Optional[datetime.datetime],
-        feed_concurrency: Optional[int],
-        do_get: Callable[..., Tuple[int, Any, bytes]],
-    ) -> Optional[LicenseData]:
+        checkout_link: str | None,
+        feed_license_identifier: str | None,
+        feed_license_expires: datetime.datetime | None,
+        feed_concurrency: int | None,
+        do_get: Callable[..., tuple[int, Any, bytes]],
+    ) -> LicenseData | None:
         license_info_document = cls.fetch_license_info(license_info_link, do_get)
 
         if not license_info_document:
@@ -1127,7 +1126,7 @@ class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
     LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
 
     @classmethod
-    def settings_class(cls) -> Type[ODLSettings]:
+    def settings_class(cls) -> type[ODLSettings]:
         return ODLSettings
 
     @classmethod
@@ -1135,9 +1134,9 @@ class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
         cls,
         parser: OPDSXMLParser,
         entry_tag: Element,
-        feed_url: Optional[str] = None,
-        do_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
-    ) -> Dict[str, Any]:
+        feed_url: str | None = None,
+        do_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+    ) -> dict[str, Any]:
         do_get = do_get or Representation.cautious_http_get
 
         # TODO: Review for consistency when updated ODL spec is ready.
@@ -1158,7 +1157,7 @@ class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
             # By default, dcterms:format includes the media type of a
             # DRM-free resource.
             content_type = full_content_type
-            drm_schemes: List[str | None] = []
+            drm_schemes: list[str | None] = []
 
             # But it may instead describe an audiobook protected with
             # the Feedbooks access-control scheme.
@@ -1259,7 +1258,7 @@ class ODLImportMonitor(OPDSImportMonitor):
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[OPDSImporter],
+        import_class: type[OPDSImporter],
         **import_class_kwargs: Any,
     ):
         # Always force reimport ODL collections to get up to date license information
@@ -1279,7 +1278,7 @@ class ODLHoldReaper(CollectionMonitor):
         self,
         _db: Session,
         collection: Collection,
-        api: Optional[ODLAPI] = None,
+        api: ODLAPI | None = None,
         **kwargs: Any,
     ):
         super().__init__(_db, collection, **kwargs)

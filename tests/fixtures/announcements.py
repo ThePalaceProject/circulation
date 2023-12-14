@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 import pytest
 from sqlalchemy.orm import Session
@@ -22,10 +21,10 @@ class AnnouncementFixture:
     def create_announcement(
         self,
         db: Session,
-        start: Optional[datetime.date] = None,
-        finish: Optional[datetime.date] = None,
+        start: datetime.date | None = None,
+        finish: datetime.date | None = None,
         content: str = "test",
-        library: Optional[Library] = None,
+        library: Library | None = None,
     ) -> Announcement:
         if start is None:
             start = self.today
@@ -40,7 +39,7 @@ class AnnouncementFixture:
         return announcement
 
     def active_announcement(
-        self, db: Session, library: Optional[Library] = None
+        self, db: Session, library: Library | None = None
     ) -> Announcement:
         # This announcement is active.
         return self.create_announcement(
@@ -52,7 +51,7 @@ class AnnouncementFixture:
         )
 
     def expired_announcement(
-        self, db: Session, library: Optional[Library] = None
+        self, db: Session, library: Library | None = None
     ) -> Announcement:
         # This announcement expired yesterday.
         return self.create_announcement(
@@ -64,7 +63,7 @@ class AnnouncementFixture:
         )
 
     def forthcoming_announcement(
-        self, db: Session, library: Optional[Library] = None
+        self, db: Session, library: Library | None = None
     ) -> Announcement:
         # This announcement should be displayed starting tomorrow.
         return self.create_announcement(

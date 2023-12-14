@@ -7,7 +7,7 @@ import logging
 import os
 import random
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
@@ -2303,7 +2303,7 @@ class TestOverdriveAPICredentials:
                 Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockAPI}
             ),
         )
-        od_apis: Dict[str, OverdriveAPI] = {
+        od_apis: dict[str, OverdriveAPI] = {
             api.collection.name: api  # type: ignore[union-attr,misc]
             for api in list(circulation.api_for_collection.values())
         }
@@ -2452,7 +2452,7 @@ class TestExtractData:
         error_url = "http://error/"
 
         # Here we don't even know the name of the format.
-        empty: Dict[str, Any] = dict()
+        empty: dict[str, Any] = dict()
         with pytest.raises(IOError) as excinfo:
             m(empty, error_url)
         assert "No linkTemplates for format (unknown)" in str(excinfo.value)
@@ -3001,7 +3001,7 @@ class TestOverdriveCirculationMonitor:
         db = overdrive_api_fixture.db
 
         class MockAPI:
-            tries: Dict[str, int] = {}
+            tries: dict[str, int] = {}
 
             def __init__(self, *ignore, **kwignore):
                 self.licensepools = []
@@ -3066,7 +3066,7 @@ class TestOverdriveCirculationMonitor:
         db = overdrive_api_fixture.db
 
         class MockAPI:
-            tries: Dict[str, int] = {}
+            tries: dict[str, int] = {}
 
             def __init__(self, *ignore, **kwignore):
                 self.licensepools = []

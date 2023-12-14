@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import Field, validator
 
@@ -44,13 +44,13 @@ class PlaytimeTimeEntry(CustomBaseModel):
 
 
 class PlaytimeEntriesPost(CustomBaseModel):
-    book_id: Optional[str] = Field(
+    book_id: str | None = Field(
         description="An identifier of a book (currently ignored)."
     )
-    library_id: Optional[str] = Field(
+    library_id: str | None = Field(
         description="And identifier for the library (currently ignored)."
     )
-    time_entries: List[PlaytimeTimeEntry] = Field(description="A List of time entries")
+    time_entries: list[PlaytimeTimeEntry] = Field(description="A List of time entries")
 
 
 class PlaytimeEntriesPostSummary(CustomBaseModel):
@@ -60,7 +60,7 @@ class PlaytimeEntriesPostSummary(CustomBaseModel):
 
 
 class PlaytimeEntriesPostResponse(CustomBaseModel):
-    responses: List[Dict[str, Any]] = Field(
+    responses: list[dict[str, Any]] = Field(
         description="Responses as part of the multi-reponse"
     )
     summary: PlaytimeEntriesPostSummary = Field(

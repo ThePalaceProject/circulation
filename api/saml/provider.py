@@ -1,5 +1,3 @@
-from typing import Optional, Type
-
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
@@ -45,7 +43,7 @@ class SAMLWebSSOAuthenticationProvider(
         integration_id: int,
         settings: SAMLWebSSOAuthSettings,
         library_settings: SAMLWebSSOAuthLibrarySettings,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics | None = None,
     ):
         """Initializes a new instance of SAMLAuthenticationProvider class"""
         super().__init__(
@@ -76,14 +74,14 @@ class SAMLWebSSOAuthenticationProvider(
         return True
 
     @classmethod
-    def settings_class(cls) -> Type[SAMLWebSSOAuthSettings]:
+    def settings_class(cls) -> type[SAMLWebSSOAuthSettings]:
         return SAMLWebSSOAuthSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[SAMLWebSSOAuthLibrarySettings]:
+    def library_settings_class(cls) -> type[SAMLWebSSOAuthLibrarySettings]:
         return SAMLWebSSOAuthLibrarySettings
 
-    def get_credential_from_header(self, auth: Authorization) -> Optional[str]:
+    def get_credential_from_header(self, auth: Authorization) -> str | None:
         # We cannot extract the credential from the header, so we just return None
         return None
 

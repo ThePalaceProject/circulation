@@ -4,7 +4,7 @@ import datetime
 import logging
 from collections import defaultdict
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy.orm import Session, joinedload
@@ -32,7 +32,7 @@ from core.util.opds_writer import AtomFeed, OPDSFeed
 
 class ToFeedEntry:
     @classmethod
-    def authors(cls, edition: Edition) -> Dict[str, List[Author]]:
+    def authors(cls, edition: Edition) -> dict[str, list[Author]]:
         """Create one or more author (and contributor) objects for the given
         Work.
 
@@ -41,8 +41,8 @@ class ToFeedEntry:
             Contributions.
         :return: A dict with "authors" and "contributors" as a list of Author objects
         """
-        authors: Dict[str, List[Author]] = {"authors": [], "contributors": []}
-        state: Dict[Optional[str], Set[str]] = defaultdict(set)
+        authors: dict[str, list[Author]] = {"authors": [], "contributors": []}
+        state: dict[str | None, set[str]] = defaultdict(set)
         for contribution in edition.contributions:
             info = cls.contributor(contribution, state)
             if info is None:
@@ -63,8 +63,8 @@ class ToFeedEntry:
 
     @classmethod
     def contributor(
-        cls, contribution: Contribution, state: Dict[Optional[str], Set[str]]
-    ) -> Optional[Tuple[str, Author]]:
+        cls, contribution: Contribution, state: dict[str | None, set[str]]
+    ) -> tuple[str, Author] | None:
         """Build an author (or contributor) object for a Contribution.
 
         :param contribution: A Contribution.
@@ -101,7 +101,7 @@ class ToFeedEntry:
             return None
 
         # Okay, we're creating a tag.
-        properties: Dict[str, Any] = dict()
+        properties: dict[str, Any] = dict()
         if marc_role:
             properties["role"] = marc_role
         entry = Author(name=name, **properties)
@@ -113,8 +113,8 @@ class ToFeedEntry:
 
     @classmethod
     def series(
-        cls, series_name: Optional[str], series_position: Optional[int] | Optional[str]
-    ) -> Optional[FeedEntryType]:
+        cls, series_name: str | None, series_position: int | None | str | None
+    ) -> FeedEntryType | None:
         """Generate a FeedEntryType object for the given name and position."""
         if not series_name:
             return None
@@ -126,7 +126,7 @@ class ToFeedEntry:
         return series
 
     @classmethod
-    def rating(cls, type_uri: Optional[str], value: float | Decimal) -> FeedEntryType:
+    def rating(cls, type_uri: str | None, value: float | Decimal) -> FeedEntryType:
         """Generate a FeedEntryType object for the given type and value."""
         entry = FeedEntryType.create(
             **dict(ratingValue="%.4f" % value, additionalType=type_uri)
@@ -134,7 +134,7 @@ class ToFeedEntry:
         return entry
 
     @classmethod
-    def samples(cls, edition: Optional[Edition]) -> list[Hyperlink]:
+    def samples(cls, edition: Edition | None) -> list[Hyperlink]:
         if not edition:
             return []
         _db = Session.object_session(edition)
@@ -150,7 +150,7 @@ class ToFeedEntry:
         return links
 
     @classmethod
-    def categories(cls, work: Work) -> Dict[str, List[Dict[str, str]]]:
+    def categories(cls, work: Work) -> dict[str, list[dict[str, str]]]:
         """Return all relevant classifications of this work.
 
         :return: A dictionary mapping 'scheme' URLs to dictionaries of
@@ -187,7 +187,7 @@ class ToFeedEntry:
         # Add the appeals as a category of schema
         # http://librarysimplified.org/terms/appeal
         schema_url = AtomFeed.SIMPLIFIED_NS + "appeals/"
-        appeals: List[Dict[str, Any]] = []
+        appeals: list[dict[str, Any]] = []
         categories[schema_url] = appeals
         for name, value in (
             (Work.CHARACTER_APPEAL, work.appeal_character),
@@ -196,7 +196,7 @@ class ToFeedEntry:
             (Work.STORY_APPEAL, work.appeal_story),
         ):
             if value:
-                appeal: Dict[str, Any] = dict(term=schema_url + name, label=name)
+                appeal: dict[str, Any] = dict(term=schema_url + name, label=name)
                 weight_field = "ratingValue"
                 appeal[weight_field] = value
                 appeals.append(appeal)
@@ -222,7 +222,7 @@ class ToFeedEntry:
         return categories
 
     @classmethod
-    def content(cls, work: Optional[Work]) -> str:
+    def content(cls, work: Work | None) -> str:
         """Return an HTML summary of this work."""
         summary = ""
         if work:
@@ -243,7 +243,7 @@ class ToFeedEntry:
 
 class Annotator(ToFeedEntry):
     def annotate_work_entry(
-        self, entry: WorkEntry, updated: Optional[datetime.datetime] = None
+        self, entry: WorkEntry, updated: datetime.datetime | None = None
     ) -> None:
         """
         Any data that the serializer must consider while generating an "entry"

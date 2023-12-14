@@ -1,19 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
-)
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
 import webpub_manifest_parser.opds2.ast as opds2_ast
@@ -209,7 +200,7 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
         ),
     )
 
-    ignored_identifier_types: List[str] = FormField(
+    ignored_identifier_types: list[str] = FormField(
         alias="IGNORED_IDENTIFIER_TYPE",
         default=[],
         form=ConfigurationFormItem(
@@ -234,11 +225,11 @@ class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
 
 class OPDS2API(BaseOPDSAPI):
     @classmethod
-    def settings_class(cls) -> Type[OPDS2ImporterSettings]:
+    def settings_class(cls) -> type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[OPDS2ImporterLibrarySettings]:
+    def library_settings_class(cls) -> type[OPDS2ImporterLibrarySettings]:
         return OPDS2ImporterLibrarySettings
 
     @classmethod
@@ -336,7 +327,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
     NEXT_LINK_RELATION: str = "next"
 
     @classmethod
-    def settings_class(cls) -> Type[OPDS2ImporterSettings]:
+    def settings_class(cls) -> type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
 
     def __init__(
@@ -345,7 +336,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str | None = None,
-        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -463,7 +454,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         return contributor_metadata_list
 
     def _extract_link(
-        self, link: Link, feed_self_url: str, default_link_rel: Optional[str] = None
+        self, link: Link, feed_self_url: str, default_link_rel: str | None = None
     ) -> LinkData:
         """Extract a LinkData object from webpub-manifest-parser's link.
 
@@ -750,7 +741,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         self,
         feed: opds2_ast.OPDS2Feed,
         publication: opds2_ast.OPDS2Publication,
-        data_source_name: Optional[str],
+        data_source_name: str | None,
     ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
@@ -1060,7 +1051,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
     def extract_last_update_dates(
         self, feed: str | opds2_ast.OPDS2Feed
-    ) -> list[tuple[Optional[str], Optional[datetime]]]:
+    ) -> list[tuple[str | None, datetime | None]]:
         """Extract last update date of the feed.
 
         :param feed: OPDS 2.0 feed
@@ -1150,7 +1141,7 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
     MEDIA_TYPE = OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
 
     def _verify_media_type(
-        self, url: str, status_code: int, headers: Dict[str, str], feed: bytes
+        self, url: str, status_code: int, headers: dict[str, str], feed: bytes
     ) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.

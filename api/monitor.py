@@ -1,5 +1,3 @@
-from typing import Type
-
 from sqlalchemy import and_, or_
 
 from api.odl import ODLAPI
@@ -56,7 +54,7 @@ class LoanlikeReaperMonitor(ReaperMonitor):
 class LoanReaper(LoanlikeReaperMonitor):
     """Remove expired and abandoned loans from the database."""
 
-    MODEL_CLASS: Type[Loan] = Loan
+    MODEL_CLASS: type[Loan] = Loan
     MAX_AGE = 90
 
     @property

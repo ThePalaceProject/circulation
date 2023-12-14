@@ -5,9 +5,10 @@ import logging
 import sys
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from threading import Thread
 from types import TracebackType
-from typing import Any, Dict, Iterable, List, Literal, Tuple, Type, TypeVar
+from typing import Any, Literal, TypeVar
 
 import flask
 from flask import Response
@@ -536,8 +537,8 @@ class CirculationInternalFormatsMixin:
     # For instance, the combination ("application/epub+zip",
     # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
     # is called "ebook-epub-adobe" in Overdrive.
-    delivery_mechanism_to_internal_format: Dict[
-        Tuple[Optional[str], Optional[str]], str
+    delivery_mechanism_to_internal_format: dict[
+        tuple[Optional[str], Optional[str]], str
     ] = {}
 
     def internal_format(self, delivery_mechanism: LicensePoolDeliveryMechanism) -> str:
@@ -909,7 +910,7 @@ class CirculationAPI:
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
         hold_notification_email: Optional[str] = None,
-    ) -> Tuple[Optional[Loan], Optional[Hold], bool]:
+    ) -> tuple[Optional[Loan], Optional[Hold], bool]:
         """Either borrow a book or put it on hold. Don't worry about fulfilling
         the loan yet.
 
@@ -1446,7 +1447,7 @@ class CirculationAPI:
 
     def patron_activity(
         self, patron: Patron, pin: str
-    ) -> Tuple[List[LoanInfo], List[HoldInfo], bool]:
+    ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
         """Return a record of the patron's current activity
         vis-a-vis all relevant external loan sources.
 
@@ -1471,9 +1472,9 @@ class CirculationAPI:
                 self.pin = pin
                 self.activity: Optional[Iterable[LoanInfo | HoldInfo]] = None
                 self.exception: Optional[Exception] = None
-                self.trace: Tuple[
-                    Type[BaseException], BaseException, TracebackType
-                ] | Tuple[None, None, None] | None = None
+                self.trace: tuple[
+                    type[BaseException], BaseException, TracebackType
+                ] | tuple[None, None, None] | None = None
                 super().__init__()
 
             def run(self) -> None:
@@ -1506,8 +1507,8 @@ class CirculationAPI:
             thread.start()
         for thread in threads:
             thread.join()
-        loans: List[LoanInfo] = []
-        holds: List[HoldInfo] = []
+        loans: list[LoanInfo] = []
+        holds: list[HoldInfo] = []
         complete = True
         for thread in threads:
             if thread.exception:
@@ -1556,7 +1557,7 @@ class CirculationAPI:
 
     def sync_bookshelf(
         self, patron: Patron, pin: str, force: bool = False
-    ) -> Tuple[List[Loan] | Query[Loan], List[Hold] | Query[Hold]]:
+    ) -> tuple[list[Loan] | Query[Loan], list[Hold] | Query[Hold]]:
         """Sync our internal model of a patron's bookshelf with any external
         vendors that provide books to the patron's library.
 

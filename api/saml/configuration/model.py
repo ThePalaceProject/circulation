@@ -1,7 +1,8 @@
 import html
 from datetime import datetime
+from re import Pattern
 from threading import Lock
-from typing import Any, Dict, List, Optional, Pattern
+from typing import Any
 
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
@@ -118,7 +119,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
         alias="sp_private_key",
     )
-    federated_identity_provider_entity_ids: Optional[List[str]] = FormField(
+    federated_identity_provider_entity_ids: list[str] | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="List of Federated IdPs",
@@ -148,7 +149,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
         alias="saml_patron_id_use_name_id",
     )
-    patron_id_attributes: Optional[List[str]] = FormField(
+    patron_id_attributes: list[str] | None = FormField(
         [
             SAMLAttributeType.eduPersonUniqueId.name,
             SAMLAttributeType.eduPersonTargetedID.name,
@@ -170,7 +171,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         alias="saml_patron_id_attributes",
         format="narrow",
     )
-    patron_id_regular_expression: Optional[Pattern] = FormField(
+    patron_id_regular_expression: Pattern | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Patron ID: Regular expression",
@@ -194,7 +195,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
         alias="saml_patron_id_regular_expression",
     )
-    non_federated_identity_provider_xml_metadata: Optional[str] = FormField(
+    non_federated_identity_provider_xml_metadata: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Identity Provider's XML metadata",
@@ -208,7 +209,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
         alias="idp_xml_metadata",
     )
-    session_lifetime: Optional[PositiveInt] = FormField(
+    session_lifetime: PositiveInt | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Session Lifetime",
@@ -226,7 +227,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         ),
         alias="saml_session_lifetime",
     )
-    filter_expression: Optional[str] = FormField(
+    filter_expression: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Filter Expression",
@@ -392,17 +393,17 @@ class SAMLOneLoginConfiguration:
         :param configuration: Configuration object containing SAML metadata
         """
         self._configuration = configuration
-        self._service_provider_loaded: Optional[SAMLServiceProviderMetadata] = None
-        self._service_provider_settings: Optional[Dict[str, Any]] = None
-        self._identity_providers_loaded: Optional[
-            List[SAMLIdentityProviderMetadata]
-        ] = None
-        self._identity_providers_settings: Dict[str, Dict[str, Any]] = {}
+        self._service_provider_loaded: SAMLServiceProviderMetadata | None = None
+        self._service_provider_settings: dict[str, Any] | None = None
+        self._identity_providers_loaded: None | (
+            list[SAMLIdentityProviderMetadata]
+        ) = None
+        self._identity_providers_settings: dict[str, dict[str, Any]] = {}
         self._metadata_parser = SAMLMetadataParser()
 
     def _get_federated_identity_providers(
         self, db: Session
-    ) -> List[SAMLFederatedIdentityProvider]:
+    ) -> list[SAMLFederatedIdentityProvider]:
         """Return a list of federated IdPs corresponding to the entity IDs selected by the admin.
 
         :param db: Database session
@@ -424,7 +425,7 @@ class SAMLOneLoginConfiguration:
 
     def _load_identity_providers(
         self, db: Session
-    ) -> List[SAMLIdentityProviderMetadata]:
+    ) -> list[SAMLIdentityProviderMetadata]:
         """Loads IdP settings from the library's configuration settings
 
         :param db: Database session
@@ -484,7 +485,7 @@ class SAMLOneLoginConfiguration:
 
         return service_provider
 
-    def get_identity_providers(self, db: Session) -> List[SAMLIdentityProviderMetadata]:
+    def get_identity_providers(self, db: Session) -> list[SAMLIdentityProviderMetadata]:
         """Returns identity providers
 
         :param db: Database session
@@ -512,7 +513,7 @@ class SAMLOneLoginConfiguration:
 
     def _get_identity_provider_settings(
         self, identity_provider: SAMLIdentityProviderMetadata
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Converts ServiceProviderMetadata object to the OneLogin's SAML Toolkit format
 
         :param identity_provider: IdentityProviderMetadata object
@@ -561,7 +562,7 @@ class SAMLOneLoginConfiguration:
 
     def _get_service_provider_settings(
         self, service_provider: SAMLServiceProviderMetadata
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Converts ServiceProviderMetadata object to the OneLogin's SAML Toolkit format
 
         :param service_provider: ServiceProviderMetadata object
@@ -600,7 +601,7 @@ class SAMLOneLoginConfiguration:
 
     def get_identity_provider_settings(
         self, db: Session, idp_entity_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Returns a dictionary containing identity provider's settings in a OneLogin's SAML Toolkit format
 
         :param db: Database session
@@ -641,7 +642,7 @@ class SAMLOneLoginConfiguration:
 
         return identity_provider
 
-    def get_service_provider_settings(self) -> Dict[str, Any]:
+    def get_service_provider_settings(self) -> dict[str, Any]:
         """Returns a dictionary containing service provider's settings in the OneLogin's SAML Toolkit format
 
         :param db: Database session
@@ -657,7 +658,7 @@ class SAMLOneLoginConfiguration:
 
         return self._service_provider_settings
 
-    def get_settings(self, db: Session, idp_entity_id: str) -> Dict[str, Any]:
+    def get_settings(self, db: Session, idp_entity_id: str) -> dict[str, Any]:
         """Returns a dictionary containing SP's and IdP's settings in the OneLogin's SAML Toolkit format
 
         :param db: Database session
@@ -665,7 +666,7 @@ class SAMLOneLoginConfiguration:
 
         :return: Dictionary containing SP's and IdP's settings in the OneLogin's SAML Toolkit format
         """
-        onelogin_settings: Dict[str, Any] = {
+        onelogin_settings: dict[str, Any] = {
             self.DEBUG: self._configuration.service_provider_debug_mode,
             self.STRICT: self._configuration.service_provider_strict_mode,
         }

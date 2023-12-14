@@ -4,7 +4,8 @@ import datetime
 import json
 import logging
 import time
-from typing import Any, Callable, Generator, Mapping, Tuple, cast
+from collections.abc import Callable, Generator, Mapping
+from typing import Any, cast
 
 from dependency_injector.wiring import Provide
 from flask_babel import lazy_gettext as _
@@ -912,7 +913,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
 
         return circulation_changes
 
-    def process_book(self, bibliographic: Metadata) -> Tuple[Edition, LicensePool]:
+    def process_book(self, bibliographic: Metadata) -> tuple[Edition, LicensePool]:
         """Make the local database reflect the state of the remote Enki
         collection for the given book.
 

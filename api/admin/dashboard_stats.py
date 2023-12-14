@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func, select

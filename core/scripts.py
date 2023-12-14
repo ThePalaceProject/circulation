@@ -8,8 +8,8 @@ import sys
 import traceback
 import unicodedata
 import uuid
+from collections.abc import Generator
 from enum import Enum
-from typing import Generator, Optional, Type
 
 from sqlalchemy import and_, exists, or_, select, tuple_
 from sqlalchemy.orm import Query, Session, defer
@@ -120,7 +120,7 @@ class Script:
                     continue
         raise ValueError("Could not parse time: %s" % time_string)
 
-    def __init__(self, _db=None, services: Optional[Services] = None, *args, **kwargs):
+    def __init__(self, _db=None, services: Services | None = None, *args, **kwargs):
         """Basic constructor.
 
         :_db: A database session to be used instead of
@@ -1808,7 +1808,7 @@ class ReclassifyWorksForUncheckedSubjectsScript(WorkClassificationScript):
         the ordering of the rows follows all the joined tables"""
 
         for subject in self._unchecked_subjects():
-            last_work: Optional[Work] = None  # Last work object of the previous page
+            last_work: Work | None = None  # Last work object of the previous page
             # IDs of the last work, for paging
             work_id, license_id, iden_id, classn_id = (
                 None,
@@ -2009,7 +2009,7 @@ class OPDSImportScript(CollectionInputScript):
     name = "Import all books from the OPDS feed associated with a collection."
 
     IMPORTER_CLASS = OPDSImporter
-    MONITOR_CLASS: Type[OPDSImportMonitor] = OPDSImportMonitor
+    MONITOR_CLASS: type[OPDSImportMonitor] = OPDSImportMonitor
     PROTOCOL = ExternalIntegration.OPDS_IMPORT
 
     def __init__(
@@ -2467,7 +2467,7 @@ class WhereAreMyBooksScript(CollectionInputScript):
     """
 
     def __init__(
-        self, _db=None, output=None, search: Optional[ExternalSearchIndex] = None
+        self, _db=None, output=None, search: ExternalSearchIndex | None = None
     ):
         _db = _db or self._db
         super().__init__(_db)

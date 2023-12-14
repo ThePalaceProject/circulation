@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Callable, Optional
+from collections.abc import Callable
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
@@ -1537,10 +1537,10 @@ class TestFormatPriorities:
     @pytest.fixture
     def mock_delivery(
         self,
-    ) -> Callable[[Optional[str], Optional[str]], DeliveryMechanism]:
+    ) -> Callable[[str | None, str | None], DeliveryMechanism]:
         def delivery_mechanism(
-            drm_scheme: Optional[str] = None,
-            content_type: Optional[str] = "application/epub+zip",
+            drm_scheme: str | None = None,
+            content_type: str | None = "application/epub+zip",
         ) -> DeliveryMechanism:
             def _delivery_eq(self, other):
                 return (
@@ -1564,10 +1564,10 @@ class TestFormatPriorities:
     @pytest.fixture
     def mock_mechanism(
         self, mock_delivery
-    ) -> Callable[[Optional[str], Optional[str]], LicensePoolDeliveryMechanism]:
+    ) -> Callable[[str | None, str | None], LicensePoolDeliveryMechanism]:
         def mechanism(
-            drm_scheme: Optional[str] = None,
-            content_type: Optional[str] = "application/epub+zip",
+            drm_scheme: str | None = None,
+            content_type: str | None = "application/epub+zip",
         ) -> LicensePoolDeliveryMechanism:
             def _mechanism_eq(self, other):
                 return self.delivery_mechanism == other.delivery_mechanism

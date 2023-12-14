@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 import core.classifier as genres
 from api.config import CannotLoadConfiguration, Configuration
@@ -957,8 +956,8 @@ class DatabaseExclusiveWorkList(DatabaseBackedWorkList):
 class WorkBasedLane(DynamicLane):
     """A lane that shows works related to one particular Work."""
 
-    DISPLAY_NAME: Optional[str] = None
-    ROUTE: Optional[str] = None
+    DISPLAY_NAME: str | None = None
+    ROUTE: str | None = None
 
     def __init__(self, library, work, display_name=None, children=None, **kwargs):
         self.work = work

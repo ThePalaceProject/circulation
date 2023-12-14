@@ -1,5 +1,4 @@
 import json
-from typing import Dict
 
 import flask
 import pytest
@@ -271,7 +270,7 @@ class TestCollectionSettings:
     def test_collections_post_errors(
         self,
         admin_ctrl_fixture: AdminControllerFixture,
-        post_data: Dict[str, str],
+        post_data: dict[str, str],
         expected: ProblemDetail,
         detailed: bool,
     ):

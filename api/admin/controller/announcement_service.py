@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 import flask
 
@@ -19,13 +20,13 @@ class AnnouncementSettings(SettingsController):
         method = flask.request.method.lower()
         return getattr(self, method)
 
-    def process_many(self) -> Dict[str, Any] | ProblemDetail:
+    def process_many(self) -> dict[str, Any] | ProblemDetail:
         try:
             return self._action()()
         except ProblemError as e:
             return e.problem_detail
 
-    def get(self) -> Dict[str, Any]:
+    def get(self) -> dict[str, Any]:
         """Respond with settings and all global announcements"""
         db_announcements = (
             self._db.execute(Announcement.global_announcements()).scalars().all()
@@ -37,7 +38,7 @@ class AnnouncementSettings(SettingsController):
             announcements=announcements,
         )
 
-    def post(self) -> Dict[str, Any]:
+    def post(self) -> dict[str, Any]:
         """POST multiple announcements to the global namespace"""
         validator = AnnouncementListValidator()
         if flask.request.form is None or "announcements" not in flask.request.form:

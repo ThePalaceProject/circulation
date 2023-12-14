@@ -1,7 +1,6 @@
 import datetime
 import re
 from enum import Enum
-from typing import List, Optional, Type, Union
 from urllib import parse
 
 import dateutil
@@ -73,7 +72,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     )
     # The field to use when seeing which values of MBLOCK[p56] mean a patron
     # is blocked. By default, any value other than '-' indicates a block.
-    block_types: Optional[str] = FormField(
+    block_types: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Block Types",
@@ -84,7 +83,7 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
     # Identifiers that contain any of these strings are ignored when
     # finding the "correct" identifier in a patron's record, even if
     # it means they end up with no identifier at all.
-    identifier_blacklist: List[str] = FormField(
+    identifier_blacklist: list[str] = FormField(
         [],
         form=ConfigurationFormItem(
             label="Identifier Blacklist",
@@ -178,11 +177,11 @@ class MilleniumPatronAPI(
         return _("III Millenium Patron API")
 
     @classmethod
-    def settings_class(cls) -> Type[MilleniumPatronSettings]:
+    def settings_class(cls) -> type[MilleniumPatronSettings]:
         return MilleniumPatronSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[MilleniumPatronLibrarySettings]:
+    def library_settings_class(cls) -> type[MilleniumPatronLibrarySettings]:
         return MilleniumPatronLibrarySettings
 
     ERROR_MESSAGE_FIELD = "ERRMSG"
@@ -212,7 +211,7 @@ class MilleniumPatronAPI(
         integration_id: int,
         settings: MilleniumPatronSettings,
         library_settings: MilleniumPatronLibrarySettings,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics | None = None,
     ):
         super().__init__(
             library_id, integration_id, settings, library_settings, analytics
@@ -243,8 +242,8 @@ class MilleniumPatronAPI(
         """Make an HTTP request and parse the response."""
 
     def remote_authenticate(
-        self, username: Optional[str], password: Optional[str]
-    ) -> Optional[PatronData]:
+        self, username: str | None, password: str | None
+    ) -> PatronData | None:
         """Does the Millenium Patron API approve of these credentials?
 
         :return: False if the credentials are invalid. If they are
@@ -282,8 +281,8 @@ class MilleniumPatronAPI(
         return None
 
     def _remote_authenticate_pintest(
-        self, username: str, password: Optional[str]
-    ) -> Optional[PatronData]:
+        self, username: str, password: str | None
+    ) -> PatronData | None:
         # Patrons are authenticated with a secret PIN.
         #
         # The PIN is URL-encoded. The username is not: as far as
@@ -330,8 +329,8 @@ class MilleniumPatronAPI(
         return False
 
     def remote_patron_lookup(
-        self, patron_or_patrondata_or_identifier: Union[PatronData, Patron, str]
-    ) -> Optional[PatronData]:
+        self, patron_or_patrondata_or_identifier: PatronData | Patron | str
+    ) -> PatronData | None:
         if isinstance(patron_or_patrondata_or_identifier, str):
             identifier = patron_or_patrondata_or_identifier
         else:
@@ -394,7 +393,7 @@ class MilleniumPatronAPI(
         return PatronData.NO_VALUE
 
     @classmethod
-    def _code_from_field(cls, field_name: Optional[str]) -> Optional[str]:
+    def _code_from_field(cls, field_name: str | None) -> str | None:
         """Convert a Millenium property key to its code.
 
         A field name may comprise a label and a code or just a code.

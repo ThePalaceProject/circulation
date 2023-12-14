@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from aws_xray_sdk.core import AWSXRayRecorder
 from aws_xray_sdk.core import patch as xray_patch
@@ -17,7 +16,7 @@ class PalaceXrayMiddleware(XRayMiddleware):
     XRAY_ENV_PATRON_BARCODE = "PALACE_XRAY_INCLUDE_BARCODE"
 
     @classmethod
-    def put_annotations(cls, segment: Segment, seg_type: Optional[str] = None):
+    def put_annotations(cls, segment: Segment, seg_type: str | None = None):
         if seg_type is not None:
             segment.put_annotation("type", seg_type)
 

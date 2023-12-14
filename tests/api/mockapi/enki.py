@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -12,10 +12,10 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class MockEnkiAPI(EnkiAPI):
     def __init__(
-        self, _db: Session, library: Library, collection: Optional[Collection] = None
+        self, _db: Session, library: Library, collection: Collection | None = None
     ) -> None:
-        self.responses: List[MockRequestsResponse] = []
-        self.requests: List[List[Any]] = []
+        self.responses: list[MockRequestsResponse] = []
+        self.requests: list[list[Any]] = []
 
         if not collection:
             collection, ignore = Collection.by_name_and_protocol(

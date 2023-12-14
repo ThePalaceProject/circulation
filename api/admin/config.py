@@ -1,6 +1,5 @@
 import os
 from enum import Enum
-from typing import Optional
 from urllib.parse import urljoin
 
 from requests import RequestException
@@ -52,7 +51,7 @@ class Configuration(LoggerMixin):
     ENV_ADMIN_UI_PACKAGE_VERSION = "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION"
 
     # Cache the package version after first lookup.
-    _version: Optional[str] = None
+    _version: str | None = None
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:
@@ -91,7 +90,7 @@ class Configuration(LoggerMixin):
         return package_version
 
     @classmethod
-    def env_package_version(cls) -> Optional[str]:
+    def env_package_version(cls) -> str | None:
         """Get the package version specified in configuration or environment.
 
         :return Package verison.
@@ -120,7 +119,7 @@ class Configuration(LoggerMixin):
 
     @classmethod
     def lookup_asset_url(
-        cls, key: str, *, _operational_mode: Optional[OperationalMode] = None
+        cls, key: str, *, _operational_mode: OperationalMode | None = None
     ) -> str:
         """Get the URL for the asset_type.
 
@@ -143,7 +142,7 @@ class Configuration(LoggerMixin):
         )
 
     @classmethod
-    def package_url(cls, *, _operational_mode: Optional[OperationalMode] = None) -> str:
+    def package_url(cls, *, _operational_mode: OperationalMode | None = None) -> str:
         """Compute the URL for the admin UI package.
 
         :param _operational_mode: For testing. The operational mode is
@@ -162,7 +161,7 @@ class Configuration(LoggerMixin):
         return url
 
     @classmethod
-    def package_development_directory(cls, *, _base_dir: Optional[str] = None) -> str:
+    def package_development_directory(cls, *, _base_dir: str | None = None) -> str:
         """Absolute path for the admin UI package when in development mode.
 
         :param _base_dir: For testing purposes. Not used in normal operation.
@@ -177,7 +176,7 @@ class Configuration(LoggerMixin):
         )
 
     @classmethod
-    def static_files_directory(cls, *, _base_dir: Optional[str] = None) -> str:
+    def static_files_directory(cls, *, _base_dir: str | None = None) -> str:
         """Absolute path for the admin UI static files.
 
         :param _base_dir: For testing purposes. Not used in normal operation.

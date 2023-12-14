@@ -1,5 +1,4 @@
 import logging
-from typing import List, Tuple
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,7 +25,7 @@ class PlaytimeEntries:
         collection: Collection,
         library: Library,
         data: PlaytimeEntriesPost,
-    ) -> Tuple[List, PlaytimeEntriesPostSummary]:
+    ) -> tuple[list, PlaytimeEntriesPostSummary]:
         """Insert into the database playtime entries from a request"""
         responses = []
         summary = PlaytimeEntriesPostSummary()

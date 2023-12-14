@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import List, Optional
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -31,7 +30,7 @@ def create_playtime_entries(
     collection: Collection,
     library: Library,
     *entries: PlaytimeTimeEntry,
-) -> List[PlaytimeEntry]:
+) -> list[PlaytimeEntry]:
     all_inserted = []
     for entry in entries:
         inserted = PlaytimeEntry(
@@ -452,9 +451,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             )
             for equivalent in equivalents
         ]
-        test_identifier: Optional[Identifier] = (
-            ids[id_key] if id_key is not None else None
-        )
+        test_identifier: Identifier | None = ids[id_key] if id_key is not None else None
         if test_identifier is not None:
             test_identifier.equivalencies = equivalencies
 

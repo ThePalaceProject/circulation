@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import flask
 from flask import Response
@@ -37,7 +37,7 @@ class CollectionSettingsController(
 
     def configured_service_info(
         self, service: IntegrationConfiguration
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         service_info = super().configured_service_info(service)
         user = getattr(flask.request, "admin", None)
         if service_info:
@@ -54,7 +54,7 @@ class CollectionSettingsController(
 
     def configured_service_library_info(
         self, library_configuration: IntegrationLibraryConfiguration
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         library_info = super().configured_service_library_info(library_configuration)
         user = getattr(flask.request, "admin", None)
         if library_info:
@@ -62,7 +62,7 @@ class CollectionSettingsController(
                 return library_info
         return None
 
-    def process_collections(self) -> Union[Response, ProblemDetail]:
+    def process_collections(self) -> Response | ProblemDetail:
         if flask.request.method == "GET":
             return self.process_get()
         else:
@@ -86,7 +86,7 @@ class CollectionSettingsController(
         create(self._db, Collection, integration_configuration=service)
         return service
 
-    def process_post(self) -> Union[Response, ProblemDetail]:
+    def process_post(self) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
             form_data = flask.request.form
@@ -139,7 +139,7 @@ class CollectionSettingsController(
 
         return Response(str(integration.id), response_code)
 
-    def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
+    def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
 
         integration = get_one(

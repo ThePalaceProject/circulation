@@ -1,5 +1,3 @@
-from typing import Optional
-
 import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
@@ -126,7 +124,7 @@ class TestPatronController:
         # This PatronController will always return a specific
         # PatronData object, no matter what is asked for.
         class MockPatronController(PatronController):
-            mock_patrondata: Optional[PatronData] = None
+            mock_patrondata: PatronData | None = None
 
             def _load_patrondata(self, authenticator):
                 self.called_with = authenticator

@@ -225,7 +225,7 @@ pymarc = "5.1.0"
 pyOpenSSL = "^23.1.0"
 pyparsing = "3.1.1"
 pyspellchecker = "0.7.2"
-python = ">=3.8,<4"
+python = ">=3.10,<4"
 python-dateutil = "2.8.2"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
 pytz = "^2023.3"
@@ -237,7 +237,6 @@ textblob = "0.17.1"
 types-pyopenssl = "^23.1.0.3"
 types-pyyaml = "^6.0.12.9"
 # We import typing_extensions, so we can use new annotation features.
-# - ParamSpec (Python 3.10)
 # - Self (Python 3.11)
 typing_extensions = {version = "^4.5.0", python = "<3.11"}
 unicodecsv = "0.14.1"  # this is used, but can probably be removed on py3

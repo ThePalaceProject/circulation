@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -57,8 +58,8 @@ def create_mock_onelogin_configuration(
 ) -> Callable[..., SAMLOneLoginConfiguration]:
     def _create_mock(
         service_provider: SAMLServiceProviderMetadata,
-        identity_providers: List[SAMLIdentityProviderMetadata],
-        configuration: Optional[SAMLWebSSOAuthSettings] = None,
+        identity_providers: list[SAMLIdentityProviderMetadata],
+        configuration: SAMLWebSSOAuthSettings | None = None,
     ):
         if configuration is None:
             configuration = create_saml_configuration()

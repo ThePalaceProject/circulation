@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional, Union
-
 import flask
 from flask import Request, Response, redirect, url_for
 from flask_babel import lazy_gettext as _
@@ -41,7 +39,7 @@ class ResetPasswordController(AdminController):
         )
     )
 
-    def forgot_password(self) -> Union[ProblemDetail, WerkzeugResponse]:
+    def forgot_password(self) -> ProblemDetail | WerkzeugResponse:
         """Shows forgot password page or starts off forgot password workflow"""
 
         if not self.admin_auth_providers:
@@ -91,7 +89,7 @@ class ResetPasswordController(AdminController):
             "Sign in",
         )
 
-    def _extract_admin_from_request(self, request: Request) -> Optional[Admin]:
+    def _extract_admin_from_request(self, request: Request) -> Admin | None:
         email = request.form.get("email")
 
         admin = get_one(self._db, Admin, email=email)
@@ -114,7 +112,7 @@ class ResetPasswordController(AdminController):
 
     def reset_password(
         self, reset_password_token: str, admin_id: int
-    ) -> Optional[WerkzeugResponse]:
+    ) -> WerkzeugResponse | None:
         """Shows reset password page or process the reset password request"""
         auth = self.admin_auth_provider(PasswordAdminAuthenticationProvider.NAME)
         if not auth:
@@ -195,11 +193,11 @@ class ResetPasswordController(AdminController):
 
     def _response_with_message_and_redirect_button(
         self,
-        message: Optional[str],
+        message: str | None,
         redirect_button_link: str,
         redirect_button_text: str,
         is_error: bool = False,
-        status_code: Optional[int] = 200,
+        status_code: int | None = 200,
     ) -> Response:
         style = error_style if is_error else body_style
 

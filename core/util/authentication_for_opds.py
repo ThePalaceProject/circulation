@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,7 @@ class OPDSAuthenticationFlow(ABC):
         """
         ...
 
-    def authentication_flow_document(self, _db: Session) -> Dict[str, Any]:
+    def authentication_flow_document(self, _db: Session) -> dict[str, Any]:
         """Convert this object into a dictionary that can be used in the
         `authentication` list of an Authentication For OPDS document.
         """
@@ -28,7 +28,7 @@ class OPDSAuthenticationFlow(ABC):
         return data
 
     @abstractmethod
-    def _authentication_flow_document(self, _db: Session) -> Dict[str, Any]:
+    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]:
         ...
 
 
@@ -44,8 +44,8 @@ class AuthenticationForOPDSDocument:
         self,
         id: str | None = None,
         title: str | None = None,
-        authentication_flows: List[OPDSAuthenticationFlow] | None = None,
-        links: List[Dict[str, Optional[str]]] | None = None,
+        authentication_flows: list[OPDSAuthenticationFlow] | None = None,
+        links: list[dict[str, str | None]] | None = None,
     ):
         """Initialize an Authentication For OPDS document.
 
@@ -63,7 +63,7 @@ class AuthenticationForOPDSDocument:
         self.authentication_flows = authentication_flows or []
         self.links = links or []
 
-    def to_dict(self, _db: Session) -> Dict[str, Any]:
+    def to_dict(self, _db: Session) -> dict[str, Any]:
         """Convert this data structure to a dictionary that becomes an
         Authentication For OPDS document when serialized to JSON.
 
@@ -83,7 +83,7 @@ class AuthenticationForOPDSDocument:
             if not isinstance(value, list):
                 raise ValueError("'%s' must be a list." % key)
 
-        document: Dict[str, Any] = dict(id=self.id, title=self.title)
+        document: dict[str, Any] = dict(id=self.id, title=self.title)
         flow_documents = document.setdefault("authentication", [])
         for flow in self.authentication_flows:
             doc = flow.authentication_flow_document(_db)

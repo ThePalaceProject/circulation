@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 
 
 class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
-    skipped_license_formats: List[str] = FormField(
+    skipped_license_formats: list[str] = FormField(
         default=["text/html"],
         alias="odl2_skipped_license_formats",
         form=ConfigurationFormItem(
@@ -51,7 +52,7 @@ class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
         ),
     )
 
-    loan_limit: Optional[PositiveInt] = FormField(
+    loan_limit: PositiveInt | None = FormField(
         default=None,
         alias="odl2_loan_limit",
         form=ConfigurationFormItem(
@@ -64,7 +65,7 @@ class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
         ),
     )
 
-    hold_limit: Optional[PositiveInt] = FormField(
+    hold_limit: PositiveInt | None = FormField(
         default=None,
         alias="odl2_hold_limit",
         form=ConfigurationFormItem(
@@ -80,11 +81,11 @@ class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
 
 class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
     @classmethod
-    def settings_class(cls) -> Type[ODL2Settings]:
+    def settings_class(cls) -> type[ODL2Settings]:
         return ODL2Settings
 
     @classmethod
-    def library_settings_class(cls) -> Type[ODLLibrarySettings]:
+    def library_settings_class(cls) -> type[ODLLibrarySettings]:
         return ODLLibrarySettings
 
     @classmethod
@@ -101,7 +102,7 @@ class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
         self.hold_limit = self.settings.hold_limit
 
     def _checkout(
-        self, patron: Patron, licensepool: LicensePool, hold: Optional[Hold] = None
+        self, patron: Patron, licensepool: LicensePool, hold: Hold | None = None
     ) -> Loan:
         # If the loan limit is not None or 0
         if self.loan_limit:
@@ -139,16 +140,16 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
     NAME = ODL2API.label()
 
     @classmethod
-    def settings_class(cls) -> Type[ODL2Settings]:
+    def settings_class(cls) -> type[ODL2Settings]:
         return ODL2Settings
 
     def __init__(
         self,
         db: Session,
         collection: Collection,
-        parser: Optional[RWPMManifestParser] = None,
+        parser: RWPMManifestParser | None = None,
         data_source_name: str | None = None,
-        http_get: Optional[Callable[..., Tuple[int, Any, bytes]]] = None,
+        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
     ):
         """Initialize a new instance of ODL2Importer class.
 
@@ -183,7 +184,7 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
         self,
         feed: OPDS2Feed,
         publication: OPDS2Publication,
-        data_source_name: Optional[str],
+        data_source_name: str | None,
     ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
@@ -254,7 +255,7 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
                     if not medium:
                         medium = Edition.medium_from_media_type(license_format)
 
-                    drm_schemes: List[str | None]
+                    drm_schemes: list[str | None]
                     if license_format in self.LICENSE_FORMATS:
                         # Special case to handle DeMarque audiobooks which include the protection
                         # in the content type. When we see a license format of
@@ -304,7 +305,7 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[ODL2Importer],
+        import_class: type[ODL2Importer],
         **import_class_kwargs: Any,
     ) -> None:
         # Always force reimport ODL collections to get up to date license information

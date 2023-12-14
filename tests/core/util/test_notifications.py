@@ -1,7 +1,8 @@
 import logging
 import re
+from collections.abc import Generator
 from datetime import datetime
-from typing import Any, Generator
+from typing import Any
 from unittest import mock
 from unittest.mock import MagicMock
 

@@ -10,9 +10,10 @@ import re
 import time
 import urllib.parse
 from abc import ABC
+from collections.abc import Generator
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Dict, Generator, List, Tuple, Type, TypeVar, Union
+from typing import TypeVar
 
 import dateutil.parser
 from dependency_injector.wiring import Provide, inject
@@ -667,8 +668,8 @@ class ItemListParser(XMLProcessor[Metadata]):
     @classmethod
     def contributors_from_string(
         cls, string: Optional[str], role: str = Contributor.AUTHOR_ROLE
-    ) -> List[ContributorData]:
-        contributors: List[ContributorData] = []
+    ) -> list[ContributorData]:
+        contributors: list[ContributorData] = []
         if not string:
             return contributors
 
@@ -685,8 +686,8 @@ class ItemListParser(XMLProcessor[Metadata]):
         return contributors
 
     @classmethod
-    def parse_genre_string(self, s: Optional[str]) -> List[SubjectData]:
-        genres: List[SubjectData] = []
+    def parse_genre_string(self, s: Optional[str]) -> list[SubjectData]:
+        genres: list[SubjectData] = []
         if not s:
             return genres
         for i in s.split(","):
@@ -709,7 +710,7 @@ class ItemListParser(XMLProcessor[Metadata]):
         return genres
 
     def process_one(
-        self, tag: _Element, namespaces: Optional[Dict[str, str]]
+        self, tag: _Element, namespaces: Optional[dict[str, str]]
     ) -> Metadata:
         """Turn an <item> tag into a Metadata and an encompassed CirculationData
         objects, and return the Metadata."""
@@ -956,7 +957,7 @@ class ErrorParser(BibliothecaParser[Exception]):
         return return_val
 
     def process_one(
-        self, error_tag: _Element, namespaces: Optional[Dict[str, str]]
+        self, error_tag: _Element, namespaces: Optional[dict[str, str]]
     ) -> Exception:
         message = self.text_of_optional_subtag(error_tag, "Message")
         if not message:
@@ -1031,9 +1032,7 @@ class PatronCirculationParser(XMLParser):
     def __init__(self, collection: Collection) -> None:
         self.collection = collection
 
-    def process_all(
-        self, string: bytes | str
-    ) -> itertools.chain[Union[LoanInfo, HoldInfo]]:
+    def process_all(self, string: bytes | str) -> itertools.chain[LoanInfo | HoldInfo]:
         xml = self._load_xml(string)
         loans = self._process_all(
             xml, "//Checkouts/Item", namespaces={}, handler=self.process_one_loan
@@ -1047,17 +1046,17 @@ class PatronCirculationParser(XMLParser):
         return itertools.chain(loans, holds, reserves)
 
     def process_one_loan(
-        self, tag: _Element, namespaces: Dict[str, str]
+        self, tag: _Element, namespaces: dict[str, str]
     ) -> Optional[LoanInfo]:
         return self.process_one(tag, namespaces, LoanInfo)
 
     def process_one_hold(
-        self, tag: _Element, namespaces: Dict[str, str]
+        self, tag: _Element, namespaces: dict[str, str]
     ) -> Optional[HoldInfo]:
         return self.process_one(tag, namespaces, HoldInfo)
 
     def process_one_reserve(
-        self, tag: _Element, namespaces: Dict[str, str]
+        self, tag: _Element, namespaces: dict[str, str]
     ) -> Optional[HoldInfo]:
         hold_info = self.process_one(tag, namespaces, HoldInfo)
         if hold_info is not None:
@@ -1065,7 +1064,7 @@ class PatronCirculationParser(XMLParser):
         return hold_info
 
     def process_one(
-        self, tag: _Element, namespaces: Dict[str, str], source_class: Type[T]
+        self, tag: _Element, namespaces: dict[str, str], source_class: type[T]
     ) -> Optional[T]:
         if not tag.xpath("ItemId"):
             # This happens for events associated with books
@@ -1107,7 +1106,7 @@ class DateResponseParser(BibliothecaParser[Optional[datetime]], ABC):
         return f"/{self.RESULT_TAG_NAME}/{self.DATE_TAG_NAME}"
 
     def process_one(
-        self, tag: _Element, namespaces: Optional[Dict[str, str]]
+        self, tag: _Element, namespaces: Optional[dict[str, str]]
     ) -> Optional[datetime]:
         due_date = tag.text
         if not due_date:
@@ -1158,7 +1157,7 @@ class EventParser(BibliothecaParser):
     def process_all(
         self, string: bytes | str, no_events_error=False
     ) -> Generator[
-        Tuple[str, str, Optional[str], datetime, Optional[datetime], str], None, None
+        tuple[str, str, Optional[str], datetime, Optional[datetime], str], None, None
     ]:
         has_events = False
         for i in super().process_all(string):
@@ -1181,8 +1180,8 @@ class EventParser(BibliothecaParser):
             )
 
     def process_one(
-        self, tag: _Element, namespaces: Optional[Dict[str, str]]
-    ) -> Tuple[str, str, Optional[str], datetime, Optional[datetime], str]:
+        self, tag: _Element, namespaces: Optional[dict[str, str]]
+    ) -> tuple[str, str, Optional[str], datetime, Optional[datetime], str]:
         isbn = self.text_of_subtag(tag, "ISBN")
         bibliotheca_id = self.text_of_subtag(tag, "ItemId")
         patron_id = self.text_of_optional_subtag(tag, "PatronId")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import datetime
-from typing import Type
 from unittest.mock import MagicMock
 
 import pytest
@@ -42,7 +41,7 @@ class TestAuthdataUtility:
     def test_eligible_authdata_vendor_id_integrations(
         self,
         registration_status: RegistrationStatus,
-        authdata_utility_type: Type[AuthdataUtility] | Type[None],
+        authdata_utility_type: type[AuthdataUtility] | type[None],
         authdata: AuthdataUtility,
         vendor_id_fixture: VendorIDFixture,
     ):

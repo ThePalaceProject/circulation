@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from gettext import gettext as _
-from typing import TYPE_CHECKING, List, Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urljoin
 
 from pydantic import HttpUrl
@@ -61,7 +61,7 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
         ),
         alias="LIBRARY_ID",
     )
-    library_disallowed_suffixes: List[str] = FormField(
+    library_disallowed_suffixes: list[str] = FormField(
         [],
         form=ConfigurationFormItem(
             label="Disallowed Patron Suffixes",
@@ -128,7 +128,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         integration_id: int,
         settings: SirsiDynixHorizonAuthSettings,
         library_settings: SirsiDynixHorizonAuthLibrarySettings,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics | None = None,
     ):
         super().__init__(
             library_id, integration_id, settings, library_settings, analytics
@@ -289,7 +289,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def api_read_patron_data(
         self, patron_key: str, session_token: str
-    ) -> Union[Literal[False], dict]:
+    ) -> Literal[False] | dict:
         """API request to pull basic patron information
 
         :param patron_key: The permanent external identifier for a patron
@@ -307,7 +307,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def api_patron_status_info(
         self, patron_key: str, session_token: str
-    ) -> Union[Literal[False], dict]:
+    ) -> Literal[False] | dict:
         """API request to pull patron status information, like fines
 
         :param patron_key: The permanent external identifier for a patron

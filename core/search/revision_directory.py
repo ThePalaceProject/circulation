@@ -1,4 +1,4 @@
-from typing import Mapping
+from collections.abc import Mapping
 
 from core.config import CannotLoadConfiguration
 from core.search.revision import SearchSchemaRevision

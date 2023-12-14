@@ -1,7 +1,7 @@
 import operator
 import types
+from collections.abc import Callable
 from copy import copy, deepcopy
-from typing import Callable, Dict, List, Optional, Union
 
 from multipledispatch import dispatch
 
@@ -74,8 +74,8 @@ class DSLEvaluationVisitor(Visitor):
 
     def __init__(
         self,
-        context: Optional[Union[Dict, object]] = None,
-        safe_classes: Optional[List[type]] = None,
+        context: dict | object | None = None,
+        safe_classes: list[type] | None = None,
     ):
         """Initialize a new instance of DSLEvaluationVisitor class.
 
@@ -83,8 +83,8 @@ class DSLEvaluationVisitor(Visitor):
         :param safe_classes: Optional list of classes which methods can be called.
             By default it contains only built-in classes: float, int, str
         """
-        self._context: Optional[Union[Dict, object]] = {}
-        self._safe_classes: Optional[List[type]] = []
+        self._context: dict | object | None = {}
+        self._safe_classes: list[type] | None = []
         self._current_scope = None
         self._root_dot_node = None
 
@@ -95,7 +95,7 @@ class DSLEvaluationVisitor(Visitor):
         self.safe_classes = safe_classes
 
     @staticmethod
-    def _get_attribute_value(obj: Union[Dict, object], attribute: str):
+    def _get_attribute_value(obj: dict | object, attribute: str):
         """Return the attribute's value by its name.
 
         :param obj: Object or a dictionary containing the attribute
@@ -121,7 +121,7 @@ class DSLEvaluationVisitor(Visitor):
     def _evaluate_unary_expression(
         self,
         unary_expression: UnaryExpression,
-        available_operators: Dict[Operator, Callable],
+        available_operators: dict[Operator, Callable],
     ):
         """Evaluate the unary expression.
 
@@ -147,7 +147,7 @@ class DSLEvaluationVisitor(Visitor):
     def _evaluate_binary_expression(
         self,
         binary_expression: BinaryExpression,
-        available_operators: Dict[Operator, Callable],
+        available_operators: dict[Operator, Callable],
     ):
         """Evaluate the binary expression.
 
@@ -172,7 +172,7 @@ class DSLEvaluationVisitor(Visitor):
         return result
 
     @property
-    def context(self) -> Union[Dict, object]:
+    def context(self) -> dict | object:
         """Return the evaluation context.
 
         :return: Evaluation context
@@ -180,7 +180,7 @@ class DSLEvaluationVisitor(Visitor):
         return self._context
 
     @context.setter
-    def context(self, value: Union[Dict, object]):
+    def context(self, value: dict | object):
         """Set the evaluation context.
 
         :param value: New evaluation context
@@ -202,7 +202,7 @@ class DSLEvaluationVisitor(Visitor):
         self._context = new_context
 
     @property
-    def safe_classes(self) -> Optional[List[type]]:
+    def safe_classes(self) -> list[type] | None:
         """Return a list of classes which methods can be called.
 
         :return: List of safe classes which methods can be called
@@ -210,7 +210,7 @@ class DSLEvaluationVisitor(Visitor):
         return self._safe_classes
 
     @safe_classes.setter
-    def safe_classes(self, value: List[type]):
+    def safe_classes(self, value: list[type]):
         """Set safe classes which methods can be called.
 
         :param value: List of safe classes which methods be called
@@ -397,8 +397,8 @@ class DSLEvaluator:
     def evaluate(
         self,
         expression: str,
-        context: Optional[Union[Dict, object]] = None,
-        safe_classes: Optional[List[type]] = None,
+        context: dict | object | None = None,
+        safe_classes: list[type] | None = None,
     ):
         """Evaluate the expression and return the resulting value.
 

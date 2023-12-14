@@ -3,7 +3,7 @@
 
 import re
 from collections import defaultdict
-from typing import Dict, List, Pattern
+from re import Pattern
 
 
 class LookupTable(dict):
@@ -31,9 +31,9 @@ class LanguageCodes:
     two_to_three = LookupTable()
     three_to_two = LookupTable()
     terminologic_to_three = LookupTable()
-    english_names: Dict[str, List[str]] = defaultdict(list)
+    english_names: dict[str, list[str]] = defaultdict(list)
     english_names_to_three = LookupTable()
-    native_names: Dict[str, List[str]] = defaultdict(list)
+    native_names: dict[str, list[str]] = defaultdict(list)
 
     RAW_DATA = """aar||aa|Afar|afar
 abk||ab|Abkhazian|abkhaze
@@ -653,7 +653,7 @@ class LanguageNames:
     number = re.compile("[0-9]")
     parentheses = re.compile(r"\([^)]+\)")
 
-    name_to_codes: Dict[str, List[str]]
+    name_to_codes: dict[str, list[str]]
     name_re: Pattern
 
     @classmethod

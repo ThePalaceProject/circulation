@@ -5,7 +5,7 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from dataclasses import dataclass
 from json import JSONDecodeError
 from ssl import get_server_certificate
-from typing import Any, List, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import pytz
@@ -97,7 +97,7 @@ The config file format is a YML file of the form:
 
     def _read_config(
         self, filepath: str, key_file: str | None = None, raw: bool = False
-    ) -> List | bytes:
+    ) -> list | bytes:
         """Read the config yml from a source.
         The file should be a yml with a list of IntegrationTestDetails as the content.
         :param filepath: The path to the file, could be an URL or a file on the local directory
@@ -157,7 +157,7 @@ The config file format is a YML file of the form:
             self._encrypt(args.config, args.key_file, args.encrypt_file)
             return
 
-        data = cast(List[dict], self._read_config(args.config, key_file=args.key_file))
+        data = cast(list[dict], self._read_config(args.config, key_file=args.key_file))
 
         for datapoint in data:
             test = IntegrationTestDetails(**datapoint)

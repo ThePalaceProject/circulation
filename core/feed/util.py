@@ -1,5 +1,4 @@
 import datetime
-from typing import Union
 
 import pytz
 
@@ -7,7 +6,7 @@ TIME_FORMAT_UTC = "%Y-%m-%dT%H:%M:%S+00:00"
 TIME_FORMAT_NAIVE = "%Y-%m-%dT%H:%M:%SZ"
 
 
-def strftime(date: Union[datetime.datetime, datetime.date]) -> str:
+def strftime(date: datetime.datetime | datetime.date) -> str:
     """
     Format a date for the OPDS feeds.
 

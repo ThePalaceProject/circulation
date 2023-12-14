@@ -4,7 +4,6 @@ import base64
 import json
 import uuid
 from io import BytesIO
-from typing import Optional, Tuple
 
 import flask
 from flask import Response
@@ -164,7 +163,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         else:
             return Response(str(library.uuid), 200)
 
-    def create_library(self, short_name: str) -> Tuple[Library, bool]:
+    def create_library(self, short_name: str) -> tuple[Library, bool]:
         self.require_system_admin()
         public_key, private_key = Library.generate_keypair()
         library, is_new = create(
@@ -201,7 +200,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             )
 
     def check_short_name_unique(
-        self, library: Optional[Library], short_name: Optional[str]
+        self, library: Library | None, short_name: str | None
     ) -> None:
         if not library or (short_name and short_name != library.short_name):
             # If you're adding a new short_name, either by editing an
@@ -227,7 +226,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
     def scale_and_store_logo(
         cls,
         library: Library,
-        image_file: Optional[FileStorage],
+        image_file: FileStorage | None,
         max_dimension: int = Configuration.LOGO_MAX_DIMENSION,
     ) -> None:
         if not image_file:

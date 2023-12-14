@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -38,9 +38,9 @@ class LibraryFixture:
 
     def library(
         self,
-        name: Optional[str] = None,
-        short_name: Optional[str] = None,
-        settings: Optional[LibrarySettings] = None,
+        name: str | None = None,
+        short_name: str | None = None,
+        settings: LibrarySettings | None = None,
     ) -> Library:
         library = self.db.library(name=name, short_name=short_name, settings=settings)
         if isinstance(settings, MockLibrarySettings):

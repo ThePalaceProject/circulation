@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any
 
 import flask
 import pytest
@@ -93,8 +94,8 @@ class AdminRouteFixture:
         self.original_api_app = self.api_routes.app
         self.resolver = self.original_app.url_map.bind("", "/")
 
-        self.controller: Optional[CirculationManagerController] = None
-        self.real_controller: Optional[CirculationManagerController] = None
+        self.controller: CirculationManagerController | None = None
+        self.real_controller: CirculationManagerController | None = None
 
         self.routes.app = app  # type: ignore
         # Need to also mock the route app from /api/routes.

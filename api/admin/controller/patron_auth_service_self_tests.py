@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Type
+from typing import Any
 
 from flask import Response
 from sqlalchemy.orm import Session
@@ -20,21 +20,21 @@ class PatronAuthServiceSelfTestsController(
     def __init__(
         self,
         db: Session,
-        registry: Optional[IntegrationRegistry[AuthenticationProviderType]] = None,
+        registry: IntegrationRegistry[AuthenticationProviderType] | None = None,
     ):
         registry = registry or PatronAuthRegistry()
         super().__init__(db, registry)
 
     def process_patron_auth_service_self_tests(
-        self, identifier: Optional[int]
+        self, identifier: int | None
     ) -> Response | ProblemDetail:
         return self.process_self_tests(identifier)
 
     def get_prior_test_results(
         self,
-        protocol_class: Type[AuthenticationProviderType],
+        protocol_class: type[AuthenticationProviderType],
         integration: IntegrationConfiguration,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         # Find the first library associated with this service.
         library_configuration = self.get_library_configuration(integration)
 
@@ -49,7 +49,7 @@ class PatronAuthServiceSelfTestsController(
 
         return super().get_prior_test_results(protocol_class, integration)
 
-    def run_self_tests(self, integration: IntegrationConfiguration) -> Dict[str, Any]:
+    def run_self_tests(self, integration: IntegrationConfiguration) -> dict[str, Any]:
         # If the auth service doesn't have at least one library associated with it,
         # we can't run self tests.
         library_configuration = self.get_library_configuration(integration)

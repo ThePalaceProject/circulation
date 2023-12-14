@@ -7,7 +7,7 @@ import re
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import total_ordering
-from typing import TYPE_CHECKING, List, overload
+from typing import TYPE_CHECKING, overload
 from urllib.parse import quote, unquote
 
 import isbnlib
@@ -242,7 +242,7 @@ class Identifier(Base, IdentifierConstants):
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
-    equivalencies: Mapped[List[Equivalency]] = relationship(
+    equivalencies: Mapped[list[Equivalency]] = relationship(
         "Equivalency",
         foreign_keys="Equivalency.input_id",
         back_populates="input",
@@ -250,7 +250,7 @@ class Identifier(Base, IdentifierConstants):
         uselist=True,
     )
 
-    inbound_equivalencies: Mapped[List[Equivalency]] = relationship(
+    inbound_equivalencies: Mapped[list[Equivalency]] = relationship(
         "Equivalency",
         foreign_keys="Equivalency.output_id",
         back_populates="output",
@@ -259,7 +259,7 @@ class Identifier(Base, IdentifierConstants):
     )
 
     # One Identifier may have many associated CoverageRecords.
-    coverage_records: Mapped[List[CoverageRecord]] = relationship(
+    coverage_records: Mapped[list[CoverageRecord]] = relationship(
         "CoverageRecord", back_populates="identifier"
     )
 
@@ -273,13 +273,13 @@ class Identifier(Base, IdentifierConstants):
 
     # One Identifier may serve as the primary identifier for
     # several Editions.
-    primarily_identifies: Mapped[List[Edition]] = relationship(
+    primarily_identifies: Mapped[list[Edition]] = relationship(
         "Edition", backref="primary_identifier"
     )
 
     # One Identifier may serve as the identifier for many
     # LicensePools, through different Collections.
-    licensed_through: Mapped[List[LicensePool]] = relationship(
+    licensed_through: Mapped[list[LicensePool]] = relationship(
         "LicensePool",
         back_populates="identifier",
         lazy="joined",
@@ -287,27 +287,27 @@ class Identifier(Base, IdentifierConstants):
     )
 
     # One Identifier may have many Links.
-    links: Mapped[List[Hyperlink]] = relationship(
+    links: Mapped[list[Hyperlink]] = relationship(
         "Hyperlink", backref="identifier", uselist=True
     )
 
     # One Identifier may be the subject of many Measurements.
-    measurements: Mapped[List[Measurement]] = relationship(
+    measurements: Mapped[list[Measurement]] = relationship(
         "Measurement", backref="identifier"
     )
 
     # One Identifier may participate in many Classifications.
-    classifications: Mapped[List[Classification]] = relationship(
+    classifications: Mapped[list[Classification]] = relationship(
         "Classification", backref="identifier"
     )
 
     # One identifier may participate in many Annotations.
-    annotations: Mapped[List[Annotation]] = relationship(
+    annotations: Mapped[list[Annotation]] = relationship(
         "Annotation", backref="identifier"
     )
 
     # One Identifier can have many LicensePoolDeliveryMechanisms.
-    delivery_mechanisms: Mapped[List[LicensePoolDeliveryMechanism]] = relationship(
+    delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
         backref="identifier",
         foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id],

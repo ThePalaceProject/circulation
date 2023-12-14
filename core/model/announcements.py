@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import uuid
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Date, ForeignKey, Integer, Unicode, select
 from sqlalchemy.dialects.postgresql import UUID
@@ -52,7 +52,7 @@ class Announcement(Base):
     @classmethod
     def authentication_document_announcements(
         cls, library: Library
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         db = Session.object_session(library)
         today_local = datetime.date.today()
         query = (
@@ -69,7 +69,7 @@ class Announcement(Base):
 
     @classmethod
     def from_data(
-        cls, db: Session, data: AnnouncementData, library: Optional[Library] = None
+        cls, db: Session, data: AnnouncementData, library: Library | None = None
     ) -> Announcement:
         created, _ = create(
             db,
@@ -86,9 +86,9 @@ class Announcement(Base):
     def sync(
         cls,
         db: Session,
-        existing: List[Announcement],
-        new: Dict[uuid.UUID, AnnouncementData],
-        library: Optional[Library] = None,
+        existing: list[Announcement],
+        new: dict[uuid.UUID, AnnouncementData],
+        library: Library | None = None,
     ) -> None:
         """
         Synchronize the existing announcements with the new announcements, creating any new announcements
@@ -140,9 +140,9 @@ class AnnouncementData:
     content: str
     start: datetime.date
     finish: datetime.date
-    id: Optional[uuid.UUID] = None
+    id: uuid.UUID | None = None
 
-    def as_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> dict[str, str]:
         date_format = "%Y-%m-%d"
         return_dict = {
             "content": self.content,

@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 from copy import deepcopy
-from typing import Dict, Optional
 
 import sqlalchemy
 
@@ -87,7 +86,7 @@ class SAMLCredentialManager:
         db: sqlalchemy.orm.session.Session,
         patron: Patron,
         subject: SAMLSubject,
-        cm_session_lifetime: Optional[int] = None,
+        cm_session_lifetime: int | None = None,
     ) -> Credential:
         """Create a Credential object that ties the given patron to the given provider token.
 
@@ -113,7 +112,7 @@ class SAMLCredentialManager:
 
     def lookup_saml_token_by_patron(
         self, db: sqlalchemy.orm.session.Session, patron: Patron
-    ) -> Optional[Credential]:
+    ) -> Credential | None:
         """Look up for a SAML token.
 
         :param db: Database session
@@ -136,8 +135,8 @@ class SAMLCredentialManager:
         return credential
 
     def lookup_saml_token_by_value(
-        self, db: sqlalchemy.orm.session.Session, token: Dict
-    ) -> Optional[Credential]:
+        self, db: sqlalchemy.orm.session.Session, token: dict
+    ) -> Credential | None:
         """Look up for a SAML token.
 
         :param db: Database session

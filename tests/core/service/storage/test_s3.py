@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Generator
 from io import BytesIO
-from typing import TYPE_CHECKING, Generator, Optional
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -331,7 +332,7 @@ class TestS3ServiceIntegration:
         key: str,
         bucket: str,
         content: bytes | str,
-        content_type: Optional[str],
+        content_type: str | None,
         s3_service_integration_fixture: S3ServiceIntegrationFixture,
     ):
         """The S3Service.store method stores content in the bucket."""
@@ -371,7 +372,7 @@ class TestS3ServiceIntegration:
         key: str,
         bucket: str,
         content: bytes,
-        content_type: Optional[str],
+        content_type: str | None,
         s3_service_integration_fixture: S3ServiceIntegrationFixture,
     ):
         service = getattr(s3_service_integration_fixture, bucket)

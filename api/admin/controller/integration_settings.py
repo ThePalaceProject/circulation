@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, List, NamedTuple, Optional, Tuple, Type, TypeVar
+from typing import Any, Generic, NamedTuple, TypeVar
 
 import flask
 from flask import Response
@@ -42,20 +42,20 @@ T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
 
 class UpdatedLibrarySettingsTuple(NamedTuple):
     integration: IntegrationLibraryConfiguration
-    settings: Dict[str, Any]
+    settings: dict[str, Any]
 
 
 class ChangedLibrariesTuple(NamedTuple):
-    new: List[UpdatedLibrarySettingsTuple]
-    updated: List[UpdatedLibrarySettingsTuple]
-    removed: List[IntegrationLibraryConfiguration]
+    new: list[UpdatedLibrarySettingsTuple]
+    updated: list[UpdatedLibrarySettingsTuple]
+    removed: list[IntegrationLibraryConfiguration]
 
 
 class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     def __init__(
         self,
         manager: CirculationManager,
-        registry: Optional[IntegrationRegistry[T]] = None,
+        registry: IntegrationRegistry[T] | None = None,
     ):
         self._db = manager._db
         self.registry = registry or self.default_registry()
@@ -68,7 +68,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         ...
 
     @memoize(ttls=1800)
-    def _cached_protocols(self) -> Dict[str, Dict[str, Any]]:
+    def _cached_protocols(self) -> dict[str, dict[str, Any]]:
         """Cached result for integration implementations"""
         protocols = []
         for name, api in self.registry:
@@ -92,13 +92,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return dict(protocols)
 
     @property
-    def protocols(self) -> Dict[str, Dict[str, Any]]:
+    def protocols(self) -> dict[str, dict[str, Any]]:
         """Use a property for implementations to allow expiring cached results"""
         return self._cached_protocols()
 
     def configured_service_info(
         self, service: IntegrationConfiguration
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         return {
             "id": service.id,
             "name": service.name,
@@ -108,13 +108,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
 
     def configured_service_library_info(
         self, library_configuration: IntegrationLibraryConfiguration
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         library_info = {"short_name": library_configuration.library.short_name}
         library_info.update(library_configuration.settings_dict)
         return library_info
 
     @property
-    def configured_services(self) -> List[Dict[str, Any]]:
+    def configured_services(self) -> list[dict[str, Any]]:
         """Return a list of all currently configured services for the controller's goal."""
         configured_services = []
         for service in (
@@ -147,7 +147,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return configured_services
 
     def get_existing_service(
-        self, service_id: int, name: Optional[str], protocol: str
+        self, service_id: int, name: str | None, protocol: str
     ) -> IntegrationConfiguration:
         """
         Query for an existing service to edit.
@@ -157,7 +157,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         necessary and a ProblemError will be raised if the name is already in
         use.
         """
-        service: Optional[IntegrationConfiguration] = get_one(
+        service: IntegrationConfiguration | None = get_one(
             self._db,
             IntegrationConfiguration,
             id=service_id,
@@ -202,15 +202,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             )
         return new_service
 
-    def get_libraries_data(
-        self, form_data: ImmutableMultiDict[str, str]
-    ) -> Optional[str]:
+    def get_libraries_data(self, form_data: ImmutableMultiDict[str, str]) -> str | None:
         libraries_data = form_data.get("libraries", None, str)
         return libraries_data
 
     def get_service(
         self, form_data: ImmutableMultiDict[str, str]
-    ) -> Tuple[IntegrationConfiguration, str, int]:
+    ) -> tuple[IntegrationConfiguration, str, int]:
         protocol = form_data.get("protocol", None, str)
         _id = form_data.get("id", None, int)
         name = form_data.get("name", None, str)
@@ -239,7 +237,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """
         Get a library by its short name.
         """
-        library: Optional[Library] = get_one(self._db, Library, short_name=short_name)
+        library: Library | None = get_one(self._db, Library, short_name=short_name)
         if library is None:
             raise ProblemError(
                 NO_SUCH_LIBRARY.detailed(
@@ -343,7 +341,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return ChangedLibrariesTuple(new=new, updated=updated, removed=removed)
 
     def process_deleted_libraries(
-        self, removed: List[IntegrationLibraryConfiguration]
+        self, removed: list[IntegrationLibraryConfiguration]
     ) -> None:
         """
         Delete any IntegrationLibraryConfigurations that were removed.
@@ -353,8 +351,8 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
 
     def process_updated_libraries(
         self,
-        libraries: List[UpdatedLibrarySettingsTuple],
-        settings_class: Type[BaseSettings],
+        libraries: list[UpdatedLibrarySettingsTuple],
+        settings_class: type[BaseSettings],
     ) -> None:
         """
         Update the settings for any IntegrationLibraryConfigurations that were updated or added.
@@ -367,7 +365,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         self,
         service: IntegrationConfiguration,
         libraries_data: str,
-        settings_class: Type[BaseSettings],
+        settings_class: type[BaseSettings],
     ) -> None:
         """
         Process the library settings for a service. This will create new

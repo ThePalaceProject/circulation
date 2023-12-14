@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Iterable, List
+from collections.abc import Iterable
 
 import jsonschema
 
@@ -304,7 +304,7 @@ class CustomListProblemCollectionRequestFailed(CustomListProblem):
 
 
 class CustomListReport:
-    _errors: List[CustomListProblem]
+    _errors: list[CustomListProblem]
     _id: int
     _name: str
 
@@ -407,7 +407,7 @@ class CustomListReport:
 
 
 class CustomListsReport:
-    _reports: List[CustomListReport]
+    _reports: list[CustomListReport]
 
     def __init__(self):
         self._reports = []

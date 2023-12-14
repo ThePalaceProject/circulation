@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Dict
 
 
 class SearchMappingFieldType(ABC):
@@ -68,14 +67,14 @@ SHORT: SearchMappingFieldTypeScalar = SearchMappingFieldTypeScalar("short")
 class SearchMappingFieldTypeParameterized(SearchMappingFieldType):
     """The base class for types that have parameters (date, keyword, etc)"""
 
-    _parameters: Dict[str, str]
+    _parameters: dict[str, str]
 
     def __init__(self, name: str):
         self._name = name
         self._parameters = {}
 
     @property
-    def parameters(self) -> Dict[str, str]:
+    def parameters(self) -> dict[str, str]:
         return self._parameters
 
     def serialize(self) -> dict:
@@ -111,14 +110,14 @@ def sort_author_keyword() -> SearchMappingFieldTypeParameterized:
 class SearchMappingFieldTypeObject(SearchMappingFieldType):
     """See: https://opensearch.org/docs/latest/field-types/supported-field-types/object/"""
 
-    _properties: Dict[str, SearchMappingFieldType]
+    _properties: dict[str, SearchMappingFieldType]
 
     def __init__(self, type: str):
         self._type = type
         self._properties = {}
 
     @property
-    def properties(self) -> Dict[str, SearchMappingFieldType]:
+    def properties(self) -> dict[str, SearchMappingFieldType]:
         return self._properties
 
     def add_property(self, name, type: SearchMappingFieldType):
@@ -226,24 +225,24 @@ class SearchMappingDocument:
     """
 
     def __init__(self):
-        self._settings: Dict[str, dict] = {}
-        self._fields: Dict[str, SearchMappingFieldType] = {}
-        self._scripts: Dict[str, str] = {}
+        self._settings: dict[str, dict] = {}
+        self._fields: dict[str, SearchMappingFieldType] = {}
+        self._scripts: dict[str, str] = {}
 
     @property
-    def settings(self) -> Dict[str, dict]:
+    def settings(self) -> dict[str, dict]:
         return self._settings
 
     @property
-    def scripts(self) -> Dict[str, str]:
+    def scripts(self) -> dict[str, str]:
         return self._scripts
 
     @property
-    def properties(self) -> Dict[str, SearchMappingFieldType]:
+    def properties(self) -> dict[str, SearchMappingFieldType]:
         return self._fields
 
     @properties.setter
-    def properties(self, fields: Dict[str, SearchMappingFieldType]):
+    def properties(self, fields: dict[str, SearchMappingFieldType]):
         self._fields = dict(fields)
 
     def serialize(self) -> dict:

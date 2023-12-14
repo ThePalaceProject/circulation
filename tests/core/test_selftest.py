@@ -6,7 +6,7 @@ configured, not that the code is correct.
 """
 
 import datetime
-from typing import Generator, Optional
+from collections.abc import Generator
 from unittest.mock import MagicMock
 
 from sqlalchemy.orm import Session
@@ -104,7 +104,7 @@ class TestHasSelfTests:
         """
 
         class Tester(HasSelfTests):
-            integration: Optional[ExternalIntegration]
+            integration: ExternalIntegration | None
 
             def __init__(self, extra_arg=None):
                 """This constructor works."""

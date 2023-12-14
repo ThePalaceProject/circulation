@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from core.feed.types import FeedData, WorkEntryData
 from core.util.opds_writer import OPDSMessage
@@ -15,7 +15,7 @@ class SerializerInterface(ABC, Generic[T]):
 
     @abstractmethod
     def serialize_feed(
-        self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
+        self, feed: FeedData, precomposed_entries: list[OPDSMessage] | None = None
     ) -> str:
         ...
 

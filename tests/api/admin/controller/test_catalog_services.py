@@ -1,6 +1,5 @@
 import json
 from contextlib import nullcontext
-from typing import Dict, Optional, Type
 
 import flask
 import pytest
@@ -158,10 +157,10 @@ class TestCatalogServicesController:
     def test_catalog_services_post_errors(
         self,
         admin_ctrl_fixture: AdminControllerFixture,
-        post_data: Dict[str, str],
-        expected: Optional[ProblemDetail],
+        post_data: dict[str, str],
+        expected: ProblemDetail | None,
         admin: bool,
-        raises: Optional[Type[Exception]],
+        raises: type[Exception] | None,
     ):
         if admin:
             admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)

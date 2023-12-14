@@ -1,6 +1,6 @@
 import functools
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import pytest
 import requests

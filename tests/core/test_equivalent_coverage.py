@@ -1,5 +1,3 @@
-from typing import List
-
 import pytest
 import sqlalchemy
 from sqlalchemy import or_
@@ -23,8 +21,8 @@ class EquivalentCoverageFixture:
     coverage_records: ExampleEquivalencyCoverageRecordFixture
     provider: EquivalentIdentifiersCoverageProvider
     transaction: DatabaseTransactionFixture
-    identifiers: List[Identifier]
-    equivalencies: List[Equivalency]
+    identifiers: list[Identifier]
+    equivalencies: list[Equivalency]
 
 
 @pytest.fixture()

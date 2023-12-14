@@ -1,8 +1,9 @@
 import json
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 from functools import partial
-from typing import Callable, cast
+from typing import cast
 
 import pytest
 

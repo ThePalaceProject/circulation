@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Column
 from sqlalchemy import Enum as SQLAlchemyEnum
@@ -47,14 +47,14 @@ class IntegrationConfiguration(Base):
     name = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.
-    settings_dict: Mapped[Dict[str, Any]] = Column(
+    settings_dict: Mapped[dict[str, Any]] = Column(
         "settings", JSONB, nullable=False, default=dict
     )
 
     # Integration specific context data. Stored as json. This is used to
     # store configuration data that is not user supplied for a particular
     # integration.
-    context: Mapped[Dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
+    context: Mapped[dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (
         Index(
@@ -64,7 +64,7 @@ class IntegrationConfiguration(Base):
         ),
     )
 
-    def context_update(self, new_context: Dict[str, Any]) -> None:
+    def context_update(self, new_context: dict[str, Any]) -> None:
         """Update the context for this integration"""
         self.context.update(new_context)
         flag_modified(self, "context")
@@ -73,7 +73,7 @@ class IntegrationConfiguration(Base):
     self_test_results = Column(JSONB, nullable=False, default=dict)
 
     library_configurations: Mapped[
-        List[IntegrationLibraryConfiguration]
+        list[IntegrationLibraryConfiguration]
     ] = relationship(
         "IntegrationLibraryConfiguration",
         back_populates="parent",
@@ -87,7 +87,7 @@ class IntegrationConfiguration(Base):
     )
 
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#simplifying-association-objects
-    libraries: Mapped[List[Library]] = association_proxy(
+    libraries: Mapped[list[Library]] = association_proxy(
         "library_configurations",
         "library",
         creator=lambda library: IntegrationLibraryConfiguration(library=library),
@@ -161,7 +161,7 @@ class IntegrationLibraryConfiguration(Base):
     library: Mapped[Library] = relationship("Library")
 
     # The configuration settings for this integration. Stored as json.
-    settings_dict: Mapped[Dict[str, Any]] = Column(
+    settings_dict: Mapped[dict[str, Any]] = Column(
         "settings", JSONB, nullable=False, default=dict
     )
 

@@ -1,5 +1,5 @@
 import datetime
-from typing import Generator, List, Union
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -147,7 +147,7 @@ class TestOPDS2Importer(OPDS2Test):
             opds2_importer_fixture.transaction.session,
         )
         content_server_feed_text = opds2_files_fixture.sample_text("feed.json")
-        content_server_feed: Union[str, bytes]
+        content_server_feed: str | bytes
 
         if manifest_type == "bytes":
             content_server_feed = content_server_feed_text.encode()
@@ -405,7 +405,7 @@ class TestOPDS2Importer(OPDS2Test):
         opds2_importer_fixture: TestOPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
         this_identifier_type,
-        ignore_identifier_type: List[IdentifierType],
+        ignore_identifier_type: list[IdentifierType],
         identifier: str,
     ) -> None:
         """Ensure that OPDS2Importer imports only publications having supported identifier types.

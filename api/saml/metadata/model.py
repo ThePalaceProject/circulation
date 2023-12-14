@@ -3,7 +3,8 @@ import logging
 from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE  # type: ignore
-from typing import Any, List, Optional, Pattern, Union
+from re import Pattern
+from typing import Any
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
@@ -786,7 +787,7 @@ class SAMLNameID:
         self,
         name_format: str,
         name_qualifier: str,
-        sp_name_qualifier: Optional[str],
+        sp_name_qualifier: str | None,
         name_id: str,
     ) -> None:
         """Initializes a new instance of NameID class
@@ -850,7 +851,7 @@ class SAMLNameID:
         return self._name_qualifier
 
     @property
-    def sp_name_qualifier(self) -> Optional[str]:
+    def sp_name_qualifier(self) -> str | None:
         """Returns the attribute that further qualifies a federated name identifier with the name of the service provider
         or affiliation of providers which has federated the principal's identity
 
@@ -1045,9 +1046,9 @@ class SAMLSubject:
     def __init__(
         self,
         idp: str,
-        name_id: Optional[SAMLNameID],
-        attribute_statement: Optional[SAMLAttributeStatement],
-        valid_till: Optional[Union[datetime.datetime, datetime.timedelta, int]] = None,
+        name_id: SAMLNameID | None,
+        attribute_statement: SAMLAttributeStatement | None,
+        valid_till: datetime.datetime | datetime.timedelta | int | None = None,
     ):
         """Initializes a new instance of Subject class
 
@@ -1060,7 +1061,7 @@ class SAMLSubject:
             - https://wiki.shibboleth.net/confluence/display/IDP30/SessionConfiguration
         """
         self._idp = idp
-        self._name_id: Optional[SAMLNameID] = name_id
+        self._name_id: SAMLNameID | None = name_id
         self._attribute_statement = attribute_statement
         self._valid_till = valid_till
 
@@ -1112,7 +1113,7 @@ class SAMLSubject:
         return self._idp
 
     @property
-    def name_id(self) -> Optional[SAMLNameID]:
+    def name_id(self) -> SAMLNameID | None:
         """Return the name ID.
 
         :return: Name ID
@@ -1120,7 +1121,7 @@ class SAMLSubject:
         return self._name_id
 
     @name_id.setter
-    def name_id(self, value: Optional[SAMLNameID]) -> None:
+    def name_id(self, value: SAMLNameID | None) -> None:
         """Set the name ID.
 
         :param value: New name ID
@@ -1290,8 +1291,8 @@ class SAMLSubjectPatronIDExtractor:
     def __init__(
         self,
         use_name_id: bool = True,
-        attributes: Optional[List[str]] = None,
-        regular_expression: Optional[Pattern] = None,
+        attributes: list[str] | None = None,
+        regular_expression: Pattern | None = None,
     ):
         """Initialize a new instance of SAMLSubjectPatronIDExtractor class.
 

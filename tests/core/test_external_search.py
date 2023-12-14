@@ -2,8 +2,8 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Callable, Collection
 from datetime import datetime
-from typing import Callable, Collection, List
 from unittest.mock import MagicMock
 
 import pytest
@@ -1632,7 +1632,7 @@ class TestAuthorFilterData:
     sort_name: Contributor
     viaf: Contributor
     lc: Contributor
-    works: List[Work]
+    works: list[Work]
     literary_wonderlands: Work
     ubik: Work
     justice: Work
@@ -5381,7 +5381,7 @@ class TestExternalSearchJSONQueryData:
     book_work: Work
     facets: SearchFacets
     filter: Filter
-    random_works: List[Work]
+    random_works: list[Work]
 
 
 class TestExternalSearchJSONQuery:

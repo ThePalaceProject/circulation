@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Iterable, List
+from collections.abc import Iterable
 
 import pytest
 from opensearchpy import OpenSearch
@@ -24,7 +24,7 @@ class ExternalSearchFixture:
     integration: ExternalIntegration
     db: DatabaseTransactionFixture
     search: OpenSearch
-    _indexes_created: List[str]
+    _indexes_created: list[str]
 
     def __init__(self):
         self._indexes_created = []

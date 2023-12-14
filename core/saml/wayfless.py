@@ -1,5 +1,3 @@
-from typing import Optional
-
 from flask_babel import lazy_gettext as _
 
 from core.exceptions import BaseError
@@ -18,7 +16,7 @@ class SAMLWAYFlessConstants:
 
 
 class SAMLWAYFlessSetttings(BaseSettings):
-    saml_wayfless_url_template: Optional[str] = FormField(
+    saml_wayfless_url_template: str | None = FormField(
         default=None,
         form=ConfigurationFormItem(
             label=_("SAML WAYFless URL Template"),

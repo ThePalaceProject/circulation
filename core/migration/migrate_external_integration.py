@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy.engine import Connection, CursorResult, Row
 
@@ -19,7 +19,7 @@ T = TypeVar("T", bound=BaseSettings)
 
 
 def _validate_and_load_settings(
-    settings_class: Type[T], settings_dict: Dict[str, str]
+    settings_class: type[T], settings_dict: dict[str, str]
 ) -> T:
     aliases = {
         f.alias: f.name
@@ -47,14 +47,14 @@ def _validate_and_load_settings(
 def get_configuration_settings(
     connection: Connection,
     integration: Row,
-) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]], str]:
+) -> tuple[dict[str, str], dict[str, dict[str, str]], str]:
     settings = connection.execute(
         "select cs.library_id, cs.key, cs.value from configurationsettings cs "
         "where cs.external_integration_id = (%s)",
         (integration.id,),
     )
     settings_dict = {}
-    library_settings: Dict[str, Dict[str, str]] = defaultdict(dict)
+    library_settings: dict[str, dict[str, str]] = defaultdict(dict)
     self_test_results = json_serializer({})
     for setting in settings:
         if not setting.value:
@@ -74,11 +74,11 @@ def _migrate_external_integration(
     connection: Connection,
     name: str,
     protocol: str,
-    protocol_class: Type[HasIntegrationConfiguration[BaseSettings]],
+    protocol_class: type[HasIntegrationConfiguration[BaseSettings]],
     goal: str,
-    settings_dict: Dict[str, Any],
+    settings_dict: dict[str, Any],
     self_test_results: str,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
 ) -> int:
     # Load and validate the settings before storing them in the database.
     settings_class = protocol_class.settings_class()
@@ -105,8 +105,8 @@ def _migrate_library_settings(
     connection: Connection,
     integration_id: int,
     library_id: int,
-    library_settings: Dict[str, str],
-    protocol_class: Type[
+    library_settings: dict[str, str],
+    protocol_class: type[
         HasLibraryIntegrationConfiguration[BaseSettings, BaseSettings]
     ],
 ) -> None:

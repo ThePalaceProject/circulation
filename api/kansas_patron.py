@@ -1,5 +1,3 @@
-from typing import Optional, Type, Union
-
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import HttpUrl
@@ -37,11 +35,11 @@ class KansasAuthenticationAPI(
         return "An authentication service for the Kansas State Library."
 
     @classmethod
-    def settings_class(cls) -> Type[KansasAuthSettings]:
+    def settings_class(cls) -> type[KansasAuthSettings]:
         return KansasAuthSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[BasicAuthProviderLibrarySettings]:
+    def library_settings_class(cls) -> type[BasicAuthProviderLibrarySettings]:
         return BasicAuthProviderLibrarySettings
 
     def __init__(
@@ -61,8 +59,8 @@ class KansasAuthenticationAPI(
     # methods.
 
     def remote_authenticate(
-        self, username: Optional[str], password: Optional[str]
-    ) -> Optional[PatronData]:
+        self, username: str | None, password: str | None
+    ) -> PatronData | None:
         # Create XML doc for request
         authorization_request = self.create_authorize_request(username, password)
         # Post request to the server
@@ -83,8 +81,8 @@ class KansasAuthenticationAPI(
         )
 
     def remote_patron_lookup(
-        self, patron_or_patrondata: Union[PatronData, Patron]
-    ) -> Optional[PatronData]:
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | None:
         # Kansas auth gives very little data about the patron. So this function is just a passthrough.
         if isinstance(patron_or_patrondata, PatronData):
             return patron_or_patrondata

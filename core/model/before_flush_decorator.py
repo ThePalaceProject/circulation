@@ -1,19 +1,13 @@
 from __future__ import annotations
 
-import sys
+from collections.abc import Callable
 from copy import copy
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, ParamSpec
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
-
-# TODO: Remove this when we drop support for Python 3.9
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
 
 if TYPE_CHECKING:
     from core.model import Base
@@ -39,7 +33,7 @@ class BeforeFlushListener:
         """
 
         # Tuple of models that the listener is registered for.
-        models: Tuple[Type[Base], ...]
+        models: tuple[type[Base], ...]
         # State that the listener is registered for.
         state: ListenerState
         # If True, the listener will only be called once.
@@ -50,11 +44,11 @@ class BeforeFlushListener:
         one_shot_triggered: bool = False
 
     def __init__(self):
-        self._listeners: List[BeforeFlushListener.Listeners] = []
+        self._listeners: list[BeforeFlushListener.Listeners] = []
 
     def before_flush(
         self,
-        model: Type[Base] | Tuple[Type[Base], ...],
+        model: type[Base] | tuple[type[Base], ...],
         state: ListenerState = ListenerState.any,
         one_shot: bool = False,
     ) -> Callable[[Callable[P, None]], Callable[P, None]]:
@@ -91,8 +85,8 @@ class BeforeFlushListener:
         cls,
         listening_for: ListenerState,
         session: Session,
-        listeners: List[BeforeFlushListener.Listeners],
-        instance_filter: Optional[Callable[[Session, Base], bool]] = None,
+        listeners: list[BeforeFlushListener.Listeners],
+        instance_filter: Callable[[Session, Base], bool] | None = None,
     ) -> None:
         """
         Invoke the listeners for the given state.
@@ -136,8 +130,8 @@ class BeforeFlushListener:
     def before_flush_event_listener(
         self,
         session: Session,
-        _flush_context: Optional[UOWTransaction] = None,
-        _instances: Optional[List[object]] = None,
+        _flush_context: UOWTransaction | None = None,
+        _instances: list[object] | None = None,
     ) -> None:
         """
         SQLAlchemy event listener that is called before a flush. This is where we invoke the listeners that have been

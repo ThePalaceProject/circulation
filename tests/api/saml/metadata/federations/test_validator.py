@@ -1,6 +1,5 @@
 import datetime
 import os
-from typing import Optional, Type, Union
 
 import pytest
 from freezegun import freeze_time
@@ -136,8 +135,8 @@ class TestSAMLFederatedMetadataExpirationValidator:
         self,
         _,
         current_time: datetime.datetime,
-        metadata: Union[str, bytes],
-        expected_exception: Optional[Type[Exception]],
+        metadata: str | bytes,
+        expected_exception: type[Exception] | None,
     ):
         # Arrange
         validator = SAMLFederatedMetadataExpirationValidator()

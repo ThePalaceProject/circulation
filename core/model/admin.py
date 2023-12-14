@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import bcrypt
 from flask_babel import lazy_gettext as _
@@ -40,7 +40,7 @@ class Admin(Base, HasSessionCache):
     password_hashed = Column(Unicode, index=True)
 
     # An Admin may have many roles.
-    roles: Mapped[List[AdminRole]] = relationship(
+    roles: Mapped[list[AdminRole]] = relationship(
         "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
     )
 

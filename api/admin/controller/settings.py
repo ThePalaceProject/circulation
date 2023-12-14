@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 import flask
 from flask import Response
@@ -55,7 +55,7 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
 
     def _get_settings_class(
         self, registry: IntegrationRegistry, protocol_name: str, is_child=False
-    ) -> Type[BaseSettings] | ProblemDetail | None:
+    ) -> type[BaseSettings] | ProblemDetail | None:
         api_class = registry.get(protocol_name)
         if not api_class:
             return None
@@ -234,14 +234,14 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         return values
 
     def _extract_form_setting_value(
-        self, setting: Dict[str, Any], form_data: ImmutableMultiDict
-    ) -> Optional[Any]:
+        self, setting: dict[str, Any], form_data: ImmutableMultiDict
+    ) -> Any | None:
         """Extract the value of a setting from form data."""
 
         key = setting.get("key")
         setting_type = setting.get("type")
 
-        value: Optional[Any]
+        value: Any | None
         if setting_type == "list" and not setting.get("options"):
             value = [item for item in form_data.getlist(key) if item]
         elif setting_type == "menu":
@@ -295,7 +295,7 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         self,
         configuration: IntegrationConfiguration,
         library_info: dict,
-        protocol_class: Type[HasLibraryIntegrationConfiguration],
+        protocol_class: type[HasLibraryIntegrationConfiguration],
     ) -> IntegrationLibraryConfiguration:
         """Set the library configuration for the integration configuration.
         The data will be validated first."""

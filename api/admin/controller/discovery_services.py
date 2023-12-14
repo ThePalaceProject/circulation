@@ -1,5 +1,3 @@
-from typing import Union
-
 import flask
 from flask import Response
 from sqlalchemy import and_, select
@@ -25,7 +23,7 @@ class DiscoveryServicesController(
     def default_registry(self) -> DiscoveryRegistry:
         return DiscoveryRegistry()
 
-    def process_discovery_services(self) -> Union[Response, ProblemDetail]:
+    def process_discovery_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
         if flask.request.method == "GET":
             return self.process_get()
@@ -60,7 +58,7 @@ class DiscoveryServicesController(
         )
         default_registry.settings_dict = settings.dict()
 
-    def process_post(self) -> Union[Response, ProblemDetail]:
+    def process_post(self) -> Response | ProblemDetail:
         try:
             form_data = flask.request.form
             service, protocol, response_code = self.get_service(form_data)
@@ -82,7 +80,7 @@ class DiscoveryServicesController(
 
         return Response(str(service.id), response_code)
 
-    def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
+    def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
             return self.delete_service(service_id)

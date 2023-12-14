@@ -1,5 +1,4 @@
 import datetime
-from typing import List
 
 import pytest
 
@@ -587,8 +586,8 @@ class TestWorkCoverageRecord:
 
 
 class ExampleEquivalencyCoverageRecordFixture:
-    identifiers: List[Identifier]
-    equivalencies: List[Equivalency]
+    identifiers: list[Identifier]
+    equivalencies: list[Equivalency]
     transaction: DatabaseTransactionFixture
 
     def __init__(self, transaction: DatabaseTransactionFixture):

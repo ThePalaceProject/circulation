@@ -4,15 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import (
-    TYPE_CHECKING,
-    ClassVar,
-    Optional,
-    Protocol,
-    Type,
-    cast,
-    runtime_checkable,
-)
+from typing import TYPE_CHECKING, ClassVar, Protocol, cast, runtime_checkable
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -977,7 +969,7 @@ class TestErrorParser:
     def test_exception(
         self,
         incoming_message: str,
-        error_class: Type[CirculationException],
+        error_class: type[CirculationException],
         error_code: int,
         problem_detail_title: str,
         problem_detail_code: int,
@@ -1033,8 +1025,8 @@ class TestErrorParser:
     )
     def test_remote_initiated_server_error(
         self,
-        incoming_message: Optional[str],
-        incoming_message_from_file: Optional[str],
+        incoming_message: str | None,
+        incoming_message_from_file: str | None,
         error_string: str,
         api_bibliotheca_files_fixture: BibliothecaFilesFixture,
     ):

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Optional, cast
+from typing import cast
 from unittest.mock import call, patch
 
 import pytest
@@ -31,12 +31,12 @@ class TestPatronActivitySync:
     def test_item_query(self, sync_fixture: PatronSyncFixture):
         db = sync_fixture.db
 
-        work: Optional[Work] = db.work(
+        work: Work | None = db.work(
             with_license_pool=True, with_open_access_download=True
         )
         assert work is not None
 
-        pool: Optional[LicensePool] = work.active_license_pool()
+        pool: LicensePool | None = work.active_license_pool()
         assert pool is not None
 
         patron1: Patron = db.patron()  # 0 loans, holds or tokens

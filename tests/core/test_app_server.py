@@ -1,8 +1,8 @@
 import gzip
 import json
+from collections.abc import Callable, Iterable
 from functools import partial
 from io import BytesIO
-from typing import Callable, Iterable
 from unittest.mock import MagicMock, PropertyMock
 
 import flask

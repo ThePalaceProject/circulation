@@ -4,9 +4,10 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Type
+from typing import Any
 
 from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection
@@ -168,9 +169,9 @@ class CacheMARCFiles(LibraryInputScript):
 
     def __init__(
         self,
-        _db: Optional[Session] = None,
-        cmd_args: Optional[Sequence[str]] = None,
-        exporter: Optional[MARCExporter] = None,
+        _db: Session | None = None,
+        cmd_args: Sequence[str] | None = None,
+        exporter: MARCExporter | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -185,9 +186,7 @@ class CacheMARCFiles(LibraryInputScript):
 
         self.exporter = exporter or MARCExporter(self._db, self.storage_service)
 
-    def parse_args(
-        self, cmd_args: Optional[Sequence[str]] = None
-    ) -> argparse.Namespace:
+    def parse_args(self, cmd_args: Sequence[str] | None = None) -> argparse.Namespace:
         parser = self.arg_parser(self._db)
         parsed = parser.parse_args(cmd_args)
         self.force = parsed.force
@@ -195,7 +194,7 @@ class CacheMARCFiles(LibraryInputScript):
 
     def settings(
         self, library: Library
-    ) -> Tuple[MarcExporterSettings, MarcExporterLibrarySettings]:
+    ) -> tuple[MarcExporterSettings, MarcExporterLibrarySettings]:
         integration_query = (
             select(IntegrationLibraryConfiguration)
             .join(IntegrationConfiguration)
@@ -228,8 +227,8 @@ class CacheMARCFiles(LibraryInputScript):
         ).all()
 
     def get_web_client_urls(
-        self, library: Library, url: Optional[str] = None
-    ) -> List[str]:
+        self, library: Library, url: str | None = None
+    ) -> list[str]:
         """Find web client URLs configured by the registry for this library."""
         urls = [
             s.web_client
@@ -247,7 +246,7 @@ class CacheMARCFiles(LibraryInputScript):
         return urls
 
     def process_library(
-        self, library: Library, annotator_cls: Type[MarcAnnotator] = MarcAnnotator
+        self, library: Library, annotator_cls: type[MarcAnnotator] = MarcAnnotator
     ) -> None:
         try:
             settings, library_settings = self.settings(library)
@@ -290,7 +289,7 @@ class CacheMARCFiles(LibraryInputScript):
 
     def last_updated(
         self, library: Library, collection: Collection
-    ) -> Optional[datetime.datetime]:
+    ) -> datetime.datetime | None:
         """Find the most recent MarcFile creation time."""
         last_updated_file = self._db.execute(
             select(MarcFile.created)
@@ -487,7 +486,7 @@ class InstanceInitializationScript:
     """
 
     def __init__(self) -> None:
-        self._log: Optional[logging.Logger] = None
+        self._log: logging.Logger | None = None
         self._container = container_instance()
 
         # Call init_resources() to initialize the logging configuration.

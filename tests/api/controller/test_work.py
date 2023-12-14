@@ -1,7 +1,7 @@
 import datetime
 import json
 import urllib.parse
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 
 import feedparser
@@ -327,7 +327,7 @@ class TestWorkController:
             patron2_loan, _ = pool.loan_to(patron_2)
 
             # We want to make sure that the feed doesn't contain any fulfillment links.
-            active_loans_by_work: Dict[Any, Any] = {}
+            active_loans_by_work: dict[Any, Any] = {}
             annotator = LibraryAnnotator(
                 None,
                 None,

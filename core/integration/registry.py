@@ -1,19 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import (
-    Dict,
-    Generic,
-    Iterator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    overload,
-)
+from collections.abc import Iterator
+from typing import Generic, TypeVar, overload
 
 from core.integration.goals import Goals
 
@@ -26,10 +15,10 @@ class IntegrationRegistryException(ValueError):
 
 
 class IntegrationRegistry(Generic[T]):
-    def __init__(self, goal: Goals, integrations: Optional[Dict[str, Type[T]]] = None):
+    def __init__(self, goal: Goals, integrations: dict[str, type[T]] | None = None):
         """Initialize a new IntegrationRegistry."""
-        self._lookup: Dict[str, Type[T]] = {}
-        self._reverse_lookup: Dict[Type[T], List[str]] = defaultdict(list)
+        self._lookup: dict[str, type[T]] = {}
+        self._reverse_lookup: dict[type[T], list[str]] = defaultdict(list)
         self.goal = goal
 
         if integrations:
@@ -38,11 +27,11 @@ class IntegrationRegistry(Generic[T]):
 
     def register(
         self,
-        integration: Type[T],
+        integration: type[T],
         *,
-        canonical: Optional[str] = None,
-        aliases: Optional[List[str]] = None,
-    ) -> Type[T]:
+        canonical: str | None = None,
+        aliases: list[str] | None = None,
+    ) -> type[T]:
         """
         Register an integration class.
 
@@ -72,29 +61,29 @@ class IntegrationRegistry(Generic[T]):
         return integration
 
     @overload
-    def get(self, protocol: str, default: None = ...) -> Type[T] | None:
+    def get(self, protocol: str, default: None = ...) -> type[T] | None:
         ...
 
     @overload
-    def get(self, protocol: str, default: V) -> Type[T] | V:
+    def get(self, protocol: str, default: V) -> type[T] | V:
         ...
 
-    def get(self, protocol: str, default: V | None = None) -> Type[T] | V | None:
+    def get(self, protocol: str, default: V | None = None) -> type[T] | V | None:
         """Look up an integration class by protocol."""
         if protocol not in self._lookup:
             return default
         return self[protocol]
 
     @overload
-    def get_protocol(self, integration: Type[T], default: None = ...) -> str | None:
+    def get_protocol(self, integration: type[T], default: None = ...) -> str | None:
         ...
 
     @overload
-    def get_protocol(self, integration: Type[T], default: V) -> str | V:
+    def get_protocol(self, integration: type[T], default: V) -> str | V:
         ...
 
     def get_protocol(
-        self, integration: Type[T], default: V | None = None
+        self, integration: type[T], default: V | None = None
     ) -> str | V | None:
         """Look up the canonical protocol for an integration class."""
         names = self.get_protocols(integration, default)
@@ -104,24 +93,24 @@ class IntegrationRegistry(Generic[T]):
 
     @overload
     def get_protocols(
-        self, integration: Type[T], default: None = ...
-    ) -> List[str] | None:
+        self, integration: type[T], default: None = ...
+    ) -> list[str] | None:
         ...
 
     @overload
-    def get_protocols(self, integration: Type[T], default: V) -> List[str] | V:
+    def get_protocols(self, integration: type[T], default: V) -> list[str] | V:
         ...
 
     def get_protocols(
-        self, integration: Type[T], default: V | None = None
-    ) -> List[str] | V | None:
+        self, integration: type[T], default: V | None = None
+    ) -> list[str] | V | None:
         """Look up all protocols for an integration class."""
         if integration not in self._reverse_lookup:
             return default
         return self._reverse_lookup[integration]
 
     @property
-    def integrations(self) -> Set[Type[T]]:
+    def integrations(self) -> set[type[T]]:
         """Return a set of all registered canonical protocols."""
         return set(self._reverse_lookup.keys())
 
@@ -137,11 +126,11 @@ class IntegrationRegistry(Generic[T]):
             assert isinstance(names, list)
             self.register(integration, canonical=names[0], aliases=names[1:])
 
-    def __iter__(self) -> Iterator[Tuple[str, Type[T]]]:
+    def __iter__(self) -> Iterator[tuple[str, type[T]]]:
         for integration, names in self._reverse_lookup.items():
             yield names[0], integration
 
-    def __getitem__(self, protocol: str) -> Type[T]:
+    def __getitem__(self, protocol: str) -> type[T]:
         """Look up an integration class by protocol, using the [] operator."""
         return self._lookup[protocol]
 
@@ -156,15 +145,13 @@ class IntegrationRegistry(Generic[T]):
     def __repr__(self) -> str:
         return f"<IntegrationRegistry: {self._lookup}>"
 
-    def __add__(
-        self, other: IntegrationRegistry[V]
-    ) -> IntegrationRegistry[Union[T, V]]:
+    def __add__(self, other: IntegrationRegistry[V]) -> IntegrationRegistry[T | V]:
         if not isinstance(other, IntegrationRegistry):
             raise TypeError(
                 f"unsupported operand type(s) for +: 'IntegrationRegistry' and '{type(other).__name__}'"
             )
 
-        new: IntegrationRegistry[Union[T, V]] = IntegrationRegistry(self.goal)
+        new: IntegrationRegistry[T | V] = IntegrationRegistry(self.goal)
         new.update(self)
         new.update(other)
         return new

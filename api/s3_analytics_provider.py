@@ -4,7 +4,7 @@ import datetime
 import json
 import random
 import string
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING
 
 from core.config import CannotLoadConfiguration
 from core.local_analytics_provider import LocalAnalyticsProvider
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class S3AnalyticsProvider(LocalAnalyticsProvider):
     """Analytics provider storing data in a S3 bucket."""
 
-    def __init__(self, s3_service: Optional[S3Service]):
+    def __init__(self, s3_service: S3Service | None):
         self.s3_service = s3_service
 
     @staticmethod
@@ -28,8 +28,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time: datetime.datetime,
         old_value,
         new_value,
-        neighborhood: Optional[str] = None,
-    ) -> Dict:
+        neighborhood: str | None = None,
+    ) -> dict:
         """Create a Python dict containing required information about the event.
 
         :param library: Library associated with the event
@@ -189,10 +189,10 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     def _get_file_key(
         self,
         library: Library,
-        license_pool: Optional[LicensePool],
+        license_pool: LicensePool | None,
         event_type: str,
         end_time: datetime.datetime,
-        start_time: Optional[datetime.datetime] = None,
+        start_time: datetime.datetime | None = None,
     ):
         """The path to the analytics data file for the given library, license
         pool and date range."""

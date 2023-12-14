@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 from urllib.parse import quote_plus
 
@@ -116,7 +116,7 @@ class TestOPDSFeedController:
 
             # But the rest of the feed looks good.
             links = feed["feed"]["links"]
-            by_rel: Dict[str, Any] = dict()
+            by_rel: dict[str, Any] = dict()
 
             # Put the links into a data structure based on their rel values.
             for i in links:

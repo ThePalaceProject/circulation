@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import random
 import string
+from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, Optional, Protocol, Union, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import pytest
 import pytest_alembic
@@ -61,7 +62,7 @@ def alembic_engine(database: DatabaseFixture) -> Engine:
 
 @pytest.fixture
 def alembic_runner(
-    alembic_config: Union[Dict[str, Any], alembic.config.Config, Config],
+    alembic_config: dict[str, Any] | alembic.config.Config | Config,
     alembic_engine: Engine,
 ) -> Generator[MigrationContext, None, None]:
     """
@@ -75,13 +76,13 @@ def alembic_runner(
 
 
 class RandomName(Protocol):
-    def __call__(self, length: Optional[int] = None) -> str:
+    def __call__(self, length: int | None = None) -> str:
         ...
 
 
 @pytest.fixture
 def random_name() -> RandomName:
-    def fixture(length: Optional[int] = None) -> str:
+    def fixture(length: int | None = None) -> str:
         if length is None:
             length = 10
         return "".join(random.choices(string.ascii_lowercase, k=length))
@@ -93,8 +94,8 @@ class CreateLibrary(Protocol):
     def __call__(
         self,
         connection: Connection,
-        name: Optional[str] = None,
-        short_name: Optional[str] = None,
+        name: str | None = None,
+        short_name: str | None = None,
     ) -> int:
         ...
 
@@ -103,8 +104,8 @@ class CreateLibrary(Protocol):
 def create_library(random_name: RandomName) -> CreateLibrary:
     def fixture(
         connection: Connection,
-        name: Optional[str] = None,
-        short_name: Optional[str] = None,
+        name: str | None = None,
+        short_name: str | None = None,
     ) -> int:
         if name is None:
             name = random_name()
@@ -142,7 +143,7 @@ class CreateCollection(Protocol):
     def __call__(
         self,
         connection: Connection,
-        integration_configuration_id: Optional[int] = None,
+        integration_configuration_id: int | None = None,
     ) -> int:
         ...
 
@@ -151,7 +152,7 @@ class CreateCollection(Protocol):
 def create_collection(random_name: RandomName) -> CreateCollection:
     def fixture(
         connection: Connection,
-        integration_configuration_id: Optional[int] = None,
+        integration_configuration_id: int | None = None,
     ) -> int:
         collection = connection.execute(
             "INSERT INTO collections (integration_configuration_id) VALUES (%s) returning id",
@@ -168,9 +169,9 @@ class CreateExternalIntegration(Protocol):
     def __call__(
         self,
         connection: Connection,
-        protocol: Optional[str] = None,
-        goal: Optional[str] = None,
-        name: Optional[str] = None,
+        protocol: str | None = None,
+        goal: str | None = None,
+        name: str | None = None,
     ) -> int:
         ...
 
@@ -179,9 +180,9 @@ class CreateExternalIntegration(Protocol):
 def create_external_integration(random_name: RandomName) -> CreateExternalIntegration:
     def fixture(
         connection: Connection,
-        protocol: Optional[str] = None,
-        goal: Optional[str] = None,
-        name: Optional[str] = None,
+        protocol: str | None = None,
+        goal: str | None = None,
+        name: str | None = None,
     ) -> int:
         protocol = protocol or random_name()
         goal = goal or random_name()
@@ -200,10 +201,10 @@ class CreateConfigSetting(Protocol):
     def __call__(
         self,
         connection: Connection,
-        key: Optional[str] = None,
-        value: Optional[str] = None,
-        integration_id: Optional[int] = None,
-        library_id: Optional[int] = None,
+        key: str | None = None,
+        value: str | None = None,
+        integration_id: int | None = None,
+        library_id: int | None = None,
         associate_library: bool = False,
     ) -> int:
         ...
@@ -213,10 +214,10 @@ class CreateConfigSetting(Protocol):
 def create_config_setting() -> CreateConfigSetting:
     def fixture(
         connection: Connection,
-        key: Optional[str] = None,
-        value: Optional[str] = None,
-        integration_id: Optional[int] = None,
-        library_id: Optional[int] = None,
+        key: str | None = None,
+        value: str | None = None,
+        integration_id: int | None = None,
+        library_id: int | None = None,
         associate_library: bool = False,
     ) -> int:
         if type(value) in (tuple, list, dict):
@@ -252,7 +253,7 @@ class CreateIntegrationConfiguration(Protocol):
         name: str,
         protocol: str,
         goal: str,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
     ) -> int:
         ...
 
@@ -264,7 +265,7 @@ def create_integration_configuration() -> CreateIntegrationConfiguration:
         name: str,
         protocol: str,
         goal: str,
-        settings: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any] | None = None,
     ) -> int:
         if settings is None:
             settings = {}
@@ -318,8 +319,8 @@ class CreateIdentifier:
     def __call__(
         self,
         connection: Connection,
-        identifier: Optional[str] = None,
-        type: Optional[str] = None,
+        identifier: str | None = None,
+        type: str | None = None,
     ) -> int:
         identifier = identifier or self.random_name()
         type = type or self.random_name()
@@ -346,8 +347,8 @@ class CreateLicensePool(Protocol):
         self,
         connection: Connection,
         collection_id: int,
-        identifier_id: Optional[int] = None,
-        should_track_playtime: Optional[bool] = False,
+        identifier_id: int | None = None,
+        should_track_playtime: bool | None = False,
     ) -> int:
         ...
 
@@ -357,8 +358,8 @@ def create_license_pool() -> CreateLicensePool:
     def fixture(
         connection: Connection,
         collection_id: int,
-        identifier_id: Optional[int] = None,
-        should_track_playtime: Optional[bool] = False,
+        identifier_id: int | None = None,
+        should_track_playtime: bool | None = False,
     ) -> int:
         licensepool = connection.execute(
             "INSERT into licensepools (collection_id, identifier_id, should_track_playtime) VALUES (%(id)s, %(identifier_id)s, %(track)s) returning id",
@@ -377,7 +378,7 @@ class CreateLane:
         self,
         connection: Connection,
         library_id: int,
-        name: Optional[str] = None,
+        name: str | None = None,
         priority: int = 0,
         inherit_parent_restrictions: bool = False,
         include_self_in_grouped_feed: bool = False,
@@ -413,9 +414,9 @@ class CreateCoverageRecord:
     def __call__(
         self,
         connection: Connection,
-        operation: Optional[str] = None,
-        identifier_id: Optional[int] = None,
-        collection_id: Optional[int] = None,
+        operation: str | None = None,
+        identifier_id: int | None = None,
+        collection_id: int | None = None,
     ) -> int:
         if identifier_id is None:
             identifier_id = self.create_identifier(connection)

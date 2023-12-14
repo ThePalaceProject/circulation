@@ -22,7 +22,6 @@ import logging
 import re
 from collections import namedtuple
 from operator import attrgetter
-from typing import Optional
 
 VALIDATE_LANG_REGEX = re.compile("^[a-z]+$", flags=re.IGNORECASE)
 QUALITY_VAL_SUB_REGEX = re.compile("^q=", flags=re.IGNORECASE)
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def parse_accept_language(
-    accept_language_str: str, default_quality: Optional[float] = None
+    accept_language_str: str, default_quality: float | None = None
 ) -> list:
     """
     Parse a RFC 2616 Accept-Language string.

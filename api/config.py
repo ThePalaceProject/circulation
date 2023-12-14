@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
@@ -142,28 +142,28 @@ class Configuration(CoreConfiguration):
             cls.estimate_language_collections_for_library(library)
 
     @classmethod
-    def large_collection_languages(cls, library: Library) -> List[str]:
+    def large_collection_languages(cls, library: Library) -> list[str]:
         cls.estimate_language_collections_when_unset(library)
         if library.settings.large_collection_languages is None:
             return []
         return library.settings.large_collection_languages
 
     @classmethod
-    def small_collection_languages(cls, library: Library) -> List[str]:
+    def small_collection_languages(cls, library: Library) -> list[str]:
         cls.estimate_language_collections_when_unset(library)
         if library.settings.small_collection_languages is None:
             return []
         return library.settings.small_collection_languages
 
     @classmethod
-    def tiny_collection_languages(cls, library: Library) -> List[str]:
+    def tiny_collection_languages(cls, library: Library) -> list[str]:
         cls.estimate_language_collections_when_unset(library)
         if library.settings.tiny_collection_languages is None:
             return []
         return library.settings.tiny_collection_languages
 
     @classmethod
-    def max_outstanding_fines(cls, library: Library) -> Optional[Money]:
+    def max_outstanding_fines(cls, library: Library) -> Money | None:
         if library.settings.max_outstanding_fines is None:
             return None
         return MoneyUtility.parse(library.settings.max_outstanding_fines)
@@ -235,7 +235,7 @@ class Configuration(CoreConfiguration):
         return "mailto:%s" % value
 
     @classmethod
-    def help_uris(cls, library: Library) -> Iterable[Tuple[Optional[str], str]]:
+    def help_uris(cls, library: Library) -> Iterable[tuple[str | None, str]]:
         """Find all the URIs that might help patrons get help from
         this library.
 
@@ -247,7 +247,7 @@ class Configuration(CoreConfiguration):
             yield "text/html", library.settings.help_web
 
     @classmethod
-    def copyright_designated_agent_uri(cls, library: Library) -> Optional[str]:
+    def copyright_designated_agent_uri(cls, library: Library) -> str | None:
         if library.settings.copyright_designated_agent_email_address:
             email = library.settings.copyright_designated_agent_email_address
         elif library.settings.help_email:
@@ -258,7 +258,7 @@ class Configuration(CoreConfiguration):
         return cls._as_mailto(email)
 
     @classmethod
-    def configuration_contact_uri(cls, library: Library) -> Optional[str]:
+    def configuration_contact_uri(cls, library: Library) -> str | None:
         if library.settings.configuration_contact_email_address:
             email = library.settings.configuration_contact_email_address
         elif library.settings.help_email:

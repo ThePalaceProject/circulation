@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import boto3
 from dependency_injector import providers
@@ -25,7 +25,7 @@ class Storage(DeclarativeContainer):
         endpoint_url=config.endpoint_url,
     )
 
-    analytics: Provider[Optional[S3Service]] = providers.Singleton(
+    analytics: Provider[S3Service | None] = providers.Singleton(
         S3Service.factory,
         client=s3_client,
         region=config.region,
@@ -33,7 +33,7 @@ class Storage(DeclarativeContainer):
         url_template=config.url_template,
     )
 
-    public: Provider[Optional[S3Service]] = providers.Singleton(
+    public: Provider[S3Service | None] = providers.Singleton(
         S3Service.factory,
         client=s3_client,
         region=config.region,

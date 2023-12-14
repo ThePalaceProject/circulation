@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from copy import deepcopy
 from functools import partial
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -329,7 +330,7 @@ class TestSirsiDynixAuthenticationProvider:
             "amountOwed": {"currencyCode": "USD", "amount": "0.00"},
         }
 
-        statuses: List[Tuple[Dict[str, bool], Any]] = [
+        statuses: list[tuple[dict[str, bool], Any]] = [
             ({"hasMaxDaysWithFines": True}, PatronData.EXCESSIVE_FINES),
             ({"hasMaxFines": True}, PatronData.EXCESSIVE_FINES),
             ({"hasMaxLostItem": True}, PatronData.TOO_MANY_LOST),

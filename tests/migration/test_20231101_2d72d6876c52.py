@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pytest
 from pytest_alembic import MigrationContext
@@ -19,7 +19,7 @@ def create_integration_configuration(
     name: str,
     protocol: str,
     goal: str,
-    settings: Optional[Dict[str, Any]] = None,
+    settings: dict[str, Any] | None = None,
 ) -> int:
     if settings is None:
         settings = {}
@@ -43,7 +43,7 @@ def create_integration_library_configuration(
     connection: Connection,
     integration_id: int,
     library_id: int,
-    settings: Optional[Dict[str, Any]] = None,
+    settings: dict[str, Any] | None = None,
 ) -> None:
     if settings is None:
         settings = {}
@@ -73,9 +73,9 @@ def create_collection(
     connection: Connection,
     name: str,
     integration_configuration_id: int,
-    external_account_id: Optional[str] = None,
-    external_integration_id: Optional[int] = None,
-    parent_id: Optional[int] = None,
+    external_account_id: str | None = None,
+    external_integration_id: int | None = None,
+    parent_id: int | None = None,
 ) -> int:
     collection = connection.execute(
         "INSERT INTO collections "
@@ -135,7 +135,7 @@ def test_migration(
             "LICENSE_GOAL",
             settings=integration_2_settings,
         )
-        integration_3_settings: Dict[str, str] = {}
+        integration_3_settings: dict[str, str] = {}
         integration_3 = create_integration_configuration(
             connection,
             "collection_1",

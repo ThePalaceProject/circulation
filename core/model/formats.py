@@ -1,5 +1,5 @@
 import sys
-from typing import List, Mapping, Optional
+from collections.abc import Mapping
 
 from flask_babel import lazy_gettext as _
 
@@ -26,14 +26,14 @@ class FormatPriorities:
 
     _prioritized_drm_schemes: Mapping[str, int]
     _prioritized_content_types: Mapping[str, int]
-    _hidden_content_types: List[str]
+    _hidden_content_types: list[str]
     _deprioritize_lcp_non_epubs: bool
 
     def __init__(
         self,
-        prioritized_drm_schemes: List[str],
-        prioritized_content_types: List[str],
-        hidden_content_types: List[str],
+        prioritized_drm_schemes: list[str],
+        prioritized_content_types: list[str],
+        hidden_content_types: list[str],
         deprioritize_lcp_non_epubs: bool,
     ):
         """
@@ -58,7 +58,7 @@ class FormatPriorities:
 
     def prioritize_for_pool(
         self, pool: LicensePool
-    ) -> List[LicensePoolDeliveryMechanism]:
+    ) -> list[LicensePoolDeliveryMechanism]:
         """
         Filter and prioritize the delivery mechanisms in the given pool.
         :param pool: The license pool
@@ -67,8 +67,8 @@ class FormatPriorities:
         return self.prioritize_mechanisms(pool.delivery_mechanisms)
 
     def prioritize_mechanisms(
-        self, mechanisms: List[LicensePoolDeliveryMechanism]
-    ) -> List[LicensePoolDeliveryMechanism]:
+        self, mechanisms: list[LicensePoolDeliveryMechanism]
+    ) -> list[LicensePoolDeliveryMechanism]:
         """
         Filter and prioritize the delivery mechanisms in the given pool.
         :param mechanisms: The list of delivery mechanisms
@@ -76,7 +76,7 @@ class FormatPriorities:
         """
 
         # First, filter out all hidden content types.
-        mechanisms_filtered: List[LicensePoolDeliveryMechanism] = []
+        mechanisms_filtered: list[LicensePoolDeliveryMechanism] = []
         for delivery in mechanisms:
             delivery_mechanism = delivery.delivery_mechanism
             if delivery_mechanism:
@@ -115,7 +115,7 @@ class FormatPriorities:
 
     @staticmethod
     def _artificial_lcp_content_priority(
-        drm_scheme: Optional[str], content_type: Optional[str]
+        drm_scheme: str | None, content_type: str | None
     ) -> int:
         """A comparison function that arbitrarily deflates the priority of LCP content. The comparison function
         treats all other DRM mechanisms and content types as equal."""
@@ -127,7 +127,7 @@ class FormatPriorities:
         else:
             return 0
 
-    def _drm_scheme_priority(self, drm_scheme: Optional[str]) -> int:
+    def _drm_scheme_priority(self, drm_scheme: str | None) -> int:
         """Determine the priority of a DRM scheme. A lack of DRM is always
         prioritized over having DRM, and prioritized schemes are always
         higher priority than non-prioritized schemes."""
@@ -143,7 +143,7 @@ class FormatPriorities:
 
 
 class FormatPrioritiesSettings(BaseSettings):
-    prioritized_drm_schemes: Optional[list] = FormField(
+    prioritized_drm_schemes: list | None = FormField(
         default=[],
         form=ConfigurationFormItem(
             label=_("Prioritized DRM schemes"),
@@ -165,7 +165,7 @@ class FormatPrioritiesSettings(BaseSettings):
         ),
     )
 
-    prioritized_content_types: Optional[list] = FormField(
+    prioritized_content_types: list | None = FormField(
         default=[],
         form=ConfigurationFormItem(
             label=_("Prioritized content types"),
@@ -187,7 +187,7 @@ class FormatPrioritiesSettings(BaseSettings):
         ),
     )
 
-    deprioritize_lcp_non_epubs: Optional[str] = FormField(
+    deprioritize_lcp_non_epubs: str | None = FormField(
         default="false",
         form=ConfigurationFormItem(
             label=_("De-prioritize LCP non-EPUBs"),

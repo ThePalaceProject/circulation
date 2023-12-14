@@ -5,7 +5,6 @@ Revises: 0039f3f12014
 Create Date: 2023-12-06 16:04:36.936466+00:00
 
 """
-from typing import Optional
 from urllib.parse import unquote, urlparse
 
 from alembic import op
@@ -19,7 +18,7 @@ branch_labels = None
 depends_on = None
 
 
-def parse_key_from_url(url: Optional[str], bucket: str) -> Optional[str]:
+def parse_key_from_url(url: str | None, bucket: str) -> str | None:
     """Parse the key from a URL.
 
     :param url: The URL to parse.

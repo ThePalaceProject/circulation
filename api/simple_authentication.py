@@ -1,5 +1,3 @@
-from typing import List, Optional, Type, Union
-
 from api.authentication.base import PatronData
 from api.authentication.basic import (
     BasicAuthenticationProvider,
@@ -32,7 +30,7 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
             description="A test password to use when testing the authentication provider.",
         ),
     )
-    additional_test_identifiers: Optional[List[str]] = FormField(
+    additional_test_identifiers: list[str] | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Additional test identifiers",
@@ -41,7 +39,7 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
             type=ConfigurationFormItemType.LIST,
         ),
     )
-    neighborhood: Optional[str] = FormField(
+    neighborhood: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Test neighborhood",
@@ -72,11 +70,11 @@ class SimpleAuthenticationProvider(
         )
 
     @classmethod
-    def settings_class(cls) -> Type[SimpleAuthSettings]:
+    def settings_class(cls) -> type[SimpleAuthSettings]:
         return SimpleAuthSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[BasicAuthProviderLibrarySettings]:
+    def library_settings_class(cls) -> type[BasicAuthProviderLibrarySettings]:
         return BasicAuthProviderLibrarySettings
 
     def __init__(
@@ -85,7 +83,7 @@ class SimpleAuthenticationProvider(
         integration_id: int,
         settings: SimpleAuthSettings,
         library_settings: BasicAuthProviderLibrarySettings,
-        analytics: Optional[Analytics] = None,
+        analytics: Analytics | None = None,
     ):
         super().__init__(
             library_id, integration_id, settings, library_settings, analytics
@@ -105,8 +103,8 @@ class SimpleAuthenticationProvider(
         self.test_neighborhood = settings.neighborhood
 
     def remote_authenticate(
-        self, username: Optional[str], password: Optional[str]
-    ) -> Optional[PatronData]:
+        self, username: str | None, password: str | None
+    ) -> PatronData | None:
         """Fake 'remote' authentication."""
         if not username or (self.collects_password and not password):
             return None
@@ -118,7 +116,7 @@ class SimpleAuthenticationProvider(
 
     @classmethod
     def generate_patrondata(
-        cls, authorization_identifier: str, neighborhood: Optional[str] = None
+        cls, authorization_identifier: str, neighborhood: str | None = None
     ) -> PatronData:
         if authorization_identifier.endswith("_username"):
             username = authorization_identifier
@@ -140,7 +138,7 @@ class SimpleAuthenticationProvider(
         )
         return patrondata
 
-    def valid_patron(self, username: str, password: Optional[str]) -> bool:
+    def valid_patron(self, username: str, password: str | None) -> bool:
         """Is this patron associated with the given password in
         the given dictionary?
         """
@@ -151,8 +149,8 @@ class SimpleAuthenticationProvider(
         return password_match and username in self.test_identifiers
 
     def remote_patron_lookup(
-        self, patron_or_patrondata: Union[Patron, PatronData]
-    ) -> Optional[PatronData]:
+        self, patron_or_patrondata: Patron | PatronData
+    ) -> PatronData | None:
         if not patron_or_patrondata:
             return None
         if (

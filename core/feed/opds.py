@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
 from werkzeug.datastructures import MIMEAccept
 
@@ -16,10 +16,10 @@ from core.util.opds_writer import OPDSMessage
 
 
 def get_serializer(
-    mime_types: Optional[MIMEAccept],
+    mime_types: MIMEAccept | None,
 ) -> SerializerInterface[Any]:
     # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
-    serializers: Dict[str, Type[SerializerInterface[Any]]] = {
+    serializers: dict[str, type[SerializerInterface[Any]]] = {
         "application/atom+xml": OPDS1Serializer,
         "application/opds+json": OPDS2Serializer,
     }
@@ -37,7 +37,7 @@ class BaseOPDSFeed(FeedInterface):
         self,
         title: str,
         url: str,
-        precomposed_entries: Optional[List[OPDSMessage]] = None,
+        precomposed_entries: list[OPDSMessage] | None = None,
     ) -> None:
         self.url = url
         self.title = title
@@ -45,12 +45,12 @@ class BaseOPDSFeed(FeedInterface):
         self._feed = FeedData()
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def add_link(self, href: str, rel: Optional[str] = None, **kwargs: Any) -> None:
+    def add_link(self, href: str, rel: str | None = None, **kwargs: Any) -> None:
         self._feed.add_link(href, rel=rel, **kwargs)
 
     def as_response(
         self,
-        mime_types: Optional[MIMEAccept] = None,
+        mime_types: MIMEAccept | None = None,
         **kwargs: Any,
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
@@ -67,7 +67,7 @@ class BaseOPDSFeed(FeedInterface):
     def entry_as_response(
         cls,
         entry: WorkEntry | OPDSMessage,
-        mime_types: Optional[MIMEAccept] = None,
+        mime_types: MIMEAccept | None = None,
         **response_kwargs: Any,
     ) -> OPDSEntryResponse:
         serializer = get_serializer(mime_types)

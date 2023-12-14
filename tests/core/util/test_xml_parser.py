@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict, Optional
-
 from lxml.etree import _Element
 
 from core.util.xmlparser import XMLProcessor
@@ -17,9 +15,7 @@ class MockProcessor(XMLProcessor[_Element]):
     def xpath_expression(self) -> str:
         return self._xpath_expression
 
-    def process_one(
-        self, tag: _Element, namespaces: Optional[Dict[str, str]]
-    ) -> _Element:
+    def process_one(self, tag: _Element, namespaces: dict[str, str] | None) -> _Element:
         return tag
 
 

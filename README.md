@@ -5,7 +5,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-![Python: 3.8,3.9,3.10,3.11](https://img.shields.io/badge/Python-3.8%20|%203.9%20|%203.10%20|%203.11-blue)
+![Python: 3.10,3.11](https://img.shields.io/badge/Python-3.10%20|%203.11-blue)
 
 This is a [The Palace Project](https://thepalaceproject.org) maintained fork of the NYPL
 [Library Simplified](http://www.librarysimplified.org/) Circulation Manager.
@@ -278,13 +278,13 @@ export SIMPLIFIED_MAIL_SENDER=sender@example.com
 As mentioned in the [pyenv](#pyenv) section, the `poetry` tool should be executed under a virtual environment
 in order to guarantee that it will use the Python version you expect. To use a particular Python version,
 you should create a local virtual environment in the cloned `circulation` repository directory. Assuming that
-you want to use, for example, Python 3.9.9:
+you want to use, for example, Python 3.11.1:
 
 ```sh
-pyenv virtualenv 3.9.9 circ
+pyenv virtualenv 3.11.1 circ
 ```
 
-This will create a new local virtual environment called `circ` that uses Python 3.9.9. Switch to that environment:
+This will create a new local virtual environment called `circ` that uses Python 3.11.1. Switch to that environment:
 
 ```sh
 pyenv local circ
@@ -292,7 +292,7 @@ pyenv local circ
 
 On most systems, using `pyenv` will adjust your shell prompt to indicate which virtual environment you
 are now in. For example, the version of Python installed in your operating system might be `3.10.1`, but
-using a virtual environment can substitute, for example, `3.9.9`:
+using a virtual environment can substitute, for example, `3.11.1`:
 
 ```sh
 $ python --version
@@ -300,7 +300,7 @@ Python 3.10.1
 
 $ pyenv local circ
 (circ) $ python --version
-Python 3.9.9
+Python 3.11.1
 ```
 
 For brevity, these instructions assume that all shell commands will be executed within a virtual environment.
@@ -578,7 +578,7 @@ poetry install --only ci
 
 ## Testing
 
-The Github Actions CI service runs the unit tests against Python 3.8, 3.9, 3.10, and 3.11 automatically using
+The Github Actions CI service runs the unit tests against Python 3.10, and 3.11 automatically using
 [tox](https://tox.readthedocs.io/en/latest/).
 
 Tox has an environment for each python version, the module being tested, and an optional `-docker` factor that will
@@ -594,8 +594,6 @@ with service dependencies running in docker containers.
 
 | Factor | Python Version |
 |--------|----------------|
-| py38   | Python 3.8     |
-| py39   | Python 3.9     |
 | py310  | Python 3.10    |
 | py311  | Python 3.11    |
 

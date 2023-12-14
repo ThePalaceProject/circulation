@@ -3,18 +3,8 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-)
+from collections.abc import Generator, Sequence
+from typing import TYPE_CHECKING, Any
 
 from Crypto.PublicKey import RSA
 from expiringdict import ExpiringDict
@@ -101,23 +91,23 @@ class Library(Base, HasSessionCache):
     library_registry_shared_secret = Column(Unicode, unique=True)
 
     # A library may have many Patrons.
-    patrons: Mapped[List[Patron]] = relationship(
+    patrons: Mapped[list[Patron]] = relationship(
         "Patron", back_populates="library", cascade="all, delete-orphan"
     )
 
     # An Library may have many admin roles.
-    adminroles: Mapped[List[AdminRole]] = relationship(
+    adminroles: Mapped[list[AdminRole]] = relationship(
         "AdminRole", back_populates="library", cascade="all, delete-orphan"
     )
 
     # A Library may have many CustomLists.
-    custom_lists: Mapped[List[CustomList]] = relationship(
+    custom_lists: Mapped[list[CustomList]] = relationship(
         "CustomList", backref="library", uselist=True
     )
 
     # Lists shared with this library
     # shared_custom_lists: "CustomList"
-    shared_custom_lists: Mapped[List[CustomList]] = relationship(
+    shared_custom_lists: Mapped[list[CustomList]] = relationship(
         "CustomList",
         secondary=lambda: customlist_sharedlibrary,
         back_populates="shared_locally_with_libraries",
@@ -125,7 +115,7 @@ class Library(Base, HasSessionCache):
     )
 
     # A Library may have many ExternalIntegrations.
-    integrations: Mapped[List[ExternalIntegration]] = relationship(
+    integrations: Mapped[list[ExternalIntegration]] = relationship(
         "ExternalIntegration",
         secondary=lambda: externalintegrations_libraries,
         back_populates="libraries",
@@ -134,21 +124,21 @@ class Library(Base, HasSessionCache):
     # This parameter is deprecated, and will be removed once all of our integrations
     # are updated to use IntegrationSettings. New code shouldn't use it.
     # TODO: Remove this column.
-    external_integration_settings: Mapped[List[ConfigurationSetting]] = relationship(
+    external_integration_settings: Mapped[list[ConfigurationSetting]] = relationship(
         "ConfigurationSetting",
         back_populates="library",
         cascade="all, delete",
     )
 
     # Any additional configuration information is stored as JSON on this column.
-    settings_dict: Dict[str, Any] = Column(JSONB, nullable=False, default=dict)
+    settings_dict: dict[str, Any] = Column(JSONB, nullable=False, default=dict)
 
     # A Library may have many CirculationEvents
-    circulation_events: Mapped[List[CirculationEvent]] = relationship(
+    circulation_events: Mapped[list[CirculationEvent]] = relationship(
         "CirculationEvent", backref="library", cascade="all, delete-orphan"
     )
 
-    library_announcements: Mapped[List[Announcement]] = relationship(
+    library_announcements: Mapped[list[Announcement]] = relationship(
         "Announcement",
         back_populates="library",
         cascade="all, delete-orphan",
@@ -157,12 +147,12 @@ class Library(Base, HasSessionCache):
     # A class-wide cache mapping library ID to the calculated value
     # used for Library.has_root_lane.  This is invalidated whenever
     # Lane configuration changes, and it will also expire on its own.
-    _has_root_lane_cache: Dict[Union[int, None], bool] = ExpiringDict(
+    _has_root_lane_cache: dict[int | None, bool] = ExpiringDict(
         max_len=1000, max_age_seconds=3600
     )
 
     # A Library can have many lanes
-    lanes: Mapped[List[Lane]] = relationship(
+    lanes: Mapped[list[Lane]] = relationship(
         "Lane",
         back_populates="library",
         foreign_keys="Lane.library_id",
@@ -205,7 +195,7 @@ class Library(Base, HasSessionCache):
         ).all()
 
     # Cache of the libraries loaded settings object
-    _settings: Optional[LibrarySettings]
+    _settings: LibrarySettings | None
 
     def __repr__(self) -> str:
         return (
@@ -213,14 +203,14 @@ class Library(Base, HasSessionCache):
             % (self.name, self.short_name, self.uuid, self.library_registry_short_name)
         )
 
-    def cache_key(self) -> Optional[str]:
+    def cache_key(self) -> str | None:
         return self.short_name
 
     @classmethod
-    def lookup(cls, _db: Session, short_name: Optional[str]) -> Optional[Library]:
+    def lookup(cls, _db: Session, short_name: str | None) -> Library | None:
         """Look up a library by short name."""
 
-        def _lookup() -> Tuple[Optional[Library], bool]:
+        def _lookup() -> tuple[Library | None, bool]:
             library = get_one(_db, Library, short_name=short_name)
             return library, False
 
@@ -228,13 +218,13 @@ class Library(Base, HasSessionCache):
         return library
 
     @classmethod
-    def default(cls, _db: Session) -> Optional[Library]:
+    def default(cls, _db: Session) -> Library | None:
         """Find the default Library."""
         # If for some reason there are multiple default libraries in
         # the database, they're not actually interchangeable, but
         # raising an error here might make it impossible to fix the
         # problem.
-        defaults: List[Library] = (
+        defaults: list[Library] = (
             _db.query(Library)
             .filter(Library._is_default == True)
             .order_by(Library.id.asc())
@@ -269,7 +259,7 @@ class Library(Base, HasSessionCache):
         return default_library  # type: ignore[no-any-return]
 
     @classmethod
-    def generate_keypair(cls) -> Tuple[str, bytes]:
+    def generate_keypair(cls) -> tuple[str, bytes]:
         """Generate a public / private keypair for a library."""
         private_key = RSA.generate(2048)
         public_key = private_key.public_key()
@@ -278,12 +268,12 @@ class Library(Base, HasSessionCache):
         return public_key_str, private_key_bytes
 
     @hybrid_property
-    def library_registry_short_name(self) -> Optional[str]:
+    def library_registry_short_name(self) -> str | None:
         """Gets library_registry_short_name from database"""
         return self._library_registry_short_name
 
     @library_registry_short_name.setter
-    def library_registry_short_name(self, value: Optional[str]) -> None:
+    def library_registry_short_name(self, value: str | None) -> None:
         """Uppercase the library registry short name on the way in."""
         if value:
             value = value.upper()
@@ -320,7 +310,7 @@ class Library(Base, HasSessionCache):
             yield from collection.parents
 
     @property
-    def entrypoints(self) -> Generator[Optional[Type[EntryPoint]], None, None]:
+    def entrypoints(self) -> Generator[type[EntryPoint] | None, None, None]:
         """The EntryPoints enabled for this library."""
         values = self.settings.enabled_entry_points
         for v in values:
@@ -328,7 +318,7 @@ class Library(Base, HasSessionCache):
             if cls:
                 yield cls
 
-    def enabled_facets(self, group_name: str) -> List[str]:
+    def enabled_facets(self, group_name: str) -> list[str]:
         """Look up the enabled facets for a given facet group."""
         if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
             enabled = []
@@ -380,7 +370,7 @@ class Library(Base, HasSessionCache):
     def restrict_to_ready_deliverable_works(
         self,
         query: Query[Work],
-        collection_ids: Optional[List[int]] = None,
+        collection_ids: list[int] | None = None,
         show_suppressed: bool = False,
     ) -> Query[Work]:
         """Restrict a query to show only presentation-ready works present in
@@ -442,7 +432,7 @@ class Library(Base, HasSessionCache):
         """Look up the default facet for a given facet group."""
         return getattr(self.settings, "facets_default_" + group_name)  # type: ignore[no-any-return]
 
-    def explain(self, include_secrets: bool = False) -> List[str]:
+    def explain(self, include_secrets: bool = False) -> list[str]:
         """Create a series of human-readable strings to explain a library's
         settings.
 
@@ -488,7 +478,7 @@ class Library(Base, HasSessionCache):
         return lines
 
     @property
-    def is_default(self) -> Optional[bool]:
+    def is_default(self) -> bool | None:
         return self._is_default
 
     @is_default.setter

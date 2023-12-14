@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 import urllib.parse
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import dateutil
@@ -619,7 +619,7 @@ class TestODLAPI:
         delivery_mechanism: str,
         correct_type: str,
         correct_link: str,
-        links: Dict[str, Any],
+        links: dict[str, Any],
     ) -> None:
         # Fulfill a loan in a way that gives access to a license file.
         odl_api_test_fixture.license.setup(concurrency=1, available=1)  # type: ignore[attr-defined]

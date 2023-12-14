@@ -1,6 +1,7 @@
 import json
 import types
-from typing import Any, Callable, Optional, Tuple, Type
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -52,7 +53,7 @@ class MonkeyPatchedODLFixture:
             "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
         )
 
-    def __call__(self, api: Type[BaseODLAPI]):
+    def __call__(self, api: type[BaseODLAPI]):
         # We monkeypatch the ODLAPI class to intercept HTTP requests and responses
         # these monkeypatched methods are staticmethods on this class. They take
         # a patched_self argument, which is the instance of the ODLAPI class that
@@ -170,7 +171,7 @@ class ODLTestFixture:
         pool: LicensePool,
         db: DatabaseTransactionFixture,
         loan_url: str,
-    ) -> Callable[[], Tuple[LoanInfo, Any]]:
+    ) -> Callable[[], tuple[LoanInfo, Any]]:
         """Create a function that, when evaluated, performs a checkout."""
 
         def c():
@@ -231,19 +232,17 @@ class ODLAPITestFixture:
         self.patron = patron
         self.pool = license.license_pool
 
-    def checkin(
-        self, patron: Optional[Patron] = None, pool: Optional[LicensePool] = None
-    ):
+    def checkin(self, patron: Patron | None = None, pool: LicensePool | None = None):
         patron = patron or self.patron
         pool = pool or self.pool
         return self.fixture.checkin(self.api, patron=patron, pool=pool)()
 
     def checkout(
         self,
-        loan_url: Optional[str] = None,
-        patron: Optional[Patron] = None,
-        pool: Optional[LicensePool] = None,
-    ) -> Tuple[LoanInfo, Any]:
+        loan_url: str | None = None,
+        patron: Patron | None = None,
+        pool: LicensePool | None = None,
+    ) -> tuple[LoanInfo, Any]:
         patron = patron or self.patron
         pool = pool or self.pool
         loan_url = loan_url or self.db.fresh_url()
@@ -278,7 +277,7 @@ class ODL2TestFixture(ODLTestFixture):
         patched(ODL2API)
 
     def collection(
-        self, library: Library, api_class: Type[ODL2API] = ODL2API
+        self, library: Library, api_class: type[ODL2API] = ODL2API
     ) -> Collection:
         collection = super().collection(library, api_class)
         collection.integration_configuration.name = "Test ODL2 Collection"

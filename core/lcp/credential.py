@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -67,7 +67,7 @@ class LCPCredentialFactory:
         data_source_type: Any,
         credential_type: Any,
         commit: bool,
-        value: Optional[str] = None,
+        value: str | None = None,
     ) -> Any:
         """Gets or creates a new persistent token
 

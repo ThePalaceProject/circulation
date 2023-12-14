@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Set, Tuple, Type
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any
 
 import feedparser
 from flask_babel import lazy_gettext as _
@@ -86,11 +87,11 @@ class OPDSForDistributorsAPI(
     ]
 
     @classmethod
-    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:
+    def settings_class(cls) -> type[OPDSForDistributorsSettings]:
         return OPDSForDistributorsSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[OPDSForDistributorsLibrarySettings]:
+    def library_settings_class(cls) -> type[OPDSForDistributorsLibrarySettings]:
         return OPDSForDistributorsLibrarySettings
 
     @classmethod
@@ -109,14 +110,14 @@ class OPDSForDistributorsAPI(
         self.username = settings.username
         self.password = settings.password
         self.feed_url = settings.external_account_id
-        self.auth_url: Optional[str] = None
+        self.auth_url: str | None = None
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Try to get a token."""
         yield self.run_test("Negotiate a fulfillment token", self._get_token, _db)
 
     def _request_with_timeout(
-        self, method: str, url: Optional[str], *args: Any, **kwargs: Any
+        self, method: str, url: str | None, *args: Any, **kwargs: Any
     ) -> Response:
         """Wrapper around HTTP.request_with_timeout to be overridden for tests."""
         if url is None:
@@ -220,7 +221,7 @@ class OPDSForDistributorsAPI(
 
     def can_fulfill_without_loan(
         self,
-        patron: Optional[Patron],
+        patron: Patron | None,
         pool: LicensePool,
         lpdm: LicensePoolDeliveryMechanism,
     ) -> bool:
@@ -342,7 +343,7 @@ class OPDSForDistributorsAPI(
             content_expires=credential.expires,
         )
 
-    def patron_activity(self, patron: Patron, pin: str) -> List[LoanInfo | HoldInfo]:
+    def patron_activity(self, patron: Patron, pin: str) -> list[LoanInfo | HoldInfo]:
         # Look up loans for this collection in the database.
         _db = Session.object_session(patron)
         loans = (
@@ -373,7 +374,7 @@ class OPDSForDistributorsAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        notification_email_address: Optional[str],
+        notification_email_address: str | None,
     ) -> HoldInfo:
         # All the books for this integration are available as simultaneous
         # use, so there's no need to place a hold.
@@ -387,7 +388,7 @@ class OPDSForDistributorsImporter(OPDSImporter):
     NAME = OPDSForDistributorsAPI.label()
 
     @classmethod
-    def settings_class(cls) -> Type[OPDSForDistributorsSettings]:
+    def settings_class(cls) -> type[OPDSForDistributorsSettings]:
         return OPDSForDistributorsSettings
 
     def update_work_for_edition(
@@ -426,7 +427,7 @@ class OPDSForDistributorsImporter(OPDSImporter):
 
     def extract_feed_data(
         self, feed: str | bytes, feed_url: str | None = None
-    ) -> Tuple[Dict[str, Metadata], Dict[str, List[CoverageFailure]]]:
+    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
         metadatas, failures = super().extract_feed_data(feed, feed_url)
 
         # Force all audiobook licensepools to track playtime
@@ -452,7 +453,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[OPDSImporter],
+        import_class: type[OPDSImporter],
         **kwargs: Any,
     ) -> None:
         super().__init__(_db, collection, import_class, **kwargs)
@@ -460,8 +461,8 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
         self.api = OPDSForDistributorsAPI(_db, collection)
 
     def _get(
-        self, url: str, headers: Dict[str, str]
-    ) -> Tuple[int, Dict[str, str], bytes]:
+        self, url: str, headers: dict[str, str]
+    ) -> tuple[int, dict[str, str], bytes]:
         """Make a normal HTTP request for an OPDS feed, but add in an
         auth header with the credentials for the collection.
         """
@@ -484,11 +485,11 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
         self,
         _db: Session,
         collection: Collection,
-        import_class: Type[OPDSImporter],
+        import_class: type[OPDSImporter],
         **kwargs: Any,
     ) -> None:
         super().__init__(_db, collection, import_class, **kwargs)
-        self.seen_identifiers: Set[str] = set()
+        self.seen_identifiers: set[str] = set()
 
     def feed_contains_new_data(self, feed: bytes | str) -> bool:
         # Always return True so that the importer will crawl the
@@ -497,7 +498,7 @@ class OPDSForDistributorsReaperMonitor(OPDSForDistributorsImportMonitor):
 
     def import_one_feed(
         self, feed: bytes | str
-    ) -> Tuple[List[Edition], Dict[str, List[CoverageFailure]]]:
+    ) -> tuple[list[Edition], dict[str, list[CoverageFailure]]]:
         # Collect all the identifiers in the feed.
         parsed_feed = feedparser.parse(feed)
         identifiers = [entry.get("id") for entry in parsed_feed.get("entries", [])]

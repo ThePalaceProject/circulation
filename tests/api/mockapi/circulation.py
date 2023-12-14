@@ -1,6 +1,5 @@
 from abc import ABC
 from collections import defaultdict
-from typing import Type
 
 from sqlalchemy.orm import Session
 
@@ -29,11 +28,11 @@ class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI, ABC):
         return ""
 
     @classmethod
-    def settings_class(cls) -> Type[BaseSettings]:
+    def settings_class(cls) -> type[BaseSettings]:
         return BaseSettings
 
     @classmethod
-    def library_settings_class(cls) -> Type[BaseSettings]:
+    def library_settings_class(cls) -> type[BaseSettings]:
         return BaseSettings
 
 

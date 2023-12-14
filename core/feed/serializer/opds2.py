@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.feed.serializer.base import SerializerInterface
 from core.feed.types import (
@@ -32,14 +32,14 @@ MARC_CODE_TO_ROLES = {
 }
 
 
-class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
+class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def __init__(self) -> None:
         pass
 
     def serialize_feed(
-        self, feed: FeedData, precomposed_entries: Optional[List[Any]] = None
+        self, feed: FeedData, precomposed_entries: list[Any] | None = None
     ) -> str:
-        serialized: Dict[str, Any] = {"publications": []}
+        serialized: dict[str, Any] = {"publications": []}
         serialized["metadata"] = self._serialize_metadata(feed)
 
         for entry in feed.entries:
@@ -51,20 +51,20 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
 
         return self.to_string(serialized)
 
-    def _serialize_metadata(self, feed: FeedData) -> Dict[str, Any]:
+    def _serialize_metadata(self, feed: FeedData) -> dict[str, Any]:
         fmeta = feed.metadata
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
         if fmeta.title:
             metadata["title"] = fmeta.title
         if fmeta.items_per_page is not None:
             metadata["itemsPerPage"] = fmeta.items_per_page
         return metadata
 
-    def serialize_opds_message(self, entry: OPDSMessage) -> Dict[str, Any]:
+    def serialize_opds_message(self, entry: OPDSMessage) -> dict[str, Any]:
         return dict(urn=entry.urn, description=entry.message)
 
-    def serialize_work_entry(self, data: WorkEntryData) -> Dict[str, Any]:
-        metadata: Dict[str, Any] = {}
+    def serialize_work_entry(self, data: WorkEntryData) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
         if data.additionalType:
             metadata["@type"] = data.additionalType
 
@@ -126,7 +126,7 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
         publication = {"metadata": metadata, "links": links, "images": images}
         return publication
 
-    def _serialize_link(self, link: Link) -> Dict[str, Any]:
+    def _serialize_link(self, link: Link) -> dict[str, Any]:
         serialized = {"href": link.href, "rel": link.rel}
         if link.type:
             serialized["type"] = link.type
@@ -134,18 +134,18 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
             serialized["title"] = link.title
         return serialized
 
-    def _serialize_acquisition_link(self, link: Acquisition) -> Dict[str, Any]:
+    def _serialize_acquisition_link(self, link: Acquisition) -> dict[str, Any]:
         item = self._serialize_link(link)
 
-        def _indirect(indirect: IndirectAcquisition) -> Dict[str, Any]:
-            result: Dict[str, Any] = dict(type=indirect.type)
+        def _indirect(indirect: IndirectAcquisition) -> dict[str, Any]:
+            result: dict[str, Any] = dict(type=indirect.type)
             if indirect.children:
                 result["child"] = []
             for child in indirect.children:
                 result["child"].append(_indirect(child))
             return result
 
-        props: Dict[str, Any] = {}
+        props: dict[str, Any] = {}
         if link.availability_status:
             state = link.availability_status
             if link.is_loan:
@@ -180,12 +180,12 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
 
         return item
 
-    def _serialize_feed_links(self, feed: FeedData) -> Dict[str, Any]:
-        link_data: Dict[str, List[Dict[str, Any]]] = {"links": [], "facets": []}
+    def _serialize_feed_links(self, feed: FeedData) -> dict[str, Any]:
+        link_data: dict[str, list[dict[str, Any]]] = {"links": [], "facets": []}
         for link in feed.links:
             link_data["links"].append(self._serialize_link(link))
 
-        facet_links: Dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
+        facet_links: dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
         for link in feed.facet_links:
             group = getattr(link, "facetGroup", None)
             if group:
@@ -196,8 +196,8 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
 
         return link_data
 
-    def _serialize_contributor(self, author: Author) -> Dict[str, Any]:
-        result: Dict[str, Any] = {"name": author.name}
+    def _serialize_contributor(self, author: Author) -> dict[str, Any]:
+        result: dict[str, Any] = {"name": author.name}
         if author.sort_name:
             result["sortAs"] = author.sort_name
         if author.link:
@@ -211,5 +211,5 @@ class OPDS2Serializer(SerializerInterface[Dict[str, Any]]):
         return "application/opds+json"
 
     @classmethod
-    def to_string(cls, data: Dict[str, Any]) -> str:
+    def to_string(cls, data: dict[str, Any]) -> str:
         return json.dumps(data, indent=2)

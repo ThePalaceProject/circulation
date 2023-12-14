@@ -1,5 +1,3 @@
-from typing import Union
-
 from flask import render_template_string, url_for
 from sqlalchemy.orm.session import Session
 
@@ -110,7 +108,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
 
     def validate_token_and_extract_admin(
         self, reset_password_token: str, admin_id: int, _db: Session
-    ) -> Union[Admin, ProblemDetail]:
+    ) -> Admin | ProblemDetail:
         secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
 
         return Admin.validate_reset_password_token_and_fetch_admin(

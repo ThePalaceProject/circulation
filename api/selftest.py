@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Generator, Iterable, Optional, Tuple, Union
+from collections.abc import Generator, Iterable
 
 from sqlalchemy.orm.session import Session
 
@@ -30,7 +30,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
             detail (optional) -- additional explanation of the error
         """
 
-        def __init__(self, message: Optional[str], *, detail: Optional[str] = None):
+        def __init__(self, message: str | None, *, detail: str | None = None):
             super().__init__(message=message)
             self.message = message
             self.detail = detail
@@ -38,7 +38,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
     @classmethod
     def default_patrons(
         cls, collection: Collection
-    ) -> Iterable[Union[Tuple[Library, Patron, Optional[str]], SelfTestResult]]:
+    ) -> Iterable[tuple[Library, Patron, str | None] | SelfTestResult]:
         """Find a usable default Patron for each of the libraries associated
         with the given Collection.
 
@@ -74,7 +74,7 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
     @classmethod
     def _determine_self_test_patron(
         cls, library: Library, _db=None
-    ) -> Tuple[Patron, Optional[str]]:
+    ) -> tuple[Patron, str | None]:
         """Obtain the test Patron and optional password for a library's self-tests.
 
         :param library: The library being tested.
@@ -96,8 +96,8 @@ class HasPatronSelfTests(BaseHasSelfTests, ABC):
 
         # If we get here, then we have failed to find a valid test patron
         # and will raise an exception.
-        message: Optional[str]
-        detail: Optional[str]
+        message: str | None
+        detail: str | None
         if patron is None:
             message = "Library has no test patron configured."
             detail = (

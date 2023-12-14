@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 from unittest.mock import MagicMock, call, create_autospec
 
 import pytest

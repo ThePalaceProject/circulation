@@ -1,15 +1,9 @@
 from __future__ import annotations
 
 import base64 as stdlib_base64
-import sys
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, TypeVar
-
-# TODO: Remove this when we drop support for Python 3.9
-if sys.version_info >= (3, 10):
-    from typing import Concatenate, ParamSpec
-else:
-    from typing_extensions import Concatenate, ParamSpec
+from typing import Concatenate, ParamSpec, TypeVar
 
 P = ParamSpec("P")
 T = TypeVar("T")

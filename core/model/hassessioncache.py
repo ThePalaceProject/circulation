@@ -5,8 +5,9 @@ import logging
 import sys
 from abc import abstractmethod
 from collections import namedtuple
+from collections.abc import Callable, Hashable
 from types import SimpleNamespace
-from typing import Callable, Hashable, TypeVar
+from typing import TypeVar
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, Session

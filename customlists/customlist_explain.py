@@ -2,7 +2,6 @@ import argparse
 import csv
 import json
 import logging
-from typing import List
 
 from customlists.customlist_report import (
     CustomListProblemBookBrokenOnSourceCM,
@@ -21,7 +20,7 @@ from customlists.customlist_report import (
 
 class CustomListImportExplainer:
     @staticmethod
-    def _parse_arguments(args: List[str]) -> argparse.Namespace:
+    def _parse_arguments(args: list[str]) -> argparse.Namespace:
         parser: argparse.ArgumentParser = argparse.ArgumentParser(
             description="Explain what went wrong during an import."
         )
@@ -214,7 +213,7 @@ class CustomListImportExplainer:
         self._output_csv_file = args.output_csv_file
 
     @staticmethod
-    def create(args: List[str]) -> "CustomListImportExplainer":
+    def create(args: list[str]) -> "CustomListImportExplainer":
         return CustomListImportExplainer(
             CustomListImportExplainer._parse_arguments(args)
         )
