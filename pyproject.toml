@@ -108,6 +108,7 @@ module = [
     "core.util.authentication_for_opds",
     "core.util.base64",
     "core.util.cache",
+    "core.util.log",
     "core.util.notifications",
     "core.util.problem_detail",
     "core.util.string_helpers",

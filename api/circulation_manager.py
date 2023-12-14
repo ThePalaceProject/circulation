@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import urllib.parse
 from typing import TYPE_CHECKING
 
@@ -41,7 +40,8 @@ from core.lane import Lane, WorkList
 from core.model import ConfigurationSetting, Library
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.service.container import Services
-from core.util.log import elapsed_time_logging, log_elapsed_time
+from core.service.logging.configuration import LogLevel
+from core.util.log import LoggerMixin, elapsed_time_logging, log_elapsed_time
 
 if TYPE_CHECKING:
     from api.admin.controller.admin_search import AdminSearchController
@@ -90,9 +90,7 @@ if TYPE_CHECKING:
     from api.admin.controller.work_editor import WorkController as AdminWorkController
 
 
-class CirculationManager:
-    log = logging.getLogger("api.circulation_manager.CirculationManager")
-
+class CirculationManager(LoggerMixin):
     # API Controllers
     index_controller: IndexController
     opds_feeds: OPDSFeedController
@@ -188,7 +186,7 @@ class CirculationManager:
             self.load_settings()
             self.site_configuration_last_update = last_update
 
-    @log_elapsed_time(log_method=log.info, message_prefix="load_settings")
+    @log_elapsed_time(log_level=LogLevel.info, message_prefix="load_settings")
     def load_settings(self):
         """Load all necessary configuration settings and external
         integrations from the database.
