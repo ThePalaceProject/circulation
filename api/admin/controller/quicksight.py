@@ -10,7 +10,7 @@ from api.admin.model.quicksight import (
     QuicksightGenerateUrlRequest,
     QuicksightGenerateUrlResponse,
 )
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.config import Configuration
 from core.model.admin import Admin

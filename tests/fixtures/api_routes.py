@@ -6,7 +6,7 @@ import pytest
 from werkzeug.exceptions import MethodNotAllowed
 
 from api import routes
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture

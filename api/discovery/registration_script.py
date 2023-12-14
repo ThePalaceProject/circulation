@@ -6,8 +6,8 @@ from typing import Callable, List, Literal, Optional
 from flask import url_for
 from sqlalchemy.orm import Session
 
+from api.circulation_manager import CirculationManager
 from api.config import Configuration
-from api.controller import CirculationManager
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from api.util.flask import PalaceFlask

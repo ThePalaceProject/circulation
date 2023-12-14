@@ -17,8 +17,8 @@ from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import *
+from api.circulation_manager import CirculationManager
 from api.config import Configuration
-from api.controller import CirculationManager
 from api.lanes import create_default_lanes
 from core.configuration.library import LibrarySettings
 from core.model import (

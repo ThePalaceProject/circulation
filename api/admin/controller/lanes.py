@@ -16,7 +16,7 @@ from api.admin.problem_details import (
     NO_CUSTOM_LISTS_FOR_LANE,
     NO_DISPLAY_NAME_FOR_LANE,
 )
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from api.lanes import create_default_lanes
 from core.lane import Lane
 from core.model import CustomList, Library, create, get_one

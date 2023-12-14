@@ -17,7 +17,7 @@ from api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from api.controller import CirculationManager
+from api.circulation_manager import CirculationManager
 from core.integration.base import (
     HasChildIntegrationConfiguration,
     HasIntegrationConfiguration,

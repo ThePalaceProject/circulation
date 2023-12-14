@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 import feedparser
 from flask import url_for
 
-from api.controller import CirculationManager
+from api.circulation_manager import CirculationManager
 from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
 from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request

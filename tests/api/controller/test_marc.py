@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from flask import Response
 
-from api.controller_marc import MARCRecordController
+from api.controller.marc import MARCRecordController
 from core.integration.goals import Goals
 from core.marc import MARCExporter
 from core.model import Collection, Library, MarcFile, create

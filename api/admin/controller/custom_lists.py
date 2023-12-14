@@ -21,7 +21,7 @@ from api.admin.problem_details import (
     MISSING_COLLECTION,
     MISSING_CUSTOM_LIST,
 )
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.app_server import load_pagination_from_request
 from core.feed.acquisition import OPDSAcquisitionFeed

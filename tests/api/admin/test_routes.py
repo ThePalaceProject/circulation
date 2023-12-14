@@ -11,7 +11,7 @@ from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import setup_admin_controllers
 from api.admin.problem_details import *
-from api.controller import CirculationManagerController
+from api.controller.circulation_manager import CirculationManagerController
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
