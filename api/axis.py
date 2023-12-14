@@ -10,7 +10,7 @@ import urllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Mapping, Sequence
 from datetime import timedelta
-from typing import Any, Generic, Literal, TypeVar, Union, cast
+from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
 from urllib.parse import urlparse
 
 import certifi
@@ -114,7 +114,7 @@ class Axis360Settings(BaseCirculationApiSettings):
             required=True,
         ),
     )
-    verify_certificate: Optional[bool] = FormField(
+    verify_certificate: bool | None = FormField(
         default=True,
         form=ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
@@ -222,7 +222,7 @@ class Axis360API(
         if not self.library_id or not self.username or not self.password:
             raise CannotLoadConfiguration("Axis 360 configuration is incomplete.")
 
-        self.token: Optional[str] = None
+        self.token: str | None = None
         self.verify_certificate: bool = (
             settings.verify_certificate
             if settings.verify_certificate is not None
@@ -230,7 +230,7 @@ class Axis360API(
         )
 
     @property
-    def source(self) -> Optional[DataSource]:
+    def source(self) -> DataSource | None:
         return DataSource.lookup(self._db, DataSource.AXIS_360)  # type: ignore[no-any-return]
 
     @property
@@ -294,9 +294,9 @@ class Axis360API(
         self,
         url: str,
         method: str = "get",
-        extra_headers: Optional[dict[str, str]] = None,
-        data: Optional[Mapping[str, Any]] = None,
-        params: Optional[Mapping[str, Any]] = None,
+        extra_headers: dict[str, str] | None = None,
+        data: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | None = None,
         exception_on_401: bool = False,
         **kwargs: Any,
     ) -> RequestsResponse:
@@ -343,9 +343,9 @@ class Axis360API(
 
     def availability(
         self,
-        patron_id: Optional[str] = None,
-        since: Optional[datetime.datetime] = None,
-        title_ids: Optional[list[str]] = None,
+        patron_id: str | None = None,
+        since: datetime.datetime | None = None,
+        title_ids: list[str] | None = None,
     ) -> RequestsResponse:
         url = self.base_url + self.availability_endpoint
         args = dict()
@@ -392,9 +392,7 @@ class Axis360API(
         except etree.XMLSyntaxError as e:
             raise RemoteInitiatedServerError(response.content, self.label())
 
-    def _checkin(
-        self, title_id: Optional[str], patron_id: Optional[str]
-    ) -> RequestsResponse:
+    def _checkin(self, title_id: str | None, patron_id: str | None) -> RequestsResponse:
         """Make a request to the EarlyCheckInTitle endpoint."""
         if title_id is None:
             self.log.warning(
@@ -437,7 +435,7 @@ class Axis360API(
             raise RemoteInitiatedServerError(response.content, self.label())
 
     def _checkout(
-        self, title_id: Optional[str], patron_id: Optional[str], internal_format: str
+        self, title_id: str | None, patron_id: str | None, internal_format: str
     ) -> RequestsResponse:
         url = self.base_url + "checkout/v2"
         args = dict(titleId=title_id, patronId=patron_id, format=internal_format)
@@ -483,7 +481,7 @@ class Axis360API(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        hold_notification_email: Optional[str],
+        hold_notification_email: str | None,
     ) -> HoldInfo:
         if not hold_notification_email:
             hold_notification_email = self.default_notification_email_address(
@@ -531,9 +529,9 @@ class Axis360API(
     def patron_activity(
         self,
         patron: Patron,
-        pin: Optional[str],
-        identifier: Optional[Identifier] = None,
-        internal_format: Optional[str] = None,
+        pin: str | None,
+        identifier: Identifier | None = None,
+        internal_format: str | None = None,
     ) -> list[LoanInfo | HoldInfo]:
         if identifier:
             assert identifier.identifier is not None
@@ -697,8 +695,8 @@ class Axis360API(
         url: str,
         method: str,
         headers: Mapping[str, str],
-        data: Optional[Mapping[str, Any]] = None,
-        params: Optional[Mapping[str, Any]] = None,
+        data: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> RequestsResponse:
         """Actually make an HTTP request."""
@@ -743,7 +741,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     def catch_up_from(
         self,
         start: datetime.datetime,
-        cutoff: Optional[datetime.datetime],
+        cutoff: datetime.datetime | None,
         progress: TimestampData,
     ) -> None:
         """Find Axis 360 books that changed recently.
@@ -897,7 +895,7 @@ class Axis360Parser(XMLProcessor[T], ABC):
 
     NAMESPACES = {"axis": "http://axis360api.baker-taylor.com/vendorAPI"}
 
-    def _pd(self, date: Optional[str]) -> Optional[datetime.datetime]:
+    def _pd(self, date: str | None) -> datetime.datetime | None:
         """Stupid function to parse a date."""
         if date is None:
             return date
@@ -911,7 +909,7 @@ class Axis360Parser(XMLProcessor[T], ABC):
         self,
         e: _Element,
         target: str,
-        ns: Optional[dict[str, str]],
+        ns: dict[str, str] | None,
         default: bool = False,
     ) -> bool:
         text = self.text_of_optional_subtag(e, target, ns)
@@ -923,8 +921,8 @@ class Axis360Parser(XMLProcessor[T], ABC):
             return False
 
     def _xpath1_date(
-        self, e: _Element, target: str, ns: Optional[dict[str, str]]
-    ) -> Optional[datetime.datetime]:
+        self, e: _Element, target: str, ns: dict[str, str] | None
+    ) -> datetime.datetime | None:
         value = self.text_of_optional_subtag(e, target, ns)
         return self._pd(value)
 
@@ -953,9 +951,9 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
 
     def extract_availability(
         self,
-        circulation_data: Optional[CirculationData],
+        circulation_data: CirculationData | None,
         element: _Element,
-        ns: Optional[dict[str, str]],
+        ns: dict[str, str] | None,
     ) -> CirculationData:
         identifier = self.text_of_subtag(element, "axis:titleId", ns)
         primary_identifier = IdentifierData(Identifier.AXIS_360_ID, identifier)
@@ -997,7 +995,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         cls,
         author: str,
         primary_author_found: bool = False,
-        force_role: Optional[str] = None,
+        force_role: str | None = None,
     ) -> ContributorData:
         """Parse an Axis 360 contributor string.
 
@@ -1040,7 +1038,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         return ContributorData(sort_name=author, roles=[role])
 
     def extract_bibliographic(
-        self, element: _Element, ns: Optional[dict[str, str]]
+        self, element: _Element, ns: dict[str, str] | None
     ) -> Metadata:
         """Turn bibliographic metadata into a Metadata and a CirculationData objects,
         and return them as a tuple."""
@@ -1246,7 +1244,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         return metadata
 
     def process_one(
-        self, element: _Element, ns: Optional[dict[str, str]]
+        self, element: _Element, ns: dict[str, str] | None
     ) -> tuple[Metadata, CirculationData]:
         bibliographic = self.extract_bibliographic(element, ns)
 
@@ -1327,10 +1325,9 @@ class ResponseParser:
         cls,
         code: str | int,
         message: str,
-        custom_error_classes: Optional[
-            Mapping[int | tuple[int, str], type[IntegrationException]]
-        ] = None,
-        ignore_error_codes: Optional[list[int]] = None,
+        custom_error_classes: None
+        | (Mapping[int | tuple[int, str], type[IntegrationException]]) = None,
+        ignore_error_codes: list[int] | None = None,
     ) -> tuple[int, str]:
         try:
             code = int(code)
@@ -1372,11 +1369,10 @@ class XMLResponseParser(ResponseParser, Axis360Parser[T], ABC):
     def raise_exception_on_error(
         self,
         e: _Element,
-        ns: Optional[dict[str, str]],
-        custom_error_classes: Optional[
-            Mapping[int | tuple[int, str], type[IntegrationException]]
-        ] = None,
-        ignore_error_codes: Optional[list[int]] = None,
+        ns: dict[str, str] | None,
+        custom_error_classes: None
+        | (Mapping[int | tuple[int, str], type[IntegrationException]]) = None,
+        ignore_error_codes: list[int] | None = None,
     ) -> tuple[int, str]:
         """Raise an error if the given lxml node represents an Axis 360 error
         condition.
@@ -1408,7 +1404,7 @@ class CheckinResponseParser(XMLResponseParser[Literal[True]]):
         return "//axis:EarlyCheckinRestResult"
 
     def process_one(
-        self, e: _Element, namespaces: Optional[dict[str, str]]
+        self, e: _Element, namespaces: dict[str, str] | None
     ) -> Literal[True]:
         """Either raise an appropriate exception, or do nothing."""
         self.raise_exception_on_error(e, namespaces, ignore_error_codes=[4058])
@@ -1420,9 +1416,7 @@ class CheckoutResponseParser(XMLResponseParser[LoanInfo]):
     def xpath_expression(self) -> str:
         return "//axis:checkoutResult"
 
-    def process_one(
-        self, e: _Element, namespaces: Optional[dict[str, str]]
-    ) -> LoanInfo:
+    def process_one(self, e: _Element, namespaces: dict[str, str] | None) -> LoanInfo:
         """Either turn the given document into a LoanInfo
         object, or raise an appropriate exception.
         """
@@ -1455,9 +1449,7 @@ class HoldResponseParser(XMLResponseParser[HoldInfo]):
     def xpath_expression(self) -> str:
         return "//axis:addtoholdResult"
 
-    def process_one(
-        self, e: _Element, namespaces: Optional[dict[str, str]]
-    ) -> HoldInfo:
+    def process_one(self, e: _Element, namespaces: dict[str, str] | None) -> HoldInfo:
         """Either turn the given document into a HoldInfo
         object, or raise an appropriate exception.
         """
@@ -1495,7 +1487,7 @@ class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
         return "//axis:removeholdResult"
 
     def process_one(
-        self, e: _Element, namespaces: Optional[dict[str, str]]
+        self, e: _Element, namespaces: dict[str, str] | None
     ) -> Literal[True]:
         # There's no data to gather here. Either there was an error
         # or we were successful.
@@ -1504,7 +1496,7 @@ class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
 
 
 class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
-    def __init__(self, api: Axis360API, internal_format: Optional[str] = None) -> None:
+    def __init__(self, api: Axis360API, internal_format: str | None = None) -> None:
         """Constructor.
 
         :param api: An Axis360API instance, in case the parsing of an
@@ -1528,8 +1520,8 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
         return "//axis:title"
 
     def process_one(
-        self, e: _Element, ns: Optional[dict[str, str]]
-    ) -> Optional[LoanInfo | HoldInfo]:
+        self, e: _Element, ns: dict[str, str] | None
+    ) -> LoanInfo | HoldInfo | None:
         # Figure out which book we're talking about.
         axis_identifier = self.text_of_subtag(e, "axis:titleId", ns)
         availability = self._xpath1(e, "axis:availability", ns)
@@ -1539,7 +1531,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
         checked_out = self._xpath1_boolean(availability, "axis:isCheckedout", ns)
         on_hold = self._xpath1_boolean(availability, "axis:isInHoldQueue", ns)
 
-        info: Optional[LoanInfo | HoldInfo] = None
+        info: LoanInfo | HoldInfo | None = None
         if checked_out:
             start_date = self._xpath1_date(availability, "axis:checkoutStartDate", ns)
             end_date = self._xpath1_date(availability, "axis:checkoutEndDate", ns)
@@ -1559,7 +1551,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 identifier=axis_identifier,
             )
 
-            fulfillment: Optional[FulfillmentInfo]
+            fulfillment: FulfillmentInfo | None
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
                 # immediately, without making any more API requests.
@@ -1638,7 +1630,7 @@ class JSONResponseParser(Generic[T], ResponseParser, ABC):
     """
 
     @classmethod
-    def _required_key(cls, key: str, json_obj: Optional[Mapping[str, Any]]) -> Any:
+    def _required_key(cls, key: str, json_obj: Mapping[str, Any] | None) -> Any:
         """Raise an exception if the given key is not present in the given
         object.
         """
@@ -1654,7 +1646,7 @@ class JSONResponseParser(Generic[T], ResponseParser, ABC):
         return json_obj[key]
 
     @classmethod
-    def verify_status_code(cls, parsed: Optional[Mapping[str, Any]]) -> None:
+    def verify_status_code(cls, parsed: Mapping[str, Any] | None) -> None:
         """Assert that the incoming JSON document represents a successful
         response.
         """
@@ -1713,7 +1705,7 @@ class Axis360FulfillmentInfoResponseParser(
     def _parse(
         self,
         parsed: dict[str, Any],
-        license_pool: Optional[LicensePool] = None,
+        license_pool: LicensePool | None = None,
         **kwargs: Any,
     ) -> tuple[FindawayManifest | AxisNowManifest, datetime.datetime]:
         """Extract all useful information from a parsed FulfillmentInfo
@@ -1796,7 +1788,7 @@ class AudiobookMetadataParser(
     @classmethod
     def _parse(
         cls, parsed: dict[str, Any], **kwargs: Any
-    ) -> tuple[Optional[str], list[SpineItem]]:
+    ) -> tuple[str | None, list[SpineItem]]:
         spine_items = []
         accountId = parsed.get("fndaccountid", None)
         for item in parsed.get("readingOrder", []):

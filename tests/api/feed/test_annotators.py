@@ -197,7 +197,7 @@ class TestAnnotators:
         work.presentation_edition.add_contributor(c, Contributor.PRIMARY_AUTHOR_ROLE)
 
         [same_tag] = VerboseAnnotator.authors(work.presentation_edition)["authors"]
-        assert same_tag.dict() == author.dict()
+        assert same_tag.asdict() == author.asdict()
 
     def test_duplicate_author_names_are_ignored(self, db: DatabaseTransactionFixture):
         session = db.session

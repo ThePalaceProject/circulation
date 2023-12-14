@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from collections.abc import Generator
-from typing import Any, List, Literal, Tuple, Type, TypeVar
+from typing import Any, List, Literal, Tuple, Type, TypeVar, Union
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
@@ -346,8 +346,8 @@ class SessionManager:
 
     @classmethod
     def setup_event_listener(
-        cls, session: Union[Session, sessionmaker]
-    ) -> Union[Session, sessionmaker]:
+        cls, session: Session | sessionmaker
+    ) -> Session | sessionmaker:
         event.listen(session, "before_flush", Listener.before_flush_event_listener)
         return session
 

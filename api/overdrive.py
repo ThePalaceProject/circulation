@@ -129,7 +129,7 @@ class OverdriveConstants:
 class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
     """The basic Overdrive configuration"""
 
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             type=ConfigurationFormItemType.TEXT,
@@ -190,7 +190,7 @@ class OverdriveLibrarySettings(BaseCirculationEbookLoanSettings):
 
 
 class OverdriveChildSettings(BaseSettings):
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
@@ -900,7 +900,7 @@ class OverdriveAPI(
             return response
 
     def get_patron_credential(
-        self, patron: Patron, pin: Optional[str], is_fulfillment=False
+        self, patron: Patron, pin: str | None, is_fulfillment=False
     ) -> Credential:
         """Create an OAuth token for the given patron.
 
@@ -1179,7 +1179,7 @@ class OverdriveAPI(
                 raise d[error](message)
 
     def get_loan(
-        self, patron: Patron, pin: Optional[str], overdrive_id: str
+        self, patron: Patron, pin: str | None, overdrive_id: str
     ) -> dict[str, Any]:
         """Get patron's loan information for the identified item.
 
@@ -1263,7 +1263,7 @@ class OverdriveAPI(
         )
 
     def get_fulfillment_link(
-        self, patron: Patron, pin: Optional[str], overdrive_id: str, format_type: str
+        self, patron: Patron, pin: str | None, overdrive_id: str, format_type: str
     ) -> OverdriveManifestFulfillmentInfo | tuple[str, str]:
         """Get the link to the ACSM or manifest for an existing loan."""
         try:
@@ -1403,9 +1403,7 @@ class OverdriveAPI(
         self.raise_exception_on_error(data)
         return data
 
-    def get_patron_checkouts(
-        self, patron: Patron, pin: Optional[str]
-    ) -> dict[str, Any]:
+    def get_patron_checkouts(self, patron: Patron, pin: str | None) -> dict[str, Any]:
         """Get information for the given patron's loans.
 
         :param patron: A patron.
@@ -2457,7 +2455,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # Otherwise we'll probably give it a fraction of this weight.
         trusted_weight = Classification.TRUSTED_DISTRIBUTOR_WEIGHT
 
-        duration: Optional[int] = None
+        duration: int | None = None
 
         if include_bibliographic:
             title = book.get("title", None)
@@ -2578,7 +2576,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             links = []
             sample_hrefs = set()
             for format in book.get("formats", []):
-                duration_str: Optional[str] = format.get("duration")
+                duration_str: str | None = format.get("duration")
                 if duration_str is not None:
                     # Using this method only the last valid duration attribute is captured
                     # If there are multiple formats with different durations, the edition will ignore the rest

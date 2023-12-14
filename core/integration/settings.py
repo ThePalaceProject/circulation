@@ -301,6 +301,17 @@ class BaseSettings(BaseModel, LoggerMixin):
         # not the alias.
         allow_population_by_field_name = True
 
+    # If your settings class needs additional form fields that are not
+    # defined on the model, you can add them here. This is useful if you
+    # need to add a custom form field, but don't want the data in the field
+    # to be stored on the model in the database. For example, if you want
+    # to add a custom form field that allows the user to upload an image, but
+    # want to store that image data outside the settings model.
+    #
+    # The key for the dictionary should be the field name, and the value
+    # should be a ConfigurationFormItem object that defines the form field.
+    _additional_form_fields: dict[str, ConfigurationFormItem] = {}
+
     @classmethod
     def configuration_form(cls, db: Session) -> list[dict[str, Any]]:
         """Get the configuration dictionary for this class"""
@@ -342,17 +353,6 @@ class BaseSettings(BaseModel, LoggerMixin):
             return item.field_info.form.label
         else:
             return field_name
-
-    # If your settings class needs additional form fields that are not
-    # defined on the model, you can add them here. This is useful if you
-    # need to add a custom form field, but don't want the data in the field
-    # to be stored on the model in the database. For example, if you want
-    # to add a custom form field that allows the user to upload an image, but
-    # want to store that image data outside the settings model.
-    #
-    # The key for the dictionary should be the field name, and the value
-    # should be a ConfigurationFormItem object that defines the form field.
-    _additional_form_fields: dict[str, ConfigurationFormItem] = {}
 
     def __init__(self, **data: Any):
         """

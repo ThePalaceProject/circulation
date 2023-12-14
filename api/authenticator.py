@@ -5,6 +5,7 @@ import logging
 import sys
 from abc import ABC
 from collections.abc import Iterable
+from typing import cast
 
 import flask
 import jwt
@@ -551,12 +552,14 @@ class LibraryAuthenticator(LoggerMixin):
             # Maybe we should use something custom instead.
             iss=provider_name,
         )
-        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
+        return jwt.encode(
+            payload, cast(str, self.bearer_token_signing_secret), algorithm="HS256"
+        )
 
     def decode_bearer_token(self, token: str) -> tuple[str, str]:
         """Extract auth provider name and access token from JSON web token."""
         decoded = jwt.decode(
-            token, self.bearer_token_signing_secret, algorithms=["HS256"]
+            token, cast(str, self.bearer_token_signing_secret), algorithms=["HS256"]
         )
         provider_name = decoded["iss"]
         token = decoded["token"]

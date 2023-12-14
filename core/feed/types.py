@@ -26,12 +26,12 @@ class BaseModel:
                 continue
             yield name, value
 
-    def dict(self) -> dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves"""
         attrs = {}
         for name, value in self:
             if isinstance(value, BaseModel):
-                attrs[name] = value.dict()
+                attrs[name] = value.asdict()
             else:
                 attrs[name] = value
         return attrs
@@ -84,9 +84,9 @@ class Link(FeedEntryType):
     role: str | None = None
     title: str | None = None
 
-    def dict(self) -> dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         """A dict without None values"""
-        d = super().dict()
+        d = super().asdict()
         santized = {}
         for k, v in d.items():
             if v is not None:

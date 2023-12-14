@@ -337,7 +337,7 @@ class TestLibraryAnnotator:
         # object that renders to the same data.
         same_tag = annotator_fixture.annotator.adobe_id_tags(patron_identifier)
         assert same_tag is not element
-        assert same_tag["drm_licensor"].dict() == element["drm_licensor"].dict()
+        assert same_tag["drm_licensor"].asdict() == element["drm_licensor"].asdict()
 
         # If the Adobe Vendor ID configuration is present but
         # incomplete, adobe_id_tags does nothing.
@@ -1426,9 +1426,9 @@ class TestLibraryAnnotator:
 
         # If we remove that attribute, the feed-level tag is the same as the
         # generic tag.
-        assert feed_tag["drm_licensor"].dict() != generic_tag["drm_licensor"].dict()
+        assert feed_tag["drm_licensor"].asdict() != generic_tag["drm_licensor"].asdict()
         delattr(feed_tag["drm_licensor"], "scheme")
-        assert feed_tag["drm_licensor"].dict() == generic_tag["drm_licensor"].dict()
+        assert feed_tag["drm_licensor"].asdict() == generic_tag["drm_licensor"].asdict()
 
     def test_borrow_link_raises_unfulfillable_work(
         self, annotator_fixture: LibraryAnnotatorFixture

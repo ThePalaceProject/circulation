@@ -255,14 +255,14 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
             entry.append(self._serialize_author_tag("contributor", contributor))
 
         for link in feed_entry.image_links:
-            entry.append(OPDSFeed.link(**link.dict()))
+            entry.append(OPDSFeed.link(**link.asdict()))
 
         for link in feed_entry.acquisition_links:
             element = self._serialize_acquistion_link(link)
             entry.append(element)
 
         for link in feed_entry.other_links:
-            entry.append(OPDSFeed.link(**link.dict()))
+            entry.append(OPDSFeed.link(**link.asdict()))
 
         return entry
 

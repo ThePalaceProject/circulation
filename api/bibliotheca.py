@@ -13,7 +13,7 @@ from abc import ABC
 from collections.abc import Generator
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import TypeVar
+from typing import Optional, TypeVar
 
 import dateutil.parser
 from dependency_injector.wiring import Provide, inject
@@ -105,7 +105,7 @@ class BibliothecaSettings(BaseCirculationApiSettings):
 
 
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
-    dont_display_reserves: Optional[str] = FormField(
+    dont_display_reserves: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
@@ -667,7 +667,7 @@ class ItemListParser(XMLProcessor[Metadata]):
 
     @classmethod
     def contributors_from_string(
-        cls, string: Optional[str], role: str = Contributor.AUTHOR_ROLE
+        cls, string: str | None, role: str = Contributor.AUTHOR_ROLE
     ) -> list[ContributorData]:
         contributors: list[ContributorData] = []
         if not string:
@@ -686,7 +686,7 @@ class ItemListParser(XMLProcessor[Metadata]):
         return contributors
 
     @classmethod
-    def parse_genre_string(self, s: Optional[str]) -> list[SubjectData]:
+    def parse_genre_string(self, s: str | None) -> list[SubjectData]:
         genres: list[SubjectData] = []
         if not s:
             return genres
@@ -709,9 +709,7 @@ class ItemListParser(XMLProcessor[Metadata]):
             )
         return genres
 
-    def process_one(
-        self, tag: _Element, namespaces: Optional[dict[str, str]]
-    ) -> Metadata:
+    def process_one(self, tag: _Element, namespaces: dict[str, str] | None) -> Metadata:
         """Turn an <item> tag into a Metadata and an encompassed CirculationData
         objects, and return the Metadata."""
 
@@ -957,7 +955,7 @@ class ErrorParser(BibliothecaParser[Exception]):
         return return_val
 
     def process_one(
-        self, error_tag: _Element, namespaces: Optional[dict[str, str]]
+        self, error_tag: _Element, namespaces: dict[str, str] | None
     ) -> Exception:
         message = self.text_of_optional_subtag(error_tag, "Message")
         if not message:
@@ -1047,17 +1045,17 @@ class PatronCirculationParser(XMLParser):
 
     def process_one_loan(
         self, tag: _Element, namespaces: dict[str, str]
-    ) -> Optional[LoanInfo]:
+    ) -> LoanInfo | None:
         return self.process_one(tag, namespaces, LoanInfo)
 
     def process_one_hold(
         self, tag: _Element, namespaces: dict[str, str]
-    ) -> Optional[HoldInfo]:
+    ) -> HoldInfo | None:
         return self.process_one(tag, namespaces, HoldInfo)
 
     def process_one_reserve(
         self, tag: _Element, namespaces: dict[str, str]
-    ) -> Optional[HoldInfo]:
+    ) -> HoldInfo | None:
         hold_info = self.process_one(tag, namespaces, HoldInfo)
         if hold_info is not None:
             hold_info.hold_position = 0
@@ -1065,7 +1063,7 @@ class PatronCirculationParser(XMLParser):
 
     def process_one(
         self, tag: _Element, namespaces: dict[str, str], source_class: type[T]
-    ) -> Optional[T]:
+    ) -> T | None:
         if not tag.xpath("ItemId"):
             # This happens for events associated with books
             # no longer in our collection.
@@ -1098,16 +1096,16 @@ class PatronCirculationParser(XMLParser):
 class DateResponseParser(BibliothecaParser[Optional[datetime]], ABC):
     """Extract a date from a response."""
 
-    RESULT_TAG_NAME: Optional[str] = None
-    DATE_TAG_NAME: Optional[str] = None
+    RESULT_TAG_NAME: str | None = None
+    DATE_TAG_NAME: str | None = None
 
     @property
     def xpath_expression(self) -> str:
         return f"/{self.RESULT_TAG_NAME}/{self.DATE_TAG_NAME}"
 
     def process_one(
-        self, tag: _Element, namespaces: Optional[dict[str, str]]
-    ) -> Optional[datetime]:
+        self, tag: _Element, namespaces: dict[str, str] | None
+    ) -> datetime | None:
         due_date = tag.text
         if not due_date:
             return None
@@ -1157,7 +1155,7 @@ class EventParser(BibliothecaParser):
     def process_all(
         self, string: bytes | str, no_events_error=False
     ) -> Generator[
-        tuple[str, str, Optional[str], datetime, Optional[datetime], str], None, None
+        tuple[str, str, str | None, datetime, datetime | None, str], None, None
     ]:
         has_events = False
         for i in super().process_all(string):
@@ -1180,8 +1178,8 @@ class EventParser(BibliothecaParser):
             )
 
     def process_one(
-        self, tag: _Element, namespaces: Optional[dict[str, str]]
-    ) -> tuple[str, str, Optional[str], datetime, Optional[datetime], str]:
+        self, tag: _Element, namespaces: dict[str, str] | None
+    ) -> tuple[str, str, str | None, datetime, datetime | None, str]:
         isbn = self.text_of_subtag(tag, "ISBN")
         bibliotheca_id = self.text_of_subtag(tag, "ItemId")
         patron_id = self.text_of_optional_subtag(tag, "PatronId")
