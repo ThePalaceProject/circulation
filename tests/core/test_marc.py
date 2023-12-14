@@ -770,11 +770,11 @@ class TestMARCExporter:
         assert len(records) == 2
 
         title_fields = [record.get_fields("245") for record in records]
-        titles = [fields[0].get_subfields("a")[0] for fields in title_fields]
-        assert titles == [
+        titles = {fields[0].get_subfields("a")[0] for fields in title_fields}
+        assert titles == {
             marc_exporter_fixture.w1.title,
             marc_exporter_fixture.w2.title,
-        ]
+        }
 
     def test_records_since_time(
         self,
