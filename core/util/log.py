@@ -3,23 +3,49 @@ import logging
 import sys
 import time
 from contextlib import contextmanager
-from typing import Callable, Optional
+from typing import Callable, Generator, Optional, TypeVar
+
+from typing_extensions import ParamSpec
+
+from core.service.logging.configuration import LogLevel
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 def log_elapsed_time(
-    *, log_method: Callable, message_prefix: Optional[str] = None, skip_start=False
-):
+    *,
+    log_level: LogLevel,
+    message_prefix: Optional[str] = None,
+    skip_start: bool = False,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator for logging elapsed time.
 
-    :param log_method: Callable to be used to log the message(s).
+    Must be applied to a method of a subclass of LoggerMixin or a class that has a log property
+    that is an instance of logging.Logger.
+
+    :param log_level: The log level to use for the emitted log records.
     :param message_prefix: Optional string to be prepended to the emitted log records.
     :param skip_start: Boolean indicating whether to skip the starting message.
     """
     prefix = f"{message_prefix}: " if message_prefix else ""
 
-    def outer(fn):
+    def outer(fn: Callable[P, T]) -> Callable[P, T]:
         @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            if (
+                len(args) > 0
+                and hasattr(args[0], "log")
+                and isinstance(args[0].log, logging.Logger)
+            ):
+                log_method = getattr(args[0].log, log_level.name)
+            elif len(args) > 0 and hasattr(args[0], "logger"):
+                log_method = getattr(args[0].logger(), log_level.name)
+            else:
+                raise RuntimeError(
+                    "Decorator must be applied to a method of a LoggerMixin or a subclass of LoggerMixin."
+                )
+
             if not skip_start:
                 log_method(f"{prefix}Starting...")
             tic = time.perf_counter()
@@ -38,8 +64,11 @@ def log_elapsed_time(
 
 @contextmanager
 def elapsed_time_logging(
-    *, log_method: Callable, message_prefix: Optional[str] = None, skip_start=False
-):
+    *,
+    log_method: Callable[[str], None],
+    message_prefix: Optional[str] = None,
+    skip_start: bool = False,
+) -> Generator[None, None, None]:
     """Context manager for logging elapsed time.
 
     :param log_method: Callable to be used to log the message(s).
