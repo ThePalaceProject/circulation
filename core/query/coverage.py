@@ -1,5 +1,3 @@
-from typing import List
-
 from sqlalchemy.orm.session import Session
 
 from core.model.coverage import EquivalencyCoverageRecord
@@ -9,8 +7,8 @@ from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyC
 class EquivalencyCoverageQueries:
     @classmethod
     def add_coverage_for_identifiers_chain(
-        cls, identifiers: List[Identifier], _db=None
-    ) -> List[EquivalencyCoverageRecord]:
+        cls, identifiers: list[Identifier], _db=None
+    ) -> list[EquivalencyCoverageRecord]:
         """Hunt down any recursive identifiers that may be touched by these identifiers
         set all the possible coverages to reset and recompute the chain
         """
@@ -29,7 +27,7 @@ class EquivalencyCoverageQueries:
         )
 
         # Need to be reset
-        equivs: List[Equivalency] = Equivalency.for_identifiers(
+        equivs: list[Equivalency] = Equivalency.for_identifiers(
             _db, (p[0] for p in parent_ids)
         )
         records = []

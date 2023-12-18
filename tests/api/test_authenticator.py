@@ -7,9 +7,10 @@ import datetime
 import json
 import os
 import re
+from collections.abc import Callable
 from decimal import Decimal
 from functools import partial
-from typing import TYPE_CHECKING, Callable, Literal, Tuple, cast
+from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import flask
@@ -166,7 +167,7 @@ def patron_data() -> PatronData:
     )
 
 
-InactivePatronFixture = Tuple[Patron, PatronData]
+InactivePatronFixture = tuple[Patron, PatronData]
 
 
 @pytest.fixture

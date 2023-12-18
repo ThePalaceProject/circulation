@@ -1,17 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator
 from io import BytesIO
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Dict,
-    Generator,
-    Generic,
-    List,
-    Optional,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from lxml import etree
 
@@ -25,12 +17,12 @@ class XMLParser:
 
     """Helper functions to process XML data."""
 
-    NAMESPACES: Dict[str, str] = {}
+    NAMESPACES: dict[str, str] = {}
 
     @classmethod
     def _xpath(
-        cls, tag: _Element, expression: str, namespaces: Optional[Dict[str, str]] = None
-    ) -> List[_Element]:
+        cls, tag: _Element, expression: str, namespaces: dict[str, str] | None = None
+    ) -> list[_Element]:
         if not namespaces:
             namespaces = cls.NAMESPACES
         """Wrapper to do a namespaced XPath expression."""
@@ -38,8 +30,8 @@ class XMLParser:
 
     @classmethod
     def _xpath1(
-        cls, tag: _Element, expression: str, namespaces: Optional[Dict[str, str]] = None
-    ) -> Optional[_Element]:
+        cls, tag: _Element, expression: str, namespaces: dict[str, str] | None = None
+    ) -> _Element | None:
         """Wrapper to do a namespaced XPath expression."""
         values = cls._xpath(tag, expression, namespaces=namespaces)
         if not values:
@@ -54,8 +46,8 @@ class XMLParser:
         )
 
     def text_of_optional_subtag(
-        self, tag: _Element, name: str, namespaces: Optional[Dict[str, str]] = None
-    ) -> Optional[str]:
+        self, tag: _Element, name: str, namespaces: dict[str, str] | None = None
+    ) -> str | None:
         tag = self._xpath1(tag, name, namespaces=namespaces)
         if tag is None or tag.text is None:
             return None
@@ -63,18 +55,18 @@ class XMLParser:
             return str(tag.text)
 
     def text_of_subtag(
-        self, tag: _Element, name: str, namespaces: Optional[Dict[str, str]] = None
+        self, tag: _Element, name: str, namespaces: dict[str, str] | None = None
     ) -> str:
         return str(tag.xpath(name, namespaces=namespaces)[0].text)
 
     def int_of_subtag(
-        self, tag: _Element, name: str, namespaces: Optional[Dict[str, str]] = None
+        self, tag: _Element, name: str, namespaces: dict[str, str] | None = None
     ) -> int:
         return int(self.text_of_subtag(tag, name, namespaces=namespaces))
 
     def int_of_optional_subtag(
-        self, tag: _Element, name: str, namespaces: Optional[Dict[str, str]] = None
-    ) -> Optional[int]:
+        self, tag: _Element, name: str, namespaces: dict[str, str] | None = None
+    ) -> int | None:
         v = self.text_of_optional_subtag(tag, name, namespaces=namespaces)
         if not v:
             return None
@@ -107,8 +99,8 @@ class XMLParser:
     def _process_all(
         xml: _ElementTree,
         xpath_expression: str,
-        namespaces: Dict[str, str],
-        handler: Callable[[_Element, Dict[str, str]], Optional[T]],
+        namespaces: dict[str, str],
+        handler: Callable[[_Element, dict[str, str]], T | None],
     ) -> Generator[T, None, None]:
         """
         Process all elements matching the given XPath expression. Calling
@@ -144,7 +136,7 @@ class XMLProcessor(XMLParser, Generic[T], ABC):
     def process_first(
         self,
         xml: str | bytes | _ElementTree,
-    ) -> Optional[T]:
+    ) -> T | None:
         """
         Process the first element matching the given XPath expression. Calling
         process_one on the element and returning None if no elements match or
@@ -163,9 +155,7 @@ class XMLProcessor(XMLParser, Generic[T], ABC):
         ...
 
     @abstractmethod
-    def process_one(
-        self, tag: _Element, namespaces: Optional[Dict[str, str]]
-    ) -> Optional[T]:
+    def process_one(self, tag: _Element, namespaces: dict[str, str] | None) -> T | None:
         """
         Process one element and return the result. Return None if the element
         should be ignored.

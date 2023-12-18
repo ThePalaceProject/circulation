@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Generic, TypeVar
 
 import flask
 from flask import Response
@@ -109,10 +109,10 @@ class IntegrationSelfTestsController(Generic[T], ABC):
     @abstractmethod
     def run_self_tests(
         self, integration: IntegrationConfiguration
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         ...
 
-    def get_protocol_class(self, integration: IntegrationConfiguration) -> Type[T]:
+    def get_protocol_class(self, integration: IntegrationConfiguration) -> type[T]:
         if not integration.protocol or integration.protocol not in self.registry:
             raise ProblemError(problem_detail=UNKNOWN_PROTOCOL)
         return self.registry[integration.protocol]
@@ -129,7 +129,7 @@ class IntegrationSelfTestsController(Generic[T], ABC):
         return service
 
     @staticmethod
-    def get_info(integration: IntegrationConfiguration) -> Dict[str, Any]:
+    def get_info(integration: IntegrationConfiguration) -> dict[str, Any]:
         info = dict(
             id=integration.id,
             name=integration.name,
@@ -142,14 +142,14 @@ class IntegrationSelfTestsController(Generic[T], ABC):
     @staticmethod
     def get_library_configuration(
         integration: IntegrationConfiguration,
-    ) -> Optional[IntegrationLibraryConfiguration]:
+    ) -> IntegrationLibraryConfiguration | None:
         if not integration.library_configurations:
             return None
         return integration.library_configurations[0]
 
     def get_prior_test_results(
-        self, protocol_class: Type[T], integration: IntegrationConfiguration
-    ) -> Dict[str, Any]:
+        self, protocol_class: type[T], integration: IntegrationConfiguration
+    ) -> dict[str, Any]:
         if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
             self_test_results = protocol_class.load_self_test_results(integration)  # type: ignore[unreachable]
         else:
@@ -160,7 +160,7 @@ class IntegrationSelfTestsController(Generic[T], ABC):
 
         return self_test_results
 
-    def process_self_tests(self, identifier: Optional[int]) -> Response | ProblemDetail:
+    def process_self_tests(self, identifier: int | None) -> Response | ProblemDetail:
         if not identifier:
             return MISSING_IDENTIFIER
         try:

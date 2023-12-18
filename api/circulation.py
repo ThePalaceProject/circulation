@@ -5,9 +5,10 @@ import logging
 import sys
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from threading import Thread
 from types import TracebackType
-from typing import Any, Dict, Iterable, List, Literal, Tuple, Type, TypeVar
+from typing import Any, Literal, TypeVar
 
 import flask
 from flask import Response
@@ -53,9 +54,9 @@ class CirculationInfo:
     def __init__(
         self,
         collection: Collection | int | None,
-        data_source_name: Optional[str | DataSource],
-        identifier_type: Optional[str],
-        identifier: Optional[str],
+        data_source_name: str | DataSource | None,
+        identifier_type: str | None,
+        identifier: str | None,
     ) -> None:
         """A loan, hold, or whatever.
 
@@ -73,7 +74,7 @@ class CirculationInfo:
         :param identifier: The string identifying the LicensePool.
 
         """
-        self.collection_id: Optional[int]
+        self.collection_id: int | None
         if isinstance(collection, int):
             self.collection_id = collection
         elif isinstance(collection, Collection) and collection.id is not None:
@@ -85,7 +86,7 @@ class CirculationInfo:
         self.identifier_type = identifier_type
         self.identifier = identifier
 
-    def collection(self, _db: Session) -> Optional[Collection]:
+    def collection(self, _db: Session) -> Collection | None:
         """Find the Collection to which this object belongs."""
         if self.collection_id is None:
             return None
@@ -103,7 +104,7 @@ class CirculationInfo:
         )
         return pool
 
-    def fd(self, d: Optional[datetime.datetime]) -> Optional[str]:
+    def fd(self, d: datetime.datetime | None) -> str | None:
         # Stupid method to format a date
         if not d:
             return None
@@ -128,10 +129,10 @@ class DeliveryMechanismInfo(CirculationInfo):
 
     def __init__(
         self,
-        content_type: Optional[str],
-        drm_scheme: Optional[str],
-        rights_uri: Optional[str] = RightsStatus.IN_COPYRIGHT,
-        resource: Optional[Resource] = None,
+        content_type: str | None,
+        drm_scheme: str | None,
+        rights_uri: str | None = RightsStatus.IN_COPYRIGHT,
+        resource: Resource | None = None,
     ) -> None:
         """Constructor.
 
@@ -152,7 +153,7 @@ class DeliveryMechanismInfo(CirculationInfo):
 
     def apply(
         self, loan: Loan, autocommit: bool = True
-    ) -> Optional[LicensePoolDeliveryMechanism]:
+    ) -> LicensePoolDeliveryMechanism | None:
         """Set an appropriate LicensePoolDeliveryMechanism on the given
         `Loan`, creating a DeliveryMechanism if necessary.
 
@@ -210,13 +211,13 @@ class FulfillmentInfo(CirculationInfo):
     def __init__(
         self,
         collection: Collection | int | None,
-        data_source_name: Optional[str | DataSource],
-        identifier_type: Optional[str],
-        identifier: Optional[str],
-        content_link: Optional[str],
-        content_type: Optional[str],
-        content: Optional[str],
-        content_expires: Optional[datetime.datetime],
+        data_source_name: str | DataSource | None,
+        identifier_type: str | None,
+        identifier: str | None,
+        content_link: str | None,
+        content_type: str | None,
+        content: str | None,
+        content_expires: datetime.datetime | None,
         content_link_redirect: bool = False,
     ) -> None:
         """Constructor.
@@ -280,35 +281,35 @@ class FulfillmentInfo(CirculationInfo):
         return None
 
     @property
-    def content_link(self) -> Optional[str]:
+    def content_link(self) -> str | None:
         return self._content_link
 
     @content_link.setter
-    def content_link(self, value: Optional[str]) -> None:
+    def content_link(self, value: str | None) -> None:
         self._content_link = value
 
     @property
-    def content_type(self) -> Optional[str]:
+    def content_type(self) -> str | None:
         return self._content_type
 
     @content_type.setter
-    def content_type(self, value: Optional[str]) -> None:
+    def content_type(self, value: str | None) -> None:
         self._content_type = value
 
     @property
-    def content(self) -> Optional[str]:
+    def content(self) -> str | None:
         return self._content
 
     @content.setter
-    def content(self, value: Optional[str]) -> None:
+    def content(self, value: str | None) -> None:
         self._content = value
 
     @property
-    def content_expires(self) -> Optional[datetime.datetime]:
+    def content_expires(self) -> datetime.datetime | None:
         return self._content_expires
 
     @content_expires.setter
-    def content_expires(self, value: Optional[datetime.datetime]) -> None:
+    def content_expires(self, value: datetime.datetime | None) -> None:
         self._content_expires = value
 
 
@@ -326,9 +327,9 @@ class APIAwareFulfillmentInfo(FulfillmentInfo, ABC):
     def __init__(
         self,
         api: CirculationApiType,
-        data_source_name: Optional[str],
-        identifier_type: Optional[str],
-        identifier: Optional[str],
+        data_source_name: str | None,
+        identifier_type: str | None,
+        identifier: str | None,
         key: Any,
     ) -> None:
         """Constructor.
@@ -375,39 +376,39 @@ class APIAwareFulfillmentInfo(FulfillmentInfo, ABC):
         ...
 
     @property
-    def content_link(self) -> Optional[str]:
+    def content_link(self) -> str | None:
         self.fetch()
         return self._content_link
 
     @content_link.setter
-    def content_link(self, value: Optional[str]) -> None:
+    def content_link(self, value: str | None) -> None:
         raise NotImplementedError()
 
     @property
-    def content_type(self) -> Optional[str]:
+    def content_type(self) -> str | None:
         self.fetch()
         return self._content_type
 
     @content_type.setter
-    def content_type(self, value: Optional[str]) -> None:
+    def content_type(self, value: str | None) -> None:
         raise NotImplementedError()
 
     @property
-    def content(self) -> Optional[str]:
+    def content(self) -> str | None:
         self.fetch()
         return self._content
 
     @content.setter
-    def content(self, value: Optional[str]) -> None:
+    def content(self, value: str | None) -> None:
         raise NotImplementedError()
 
     @property
-    def content_expires(self) -> Optional[datetime.datetime]:
+    def content_expires(self) -> datetime.datetime | None:
         self.fetch()
         return self._content_expires
 
     @content_expires.setter
-    def content_expires(self, value: Optional[datetime.datetime]) -> None:
+    def content_expires(self, value: datetime.datetime | None) -> None:
         raise NotImplementedError()
 
 
@@ -417,14 +418,14 @@ class LoanInfo(CirculationInfo):
     def __init__(
         self,
         collection: Collection | int,
-        data_source_name: Optional[str | DataSource],
-        identifier_type: Optional[str],
-        identifier: Optional[str],
-        start_date: Optional[datetime.datetime],
-        end_date: Optional[datetime.datetime],
-        fulfillment_info: Optional[FulfillmentInfo] = None,
-        external_identifier: Optional[str] = None,
-        locked_to: Optional[DeliveryMechanismInfo] = None,
+        data_source_name: str | DataSource | None,
+        identifier_type: str | None,
+        identifier: str | None,
+        start_date: datetime.datetime | None,
+        end_date: datetime.datetime | None,
+        fulfillment_info: FulfillmentInfo | None = None,
+        external_identifier: str | None = None,
+        locked_to: DeliveryMechanismInfo | None = None,
     ):
         """Constructor.
 
@@ -472,13 +473,13 @@ class HoldInfo(CirculationInfo):
     def __init__(
         self,
         collection: Collection | int,
-        data_source_name: Optional[str | DataSource],
-        identifier_type: Optional[str],
-        identifier: Optional[str],
-        start_date: Optional[datetime.datetime],
-        end_date: Optional[datetime.datetime],
-        hold_position: Optional[int],
-        external_identifier: Optional[str] = None,
+        data_source_name: str | DataSource | None,
+        identifier_type: str | None,
+        identifier: str | None,
+        start_date: datetime.datetime | None,
+        end_date: datetime.datetime | None,
+        hold_position: int | None,
+        external_identifier: str | None = None,
     ):
         super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
@@ -499,7 +500,7 @@ class HoldInfo(CirculationInfo):
 class BaseCirculationEbookLoanSettings(BaseSettings):
     """A mixin for settings that apply to ebook loans."""
 
-    ebook_loan_duration: Optional[PositiveInt] = FormField(
+    ebook_loan_duration: PositiveInt | None = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_("Ebook Loan Duration (in Days)"),
@@ -514,7 +515,7 @@ class BaseCirculationEbookLoanSettings(BaseSettings):
 class BaseCirculationLoanSettings(BaseSettings):
     """A mixin for settings that apply to loans."""
 
-    default_loan_duration: Optional[PositiveInt] = FormField(
+    default_loan_duration: PositiveInt | None = FormField(
         default=Collection.STANDARD_DEFAULT_LOAN_PERIOD,
         form=ConfigurationFormItem(
             label=_("Default Loan Period (in Days)"),
@@ -536,9 +537,7 @@ class CirculationInternalFormatsMixin:
     # For instance, the combination ("application/epub+zip",
     # "vnd.adobe/adept+xml") is called "ePub" in Axis 360 and 3M, but
     # is called "ebook-epub-adobe" in Overdrive.
-    delivery_mechanism_to_internal_format: Dict[
-        Tuple[Optional[str], Optional[str]], str
-    ] = {}
+    delivery_mechanism_to_internal_format: dict[tuple[str | None, str | None], str] = {}
 
     def internal_format(self, delivery_mechanism: LicensePoolDeliveryMechanism) -> str:
         """Look up the internal format for this delivery mechanism or
@@ -596,7 +595,7 @@ class BaseCirculationAPI(
     # wait til the point of fulfillment to set a delivery mechanism
     # (Overdrive), set this to FULFILL_STEP. If there is no choice of
     # delivery mechanisms (3M), set this to None.
-    SET_DELIVERY_MECHANISM_AT: Optional[str] = FULFILL_STEP
+    SET_DELIVERY_MECHANISM_AT: str | None = FULFILL_STEP
 
     def __init__(self, _db: Session, collection: Collection):
         self._db = _db
@@ -676,7 +675,7 @@ class BaseCirculationAPI(
 
     def can_fulfill_without_loan(
         self,
-        patron: Optional[Patron],
+        patron: Patron | None,
         pool: LicensePool,
         lpdm: LicensePoolDeliveryMechanism,
     ) -> bool:
@@ -700,7 +699,7 @@ class BaseCirculationAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        notification_email_address: Optional[str],
+        notification_email_address: str | None,
     ) -> HoldInfo:
         """Place a book on hold.
 
@@ -753,8 +752,8 @@ class CirculationAPI:
         self,
         db: Session,
         library: Library,
-        analytics: Optional[Analytics] = None,
-        registry: Optional[IntegrationRegistry[CirculationApiType]] = None,
+        analytics: Analytics | None = None,
+        registry: IntegrationRegistry[CirculationApiType] | None = None,
     ):
         """Constructor.
 
@@ -811,14 +810,14 @@ class CirculationAPI:
                         self.collection_ids_for_sync.append(collection.id)
 
     @property
-    def library(self) -> Optional[Library]:
+    def library(self) -> Library | None:
         if self.library_id is None:
             return None
         return Library.by_id(self._db, self.library_id)
 
     def api_for_license_pool(
         self, licensepool: LicensePool
-    ) -> Optional[CirculationApiType]:
+    ) -> CirculationApiType | None:
         """Find the API to use for the given license pool."""
         return self.api_for_collection.get(licensepool.collection.id)
 
@@ -836,8 +835,8 @@ class CirculationAPI:
 
     def _collect_event(
         self,
-        patron: Optional[Patron],
-        licensepool: Optional[LicensePool],
+        patron: Patron | None,
+        licensepool: LicensePool | None,
         name: str,
         include_neighborhood: bool = False,
     ) -> None:
@@ -908,8 +907,8 @@ class CirculationAPI:
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-        hold_notification_email: Optional[str] = None,
-    ) -> Tuple[Optional[Loan], Optional[Hold], bool]:
+        hold_notification_email: str | None = None,
+    ) -> tuple[Loan | None, Hold | None, bool]:
         """Either borrow a book or put it on hold. Don't worry about fulfilling
         the loan yet.
 
@@ -1248,9 +1247,9 @@ class CirculationAPI:
 
     def can_fulfill_without_loan(
         self,
-        patron: Optional[Patron],
-        pool: Optional[LicensePool],
-        lpdm: Optional[LicensePoolDeliveryMechanism],
+        patron: Patron | None,
+        pool: LicensePool | None,
+        lpdm: LicensePoolDeliveryMechanism | None,
     ) -> bool:
         """Can we deliver the given book in the given format to the given
         patron, even though the patron has no active loan for that
@@ -1446,7 +1445,7 @@ class CirculationAPI:
 
     def patron_activity(
         self, patron: Patron, pin: str
-    ) -> Tuple[List[LoanInfo], List[HoldInfo], bool]:
+    ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
         """Return a record of the patron's current activity
         vis-a-vis all relevant external loan sources.
 
@@ -1469,11 +1468,11 @@ class CirculationAPI:
                 self.api = api
                 self.patron = patron
                 self.pin = pin
-                self.activity: Optional[Iterable[LoanInfo | HoldInfo]] = None
-                self.exception: Optional[Exception] = None
-                self.trace: Tuple[
-                    Type[BaseException], BaseException, TracebackType
-                ] | Tuple[None, None, None] | None = None
+                self.activity: Iterable[LoanInfo | HoldInfo] | None = None
+                self.exception: Exception | None = None
+                self.trace: tuple[
+                    type[BaseException], BaseException, TracebackType
+                ] | tuple[None, None, None] | None = None
                 super().__init__()
 
             def run(self) -> None:
@@ -1506,8 +1505,8 @@ class CirculationAPI:
             thread.start()
         for thread in threads:
             thread.join()
-        loans: List[LoanInfo] = []
-        holds: List[HoldInfo] = []
+        loans: list[LoanInfo] = []
+        holds: list[HoldInfo] = []
         complete = True
         for thread in threads:
             if thread.exception:
@@ -1556,7 +1555,7 @@ class CirculationAPI:
 
     def sync_bookshelf(
         self, patron: Patron, pin: str, force: bool = False
-    ) -> Tuple[List[Loan] | Query[Loan], List[Hold] | Query[Hold]]:
+    ) -> tuple[list[Loan] | Query[Loan], list[Hold] | Query[Hold]]:
         """Sync our internal model of a patron's bookshelf with any external
         vendors that provide books to the patron's library.
 
@@ -1579,7 +1578,7 @@ class CirculationAPI:
         # Assuming everything goes well, we will set
         # Patron.last_loan_activity_sync to this value -- the moment
         # just before we started contacting the vendor APIs.
-        last_loan_activity_sync: Optional[datetime.datetime] = utc_now()
+        last_loan_activity_sync: datetime.datetime | None = utc_now()
 
         # Update the external view of the patron's current state.
         remote_loans, remote_holds, complete = self.patron_activity(patron, pin)
@@ -1624,8 +1623,8 @@ class CirculationAPI:
 
         active_loans = []
         active_holds = []
-        start: Optional[datetime.datetime]
-        end: Optional[datetime.datetime]
+        start: datetime.datetime | None
+        end: datetime.datetime | None
         for loan in remote_loans:
             # This is a remote loan. Find or create the corresponding
             # local loan.

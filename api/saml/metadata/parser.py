@@ -1,5 +1,4 @@
 import logging
-from typing import Union
 
 from flask_babel import lazy_gettext as _
 from lxml.etree import XMLSyntaxError
@@ -90,7 +89,7 @@ class SAMLMetadataParser:
         ] = OneLogin_Saml2_Constants.NS_ALG
 
     def _convert_xml_string_to_dom(
-        self, xml_metadata: Union[str, bytes]
+        self, xml_metadata: str | bytes
     ) -> RestrictedElement:
         """Converts an XML string containing SAML metadata into XML DOM
 

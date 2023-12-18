@@ -1,5 +1,4 @@
 import json
-from typing import Optional
 from unittest import mock
 
 import feedparser
@@ -894,10 +893,10 @@ class TestCustomListsController:
 
     @define
     class ShareLocallySetup:
-        shared_with: Optional[Library] = None
-        primary_library: Optional[Library] = None
-        collection1: Optional[Collection] = None
-        list: Optional[CustomList] = None
+        shared_with: Library | None = None
+        primary_library: Library | None = None
+        collection1: Collection | None = None
+        list: CustomList | None = None
 
     def _setup_share_locally(self, admin_librarian_fixture: AdminLibrarianFixture):
         shared_with = admin_librarian_fixture.ctrl.db.library("shared_with")

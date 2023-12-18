@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List
 
 from customlists.customlist_explain import CustomListImportExplainer
 
@@ -46,8 +45,8 @@ class TestExplains:
             ]
         ).execute()
 
-        text_expected: List[str] = open(output_path).readlines()
-        text_received: List[str] = open(tmpdir.join("output.csv")).readlines()
+        text_expected: list[str] = open(output_path).readlines()
+        text_received: list[str] = open(tmpdir.join("output.csv")).readlines()
         assert len(text_expected) == len(text_received)
         for i in range(0, len(text_expected)):
             assert text_expected[i] == text_received[i]

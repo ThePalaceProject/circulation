@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from enum import Enum
-from typing import Any, Dict, Generator, List, Optional, Pattern, TypeVar
+from re import Pattern
+from typing import Any, TypeVar
 
 from flask import url_for
 from pydantic import PositiveInt, validator
@@ -68,7 +70,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
 
     # Configuration settings that are common to all Basic Auth-type
     # authentication techniques.
-    test_identifier: Optional[str] = FormField(
+    test_identifier: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Test identifier",
@@ -77,7 +79,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             required=True,
         ),
     )
-    test_password: Optional[str] = FormField(
+    test_password: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Test password",
@@ -115,7 +117,7 @@ class BasicAuthProviderSettings(AuthProviderSettings):
         ),
     )
     # By default, there are no restrictions on passwords.
-    password_regular_expression: Optional[Pattern] = FormField(
+    password_regular_expression: Pattern | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Password Regular Expression",
@@ -151,14 +153,14 @@ class BasicAuthProviderSettings(AuthProviderSettings):
             weight=10,
         ),
     )
-    identifier_maximum_length: Optional[PositiveInt] = FormField(
+    identifier_maximum_length: PositiveInt | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Maximum identifier length",
             weight=10,
         ),
     )
-    password_maximum_length: Optional[PositiveInt] = FormField(
+    password_maximum_length: PositiveInt | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Maximum password length",
@@ -227,7 +229,7 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     # Usually this is a string which is compared against the
     # patron's identifiers using the comparison method chosen in
     # identifier_restriction_type.
-    library_identifier_restriction_criteria: Optional[str] = FormField(
+    library_identifier_restriction_criteria: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Library Identifier Restriction",
@@ -241,8 +243,8 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
 
     @validator("library_identifier_restriction_criteria")
     def validate_restriction_criteria(
-        cls, v: Optional[str], values: Dict[str, Any]
-    ) -> Optional[str]:
+        cls, v: str | None, values: dict[str, Any]
+    ) -> str | None:
         """Validate the library_identifier_restriction_criteria field."""
         if not v:
             return v
@@ -311,8 +313,8 @@ class BasicAuthenticationProvider(
         )
 
     def process_library_identifier_restriction_criteria(
-        self, criteria: Optional[str]
-    ) -> str | List[str] | re.Pattern | None:
+        self, criteria: str | None
+    ) -> str | list[str] | re.Pattern | None:
         """Process the library identifier restriction criteria."""
         if not criteria:
             return None
@@ -661,13 +663,13 @@ class BasicAuthenticationProvider(
         OPDS document.
         """
 
-        login_inputs: Dict[str, Any] = dict(keyboard=self.identifier_keyboard.value)
+        login_inputs: dict[str, Any] = dict(keyboard=self.identifier_keyboard.value)
         if self.identifier_maximum_length:
             login_inputs["maximum_length"] = self.identifier_maximum_length
         if self.identifier_barcode_format != BarcodeFormats.NONE:
             login_inputs["barcode_format"] = self.identifier_barcode_format.value
 
-        password_inputs: Dict[str, Any] = dict(keyboard=self.password_keyboard.value)
+        password_inputs: dict[str, Any] = dict(keyboard=self.password_keyboard.value)
         if self.password_maximum_length:
             password_inputs["maximum_length"] = self.password_maximum_length
 
@@ -713,7 +715,7 @@ class BasicAuthenticationProvider(
     def _restriction_matches(
         cls,
         field: str | None,
-        restriction: str | List[str] | re.Pattern | None,
+        restriction: str | list[str] | re.Pattern | None,
         match_type: LibraryIdentifierRestriction,
     ) -> bool:
         """Does the given patron match the given restriction?"""

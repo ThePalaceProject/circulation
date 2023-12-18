@@ -4,7 +4,6 @@ import base64
 import datetime
 import json
 from io import BytesIO
-from typing import Dict, List
 from unittest.mock import MagicMock
 
 import flask
@@ -52,10 +51,10 @@ class TestLibrarySettings:
         }
 
     def library_form(
-        self, library: Library, fields: Dict[str, str | List[str]] | None = None
+        self, library: Library, fields: dict[str, str | list[str]] | None = None
     ):
         fields = fields or {}
-        defaults: Dict[str, str | List[str]] = {
+        defaults: dict[str, str | list[str]] = {
             "uuid": str(library.uuid),
             "name": "The New York Public Library",
             "short_name": str(library.short_name),

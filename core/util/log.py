@@ -1,9 +1,9 @@
 import functools
 import logging
-import sys
 import time
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Callable, Generator, Optional, TypeVar
+from typing import TypeVar
 
 from typing_extensions import ParamSpec
 
@@ -16,7 +16,7 @@ T = TypeVar("T")
 def log_elapsed_time(
     *,
     log_level: LogLevel,
-    message_prefix: Optional[str] = None,
+    message_prefix: str | None = None,
     skip_start: bool = False,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator for logging elapsed time.
@@ -66,7 +66,7 @@ def log_elapsed_time(
 def elapsed_time_logging(
     *,
     log_method: Callable[[str], None],
-    message_prefix: Optional[str] = None,
+    message_prefix: str | None = None,
     skip_start: bool = False,
 ) -> Generator[None, None, None]:
     """Context manager for logging elapsed time.
@@ -88,18 +88,11 @@ def elapsed_time_logging(
         log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
 
 
-# Once we drop python 3.8 this can go away
-if sys.version_info >= (3, 9):
-    cache_decorator = functools.cache
-else:
-    cache_decorator = functools.lru_cache
-
-
 class LoggerMixin:
     """Mixin that adds a logger with a standardized name"""
 
     @classmethod
-    @cache_decorator
+    @functools.cache
     def logger(cls) -> logging.Logger:
         """
         Returns a logger named after the module and name of the class.

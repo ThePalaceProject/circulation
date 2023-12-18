@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -146,7 +146,7 @@ class Subject(Base):
     checked = Column(Boolean, default=False, index=True)
 
     # One Subject may participate in many Classifications.
-    classifications: Mapped[List[Classification]] = relationship(
+    classifications: Mapped[list[Classification]] = relationship(
         "Classification", back_populates="subject"
     )
 
@@ -350,11 +350,11 @@ class Classification(Base):
     __tablename__ = "classifications"
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Mapped[Optional[Identifier]]
+    identifier: Mapped[Identifier | None]
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
     subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[Optional[DataSource]]
+    data_source: Mapped[DataSource | None]
 
     # How much weight the data source gives to this classification.
     weight = Column(Integer)
@@ -485,12 +485,12 @@ class Genre(Base, HasSessionCache):
     name = Column(Unicode, unique=True, index=True)
 
     # One Genre may have affinity with many Subjects.
-    subjects: Mapped[List[Subject]] = relationship("Subject", backref="genre")
+    subjects: Mapped[list[Subject]] = relationship("Subject", backref="genre")
 
     # One Genre may participate in many WorkGenre assignments.
     works = association_proxy("work_genres", "work")
 
-    work_genres: Mapped[List[WorkGenre]] = relationship(
+    work_genres: Mapped[list[WorkGenre]] = relationship(
         "WorkGenre", backref="genre", cascade="all, delete-orphan"
     )
 

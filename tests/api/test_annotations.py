@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from pyld import jsonld
@@ -390,7 +390,7 @@ class TestAnnotationParser:
     def _sample_jsonld(
         annotation_parser_fixture: AnnotationParserFixture, motivation=Annotation.IDLING
     ):
-        data: Dict[Any, Any] = dict()
+        data: dict[Any, Any] = dict()
         data["@context"] = [
             AnnotationWriter.JSONLD_CONTEXT,
             {"ls": Annotation.LS_NAMESPACE},
@@ -456,7 +456,7 @@ class TestAnnotationParser:
     ):
         annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data: Dict[Any, Any] = dict()
+        data: dict[Any, Any] = dict()
         data["@type"] = ["http://www.w3.org/ns/oa#Annotation"]
         data["http://www.w3.org/ns/oa#motivatedBy"] = [{"@id": Annotation.IDLING}]
         data["http://www.w3.org/ns/oa#hasBody"] = [
@@ -514,7 +514,7 @@ class TestAnnotationParser:
     ):
         annotation_parser_fixture.pool.loan_to(annotation_parser_fixture.patron_value)
 
-        data: Dict[Any, Any] = dict()
+        data: dict[Any, Any] = dict()
         data["@type"] = "http://www.w3.org/ns/oa#Annotation"
         data["http://www.w3.org/ns/oa#motivatedBy"] = {"@id": Annotation.IDLING}
         data["http://www.w3.org/ns/oa#hasBody"] = {

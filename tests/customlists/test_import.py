@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import List
 
 import pytest
 
@@ -371,10 +370,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
@@ -497,10 +496,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
@@ -609,10 +608,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 1 == len(problems)
         assert (
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
@@ -724,10 +723,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
             "The collection 'B2' appears to be missing on the importing CM"
@@ -845,10 +844,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 1 == len(problems)
         assert (
             "Book 'Bad Book' (urn:uuid:9c9c1f5c-6742-47d4-b94c-e77f88ca55f7) was excluded from list updates due to a problem on the source CM: Something went wrong on the source CM"
@@ -964,10 +963,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 2 == len(problems)
         assert (
             "The collection 'B2' appears to be missing on the importing CM"
@@ -1174,10 +1173,10 @@ class TestImports:
                     schema=schema, document=document
                 )
 
-        reports: List[CustomListReport] = list(report_document.reports())
+        reports: list[CustomListReport] = list(report_document.reports())
         assert 1 == len(reports)
         report = reports[0]
-        problems: List[CustomListProblem] = list(report.problems())
+        problems: list[CustomListProblem] = list(report.problems())
         assert 3 == len(problems)
         assert (
             "The collection 'B2' appears to be missing on the importing CM"

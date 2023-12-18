@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List
 
 import pytest
 from lxml import etree
@@ -18,7 +18,7 @@ class MockResponse:
 
 
 class MockAPI(KansasAuthenticationAPI):
-    queue: List[bytes]
+    queue: list[bytes]
 
     def __init__(
         self,

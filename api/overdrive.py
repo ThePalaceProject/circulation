@@ -9,7 +9,7 @@ import re
 import time
 import urllib.parse
 from threading import RLock
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import dateutil
@@ -129,7 +129,7 @@ class OverdriveConstants:
 class OverdriveSettings(ConnectionSetting, BaseCirculationApiSettings):
     """The basic Overdrive configuration"""
 
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             type=ConfigurationFormItemType.TEXT,
@@ -190,7 +190,7 @@ class OverdriveLibrarySettings(BaseCirculationEbookLoanSettings):
 
 
 class OverdriveChildSettings(BaseSettings):
-    external_account_id: Optional[str] = FormField(
+    external_account_id: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Library ID"),
             required=True,
@@ -413,7 +413,7 @@ class OverdriveAPI(
     def settings(self) -> OverdriveSettings:
         return self._settings
 
-    def _determine_hosts(self, *, server_nickname: str) -> Dict[str, str]:
+    def _determine_hosts(self, *, server_nickname: str) -> dict[str, str]:
         # Figure out which hostnames we'll be using when constructing
         # endpoint URLs.
         if server_nickname not in self.HOSTS:
@@ -530,7 +530,7 @@ class OverdriveAPI(
 
     def get(
         self, url: str, extra_headers={}, exception_on_401=False
-    ) -> Tuple[int, CaseInsensitiveDict, bytes]:
+    ) -> tuple[int, CaseInsensitiveDict, bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
         request_headers = dict(Authorization="Bearer %s" % self.token)
         request_headers.update(extra_headers)
@@ -585,7 +585,7 @@ class OverdriveAPI(
     def token_post(
         self,
         url: str,
-        payload: Dict[str, str],
+        payload: dict[str, str],
         is_fulfillment=False,
         headers={},
         **kwargs,
@@ -806,7 +806,7 @@ class OverdriveAPI(
     def library_id(self) -> str:
         return self._library_id
 
-    def hosts(self) -> Dict[str, str]:
+    def hosts(self) -> dict[str, str]:
         return dict(self._hosts)
 
     def _run_self_tests(self, _db):
@@ -900,7 +900,7 @@ class OverdriveAPI(
             return response
 
     def get_patron_credential(
-        self, patron: Patron, pin: Optional[str], is_fulfillment=False
+        self, patron: Patron, pin: str | None, is_fulfillment=False
     ) -> Credential:
         """Create an OAuth token for the given patron.
 
@@ -1179,8 +1179,8 @@ class OverdriveAPI(
                 raise d[error](message)
 
     def get_loan(
-        self, patron: Patron, pin: Optional[str], overdrive_id: str
-    ) -> Dict[str, Any]:
+        self, patron: Patron, pin: str | None, overdrive_id: str
+    ) -> dict[str, Any]:
         """Get patron's loan information for the identified item.
 
         :param patron: A patron.
@@ -1263,8 +1263,8 @@ class OverdriveAPI(
         )
 
     def get_fulfillment_link(
-        self, patron: Patron, pin: Optional[str], overdrive_id: str, format_type: str
-    ) -> Union[OverdriveManifestFulfillmentInfo, Tuple[str, str]]:
+        self, patron: Patron, pin: str | None, overdrive_id: str, format_type: str
+    ) -> OverdriveManifestFulfillmentInfo | tuple[str, str]:
         """Get the link to the ACSM or manifest for an existing loan."""
         try:
             loan = self.get_loan(patron, pin, overdrive_id)
@@ -1343,7 +1343,7 @@ class OverdriveAPI(
 
     def get_fulfillment_link_from_download_link(
         self, patron, pin, download_link, fulfill_url=None
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         # If this for Overdrive's streaming reader, and the link expires,
         # the patron can go back to the circulation manager fulfill url
         # again to get a new one.
@@ -1403,9 +1403,7 @@ class OverdriveAPI(
         self.raise_exception_on_error(data)
         return data
 
-    def get_patron_checkouts(
-        self, patron: Patron, pin: Optional[str]
-    ) -> Dict[str, Any]:
+    def get_patron_checkouts(self, patron: Patron, pin: str | None) -> dict[str, Any]:
         """Get information for the given patron's loans.
 
         :param patron: A patron.
@@ -1480,7 +1478,7 @@ class OverdriveAPI(
             )
 
     @classmethod
-    def process_checkout_data(cls, checkout: Dict[str, Any], collection: Collection):
+    def process_checkout_data(cls, checkout: dict[str, Any], collection: Collection):
         """Convert one checkout from Overdrive's list of checkouts
         into a LoanInfo object.
 
@@ -2257,7 +2255,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         else:
             yield result
 
-    ignorable_overdrive_formats: Set[str] = set()
+    ignorable_overdrive_formats: set[str] = set()
 
     overdrive_role_to_simplified_role = {
         "actor": Contributor.ACTOR_ROLE,
@@ -2390,8 +2388,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         )
 
     def _get_applicable_accounts(
-        self, accounts: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, accounts: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Returns those accounts from the accounts array that apply the
         current overdrive collection context.
@@ -2457,7 +2455,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # Otherwise we'll probably give it a fraction of this weight.
         trusted_weight = Classification.TRUSTED_DISTRIBUTOR_WEIGHT
 
-        duration: Optional[int] = None
+        duration: int | None = None
 
         if include_bibliographic:
             title = book.get("title", None)
@@ -2578,7 +2576,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             links = []
             sample_hrefs = set()
             for format in book.get("formats", []):
-                duration_str: Optional[str] = format.get("duration")
+                duration_str: str | None = format.get("duration")
                 if duration_str is not None:
                     # Using this method only the last valid duration attribute is captured
                     # If there are multiple formats with different durations, the edition will ignore the rest
@@ -2938,7 +2936,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
 
     def __init__(self, _db=None, *args, **kwargs):
         super().__init__(_db, *args, **kwargs)
-        self._data: List[List[str]] = list()
+        self._data: list[list[str]] = list()
 
     def _create_overdrive_api(self, collection: Collection):
         return OverdriveAPI(_db=self._db, collection=collection)

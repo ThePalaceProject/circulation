@@ -4,7 +4,8 @@ import datetime
 import json
 import logging
 import time
-from typing import Any, Callable, Generator, Mapping, Tuple, cast
+from collections.abc import Callable, Generator, Mapping
+from typing import Any, cast
 
 from dependency_injector.wiring import Provide
 from flask_babel import lazy_gettext as _
@@ -79,7 +80,7 @@ class EnkiLibrarySettings(BaseSettings):
     enki_library_id: str = FormField(
         form=ConfigurationFormItem(label=_("Library ID"), required=True)
     )
-    dont_display_reserves: Optional[str] = FormField(
+    dont_display_reserves: str | None = FormField(
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
@@ -149,7 +150,7 @@ class EnkiAPI(
         self.collection_id = collection.id
         self.base_url = self.settings.url or self.PRODUCTION_BASE_URL
 
-    def enki_library_id(self, library: Library) -> Optional[str]:
+    def enki_library_id(self, library: Library) -> str | None:
         """Find the Enki library ID for the given library."""
         if library.id is None:
             return None
@@ -198,7 +199,7 @@ class EnkiAPI(
                 % library.name
             )
 
-            def count_patron_loans_and_holds(patron: Patron, pin: Optional[str]) -> str:
+            def count_patron_loans_and_holds(patron: Patron, pin: str | None) -> str:
                 activity = list(self.patron_activity(patron, pin))
                 return "Total loans and holds: %s" % len(activity)
 
@@ -208,9 +209,9 @@ class EnkiAPI(
         self,
         url: str,
         method: str = "get",
-        extra_headers: Optional[Mapping[str, str]] = None,
-        data: Optional[Mapping[str, Any]] = None,
-        params: Optional[Mapping[str, Any]] = None,
+        extra_headers: Mapping[str, str] | None = None,
+        data: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | None = None,
         retry_on_timeout: bool = True,
         **kwargs: Any,
     ) -> RequestsResponse:
@@ -247,8 +248,8 @@ class EnkiAPI(
         url: str,
         method: str,
         headers: Mapping[str, str],
-        data: Optional[Mapping[str, Any]] = None,
-        params: Optional[Mapping[str, Any]] = None,
+        data: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | None = None,
         **kwargs: Any,
     ) -> RequestsResponse:
         """Actually make an HTTP request.
@@ -331,7 +332,7 @@ class EnkiAPI(
         response = self.request(url, params=args)
         yield from BibliographicParser().process_all(response.content)
 
-    def get_item(self, enki_id: Optional[str]) -> Optional[Metadata]:
+    def get_item(self, enki_id: str | None) -> Metadata | None:
         """Retrieve bibliographic and availability information for
         a specific title.
 
@@ -437,10 +438,10 @@ class EnkiAPI(
 
     def loan_request(
         self,
-        barcode: Optional[str],
-        pin: Optional[str],
-        book_id: Optional[str],
-        enki_library_id: Optional[str],
+        barcode: str | None,
+        pin: str | None,
+        book_id: str | None,
+        enki_library_id: str | None,
     ) -> RequestsResponse:
         self.log.debug("Sending checkout request for %s" % book_id)
         url = str(self.base_url) + str(self.user_endpoint)
@@ -517,7 +518,7 @@ class EnkiAPI(
         return url, item_type, expires
 
     def patron_activity(
-        self, patron: Patron, pin: Optional[str]
+        self, patron: Patron, pin: str | None
     ) -> Generator[LoanInfo | HoldInfo, None, None]:
         enki_library_id = self.enki_library_id(patron.library)
         response = self.patron_request(
@@ -544,7 +545,7 @@ class EnkiAPI(
                     yield hold_info
 
     def patron_request(
-        self, patron: Optional[str], pin: Optional[str], enki_library_id: Optional[str]
+        self, patron: str | None, pin: str | None, enki_library_id: str | None
     ) -> RequestsResponse:
         self.log.debug("Querying Enki for information on patron %s" % patron)
         url = str(self.base_url) + str(self.user_endpoint)
@@ -574,7 +575,7 @@ class EnkiAPI(
             fulfillment_info=None,
         )
 
-    def parse_patron_holds(self, hold_data: Mapping[str, Any]) -> Optional[HoldInfo]:
+    def parse_patron_holds(self, hold_data: Mapping[str, Any]) -> HoldInfo | None:
         self.log.warning(
             "Hold information received, but parsing patron holds is not implemented. %r",
             hold_data,
@@ -586,7 +587,7 @@ class EnkiAPI(
         patron: Patron,
         pin: str,
         licensepool: LicensePool,
-        notification_email_address: Optional[str],
+        notification_email_address: str | None,
     ) -> HoldInfo:
         raise NotImplementedError()
 
@@ -736,8 +737,8 @@ class BibliographicParser:
         self,
         primary_identifier: IdentifierData,
         availability: Mapping[str, str],
-        formattype: Optional[str],
-    ) -> Optional[CirculationData]:
+        formattype: str | None,
+    ) -> CirculationData | None:
         """Turn the 'availability' portion of an Enki API response into
         a CirculationData.
         """
@@ -809,8 +810,8 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
 
     def catch_up_from(
         self,
-        start: Optional[datetime.datetime],
-        cutoff: Optional[datetime.datetime],
+        start: datetime.datetime | None,
+        cutoff: datetime.datetime | None,
         progress: TimestampData,
     ) -> None:
         """Find Enki books that changed recently.
@@ -912,7 +913,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
 
         return circulation_changes
 
-    def process_book(self, bibliographic: Metadata) -> Tuple[Edition, LicensePool]:
+    def process_book(self, bibliographic: Metadata) -> tuple[Edition, LicensePool]:
         """Make the local database reflect the state of the remote Enki
         collection for the given book.
 
@@ -956,7 +957,7 @@ class EnkiCollectionReaper(IdentifierSweepMonitor):
             api = api_class
         self.api = api
 
-    def process_item(self, identifier: Identifier) -> Optional[CirculationData]:
+    def process_item(self, identifier: Identifier) -> CirculationData | None:
         self.log.debug("Seeing if %s needs reaping", identifier.identifier)
         metadata = self.api.get_item(identifier.identifier)
         if metadata:

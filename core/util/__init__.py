@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import string
 from collections import Counter
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any, Optional
 
 import sqlalchemy
 from money import Money
@@ -580,9 +581,9 @@ def chunks(lst, chunk_size, start_index=0):
 
 
 def ansible_boolean(
-    value: Optional[str | bool],
-    label: Optional[str] = None,
-    default: Optional[bool] = None,
+    value: str | bool | None,
+    label: str | None = None,
+    default: bool | None = None,
 ) -> bool:
     """Map Ansible "truthy" and "falsy" values to a Python boolean.
 

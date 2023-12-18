@@ -3,10 +3,11 @@ import os
 import select
 import ssl
 from collections import deque
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from socket import AF_INET, SOCK_STREAM, socket
-from typing import Any, Deque, Generator
+from typing import Any, Deque
 
 import pytest
 

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from typing_extensions import Self
@@ -18,7 +16,7 @@ class AdminFeed(OPDSAcquisitionFeed):
         title: str,
         url: str,
         annotator: AdminAnnotator,
-        pagination: Optional[Pagination] = None,
+        pagination: Pagination | None = None,
     ) -> Self:
         _pagination = pagination or Pagination.default()
 

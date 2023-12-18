@@ -1,8 +1,8 @@
 import os
 import time
 import urllib.parse
+from collections.abc import Callable
 from functools import partial
-from typing import Callable
 
 import jwt
 import pytest

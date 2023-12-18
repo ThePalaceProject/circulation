@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from functools import partial
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 
 from lxml import etree
 
@@ -59,21 +59,19 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         pass
 
     def _tag(
-        self, tag_name: str, *args: Any, mapping: Optional[Dict[str, str]] = None
+        self, tag_name: str, *args: Any, mapping: dict[str, str] | None = None
     ) -> etree._Element:
         if not mapping:
             mapping = TAG_MAPPING
         return self.E(mapping.get(tag_name, tag_name), *args)
 
-    def _attr_name(
-        self, attr_name: str, mapping: Optional[Dict[str, str]] = None
-    ) -> str:
+    def _attr_name(self, attr_name: str, mapping: dict[str, str] | None = None) -> str:
         if not mapping:
             mapping = ATTRIBUTE_MAPPING
         return mapping.get(attr_name, attr_name)
 
     def serialize_feed(
-        self, feed: FeedData, precomposed_entries: Optional[List[OPDSMessage]] = None
+        self, feed: FeedData, precomposed_entries: list[OPDSMessage] | None = None
     ) -> str:
         # First we do metadata
         serialized = self.E.feed()
@@ -114,7 +112,7 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         etree.indent(serialized)
         return self.to_string(serialized)
 
-    def _serialize_feed_metadata(self, metadata: FeedMetadata) -> List[etree._Element]:
+    def _serialize_feed_metadata(self, metadata: FeedMetadata) -> list[etree._Element]:
         tags = []
         # Compulsory title
         tags.append(self._tag("title", metadata.title or ""))
@@ -257,14 +255,14 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
             entry.append(self._serialize_author_tag("contributor", contributor))
 
         for link in feed_entry.image_links:
-            entry.append(OPDSFeed.link(**link.dict()))
+            entry.append(OPDSFeed.link(**link.asdict()))
 
         for link in feed_entry.acquisition_links:
             element = self._serialize_acquistion_link(link)
             entry.append(element)
 
         for link in feed_entry.other_links:
-            entry.append(OPDSFeed.link(**link.dict()))
+            entry.append(OPDSFeed.link(**link.asdict()))
 
         return entry
 

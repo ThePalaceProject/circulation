@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, Tuple, overload
+from typing import overload
 
 import pytz
 from dateutil.relativedelta import relativedelta
@@ -41,11 +41,11 @@ def to_utc(dt: datetime.datetime) -> datetime.datetime:
 
 
 @overload
-def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
     ...
 
 
-def to_utc(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
     """This converts a naive datetime object that represents UTC into
     an aware datetime object.
 
@@ -73,7 +73,7 @@ def strptime_utc(date_string: str, format: str) -> datetime.datetime:
     return to_utc(datetime.datetime.strptime(date_string, format))
 
 
-def previous_months(number_of_months: int) -> Tuple[datetime.date, datetime.date]:
+def previous_months(number_of_months: int) -> tuple[datetime.date, datetime.date]:
     """Calculate date boundaries for matching the specified previous number of months.
 
     :param number_of_months: The number of months in the interval.

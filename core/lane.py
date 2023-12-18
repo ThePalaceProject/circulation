@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 from collections import defaultdict
-from typing import Any, List, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from flask_babel import lazy_gettext as _
@@ -1322,7 +1322,7 @@ class WorkList:
     # If a certain type of Worklist should always have its OPDS feeds
     # cached under a specific type, define that type as
     # CACHED_FEED_TYPE.
-    CACHED_FEED_TYPE: Optional[str] = None
+    CACHED_FEED_TYPE: str | None = None
 
     # By default, a WorkList is always visible.
     @property
@@ -2611,7 +2611,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
-    sublanes: Mapped[List[Lane]] = relationship(
+    sublanes: Mapped[list[Lane]] = relationship(
         "Lane",
         backref=backref("parent", remote_side=[id]),
     )
@@ -2619,7 +2619,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A lane may have multiple associated LaneGenres. For most lanes,
     # this is how the contents of the lanes are defined.
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
-    lane_genres: Mapped[List[LaneGenre]] = relationship(
+    lane_genres: Mapped[list[LaneGenre]] = relationship(
         "LaneGenre",
         foreign_keys="LaneGenre.lane_id",
         backref="lane",
@@ -2678,7 +2678,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     )
 
     # Only the books on these specific CustomLists will be shown.
-    customlists: Mapped[List[CustomList]] = relationship(
+    customlists: Mapped[list[CustomList]] = relationship(
         "CustomList", secondary=lambda: lanes_customlists, backref="lane"  # type: ignore
     )
 

@@ -1,5 +1,4 @@
 import datetime
-from typing import List, Optional
 
 import pytest
 from freezegun import freeze_time
@@ -40,10 +39,10 @@ from tests.fixtures.odl import ODL2APITestFixture
 class TestODL2Importer:
     @staticmethod
     def _get_delivery_mechanism_by_drm_scheme_and_content_type(
-        delivery_mechanisms: List[LicensePoolDeliveryMechanism],
+        delivery_mechanisms: list[LicensePoolDeliveryMechanism],
         content_type: str,
         drm_scheme: str,
-    ) -> Optional[DeliveryMechanism]:
+    ) -> DeliveryMechanism | None:
         """Find a license pool in the list by its identifier.
 
         :param delivery_mechanisms: List of delivery mechanisms

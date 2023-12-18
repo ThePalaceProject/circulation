@@ -6,7 +6,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 import dateutil.parser
 import pytz
@@ -174,8 +174,8 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 identifier_id,
                 total,
             ) in self._fetch_report_records(start=start, until=until):
-                edition: Optional[Edition] = None
-                identifier: Optional[Identifier] = None
+                edition: Edition | None = None
+                identifier: Identifier | None = None
                 if identifier_id:
                     edition = get_one(
                         self._db, Edition, primary_identifier_id=identifier_id
@@ -241,7 +241,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
 
     @staticmethod
     def _isbn_for_identifier(
-        identifier: Optional[Identifier],
+        identifier: Identifier | None,
         /,
         *,
         default_value: str = "",

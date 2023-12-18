@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -30,7 +29,7 @@ class MARCRecordControllerFixture:
         # since we don't have a request context
         self.controller.library = lambda: self.library
 
-    def integration(self, library: Optional[Library] = None):
+    def integration(self, library: Library | None = None):
         library = library or self.library
         return self.db.integration_configuration(
             MARCExporter.__name__,
@@ -40,11 +39,11 @@ class MARCRecordControllerFixture:
 
     def file(
         self,
-        library: Optional[Library] = None,
-        collection: Optional[Collection] = None,
-        key: Optional[str] = None,
-        created: Optional[datetime.datetime] = None,
-        since: Optional[datetime.datetime] = None,
+        library: Library | None = None,
+        collection: Collection | None = None,
+        key: str | None = None,
+        created: datetime.datetime | None = None,
+        since: datetime.datetime | None = None,
     ):
         key = key or self.db.fresh_str()
         created = created or utc_now()

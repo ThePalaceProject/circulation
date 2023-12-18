@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from collections.abc import Mapping
 from datetime import datetime
 from io import BytesIO
-from typing import List, Mapping, Optional, Tuple
 from uuid import UUID, uuid4
 
 import pytz
@@ -56,7 +56,7 @@ class Annotator(LoggerMixin):
     # TODO: Add remaining formats. Maybe there's a better place to
     # store this so it's easier to keep up-to-date.
     # There doesn't seem to be any particular vocabulary for this.
-    FORMAT_TERMS: Mapping[Tuple[Optional[str], Optional[str]], str] = {
+    FORMAT_TERMS: Mapping[tuple[str | None, str | None], str] = {
         (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM): "EPUB eBook",
         (
             Representation.EPUB_MEDIA_TYPE,
@@ -70,8 +70,8 @@ class Annotator(LoggerMixin):
         self,
         cm_url: str,
         library_short_name: str,
-        web_client_urls: List[str],
-        organization_code: Optional[str],
+        web_client_urls: list[str],
+        organization_code: str | None,
         include_summary: bool,
         include_genres: bool,
     ) -> None:
@@ -561,7 +561,7 @@ class Annotator(LoggerMixin):
         identifier: Identifier,
         library_short_name: str,
         cm_url: str,
-        web_client_urls: List[str],
+        web_client_urls: list[str],
     ) -> None:
         qualified_identifier = urllib.parse.quote(
             f"{identifier.type}/{identifier.identifier}", safe=""
@@ -604,7 +604,7 @@ class MarcExporterLibrarySettings(BaseSettings):
     # MARC organization codes are assigned by the
     # Library of Congress and can be found here:
     # http://www.loc.gov/marc/organizations/org-search.php
-    organization_code: Optional[str] = FormField(
+    organization_code: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="The MARC organization code for this library (003 field).",
@@ -614,7 +614,7 @@ class MarcExporterLibrarySettings(BaseSettings):
         alias="marc_organization_code",
     )
 
-    web_client_url: Optional[str] = FormField(
+    web_client_url: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="The base URL for the web catalog for this library, for the 856 field.",
@@ -690,7 +690,7 @@ class MARCExporter(
         revised: bool,
         work: Work,
         annotator: Annotator,
-    ) -> Optional[Record]:
+    ) -> Record | None:
         """Build a complete MARC record for a given work."""
         pool = work.active_license_pool()
         if not pool:
@@ -711,7 +711,7 @@ class MARCExporter(
         library: Library,
         collection: Collection,
         creation_time: datetime,
-        since_time: Optional[datetime] = None,
+        since_time: datetime | None = None,
     ) -> str:
         """The path to the hosted MARC file for the given library, collection,
         and date range."""
@@ -733,7 +733,7 @@ class MARCExporter(
     def query_works(
         self,
         collection: Collection,
-        since_time: Optional[datetime],
+        since_time: datetime | None,
         creation_time: datetime,
         batch_size: int,
     ) -> ScalarResult:
@@ -759,7 +759,7 @@ class MARCExporter(
         annotator: Annotator,
         *,
         creation_time: datetime,
-        since_time: Optional[datetime] = None,
+        since_time: datetime | None = None,
         batch_size: int = 500,
     ) -> None:
         """

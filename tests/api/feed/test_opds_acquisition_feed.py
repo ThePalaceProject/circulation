@@ -1,7 +1,8 @@
 import datetime
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Generator, List, Type
+from collections.abc import Callable, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -986,10 +987,10 @@ class TestEntrypointLinkInsertionFixture:
     db: DatabaseTransactionFixture
     mock: Any
     no_eps: WorkList
-    entrypoints: List[MediumEntryPoint]
+    entrypoints: list[MediumEntryPoint]
     wl: WorkList
     lane: Lane
-    annotator: Type[MockAnnotator]
+    annotator: type[MockAnnotator]
     old_add_entrypoint_links: Callable
 
 

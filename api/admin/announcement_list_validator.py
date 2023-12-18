@@ -1,7 +1,7 @@
 import datetime
 import json
 import uuid
-from typing import Dict, List, Optional, Union, cast
+from typing import cast
 
 import dateutil
 from flask_babel import lazy_gettext as _
@@ -28,8 +28,8 @@ class AnnouncementListValidator:
         self.default_duration_days = default_duration_days
 
     def validate_announcements(
-        self, announcements: Union[str, List[Dict[str, str]]]
-    ) -> Dict[uuid.UUID, AnnouncementData]:
+        self, announcements: str | list[dict[str, str]]
+    ) -> dict[uuid.UUID, AnnouncementData]:
         validated_announcements = {}
         bad_format = INVALID_INPUT.detailed(
             _(
@@ -64,7 +64,7 @@ class AnnouncementListValidator:
             validated_announcements[id] = validated
         return validated_announcements
 
-    def validate_announcement(self, announcement: Dict[str, str]) -> AnnouncementData:
+    def validate_announcement(self, announcement: dict[str, str]) -> AnnouncementData:
         if not isinstance(announcement, dict):
             raise ProblemError(
                 INVALID_INPUT.detailed(
@@ -162,8 +162,8 @@ class AnnouncementListValidator:
     def validate_date(
         cls,
         field: str,
-        value: Union[str, datetime.date],
-        minimum: Optional[datetime.date] = None,
+        value: str | datetime.date,
+        minimum: datetime.date | None = None,
     ) -> datetime.date:
         """Validate a date value.
 

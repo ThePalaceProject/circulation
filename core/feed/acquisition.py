@@ -2,17 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Type,
-)
+from collections.abc import Callable, Generator
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Query, Session
 
@@ -55,11 +46,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         self,
         title: str,
         url: str,
-        works: List[Work],
+        works: list[Work],
         annotator: CirculationManagerAnnotator,
-        facets: Optional[FacetsWithEntryPoint] = None,
-        pagination: Optional[Pagination] = None,
-        precomposed_entries: Optional[List[OPDSMessage]] = None,
+        facets: FacetsWithEntryPoint | None = None,
+        pagination: Pagination | None = None,
+        precomposed_entries: list[OPDSMessage] | None = None,
     ) -> None:
         self.annotator = annotator
         self._facets = facets
@@ -80,7 +71,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if annotate:
             self.annotator.annotate_feed(self._feed)
 
-    def add_pagination_links(self, works: List[Work], lane: WorkList) -> None:
+    def add_pagination_links(self, works: list[Work], lane: WorkList) -> None:
         """Add pagination links to the feed"""
         if not self._pagination:
             return None
@@ -118,7 +109,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if entrypoints:
             # A paginated feed may have multiple entry points into the
             # same dataset.
-            def make_link(ep: Type[EntryPoint]) -> str:
+            def make_link(ep: type[EntryPoint]) -> str:
                 return self.annotator.feed_url(
                     lane, facets=facets.navigate(entrypoint=ep)
                 )
@@ -196,7 +187,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     def _create_entry(
         cls,
         work: Work,
-        active_licensepool: Optional[LicensePool],
+        active_licensepool: LicensePool | None,
         edition: Edition,
         identifier: Identifier,
         annotator: Annotator,
@@ -215,9 +206,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     def add_entrypoint_links(
         cls,
         feed: FeedData,
-        url_generator: Callable[[Type[EntryPoint]], str],
-        entrypoints: List[Type[EntryPoint]],
-        selected_entrypoint: Optional[Type[EntryPoint]],
+        url_generator: Callable[[type[EntryPoint]], str],
+        entrypoints: list[type[EntryPoint]],
+        selected_entrypoint: type[EntryPoint] | None,
         group_name: str = "Formats",
     ) -> None:
         """Add links to a feed forming an OPDS facet group for a set of
@@ -248,12 +239,12 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def _entrypoint_link(
         cls,
-        url_generator: Callable[[Type[EntryPoint]], str],
-        entrypoint: Type[EntryPoint],
-        selected_entrypoint: Optional[Type[EntryPoint]],
+        url_generator: Callable[[type[EntryPoint]], str],
+        entrypoint: type[EntryPoint],
+        selected_entrypoint: type[EntryPoint] | None,
         is_default: bool,
         group_name: str,
-    ) -> Optional[Link]:
+    ) -> Link | None:
         """Create arguments for add_link_to_feed for a link that navigates
         between EntryPoints.
         """
@@ -276,7 +267,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         return link
 
     def add_breadcrumb_links(
-        self, lane: WorkList, entrypoint: Optional[Type[EntryPoint]] = None
+        self, lane: WorkList, entrypoint: type[EntryPoint] | None = None
     ) -> None:
         """Add information necessary to find your current place in the
         site's navigation.
@@ -319,7 +310,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         self,
         lane: WorkList,
         include_lane: bool = False,
-        entrypoint: Optional[Type[EntryPoint]] = None,
+        entrypoint: type[EntryPoint] | None = None,
     ) -> None:
         """Add list of ancestor links in a breadcrumbs element.
 
@@ -405,7 +396,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         # Append the breadcrumbs to the feed.
         self._feed.breadcrumbs = breadcrumbs
 
-    def show_current_entrypoint(self, entrypoint: Optional[Type[EntryPoint]]) -> None:
+    def show_current_entrypoint(self, entrypoint: type[EntryPoint] | None) -> None:
         """Annotate this given feed with a simplified:entryPoint
         attribute pointing to the current entrypoint's TYPE_URI.
 
@@ -442,9 +433,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         url: str,
         worklist: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Optional[FacetsWithEntryPoint],
-        pagination: Optional[Pagination],
-        search_engine: Optional[ExternalSearchIndex],
+        facets: FacetsWithEntryPoint | None,
+        pagination: Pagination | None,
+        search_engine: ExternalSearchIndex | None,
     ) -> OPDSAcquisitionFeed:
         works = worklist.works(
             _db, facets=facets, pagination=pagination, search_engine=search_engine
@@ -470,9 +461,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def active_loans_for(
         cls,
-        circulation: Optional[CirculationAPI],
+        circulation: CirculationAPI | None,
         patron: Patron,
-        annotator: Optional[LibraryAnnotator] = None,
+        annotator: LibraryAnnotator | None = None,
         **response_kwargs: Any,
     ) -> OPDSAcquisitionFeed:
         """A patron specific feed that only contains the loans and holds of a patron"""
@@ -484,7 +475,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 active_loans_by_work[work] = loan
 
         # There might be multiple holds for the same work so we gather all of them and choose the best one.
-        all_holds_by_work: Dict[Work, List[Hold]] = {}
+        all_holds_by_work: dict[Work, list[Hold]] = {}
         for hold in patron.holds:
             work = hold.work
             if not work:
@@ -495,7 +486,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
             all_holds_by_work[work].append(hold)
 
-        active_holds_by_work: Dict[Work, Hold] = {}
+        active_holds_by_work: dict[Work, Hold] = {}
         for work, list_of_holds in all_holds_by_work.items():
             active_holds_by_work[
                 work
@@ -599,7 +590,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         work: Work | Edition | None,
         annotator: Annotator,
         even_if_no_license_pool: bool = False,
-    ) -> Optional[WorkEntry | OPDSMessage]:
+    ) -> WorkEntry | OPDSMessage | None:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         _work: Work
@@ -669,9 +660,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         url: str,
         worklist: WorkList,
         annotator: LibraryAnnotator,
-        pagination: Optional[Pagination] = None,
-        facets: Optional[FacetsWithEntryPoint] = None,
-        search_engine: Optional[ExternalSearchIndex] = None,
+        pagination: Pagination | None = None,
+        facets: FacetsWithEntryPoint | None = None,
+        search_engine: ExternalSearchIndex | None = None,
         search_debug: bool = False,
     ) -> OPDSAcquisitionFeed:
         """Internal method called by groups() when a grouped feed
@@ -737,7 +728,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             entrypoints = facets.selectable_entrypoints(worklist)
             if entrypoints:
 
-                def make_link(ep: Type[EntryPoint]) -> str:
+                def make_link(ep: type[EntryPoint]) -> str:
                     return annotator.groups_url(
                         worklist, facets=facets.navigate(entrypoint=ep)
                     )
@@ -761,8 +752,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         search_engine: ExternalSearchIndex,
         query: str,
         annotator: LibraryAnnotator,
-        pagination: Optional[Pagination] = None,
-        facets: Optional[FacetsWithEntryPoint] = None,
+        pagination: Pagination | None = None,
+        facets: FacetsWithEntryPoint | None = None,
         **response_kwargs: Any,
     ) -> OPDSAcquisitionFeed | ProblemDetail:
         """Run a search against the given search engine and return
@@ -803,7 +794,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         entrypoints = facets.selectable_entrypoints(lane)
         if entrypoints:
 
-            def make_link(ep: Type[EntryPoint]) -> str:
+            def make_link(ep: type[EntryPoint]) -> str:
                 return annotator.search_url(
                     lane, query, pagination=None, facets=facets.navigate(entrypoint=ep)
                 )
@@ -893,11 +884,11 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
     """
 
     @classmethod
-    def single_entry(cls, work: Tuple[Identifier, Work], annotator: Annotator) -> WorkEntry | OPDSMessage:  # type: ignore[override]
+    def single_entry(cls, work: tuple[Identifier, Work], annotator: Annotator) -> WorkEntry | OPDSMessage:  # type: ignore[override]
         # This comes in as a tuple, which deviates from the typical behaviour
         identifier, _work = work
 
-        active_licensepool: Optional[LicensePool]
+        active_licensepool: LicensePool | None
         if identifier.licensed_through:
             active_licensepool = identifier.licensed_through[0]
         else:

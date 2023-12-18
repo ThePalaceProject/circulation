@@ -3,7 +3,8 @@ import json
 import logging
 import os
 import re
-from typing import IO, Any, Iterable, List, Mapping, Union
+from collections.abc import Iterable, Mapping
+from typing import IO, Any
 from urllib.parse import unquote
 
 import feedparser
@@ -162,9 +163,9 @@ class ProblematicCustomList:
 
 
 class CustomList:
-    _books: List[Book]
-    _problematic_books: List[ProblematicBook]
-    _collections: List[CollectionReference]
+    _books: list[Book]
+    _problematic_books: list[ProblematicBook]
+    _collections: list[CollectionReference]
     _id: int
     _name: str
     _library_id: str
@@ -225,8 +226,8 @@ class CustomList:
 
 
 class CustomListExports:
-    _lists: List[CustomList]
-    _problematic_lists: List[ProblematicCustomList]
+    _lists: list[CustomList]
+    _problematic_lists: list[ProblematicCustomList]
 
     def __init__(self):
         self._lists = []
@@ -336,14 +337,14 @@ class CustomListExporter:
     _output_file: str
     _library_name: str
     _schema_file: str
-    _lists: List[str]
+    _lists: list[str]
 
     @staticmethod
     def _fatal(message: str):
         raise CustomListExportFailed(message)
 
     @staticmethod
-    def _parse_arguments(args: List[str]) -> argparse.Namespace:
+    def _parse_arguments(args: list[str]) -> argparse.Namespace:
         parser: argparse.ArgumentParser = argparse.ArgumentParser(
             description="Fetch one or more custom lists."
         )
@@ -374,9 +375,7 @@ class CustomListExporter:
         )
         return parser.parse_args(args)
 
-    def _make_custom_list(
-        self, raw_list: dict
-    ) -> Union[CustomList, ProblematicCustomList]:
+    def _make_custom_list(self, raw_list: dict) -> CustomList | ProblematicCustomList:
         id: int = raw_list["id"]
         name: str = raw_list["name"]
 
@@ -529,5 +528,5 @@ class CustomListExporter:
             self._logger.setLevel(logging.DEBUG)
 
     @staticmethod
-    def create(args: List[str]) -> "CustomListExporter":
+    def create(args: list[str]) -> "CustomListExporter":
         return CustomListExporter(CustomListExporter._parse_arguments(args))

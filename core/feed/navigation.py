@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 from typing_extensions import Self
@@ -23,8 +23,8 @@ class NavigationFeed(BaseOPDSFeed):
         url: str,
         lane: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Optional[Facets] = None,
-        pagination: Optional[Pagination] = None,
+        facets: Facets | None = None,
+        pagination: Pagination | None = None,
     ) -> None:
         self.lane = lane
         self.annotator = annotator
@@ -40,7 +40,7 @@ class NavigationFeed(BaseOPDSFeed):
         url: str,
         worklist: WorkList,
         annotator: CirculationManagerAnnotator,
-        facets: Optional[Facets] = None,
+        facets: Facets | None = None,
     ) -> Self:
         """The navigation feed with links to a given lane's sublanes."""
 
@@ -83,7 +83,7 @@ class NavigationFeed(BaseOPDSFeed):
 
     def as_response(
         self,
-        mime_types: Optional[MIMEAccept] = None,
+        mime_types: MIMEAccept | None = None,
         **kwargs: Any,
     ) -> OPDSFeedResponse:
         response = super().as_response(mime_types=mime_types, **kwargs)

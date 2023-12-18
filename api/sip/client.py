@@ -32,8 +32,8 @@ import socket
 import ssl
 import tempfile
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional
 
 import certifi
 
@@ -99,9 +99,9 @@ class named:
         internal_name: str,
         sip_code: str,
         required=False,
-        length: Optional[int] = None,
+        length: int | None = None,
         allow_multiple=False,
-        log: Optional[logging.Logger] = None,
+        log: logging.Logger | None = None,
     ):
         self.sip_code = sip_code
         self.internal_name = internal_name

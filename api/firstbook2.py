@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Optional, Pattern, Union
+from re import Pattern
 
 import jwt
 import requests
@@ -48,7 +48,7 @@ class FirstBookAuthSettings(BasicAuthProviderSettings):
             weight=10,
         ),
     )
-    password_regular_expression: Optional[Pattern] = FormField(
+    password_regular_expression: Pattern | None = FormField(
         re.compile(r"^[0-9]+$"),
         form=ConfigurationFormItem(
             label="Password Regular Expression",
@@ -107,8 +107,8 @@ class FirstBookAuthenticationAPI(
         self.secret = settings.password
 
     def remote_authenticate(
-        self, username: Optional[str], password: Optional[str]
-    ) -> Optional[PatronData]:
+        self, username: str | None, password: str | None
+    ) -> PatronData | None:
         # All FirstBook credentials are in upper-case.
         if username is None or username == "":
             return None
@@ -128,8 +128,8 @@ class FirstBookAuthenticationAPI(
         )
 
     def remote_patron_lookup(
-        self, patron_or_patrondata: Union[PatronData, Patron]
-    ) -> Optional[PatronData]:
+        self, patron_or_patrondata: PatronData | Patron
+    ) -> PatronData | None:
         if isinstance(patron_or_patrondata, PatronData):
             return patron_or_patrondata
 

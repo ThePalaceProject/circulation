@@ -1,6 +1,5 @@
 import dataclasses
 import logging
-from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,7 +32,7 @@ def mock_settings(mock_problem_detail):
                 raise SettingsValidationError(mock_problem_detail)
             return v
 
-        test: Optional[str] = FormField(
+        test: str | None = FormField(
             "test",
             form=ConfigurationFormItem(label="Test", description="Test description"),
         )

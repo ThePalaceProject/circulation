@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.form_data import ProcessFormData
@@ -12,21 +10,21 @@ from core.integration.settings import (
 
 
 class MockSettings(BaseSettings):
-    field1: List[str] = FormField(
+    field1: list[str] = FormField(
         [],
         form=ConfigurationFormItem(
             label="Field 1",
             type=ConfigurationFormItemType.LIST,
         ),
     )
-    field2: List[str] = FormField(
+    field2: list[str] = FormField(
         [],
         form=ConfigurationFormItem(
             label="Field 2",
             type=ConfigurationFormItemType.MENU,
         ),
     )
-    field3: Optional[str] = FormField(
+    field3: str | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Field 3",

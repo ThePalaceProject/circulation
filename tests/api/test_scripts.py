@@ -4,7 +4,7 @@ import datetime
 import logging
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
@@ -131,9 +131,7 @@ class CacheMARCFilesFixture:
             db.session, Configuration.BASE_URL_KEY
         ).value = self.cm_base_url
 
-    def integration(
-        self, library: Optional[Library] = None
-    ) -> IntegrationConfiguration:
+    def integration(self, library: Library | None = None) -> IntegrationConfiguration:
         if library is None:
             library = self.library
 
@@ -143,7 +141,7 @@ class CacheMARCFilesFixture:
             libraries=[library],
         )
 
-    def script(self, cmd_args: Optional[list[str]] = None) -> CacheMARCFiles:
+    def script(self, cmd_args: list[str] | None = None) -> CacheMARCFiles:
         cmd_args = cmd_args or []
         return CacheMARCFiles(
             self.db.session,
@@ -452,7 +450,7 @@ class TestCacheMARCFiles:
         self,
         cache_marc_files: CacheMARCFilesFixture,
         caplog: LogCaptureFixture,
-        last_updated: Optional[datetime.datetime],
+        last_updated: datetime.datetime | None,
         force: bool,
         update_frequency: int,
         run_exporter: bool,

@@ -1,7 +1,6 @@
 import datetime
 import logging
 import random
-from typing import List, Tuple
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -60,7 +59,7 @@ class TestFacetsWithEntryPoint:
         but you don't care which EntryPoints are configured.
         """
 
-        entrypoints: List = []
+        entrypoints: list = []
 
     def test_items(self):
         ep = AudiobooksEntryPoint
@@ -714,8 +713,8 @@ class TestFacets:
         # available_facets() and default_facets() methods. This gives
         # subclasses a chance to add extra facets or change defaults.
         class Mock(Facets):
-            available_facets_calls: List[Tuple] = []
-            default_facet_calls: List[Tuple] = []
+            available_facets_calls: list[tuple] = []
+            default_facet_calls: list[tuple] = []
 
             # For whatever reason, this faceting object allows only a
             # single setting for each facet group.

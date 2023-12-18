@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytest
 from sqlalchemy import select
 
@@ -20,8 +18,8 @@ from tests.fixtures.library import LibraryFixture
 class RegistrationFixture:
     def __call__(
         self,
-        library: Optional[Library] = None,
-        integration: Optional[IntegrationConfiguration] = None,
+        library: Library | None = None,
+        integration: IntegrationConfiguration | None = None,
     ) -> DiscoveryServiceRegistration:
         library = library or self.library_fixture.library()
         integration = integration or self.integration_fixture(

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json as j
 import logging
-from typing import Dict, Optional, Tuple
 
 from flask_babel import LazyString
 from pydantic import BaseModel
@@ -18,10 +17,10 @@ JSON_MEDIA_TYPE = "application/api-problem+json"
 
 def json(
     type: str,
-    status: Optional[int],
-    title: Optional[str],
-    detail: Optional[str] = None,
-    debug_message: Optional[str] = None,
+    status: int | None,
+    title: str | None,
+    detail: str | None = None,
+    debug_message: str | None = None,
 ) -> str:
     d = dict(type=type, title=str(title), status=status)
     if detail:
@@ -32,11 +31,11 @@ def json(
 
 
 class ProblemDetailModel(BaseModel):
-    type: Optional[str] = None
-    status: Optional[int] = None
-    title: Optional[str] = None
-    detail: Optional[str] = None
-    debug_message: Optional[str] = None
+    type: str | None = None
+    status: int | None = None
+    title: str | None = None
+    detail: str | None = None
+    debug_message: str | None = None
 
 
 class ProblemDetail:
@@ -48,10 +47,10 @@ class ProblemDetail:
     def __init__(
         self,
         uri: str,
-        status_code: Optional[int] = None,
-        title: Optional[str] = None,
-        detail: Optional[str] = None,
-        debug_message: Optional[str] = None,
+        status_code: int | None = None,
+        title: str | None = None,
+        detail: str | None = None,
+        debug_message: str | None = None,
     ):
         self.uri = uri
         self.title = title
@@ -60,7 +59,7 @@ class ProblemDetail:
         self.debug_message = debug_message
 
     @property
-    def response(self) -> Tuple[str, int, Dict[str, str]]:
+    def response(self) -> tuple[str, int, dict[str, str]]:
         """Create a Flask-style response."""
         return (
             json(
@@ -77,9 +76,9 @@ class ProblemDetail:
     def detailed(
         self,
         detail: str,
-        status_code: Optional[int] = None,
-        title: Optional[str] = None,
-        debug_message: Optional[str] = None,
+        status_code: int | None = None,
+        title: str | None = None,
+        debug_message: str | None = None,
     ) -> ProblemDetail:
         """Create a ProblemDetail for a more specific occurrence of an existing
         ProblemDetail.
@@ -105,9 +104,9 @@ class ProblemDetail:
     def with_debug(
         self,
         debug_message: str,
-        detail: Optional[str] = None,
-        status_code: Optional[int] = None,
-        title: Optional[str] = None,
+        detail: str | None = None,
+        status_code: int | None = None,
+        title: str | None = None,
     ) -> ProblemDetail:
         """Insert debugging information into a ProblemDetail.
 

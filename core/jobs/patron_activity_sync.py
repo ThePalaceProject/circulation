@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import List, Optional
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Query
@@ -16,7 +15,7 @@ class PatronActivitySyncNotificationScript(PatronSweepMonitor):
     and notify said patron devices to re-sync their data"""
 
     STALE_ACTIVITY_SYNC_DAYS = 2
-    SERVICE_NAME: Optional[str] = "Patron Activity Sync Notification"
+    SERVICE_NAME: str | None = "Patron Activity Sync Notification"
 
     def item_query(self) -> Query:
         expired_sync = utc_now() - timedelta(days=self.STALE_ACTIVITY_SYNC_DAYS)
@@ -36,5 +35,5 @@ class PatronActivitySyncNotificationScript(PatronSweepMonitor):
         )
         return query
 
-    def process_items(self, items: List[Patron]) -> None:
+    def process_items(self, items: list[Patron]) -> None:
         PushNotifications.send_activity_sync_message(items)

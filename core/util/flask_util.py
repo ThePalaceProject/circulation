@@ -1,7 +1,7 @@
 """Utilities for Flask applications."""
 import datetime
 import time
-from typing import Any, Dict
+from typing import Any
 from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
@@ -198,7 +198,7 @@ class CustomBaseModel(BaseModel):
 
     def api_dict(
         self, *args: Any, by_alias: bool = True, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Return the instance in a form suitable for a web response.
 
         By default, the properties use their lower camel case aliases,

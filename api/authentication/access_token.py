@@ -4,7 +4,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from datetime import timedelta
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 from jwcrypto import jwe, jwk
 
@@ -174,4 +174,4 @@ class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
         return True
 
 
-AccessTokenProvider: Type[PatronAccessTokenProvider] = PatronJWEAccessTokenProvider
+AccessTokenProvider: type[PatronAccessTokenProvider] = PatronJWEAccessTokenProvider

@@ -1,4 +1,3 @@
-from typing import Dict, Union
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -38,7 +37,7 @@ class TestSAMLMetadataParser:
         ],
     )
     def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(
-        self, _, incorrect_xml: Union[str, bytes]
+        self, _, incorrect_xml: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -63,7 +62,7 @@ class TestSAMLMetadataParser:
     def test_parse_raises_exception_when_idp_metadata_does_not_contain_sso_service(
         self,
         _,
-        incorrect_xml_with_one_idp_metadata_without_sso_service: Union[str, bytes],
+        incorrect_xml_with_one_idp_metadata_without_sso_service: str | bytes,
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -90,9 +89,9 @@ class TestSAMLMetadataParser:
     def test_parse_raises_exception_when_idp_metadata_contains_sso_service_with_wrong_binding(
         self,
         _,
-        incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding: Union[
-            str, bytes
-        ],
+        incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding: (
+            str | bytes
+        ),
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -119,7 +118,7 @@ class TestSAMLMetadataParser:
     def test_parse_does_not_raise_exception_when_xml_metadata_does_not_have_display_names(
         self,
         _,
-        correct_xml_with_one_idp_metadata_without_display_names: Union[str, bytes],
+        correct_xml_with_one_idp_metadata_without_display_names: str | bytes,
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -167,7 +166,7 @@ class TestSAMLMetadataParser:
         ],
     )
     def test_parse_correctly_parses_one_idp_metadata(
-        self, _, correct_xml_with_idp_1: Union[str, bytes]
+        self, _, correct_xml_with_idp_1: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -269,7 +268,7 @@ class TestSAMLMetadataParser:
         ],
     )
     def test_parse_correctly_parses_idp_metadata_without_name_id_format(
-        self, _, correct_xml_with_idp_1: Union[str, bytes]
+        self, _, correct_xml_with_idp_1: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -376,7 +375,7 @@ class TestSAMLMetadataParser:
     def test_parse_correctly_parses_idp_metadata_with_one_certificate(
         self,
         _,
-        correct_xml_with_one_idp_metadata_with_one_certificate: Union[str, bytes],
+        correct_xml_with_one_idp_metadata_with_one_certificate: str | bytes,
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -483,7 +482,7 @@ class TestSAMLMetadataParser:
         ],
     )
     def test_parse_correctly_parses_metadata_with_multiple_descriptors(
-        self, _, correct_xml_with_multiple_idps: Union[str, bytes]
+        self, _, correct_xml_with_multiple_idps: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -631,7 +630,7 @@ class TestSAMLMetadataParser:
     def test_parse_raises_exception_when_sp_metadata_does_not_contain_acs_service(
         self,
         _,
-        incorrect_xml_with_one_sp_metadata_without_acs_service: Union[str, bytes],
+        incorrect_xml_with_one_sp_metadata_without_acs_service: str | bytes,
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -653,7 +652,7 @@ class TestSAMLMetadataParser:
         ],
     )
     def test_parse_correctly_parses_one_sp_metadata(
-        self, _, correct_xml_with_one_sp: Union[str, bytes]
+        self, _, correct_xml_with_one_sp: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -888,7 +887,7 @@ class TestSAMLSubjectParser:
         name_id_nq: str,
         name_id_spnq: str,
         name_id: str,
-        attributes: Dict[str, Dict],
+        attributes: dict[str, dict],
         expected_result: SAMLSubject,
     ):
         # Arrange

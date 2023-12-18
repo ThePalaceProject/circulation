@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -153,10 +153,10 @@ class Patron(Base):
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
 
-    loans: Mapped[List[Loan]] = relationship(
+    loans: Mapped[list[Loan]] = relationship(
         "Loan", backref="patron", cascade="delete", uselist=True
     )
-    holds: Mapped[List[Hold]] = relationship(
+    holds: Mapped[list[Hold]] = relationship(
         "Hold",
         back_populates="patron",
         cascade="delete",
@@ -164,7 +164,7 @@ class Patron(Base):
         order_by="Hold.id",
     )
 
-    annotations: Mapped[List[Annotation]] = relationship(
+    annotations: Mapped[list[Annotation]] = relationship(
         "Annotation",
         backref="patron",
         order_by="desc(Annotation.timestamp)",
@@ -172,7 +172,7 @@ class Patron(Base):
     )
 
     # One Patron can have many associated Credentials.
-    credentials: Mapped[List[Credential]] = relationship(
+    credentials: Mapped[list[Credential]] = relationship(
         "Credential", back_populates="patron", cascade="delete"
     )
 
@@ -545,7 +545,7 @@ class Loan(Base, LoanAndHoldMixin):
     license: Mapped[License] = relationship("License", back_populates="loans")
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
-    fulfillment: Mapped[Optional[LicensePoolDeliveryMechanism]] = relationship(
+    fulfillment: Mapped[LicensePoolDeliveryMechanism | None] = relationship(
         "LicensePoolDeliveryMechanism", back_populates="fulfills"
     )
     start = Column(DateTime(timezone=True), index=True)

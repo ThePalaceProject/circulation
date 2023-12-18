@@ -1,17 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Generic,
-    Mapping,
-    Optional,
-    Protocol,
-    Type,
-    TypeVar,
-)
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import Mapped, flag_modified
@@ -23,15 +14,15 @@ if TYPE_CHECKING:
 
 
 class IntegrationConfigurationProtocol(Protocol):
-    settings_dict: Mapped[Dict[str, Any]]
+    settings_dict: Mapped[dict[str, Any]]
 
 
 T = TypeVar("T", bound=BaseSettings)
 
 
 def integration_settings_load(
-    settings_cls: Type[T],
-    integration: IntegrationConfigurationProtocol | Dict[str, Any],
+    settings_cls: type[T],
+    integration: IntegrationConfigurationProtocol | dict[str, Any],
 ) -> T:
     """
     Load the settings object for an integration from the database.
@@ -54,7 +45,7 @@ def integration_settings_load(
 
 
 def integration_settings_update(
-    settings_cls: Type[BaseSettings],
+    settings_cls: type[BaseSettings],
     integration: IntegrationConfigurationProtocol,
     new_settings: BaseSettings | Mapping[str, Any],
     merge: bool = False,
@@ -103,7 +94,7 @@ class HasIntegrationConfiguration(Generic[SettingsType], ABC):
 
     @classmethod
     @abstractmethod
-    def settings_class(cls) -> Type[SettingsType]:
+    def settings_class(cls) -> type[SettingsType]:
         """Get the settings for this integration"""
         ...
 
@@ -149,7 +140,7 @@ class HasLibraryIntegrationConfiguration(
 ):
     @classmethod
     @abstractmethod
-    def library_settings_class(cls) -> Type[LibrarySettingsType]:
+    def library_settings_class(cls) -> type[LibrarySettingsType]:
         """Get the library settings for this integration"""
         ...
 
@@ -188,7 +179,7 @@ class HasChildIntegrationConfiguration(
 ):
     @classmethod
     @abstractmethod
-    def child_settings_class(cls) -> Type[ChildSettingsType]:
+    def child_settings_class(cls) -> type[ChildSettingsType]:
         """Get the child settings class"""
         ...
 
@@ -203,7 +194,7 @@ class HasChildIntegrationConfiguration(
     def settings_load(
         cls,
         integration: IntegrationConfiguration,
-        parent: Optional[IntegrationConfiguration] = None,
+        parent: IntegrationConfiguration | None = None,
     ) -> SettingsType:
         """
         Load the full settings object for this integration from the database.

@@ -5,7 +5,6 @@ Revises: 382d7921f500
 Create Date: 2023-11-21 17:48:04.535064+00:00
 
 """
-from typing import Optional
 
 from alembic import op
 from core.marc import MARCExporter
@@ -56,7 +55,7 @@ def upgrade() -> None:
         ) = get_configuration_settings(connection, integration)
 
         # We moved the setting for update_frequency from the library settings to the integration settings.
-        update_frequency: Optional[str] = None
+        update_frequency: str | None = None
         for library_id, library_settings in libraries_settings.items():
             if "marc_update_frequency" in library_settings:
                 frequency = library_settings["marc_update_frequency"]

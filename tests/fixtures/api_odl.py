@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import json
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from jinja2 import Template
@@ -24,10 +24,10 @@ class LicenseHelper:
 
     def __init__(
         self,
-        identifier: Optional[str] = None,
-        checkouts: Optional[int] = None,
-        concurrency: Optional[int] = None,
-        expires: Optional[Union[datetime.datetime, str]] = None,
+        identifier: str | None = None,
+        checkouts: int | None = None,
+        concurrency: int | None = None,
+        expires: datetime.datetime | str | None = None,
     ) -> None:
         """Initialize a new instance of LicenseHelper class.
 
@@ -37,12 +37,12 @@ class LicenseHelper:
         :param expires: Date & time when a license expires
         """
         self.identifier: str = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
-        self.checkouts: Optional[int] = checkouts
-        self.concurrency: Optional[int] = concurrency
+        self.checkouts: int | None = checkouts
+        self.concurrency: int | None = concurrency
         if isinstance(expires, datetime.datetime):
             self.expires = expires.isoformat()
         else:
-            self.expires: Optional[str] = expires  # type: ignore
+            self.expires: str | None = expires  # type: ignore
 
 
 class LicenseInfoHelper:
@@ -53,12 +53,12 @@ class LicenseInfoHelper:
         license: LicenseHelper,
         available: int,
         status: str = "available",
-        left: Optional[int] = None,
+        left: int | None = None,
     ) -> None:
         """Initialize a new instance of LicenseInfoHelper class."""
         self.license: LicenseHelper = license
         self.status: str = status
-        self.left: Optional[int] = left
+        self.left: int | None = left
         self.available: int = available
 
     def __str__(self) -> str:
@@ -110,7 +110,7 @@ class MockGet:
     def __init__(self):
         self.responses = []
 
-    def get(self, *args: Any, **kwargs: Any) -> Tuple[int, Dict[str, str], bytes]:
+    def get(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, str], bytes]:
         return 200, {}, self.responses.pop(0)
 
     def add(self, item: LicenseInfoHelper | str | bytes) -> None:
@@ -169,12 +169,12 @@ class OdlImportTemplatedFixture:
         self.feed_template = feed_template
 
     def __call__(
-        self, licenses: List[LicenseInfoHelper]
-    ) -> Tuple[
-        List[Edition],
-        List[LicensePool],
-        List[Work],
-        Dict[str, List[CoverageFailure]],
+        self, licenses: list[LicenseInfoHelper]
+    ) -> tuple[
+        list[Edition],
+        list[LicensePool],
+        list[Work],
+        dict[str, list[CoverageFailure]],
     ]:
         feed_licenses = [l.license for l in licenses]
         for _license in licenses:
@@ -187,7 +187,7 @@ class OdlImportTemplatedFixture:
         return self.importer.import_from_feed(feed)
 
     def get_templated_feed(
-        self, files: APIFilesFixture, filename: str, licenses: List[LicenseHelper]
+        self, files: APIFilesFixture, filename: str, licenses: list[LicenseHelper]
     ) -> str:
         """Get the test ODL feed with specific licensing information.
 

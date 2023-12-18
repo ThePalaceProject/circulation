@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Callable, List, Tuple
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import flask
@@ -85,7 +86,7 @@ def post_response(
 
 
 @pytest.fixture
-def common_args() -> List[Tuple[str, str]]:
+def common_args() -> list[tuple[str, str]]:
     return [
         ("test_identifier", "user"),
         ("test_password", "pass"),
@@ -466,7 +467,7 @@ class TestPatronAuth:
 
     def test_patron_auth_services_post_not_authorized(
         self,
-        common_args: List[Tuple[str, str]],
+        common_args: list[tuple[str, str]],
         settings_ctrl_fixture: SettingsControllerFixture,
         post_response: Callable[..., Response | ProblemDetail],
     ):
@@ -481,7 +482,7 @@ class TestPatronAuth:
 
     def test_patron_auth_services_post_create(
         self,
-        common_args: List[Tuple[str, str]],
+        common_args: list[tuple[str, str]],
         default_library: Library,
         post_response: Callable[..., Response | ProblemDetail],
         db: DatabaseTransactionFixture,
@@ -562,7 +563,7 @@ class TestPatronAuth:
     def test_patron_auth_services_post_edit(
         self,
         post_response: Callable[..., Response | ProblemDetail],
-        common_args: List[Tuple[str, str]],
+        common_args: list[tuple[str, str]],
         settings_ctrl_fixture: SettingsControllerFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
         db: DatabaseTransactionFixture,
@@ -626,7 +627,7 @@ class TestPatronAuth:
 
     def test_patron_auth_service_delete(
         self,
-        common_args: List[Tuple[str, str]],
+        common_args: list[tuple[str, str]],
         settings_ctrl_fixture: SettingsControllerFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):

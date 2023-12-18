@@ -1,4 +1,4 @@
-from typing import Callable, List, Optional
+from collections.abc import Callable
 from unittest.mock import MagicMock, PropertyMock, call
 
 import pytest
@@ -17,9 +17,9 @@ def before_flush_decorator() -> BeforeFlushListener:
 @pytest.fixture
 def create_session() -> Callable[..., Session]:
     def create(
-        new: Optional[List[Base]] = None,
-        deleted: Optional[List[Base]] = None,
-        dirty: Optional[List[Base]] = None,
+        new: list[Base] | None = None,
+        deleted: list[Base] | None = None,
+        dirty: list[Base] | None = None,
     ) -> Session:
         new = new or []
         deleted = deleted or []

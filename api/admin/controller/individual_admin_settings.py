@@ -1,5 +1,4 @@
 import json
-from typing import Optional
 
 import flask
 from flask import Response
@@ -27,8 +26,8 @@ class IndividualAdminSettingsController(SettingsController):
         else:
             return self.process_post()
 
-    def _highest_authorized_role(self) -> Optional[AdminRole]:
-        highest_role: Optional[AdminRole] = None
+    def _highest_authorized_role(self) -> AdminRole | None:
+        highest_role: AdminRole | None = None
         has_auth = False
 
         admin = getattr(flask.request, "admin", None)
@@ -54,7 +53,7 @@ class IndividualAdminSettingsController(SettingsController):
         return highest_role if has_auth else None
 
     def process_get(self):
-        logged_in_admin: Optional[Admin] = getattr(flask.request, "admin", None)
+        logged_in_admin: Admin | None = getattr(flask.request, "admin", None)
         if not logged_in_admin:
             return ADMIN_AUTH_NOT_CONFIGURED
 
@@ -110,7 +109,7 @@ class IndividualAdminSettingsController(SettingsController):
         """Create the first admin in the system."""
 
         # Passwords are always required, so check presence and validity up front.
-        password: Optional[str] = flask.request.form.get("password")
+        password: str | None = flask.request.form.get("password")
         if not self.is_acceptable_password(password):
             return self.unacceptable_password()
 
@@ -143,7 +142,7 @@ class IndividualAdminSettingsController(SettingsController):
         """Create a new admin (not the first admin in the system)."""
 
         # Passwords are always required, so check presence and validity up front.
-        password: Optional[str] = flask.request.form.get("password")
+        password: str | None = flask.request.form.get("password")
         if not self.is_acceptable_password(password):
             return self.unacceptable_password()
 
@@ -173,7 +172,7 @@ class IndividualAdminSettingsController(SettingsController):
 
     def process_post_update_existing_admin(self, admin: Admin):
         """Update an existing admin."""
-        password: Optional[str] = flask.request.form.get("password")
+        password: str | None = flask.request.form.get("password")
 
         success = False
         try:
@@ -244,7 +243,7 @@ class IndividualAdminSettingsController(SettingsController):
         )
 
     @staticmethod
-    def is_acceptable_password(password: Optional[str]) -> bool:
+    def is_acceptable_password(password: str | None) -> bool:
         # Forbid missing passwords.
         if not password:
             return False

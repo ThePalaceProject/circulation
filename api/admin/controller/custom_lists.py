@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Dict, List, Optional, Union
 
 import flask
 from flask import Response, url_for
@@ -51,16 +51,16 @@ class CustomListsController(
 
     class CustomListPostRequest(BaseModel):
         name: str
-        id: Optional[int] = None
-        entries: List[dict] = []
-        collections: List[int] = []
-        deletedEntries: List[dict] = []
+        id: int | None = None
+        entries: list[dict] = []
+        collections: list[int] = []
+        deletedEntries: list[dict] = []
         # For auto updating lists
         auto_update: bool = False
-        auto_update_query: Optional[dict] = None
-        auto_update_facets: Optional[dict] = None
+        auto_update_query: dict | None = None
+        auto_update_facets: dict | None = None
 
-    def _list_as_json(self, list: CustomList, is_owner=True) -> Dict:
+    def _list_as_json(self, list: CustomList, is_owner=True) -> dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
         for collection in list.collections:
@@ -84,7 +84,7 @@ class CustomListsController(
             is_shared=len(list.shared_locally_with_libraries) > 0,
         )
 
-    def custom_lists(self) -> Union[Dict, ProblemDetail, Response, None]:
+    def custom_lists(self) -> dict | ProblemDetail | Response | None:
         library: Library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
         self.require_librarian(library)
 
@@ -113,7 +113,7 @@ class CustomListsController(
 
         return None
 
-    def _getJSONFromRequest(self, values: Optional[str]) -> list:
+    def _getJSONFromRequest(self, values: str | None) -> list:
         if values:
             return_values = json.loads(values)
         else:
@@ -121,9 +121,7 @@ class CustomListsController(
 
         return return_values
 
-    def _get_work_from_urn(
-        self, library: Library, urn: Optional[str]
-    ) -> Optional[Work]:
+    def _get_work_from_urn(self, library: Library, urn: str | None) -> Work | None:
         identifier, ignore = Identifier.parse_urn(self._db, urn)
 
         if identifier is None:
@@ -143,14 +141,14 @@ class CustomListsController(
         self,
         library: Library,
         name: str,
-        entries: List[Dict],
-        collections: List[int],
-        deleted_entries: Optional[List[Dict]] = None,
-        id: Optional[int] = None,
-        auto_update: Optional[bool] = None,
-        auto_update_query: Optional[dict[str, str]] = None,
-        auto_update_facets: Optional[dict[str, str]] = None,
-    ) -> Union[ProblemDetail, Response]:
+        entries: list[dict],
+        collections: list[int],
+        deleted_entries: list[dict] | None = None,
+        id: int | None = None,
+        auto_update: bool | None = None,
+        auto_update_query: dict[str, str] | None = None,
+        auto_update_facets: dict[str, str] | None = None,
+    ) -> ProblemDetail | Response:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
         old_list_with_name = CustomList.find(self._db, name, library=library)
@@ -325,9 +323,7 @@ class CustomListsController(
 
         return url_fn
 
-    def custom_list(
-        self, list_id: int
-    ) -> Optional[Union[Response, Dict, ProblemDetail]]:
+    def custom_list(self, list_id: int) -> Response | dict | ProblemDetail | None:
         library: Library = flask.request.library  # type: ignore
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -410,7 +406,7 @@ class CustomListsController(
 
     def share_locally(
         self, customlist_id: int
-    ) -> Union[ProblemDetail, Dict[str, int], Response]:
+    ) -> ProblemDetail | dict[str, int] | Response:
         """Share this customlist with all libraries on this local CM"""
         if not customlist_id:
             return INVALID_INPUT
@@ -431,7 +427,7 @@ class CustomListsController(
 
     def share_locally_POST(
         self, customlist: CustomList
-    ) -> Union[ProblemDetail, Dict[str, int]]:
+    ) -> ProblemDetail | dict[str, int]:
         successes = []
         failures = []
         self.log.info(f"Begin sharing customlist '{customlist.name}'")
@@ -463,9 +459,7 @@ class CustomListsController(
             successes=len(successes), failures=len(failures)
         ).dict()
 
-    def share_locally_DELETE(
-        self, customlist: CustomList
-    ) -> Union[ProblemDetail, Response]:
+    def share_locally_DELETE(self, customlist: CustomList) -> ProblemDetail | Response:
         """Delete the shared status of a custom list
         If a customlist is actively in use by another library, then disallow the unshare
         """

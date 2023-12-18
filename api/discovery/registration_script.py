@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from argparse import ArgumentParser
-from typing import Callable, List, Literal, Optional
+from collections.abc import Callable
+from typing import Literal
 
 from flask import url_for
 from sqlalchemy.orm import Session
@@ -41,8 +42,8 @@ class LibraryRegistrationScript(LibraryInputScript):
 
     def do_run(
         self,
-        cmd_args: Optional[List[str]] = None,
-        manager: Optional[CirculationManager] = None,
+        cmd_args: list[str] | None = None,
+        manager: CirculationManager | None = None,
     ) -> PalaceFlask | Literal[False]:
         parsed = self.parse_command_line(self._db, cmd_args)
 

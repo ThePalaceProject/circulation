@@ -1,4 +1,4 @@
-from typing import Optional, Type, TypeVar
+from typing import TypeVar
 
 from pyparsing import ParseResults
 
@@ -55,8 +55,8 @@ def _parse_number(tokens: ParseResults) -> Number:
 
 
 def _parse_unary_expression(
-    expression_type: Type[UE], tokens: ParseResults
-) -> Optional[UE]:
+    expression_type: type[UE], tokens: ParseResults
+) -> UE | None:
     """Transform the token into an unary expression.
 
     :param tokens: ParseResults objects
@@ -80,7 +80,7 @@ def _parse_unary_expression(
 
 def _parse_unary_arithmetic_expression(
     tokens: ParseResults,
-) -> Optional[UnaryArithmeticExpression]:
+) -> UnaryArithmeticExpression | None:
     """Transform the token into an UnaryArithmeticExpression node.
 
     :param tokens: ParseResults objects
@@ -92,7 +92,7 @@ def _parse_unary_arithmetic_expression(
 
 def _parse_unary_boolean_expression(
     tokens: ParseResults,
-) -> Optional[UnaryBooleanExpression]:
+) -> UnaryBooleanExpression | None:
     """Transform the token into an UnaryBooleanExpression node.
 
     :param tokens: ParseResults objects
@@ -103,8 +103,8 @@ def _parse_unary_boolean_expression(
 
 
 def _parse_binary_expression(
-    expression_type: Type[BE], tokens: ParseResults
-) -> Optional[BE]:
+    expression_type: type[BE], tokens: ParseResults
+) -> BE | None:
     """Transform the token into a BinaryExpression node.
 
     :param tokens: ParseResults objects
@@ -129,7 +129,7 @@ def _parse_binary_expression(
 
 def _parse_binary_arithmetic_expression(
     tokens: ParseResults,
-) -> Optional[BinaryArithmeticExpression]:
+) -> BinaryArithmeticExpression | None:
     """Transform the token into a BinaryArithmeticExpression node.
 
     :param tokens: ParseResults objects
@@ -141,7 +141,7 @@ def _parse_binary_arithmetic_expression(
 
 def _parse_binary_boolean_expression(
     tokens: ParseResults,
-) -> Optional[BinaryBooleanExpression]:
+) -> BinaryBooleanExpression | None:
     """Transform the token into a BinaryBooleanExpression node.
 
     :param tokens: ParseResults objects
@@ -153,7 +153,7 @@ def _parse_binary_boolean_expression(
 
 def _parse_comparison_expression(
     tokens: ParseResults,
-) -> Optional[ComparisonExpression]:
+) -> ComparisonExpression | None:
     """Transform the token into a ComparisonExpression node.
 
     :param tokens: ParseResults objects

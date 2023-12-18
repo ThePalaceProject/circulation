@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import sys
 import time
+from collections.abc import Callable
 from functools import wraps
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, ParamSpec, TypeVar, cast
 
 from sqlalchemy.orm import Session
 
 from core.model.datasource import DataSource
-
-# TODO: Remove this when we drop support for Python 3.9
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
-
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -41,7 +34,7 @@ def memoize(ttls: int = 3600) -> Callable[[Callable[P, T]], Callable[P, T]]:
     because the first argument will always be the instance itself
     Hence the signatures will be different for each object
     """
-    cache: Dict[str, Any] = {}
+    cache: dict[str, Any] = {}
 
     def outer(func: Callable[P, T]) -> Callable[P, T]:
         @wraps(func)
@@ -74,7 +67,7 @@ class CachedData:
     """
 
     # Instance of itself
-    cache: Optional[CachedData] = None
+    cache: CachedData | None = None
 
     @classmethod
     def initialize(cls, _db: Session) -> CachedData:
@@ -96,7 +89,7 @@ class CachedData:
         self.lock = Lock()
 
     @memoize(ttls=3600)
-    def data_sources(self) -> List[DataSource]:
+    def data_sources(self) -> list[DataSource]:
         """List of all datasources within the system"""
         with self.lock:
             sources = self._db.query(DataSource).order_by(DataSource.id).all()

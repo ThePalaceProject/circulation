@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Generator, List, Literal, Tuple, Type, TypeVar
+from collections.abc import Generator
+from typing import Any, List, Literal, Tuple, Type, TypeVar, Union
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
@@ -85,8 +86,8 @@ T = TypeVar("T")
 
 
 def create(
-    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
-) -> Tuple[T, Literal[True]]:
+    db: Session, model: type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> tuple[T, Literal[True]]:
     kwargs.update(create_method_kwargs or {})
     created = getattr(model, create_method, model)(**kwargs)
     db.add(created)
@@ -95,7 +96,7 @@ def create(
 
 
 def get_one(
-    db: Session, model: Type[T], on_multiple="error", constraint=None, **kwargs
+    db: Session, model: type[T], on_multiple="error", constraint=None, **kwargs
 ) -> T | None:
     """Gets an object from the database based on its attributes.
 
@@ -131,8 +132,8 @@ def get_one(
 
 
 def get_one_or_create(
-    db: Session, model: Type[T], create_method="", create_method_kwargs=None, **kwargs
-) -> Tuple[T, bool]:
+    db: Session, model: type[T], create_method="", create_method_kwargs=None, **kwargs
+) -> tuple[T, bool]:
     one = get_one(db, model, **kwargs)
     if one:
         return one, False
@@ -345,8 +346,8 @@ class SessionManager:
 
     @classmethod
     def setup_event_listener(
-        cls, session: Union[Session, sessionmaker]
-    ) -> Union[Session, sessionmaker]:
+        cls, session: Session | sessionmaker
+    ) -> Session | sessionmaker:
         event.listen(session, "before_flush", Listener.before_flush_event_listener)
         return session
 
@@ -482,7 +483,7 @@ class SessionBulkOperation:
         self.bulk_method = bulk_method
         self.bulk_method_kwargs = bulk_method_kwargs or {}
         self.batch_size = batch_size
-        self._objects: List[Base] = []
+        self._objects: list[Base] = []
 
     def __enter__(self):
         return self

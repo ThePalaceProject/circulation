@@ -1,5 +1,4 @@
 from collections import Counter
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -948,7 +947,7 @@ class TestCrawlableFacets:
             (Facets.COLLECTION_NAME_FACETS_GROUP_NAME, Facets.COLLECTION_NAME_ALL),
         ],
     )
-    def test_available_none(self, group_name: str, expected: List[str]) -> None:
+    def test_available_none(self, group_name: str, expected: list[str]) -> None:
         assert CrawlableFacets.available_facets(None, group_name) == [expected]
 
     @pytest.mark.parametrize(
@@ -964,7 +963,7 @@ class TestCrawlableFacets:
             ),
         ],
     )
-    def test_available(self, group_name: str, expected: List[str]):
+    def test_available(self, group_name: str, expected: list[str]):
         mock = MagicMock(spec=Library)
         mock.enabled_facets = MagicMock(return_value=["foo"])
 

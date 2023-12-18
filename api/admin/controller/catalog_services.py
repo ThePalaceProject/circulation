@@ -1,5 +1,3 @@
-from typing import List, Type, Union
-
 import flask
 from flask import Response
 
@@ -30,7 +28,7 @@ class CatalogServicesController(
     def default_registry(self) -> CatalogServicesRegistry:
         return CatalogServicesRegistry()
 
-    def process_catalog_services(self) -> Union[Response, ProblemDetail]:
+    def process_catalog_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
 
         if flask.request.method == "GET":
@@ -74,14 +72,14 @@ class CatalogServicesController(
 
     def process_updated_libraries(
         self,
-        libraries: List[UpdatedLibrarySettingsTuple],
-        settings_class: Type[BaseSettings],
+        libraries: list[UpdatedLibrarySettingsTuple],
+        settings_class: type[BaseSettings],
     ) -> None:
         super().process_updated_libraries(libraries, settings_class)
         for integration, _ in libraries:
             self.library_integration_validation(integration)
 
-    def process_post(self) -> Union[Response, ProblemDetail]:
+    def process_post(self) -> Response | ProblemDetail:
         try:
             form_data = flask.request.form
             libraries_data = self.get_libraries_data(form_data)

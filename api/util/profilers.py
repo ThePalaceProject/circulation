@@ -2,7 +2,6 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
 
 from flask import Flask, g, request
 
@@ -16,7 +15,7 @@ class PalaceProfiler:
         return os.environ.get(cls.ENVIRONMENT_VARIABLE, None) is not None
 
     @classmethod
-    def create_profile_dir(cls) -> Optional[Path]:
+    def create_profile_dir(cls) -> Path | None:
         if not cls.enabled():
             return None
 

@@ -3,18 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import sys
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    overload,
-)
+from collections.abc import Callable
+from typing import Any, Literal, overload
 
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from flask_babel import lazy_gettext as _
@@ -99,13 +89,13 @@ class OpdsRegistrationService(
         }
 
     @classmethod
-    def settings_class(cls) -> Type[OpdsRegistrationServiceSettings]:
+    def settings_class(cls) -> type[OpdsRegistrationServiceSettings]:
         """Get the settings for this integration."""
         return OpdsRegistrationServiceSettings
 
     @classmethod
     @overload
-    def for_integration(cls, _db: Session, integration: int) -> Optional[Self]:
+    def for_integration(cls, _db: Session, integration: int) -> Self | None:
         ...
 
     @classmethod
@@ -118,7 +108,7 @@ class OpdsRegistrationService(
     @classmethod
     def for_integration(
         cls, _db: Session, integration: int | IntegrationConfiguration
-    ) -> Optional[Self]:
+    ) -> Self | None:
         """
         Find a OpdsRegistrationService object configured by the given IntegrationConfiguration ID.
         """
@@ -138,14 +128,14 @@ class OpdsRegistrationService(
 
     @staticmethod
     def post_request(
-        url: str, payload: Union[str, Dict[str, Any]], **kwargs: Any
+        url: str, payload: str | dict[str, Any], **kwargs: Any
     ) -> Response:
         return HTTP.debuggable_post(url, payload, **kwargs)
 
     @classmethod
     def for_protocol_goal_and_url(
         cls, _db: Session, protocol: str, goal: Goals, url: str
-    ) -> Optional[Self]:
+    ) -> Self | None:
         """Get a LibraryRegistry for the given protocol, goal, and
         URL. Create the corresponding ExternalIntegration if necessary.
         """
@@ -161,7 +151,7 @@ class OpdsRegistrationService(
         return cls(integration, settings)
 
     @property
-    def registrations(self) -> List[DiscoveryServiceRegistration]:
+    def registrations(self) -> list[DiscoveryServiceRegistration]:
         """Find all of this site's registrations with this OpdsRegistrationService.
 
         :yield: A sequence of Registration objects.
@@ -175,7 +165,7 @@ class OpdsRegistrationService(
 
     def fetch_catalog(
         self,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Fetch the root catalog for this OpdsRegistrationService.
 
         :return: A ProblemDetail if there's a problem communicating
@@ -187,7 +177,7 @@ class OpdsRegistrationService(
         return self._extract_catalog_information(response)
 
     @classmethod
-    def _extract_catalog_information(cls, response: Response) -> Tuple[str, str]:
+    def _extract_catalog_information(cls, response: Response) -> tuple[str, str]:
         """From an OPDS catalog, extract information that's essential to
         kickstarting the OPDS Directory Registration Protocol.
 
@@ -220,7 +210,7 @@ class OpdsRegistrationService(
 
     def fetch_registration_document(
         self,
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """Fetch a discovery service's registration document and extract
         useful information from it.
 
@@ -237,7 +227,7 @@ class OpdsRegistrationService(
     @classmethod
     def _extract_registration_information(
         cls, response: Response
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """From an OPDS registration document, extract information that's
         useful to kickstarting the OPDS Directory Registration Protocol.
 
@@ -277,7 +267,7 @@ class OpdsRegistrationService(
     @classmethod
     def _extract_links(
         cls, response: Response
-    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, str]]]:
+    ) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
         """Parse an OPDS 2 feed out of a Requests response object.
 
         :return: A 2-tuple (parsed_catalog, links),
@@ -388,7 +378,7 @@ class OpdsRegistrationService(
         library: Library,
         stage: RegistrationStage,
         url_for: Callable[..., str],
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Collect the key-value pairs to be sent when kicking off the
         registration protocol.
 
@@ -416,7 +406,7 @@ class OpdsRegistrationService(
     @staticmethod
     def _create_registration_headers(
         registration: DiscoveryServiceRegistration,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         shared_secret = registration.shared_secret
         headers = {}
         if shared_secret:
@@ -427,8 +417,8 @@ class OpdsRegistrationService(
     def _send_registration_request(
         cls,
         register_url: str,
-        headers: Dict[str, str],
-        payload: Dict[str, str],
+        headers: dict[str, str],
+        payload: dict[str, str],
     ) -> Response:
         """Send the request that actually kicks off the OPDS Directory
         Registration Protocol.
@@ -471,7 +461,7 @@ class OpdsRegistrationService(
     def _process_registration_result(
         cls,
         registration: DiscoveryServiceRegistration,
-        catalog: Dict[str, Any] | Any,
+        catalog: dict[str, Any] | Any,
         cipher: PKCS1OAEP_Cipher,
         desired_stage: RegistrationStage,
     ) -> Literal[True]:
@@ -494,7 +484,7 @@ class OpdsRegistrationService(
                     f"Remote service served '{catalog}', which I can't make sense of as an OPDS document.",
                 )
             )
-        metadata: Dict[str, str] = catalog.get("metadata", {})
+        metadata: dict[str, str] = catalog.get("metadata", {})
         short_name = metadata.get("short_name")
         encrypted_shared_secret = metadata.get("shared_secret")
         links = catalog.get("links", [])

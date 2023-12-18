@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-from typing import Dict, List
 
 from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
@@ -233,7 +232,7 @@ class Configuration(ConfigurationConstants):
             ) from e
 
     @classmethod
-    def fcm_credentials(cls) -> Dict[str, str]:
+    def fcm_credentials(cls) -> dict[str, str]:
         """Returns a dictionary containing Firebase Cloud Messaging credentials.
 
         Credentials are provided as a JSON string, either (1) directly in an environment
@@ -276,7 +275,7 @@ class Configuration(ConfigurationConstants):
                 )
 
     @classmethod
-    def overdrive_fulfillment_keys(cls, testing=False) -> Dict[str, str]:
+    def overdrive_fulfillment_keys(cls, testing=False) -> dict[str, str]:
         prefix = (
             cls.OD_PREFIX_TESTING_PREFIX if testing else cls.OD_PREFIX_PRODUCTION_PREFIX
         )
@@ -289,7 +288,7 @@ class Configuration(ConfigurationConstants):
         return {"key": key, "secret": secret}
 
     @classmethod
-    def quicksight_authorized_arns(cls) -> Dict[str, List[str]]:
+    def quicksight_authorized_arns(cls) -> dict[str, list[str]]:
         """Split the comma separated arns"""
         arns_str = os.environ.get(cls.QUICKSIGHT_AUTHORIZED_ARNS_KEY, "")
         return json.loads(arns_str)

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from queue import Queue
 from threading import Thread
 from types import TracebackType
-from typing import Any, Callable, Literal, Optional, Type
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -114,9 +115,9 @@ class Pool(LoggerMixin):
 
     def __exit__(
         self,
-        type: Optional[Type[BaseException]],
-        value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        type: type[BaseException] | None,
+        value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> Literal[False]:
         self.join()
         if value is not None:

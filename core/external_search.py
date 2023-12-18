@@ -7,7 +7,8 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -128,7 +129,7 @@ class ExternalSearchIndex(HasSelfTests):
     SITEWIDE = True
 
     @classmethod
-    def search_integration(cls, _db) -> Optional[ExternalIntegration]:
+    def search_integration(cls, _db) -> ExternalIntegration | None:
         """Look up the ExternalIntegration for Opensearch."""
         return ExternalIntegration.lookup(
             _db, ExternalIntegration.OPENSEARCH, goal=ExternalIntegration.SEARCH_GOAL
@@ -154,11 +155,11 @@ class ExternalSearchIndex(HasSelfTests):
     def __init__(
         self,
         _db,
-        url: Optional[str] = None,
-        test_search_term: Optional[str] = None,
-        revision_directory: Optional[SearchRevisionDirectory] = None,
-        version: Optional[int] = None,
-        custom_client_service: Optional[SearchService] = None,
+        url: str | None = None,
+        test_search_term: str | None = None,
+        revision_directory: SearchRevisionDirectory | None = None,
+        version: int | None = None,
+        custom_client_service: SearchService | None = None,
     ):
         """Constructor
 
@@ -226,7 +227,7 @@ class ExternalSearchIndex(HasSelfTests):
         """Get the underlying search service."""
         return self._search_service
 
-    def start_migration(self) -> Optional[SearchMigrationInProgress]:
+    def start_migration(self) -> SearchMigrationInProgress | None:
         """Update to the latest schema, indexing the given works."""
         migrator = SearchMigrator(
             revisions=self._revision_directory,
@@ -1279,7 +1280,7 @@ class JSONQuery(Query):
     _BOOL_TYPE = {"type": "bool"}
 
     # The fields mappings in the search DB
-    FIELD_MAPPING: Dict[str, Dict] = {
+    FIELD_MAPPING: dict[str, dict] = {
         "audience": dict(),
         "author": _KEYWORD_ONLY,
         "classifications.scheme": _KEYWORD_ONLY,
@@ -1388,7 +1389,7 @@ class JSONQuery(Query):
         "language": ValueTransforms.language,
     }
 
-    def __init__(self, query: Union[str, Dict], filter=None):
+    def __init__(self, query: str | dict, filter=None):
         if type(query) is str:
             try:
                 query = json.loads(query)
@@ -1411,10 +1412,10 @@ class JSONQuery(Query):
     def _is_keyword(self, name: str) -> bool:
         return self.FIELD_MAPPING[name].get("keyword") == True
 
-    def _nested_path(self, name: str) -> Union[str, None]:
+    def _nested_path(self, name: str) -> str | None:
         return self.FIELD_MAPPING[name].get("path")
 
-    def _parse_json_query(self, query: Dict):
+    def _parse_json_query(self, query: dict):
         """Eventually recursive json query parser"""
         es_query = None
 
@@ -1438,7 +1439,7 @@ class JSONQuery(Query):
 
         return es_query
 
-    def _parse_json_leaf(self, query: Dict) -> Dict:
+    def _parse_json_leaf(self, query: dict) -> dict:
         """We have a leaf query, which means this becomes a keyword.term query"""
         op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
 
@@ -1514,7 +1515,7 @@ class JSONQuery(Query):
 
         return es_query
 
-    def _parse_json_join(self, query: Dict) -> Dict:
+    def _parse_json_join(self, query: dict) -> dict:
         if len(query.keys()) != 1:
             raise QueryParseException(
                 detail="A conjuction cannot have multiple parts in the same sub-query"
@@ -2765,9 +2766,9 @@ class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvide
         # we're already at the latest version, then simply upload search documents instead.
         #
         self.receiver = None
-        self.migration: Optional[
+        self.migration: None | (
             SearchMigrationInProgress
-        ] = self.search_index_client.start_migration()
+        ) = self.search_index_client.start_migration()
         if self.migration is None:
             self.receiver: SearchDocumentReceiver = (
                 self.search_index_client.start_updating_search_documents()
@@ -2788,19 +2789,19 @@ class SearchIndexCoverageProvider(RemovesSearchCoverage, WorkPresentationProvide
         self.on_completely_finished()
         return result
 
-    def process_batch(self, works) -> List[Work | CoverageFailure]:
+    def process_batch(self, works) -> list[Work | CoverageFailure]:
         target: SearchDocumentReceiverType = self.migration or self.receiver
         failures = target.add_documents(
             documents=self.search_index_client.create_search_documents_from_works(works)
         )
 
         # Maintain a dictionary of works so that we can efficiently remove failed works later.
-        work_map: Dict[int, Work] = {}
+        work_map: dict[int, Work] = {}
         for work in works:
             work_map[work.id] = work
 
         # Remove all the works that failed and create failure records for them.
-        results: List[Work | CoverageFailure] = []
+        results: list[Work | CoverageFailure] = []
         for failure in failures:
             work = work_map[failure.id]
             del work_map[failure.id]

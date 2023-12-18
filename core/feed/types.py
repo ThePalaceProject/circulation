@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Dict, Generator, List, Optional, Tuple, cast
+from typing import Any, cast
 
 from typing_extensions import Self
 
@@ -15,7 +16,7 @@ NO_SUCH_KEY = object()
 
 @dataclass
 class BaseModel:
-    def _vars(self) -> Generator[Tuple[str, Any], None, None]:
+    def _vars(self) -> Generator[tuple[str, Any], None, None]:
         """Yield attributes as a tuple"""
         _attrs = vars(self)
         for name, value in _attrs.items():
@@ -25,17 +26,17 @@ class BaseModel:
                 continue
             yield name, value
 
-    def dict(self) -> Dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         """Dataclasses do not return undefined attributes via `asdict` so we must implement this ourselves"""
         attrs = {}
         for name, value in self:
             if isinstance(value, BaseModel):
-                attrs[name] = value.dict()
+                attrs[name] = value.asdict()
             else:
                 attrs[name] = value
         return attrs
 
-    def __iter__(self) -> Generator[Tuple[str, Any], None, None]:
+    def __iter__(self) -> Generator[tuple[str, Any], None, None]:
         """Allow attribute iteration"""
         yield from self._vars()
 
@@ -52,7 +53,7 @@ class BaseModel:
 
 @dataclass
 class FeedEntryType(BaseModel):
-    text: Optional[str] = None
+    text: str | None = None
 
     @classmethod
     def create(cls, **kwargs: Any) -> Self:
@@ -61,11 +62,11 @@ class FeedEntryType(BaseModel):
         obj.add_attributes(kwargs)
         return obj
 
-    def add_attributes(self, attrs: Dict[str, Any]) -> None:
+    def add_attributes(self, attrs: dict[str, Any]) -> None:
         for name, data in attrs.items():
             setattr(self, name, data)
 
-    def children(self) -> Generator[Tuple[str, FeedEntryType], None, None]:
+    def children(self) -> Generator[tuple[str, FeedEntryType], None, None]:
         """Yield all FeedEntryType attributes"""
         for name, value in self:
             if isinstance(value, self.__class__):
@@ -75,24 +76,24 @@ class FeedEntryType(BaseModel):
 
 @dataclass
 class Link(FeedEntryType):
-    href: Optional[str] = None
-    rel: Optional[str] = None
-    type: Optional[str] = None
+    href: str | None = None
+    rel: str | None = None
+    type: str | None = None
 
     # Additional types
-    role: Optional[str] = None
-    title: Optional[str] = None
+    role: str | None = None
+    title: str | None = None
 
-    def dict(self) -> Dict[str, Any]:
+    def asdict(self) -> dict[str, Any]:
         """A dict without None values"""
-        d = super().dict()
+        d = super().asdict()
         santized = {}
         for k, v in d.items():
             if v is not None:
                 santized[k] = v
         return santized
 
-    def link_attribs(self) -> Dict[str, Any]:
+    def link_attribs(self) -> dict[str, Any]:
         d = dict(href=self.href)
         for key in ["rel", "type"]:
             if (value := getattr(self, key, None)) is not None:
@@ -102,28 +103,28 @@ class Link(FeedEntryType):
 
 @dataclass
 class IndirectAcquisition(BaseModel):
-    type: Optional[str] = None
-    children: List[IndirectAcquisition] = field(default_factory=list)
+    type: str | None = None
+    children: list[IndirectAcquisition] = field(default_factory=list)
 
 
 @dataclass
 class Acquisition(Link):
-    holds_position: Optional[str] = None
-    holds_total: Optional[str] = None
+    holds_position: str | None = None
+    holds_total: str | None = None
 
-    copies_available: Optional[str] = None
-    copies_total: Optional[str] = None
+    copies_available: str | None = None
+    copies_total: str | None = None
 
-    availability_status: Optional[str] = None
-    availability_since: Optional[str] = None
-    availability_until: Optional[str] = None
+    availability_status: str | None = None
+    availability_since: str | None = None
+    availability_until: str | None = None
 
-    rights: Optional[str] = None
+    rights: str | None = None
 
-    lcp_hashed_passphrase: Optional[FeedEntryType] = None
-    drm_licensor: Optional[FeedEntryType] = None
+    lcp_hashed_passphrase: FeedEntryType | None = None
+    drm_licensor: FeedEntryType | None = None
 
-    indirect_acquisitions: List[IndirectAcquisition] = field(default_factory=list)
+    indirect_acquisitions: list[IndirectAcquisition] = field(default_factory=list)
 
     # Signal if the acquisition is for a loan or a hold for the patron
     is_loan: bool = False
@@ -132,47 +133,47 @@ class Acquisition(Link):
 
 @dataclass
 class Author(FeedEntryType):
-    name: Optional[str] = None
-    sort_name: Optional[str] = None
-    viaf: Optional[str] = None
-    role: Optional[str] = None
-    family_name: Optional[str] = None
-    wikipedia_name: Optional[str] = None
-    lc: Optional[str] = None
-    link: Optional[Link] = None
+    name: str | None = None
+    sort_name: str | None = None
+    viaf: str | None = None
+    role: str | None = None
+    family_name: str | None = None
+    wikipedia_name: str | None = None
+    lc: str | None = None
+    link: Link | None = None
 
 
 @dataclass
 class WorkEntryData(BaseModel):
     """All the metadata possible for a work. This is not a FeedEntryType because we want strict control."""
 
-    additionalType: Optional[str] = None
-    identifier: Optional[str] = None
-    pwid: Optional[str] = None
-    issued: Optional[datetime | date] = None
-    duration: Optional[float] = None
+    additionalType: str | None = None
+    identifier: str | None = None
+    pwid: str | None = None
+    issued: datetime | date | None = None
+    duration: float | None = None
 
-    summary: Optional[FeedEntryType] = None
-    language: Optional[FeedEntryType] = None
-    publisher: Optional[FeedEntryType] = None
-    published: Optional[FeedEntryType] = None
-    updated: Optional[FeedEntryType] = None
-    title: Optional[FeedEntryType] = None
-    sort_title: Optional[FeedEntryType] = None
-    subtitle: Optional[FeedEntryType] = None
-    series: Optional[FeedEntryType] = None
-    imprint: Optional[FeedEntryType] = None
+    summary: FeedEntryType | None = None
+    language: FeedEntryType | None = None
+    publisher: FeedEntryType | None = None
+    published: FeedEntryType | None = None
+    updated: FeedEntryType | None = None
+    title: FeedEntryType | None = None
+    sort_title: FeedEntryType | None = None
+    subtitle: FeedEntryType | None = None
+    series: FeedEntryType | None = None
+    imprint: FeedEntryType | None = None
 
-    authors: List[Author] = field(default_factory=list)
-    contributors: List[Author] = field(default_factory=list)
-    categories: List[FeedEntryType] = field(default_factory=list)
-    ratings: List[FeedEntryType] = field(default_factory=list)
-    distribution: Optional[FeedEntryType] = None
+    authors: list[Author] = field(default_factory=list)
+    contributors: list[Author] = field(default_factory=list)
+    categories: list[FeedEntryType] = field(default_factory=list)
+    ratings: list[FeedEntryType] = field(default_factory=list)
+    distribution: FeedEntryType | None = None
 
     # Links
-    acquisition_links: List[Acquisition] = field(default_factory=list)
-    image_links: List[Link] = field(default_factory=list)
-    other_links: List[Link] = field(default_factory=list)
+    acquisition_links: list[Acquisition] = field(default_factory=list)
+    image_links: list[Link] = field(default_factory=list)
+    other_links: list[Link] = field(default_factory=list)
 
 
 @dataclass
@@ -180,17 +181,17 @@ class WorkEntry(BaseModel):
     work: Work
     edition: Edition
     identifier: Identifier
-    license_pool: Optional[LicensePool] = None
+    license_pool: LicensePool | None = None
 
     # Actual, computed feed data
-    computed: Optional[WorkEntryData] = None
+    computed: WorkEntryData | None = None
 
     def __init__(
         self,
-        work: Optional[Work] = None,
-        edition: Optional[Edition] = None,
-        identifier: Optional[Identifier] = None,
-        license_pool: Optional[LicensePool] = None,
+        work: Work | None = None,
+        edition: Edition | None = None,
+        identifier: Identifier | None = None,
+        license_pool: LicensePool | None = None,
     ) -> None:
         if None in (work, edition, identifier):
             raise ValueError(
@@ -204,13 +205,13 @@ class WorkEntry(BaseModel):
 
 @dataclass
 class FeedMetadata(BaseModel):
-    title: Optional[str] = None
-    id: Optional[str] = None
-    updated: Optional[str] = None
-    items_per_page: Optional[int] = None
-    patron: Optional[FeedEntryType] = None
-    drm_licensor: Optional[FeedEntryType] = None
-    lcp_hashed_passphrase: Optional[FeedEntryType] = None
+    title: str | None = None
+    id: str | None = None
+    updated: str | None = None
+    items_per_page: int | None = None
+    patron: FeedEntryType | None = None
+    drm_licensor: FeedEntryType | None = None
+    lcp_hashed_passphrase: FeedEntryType | None = None
 
 
 class DataEntryTypes:
@@ -221,21 +222,21 @@ class DataEntryTypes:
 class DataEntry(FeedEntryType):
     """Other kinds of information, like entries of a navigation feed"""
 
-    type: Optional[str] = None
-    title: Optional[str] = None
-    id: Optional[str] = None
-    links: List[Link] = field(default_factory=list)
+    type: str | None = None
+    title: str | None = None
+    id: str | None = None
+    links: list[Link] = field(default_factory=list)
 
 
 @dataclass
 class FeedData(BaseModel):
-    links: List[Link] = field(default_factory=list)
-    breadcrumbs: List[Link] = field(default_factory=list)
-    facet_links: List[Link] = field(default_factory=list)
-    entries: List[WorkEntry] = field(default_factory=list)
-    data_entries: List[DataEntry] = field(default_factory=list)
+    links: list[Link] = field(default_factory=list)
+    breadcrumbs: list[Link] = field(default_factory=list)
+    facet_links: list[Link] = field(default_factory=list)
+    entries: list[WorkEntry] = field(default_factory=list)
+    data_entries: list[DataEntry] = field(default_factory=list)
     metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
-    entrypoint: Optional[str] = None
+    entrypoint: str | None = None
 
     class Config:
         arbitrary_types_allowed = True

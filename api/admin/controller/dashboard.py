@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
-from typing import Callable
 
 import flask
 from sqlalchemy import desc, nullslast

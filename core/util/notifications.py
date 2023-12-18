@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Mapping, Optional, cast
+from collections.abc import Mapping
+from typing import cast
 
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -55,7 +56,7 @@ class PushNotifications(LoggerMixin):
     def send_messages(
         cls,
         tokens: list[DeviceToken],
-        notification: Optional[messaging.Notification],
+        notification: messaging.Notification | None,
         data: Mapping[str, str | None],
     ) -> list[str]:
         responses = []

@@ -10,7 +10,6 @@ import csv
 import datetime
 import logging
 from collections import defaultdict
-from typing import List, Optional
 
 from dateutil.parser import parse
 from dependency_injector.wiring import Provide, inject
@@ -526,14 +525,14 @@ class LicenseData(LicenseFunctions):
     def __init__(
         self,
         identifier: str,
-        checkout_url: Optional[str],
+        checkout_url: str | None,
         status_url: str,
         status: LicenseStatus,
         checkouts_available: int,
-        expires: Optional[datetime.datetime] = None,
-        checkouts_left: Optional[int] = None,
-        terms_concurrency: Optional[int] = None,
-        content_types: Optional[List[str]] = None,
+        expires: datetime.datetime | None = None,
+        checkouts_left: int | None = None,
+        terms_concurrency: int | None = None,
+        content_types: list[str] | None = None,
     ):
         self.identifier = identifier
         self.checkout_url = checkout_url

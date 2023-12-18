@@ -1,7 +1,8 @@
+from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
 from functools import partial
-from typing import Any, Callable, List
+from typing import Any
 from urllib import parse
 
 import pytest
@@ -28,8 +29,8 @@ class MockResponse:
 
 
 class MockAPI(MilleniumPatronAPI):
-    queue: List[Any]
-    requests_made: List[Any]
+    queue: list[Any]
+    requests_made: list[Any]
 
     def __init__(
         self,

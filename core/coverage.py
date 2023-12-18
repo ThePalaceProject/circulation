@@ -1,6 +1,5 @@
 import logging
 import traceback
-from typing import Optional, Union
 
 from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
@@ -151,13 +150,13 @@ class BaseCoverageProvider:
 
     # In your subclass, set this to the name of the service,
     # e.g. "Overdrive Bibliographic Coverage Provider".
-    SERVICE_NAME: Optional[str] = None
+    SERVICE_NAME: str | None = None
 
     # In your subclass, you _may_ set this to a string that distinguishes
     # two different CoverageProviders from the same data source.
     # (You may also override the operation method, if you need
     # database access to determine which operation to use.)
-    OPERATION: Optional[str] = None
+    OPERATION: str | None = None
 
     # The database session will be committed each time the
     # BaseCoverageProvider has (attempted to) provide coverage to this
@@ -621,7 +620,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
     # Setting this to None will attempt to give coverage to every single
     # Identifier in the system, which is probably not what you want.
     NO_SPECIFIED_TYPES = object()
-    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = NO_SPECIFIED_TYPES
+    INPUT_IDENTIFIER_TYPES: None | str | object = NO_SPECIFIED_TYPES
 
     # Set this to False if a given Identifier needs to be run through
     # this CoverageProvider once for every Collection that has this
@@ -1107,14 +1106,14 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     # By default, this type of CoverageProvider will provide coverage to
     # all Identifiers in the given Collection, regardless of their type.
-    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = None
+    INPUT_IDENTIFIER_TYPES: None | str | object = None
 
     DEFAULT_BATCH_SIZE = 10
 
     # Set this to the name of the protocol managed by this type of
     # CoverageProvider. If this CoverageProvider can manage collections
     # for any protocol, leave this as None.
-    PROTOCOL: Optional[str] = None
+    PROTOCOL: str | None = None
 
     # By default, Works calculated by a CollectionCoverageProvider update
     # the ExternalSearchIndex. Set this value to True for applications that

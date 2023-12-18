@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -23,7 +22,7 @@ class VerboseAnnotator(Annotator):
     """
 
     def annotate_work_entry(
-        self, entry: WorkEntry, updated: Optional[datetime] = None
+        self, entry: WorkEntry, updated: datetime | None = None
     ) -> None:
         super().annotate_work_entry(entry, updated=updated)
         self.add_ratings(entry)
@@ -42,8 +41,8 @@ class VerboseAnnotator(Annotator):
 
     @classmethod
     def categories(
-        cls, work: Work, policy: Optional[PresentationCalculationPolicy] = None
-    ) -> Dict[str, List[Dict[str, str]]]:
+        cls, work: Work, policy: PresentationCalculationPolicy | None = None
+    ) -> dict[str, list[dict[str, str]]]:
         """Send out _all_ categories for the work.
 
         (So long as the category type has a URI associated with it in
@@ -85,7 +84,7 @@ class VerboseAnnotator(Annotator):
         return by_scheme
 
     @classmethod
-    def authors(cls, edition: Edition) -> Dict[str, List[Author]]:
+    def authors(cls, edition: Edition) -> dict[str, list[Author]]:
         """Create a detailed <author> tag for each author."""
         return {
             "authors": [

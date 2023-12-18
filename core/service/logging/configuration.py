@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 import boto3
 from pydantic import PositiveInt, validator
@@ -20,18 +20,18 @@ class LoggingConfiguration(ServiceConfiguration):
     verbose_level: LogLevel = LogLevel.warning
 
     cloudwatch_enabled: bool = False
-    cloudwatch_region: Optional[str] = None
+    cloudwatch_region: str | None = None
     cloudwatch_group: str = "palace"
     cloudwatch_stream: str = DEFAULT_LOG_STREAM_NAME
     cloudwatch_interval: PositiveInt = 60
     cloudwatch_create_group: bool = True
-    cloudwatch_access_key: Optional[str] = None
-    cloudwatch_secret_key: Optional[str] = None
+    cloudwatch_access_key: str | None = None
+    cloudwatch_secret_key: str | None = None
 
     @validator("cloudwatch_region")
     def validate_cloudwatch_region(
-        cls, v: Optional[str], values: Dict[str, Any]
-    ) -> Optional[str]:
+        cls, v: str | None, values: dict[str, Any]
+    ) -> str | None:
         if not values.get("cloudwatch_enabled"):
             # If cloudwatch is not enabled, no validation is needed.
             return None

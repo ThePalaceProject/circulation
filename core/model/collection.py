@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generator, List, Optional, Tuple, TypeVar
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from sqlalchemy import (
     Boolean,
@@ -83,7 +84,7 @@ class Collection(Base, HasSessionCache):
     # A collection may have many child collections. For example,
     # An Overdrive collection may have many children corresponding
     # to Overdrive Advantage collections.
-    children: Mapped[List[Collection]] = relationship(
+    children: Mapped[list[Collection]] = relationship(
         "Collection", back_populates="parent", uselist=True
     )
 
@@ -94,12 +95,12 @@ class Collection(Base, HasSessionCache):
 
     # A Collection can provide books to many Libraries.
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
-    libraries: Mapped[List[Library]] = association_proxy(
+    libraries: Mapped[list[Library]] = association_proxy(
         "integration_configuration", "libraries"
     )
 
     # A Collection can include many LicensePools.
-    licensepools: Mapped[List[LicensePool]] = relationship(
+    licensepools: Mapped[list[LicensePool]] = relationship(
         "LicensePool",
         back_populates="collection",
         cascade="all, delete-orphan",
@@ -107,23 +108,23 @@ class Collection(Base, HasSessionCache):
     )
 
     # A Collection can have many associated Credentials.
-    credentials: Mapped[List[Credential]] = relationship(
+    credentials: Mapped[list[Credential]] = relationship(
         "Credential", back_populates="collection", cascade="delete"
     )
 
     # A Collection can be monitored by many Monitors, each of which
     # will have its own Timestamp.
-    timestamps: Mapped[List[Timestamp]] = relationship(
+    timestamps: Mapped[list[Timestamp]] = relationship(
         "Timestamp", back_populates="collection"
     )
 
-    catalog: Mapped[List[Identifier]] = relationship(
+    catalog: Mapped[list[Identifier]] = relationship(
         "Identifier", secondary=lambda: collections_identifiers, backref="collections"
     )
 
     # A Collection can be associated with multiple CoverageRecords
     # for Identifiers in its catalog.
-    coverage_records: Mapped[List[CoverageRecord]] = relationship(
+    coverage_records: Mapped[list[CoverageRecord]] = relationship(
         "CoverageRecord", backref="collection", cascade="all"
     )
 
@@ -132,7 +133,7 @@ class Collection(Base, HasSessionCache):
     # also be added to the list. Admins can remove items from the
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
-    customlists: Mapped[List[CustomList]] = relationship(
+    customlists: Mapped[list[CustomList]] = relationship(
         "CustomList", secondary=lambda: collections_customlists, backref="collections"
     )
 
@@ -146,13 +147,13 @@ class Collection(Base, HasSessionCache):
     def __repr__(self) -> str:
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
 
-    def cache_key(self) -> Tuple[str | None, str | None]:
+    def cache_key(self) -> tuple[str | None, str | None]:
         return self.name, self.integration_configuration.protocol
 
     @classmethod
     def by_name_and_protocol(
         cls, _db: Session, name: str, protocol: str
-    ) -> Tuple[Collection, bool]:
+    ) -> tuple[Collection, bool]:
         """Find or create a Collection with the given name and the given
         protocol.
 
@@ -162,15 +163,15 @@ class Collection(Base, HasSessionCache):
         """
         key = (name, protocol)
 
-        def lookup_hook() -> Tuple[Collection, bool]:
+        def lookup_hook() -> tuple[Collection, bool]:
             return cls._by_name_and_protocol(_db, key)
 
         return cls.by_cache_key(_db, key, lookup_hook)
 
     @classmethod
     def _by_name_and_protocol(
-        cls, _db: Session, cache_key: Tuple[str, str]
-    ) -> Tuple[Collection, bool]:
+        cls, _db: Session, cache_key: tuple[str, str]
+    ) -> tuple[Collection, bool]:
         """Find or create a Collection with the given name and the given
         protocol.
 
@@ -325,7 +326,7 @@ class Collection(Base, HasSessionCache):
         self,
         library: Library,
         medium: str = EditionConstants.BOOK_MEDIUM,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Until we hear otherwise from the license provider, we assume
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
@@ -460,7 +461,7 @@ class Collection(Base, HasSessionCache):
         qu = LicensePool.with_no_delivery_mechanisms(_db)
         return qu.filter(LicensePool.collection == self)  # type: ignore[no-any-return]
 
-    def explain(self, include_secrets: bool = False) -> List[str]:
+    def explain(self, include_secrets: bool = False) -> list[str]:
         """Create a series of human-readable strings to explain a collection's
         settings.
 
@@ -491,7 +492,7 @@ class Collection(Base, HasSessionCache):
     def restrict_to_ready_deliverable_works(
         cls,
         query: Query[T],
-        collection_ids: List[int] | None = None,
+        collection_ids: list[int] | None = None,
         show_suppressed: bool = False,
         allow_holds: bool = True,
     ) -> Query[T]:

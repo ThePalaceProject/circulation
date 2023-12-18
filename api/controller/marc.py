@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Optional
 
 import flask
 from flask import Response
@@ -50,7 +49,7 @@ class MARCRecordController:
 </body>
 </html>"""
 
-    def __init__(self, storage_service: Optional[S3Service]) -> None:
+    def __init__(self, storage_service: S3Service | None) -> None:
         self.storage_service = storage_service
 
     @staticmethod
@@ -74,7 +73,7 @@ class MARCRecordController:
     @staticmethod
     def get_files(
         session: Session, library: Library
-    ) -> Dict[str, MarcFileCollectionResult]:
+    ) -> dict[str, MarcFileCollectionResult]:
         marc_files = session.execute(
             select(
                 IntegrationConfiguration.name,
@@ -97,7 +96,7 @@ class MARCRecordController:
             )
         ).all()
 
-        files_by_collection: Dict[str, MarcFileCollectionResult] = defaultdict(
+        files_by_collection: dict[str, MarcFileCollectionResult] = defaultdict(
             MarcFileCollectionResult
         )
         for file_row in marc_files:

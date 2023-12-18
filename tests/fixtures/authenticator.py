@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple, Type
+from typing import Optional
 
 import pytest
 
@@ -20,7 +20,7 @@ from tests.fixtures.database import (
     IntegrationLibraryConfigurationFixture,
 )
 
-AuthProviderFixture = Tuple[
+AuthProviderFixture = tuple[
     IntegrationConfiguration, Optional[IntegrationLibraryConfiguration]
 ]
 
@@ -37,9 +37,9 @@ class CreateAuthIntegrationFixture:
     def __call__(
         self,
         protocol: str,
-        library: Optional[Library],
-        settings_dict: Optional[Dict[str, str]] = None,
-        library_settings_dict: Optional[Dict[str, str]] = None,
+        library: Library | None,
+        settings_dict: dict[str, str] | None = None,
+        library_settings_dict: dict[str, str] | None = None,
     ) -> AuthProviderFixture:
         settings_dict = settings_dict or {}
         library_settings_dict = library_settings_dict or {}
@@ -76,7 +76,7 @@ class AuthProtocolFixture:
     def __init__(self, registry: PatronAuthRegistry):
         self.registry = registry
 
-    def __call__(self, protocol: Type[AuthenticationProviderType]) -> str:
+    def __call__(self, protocol: type[AuthenticationProviderType]) -> str:
         return self.registry.get_protocol(protocol, "")
 
 
@@ -100,7 +100,7 @@ class SimpleAuthIntegrationFixture:
 
     def __call__(
         self,
-        library: Optional[Library] = None,
+        library: Library | None = None,
         test_identifier: str = "username1",
         test_password: str = "password1",
     ) -> AuthProviderFixture:
@@ -136,7 +136,7 @@ class MilleniumAuthIntegrationFixture:
         self.get_auth_protocol = get_auth_protocol
 
     def __call__(
-        self, library: Optional[Library] = None, **kwargs: str
+        self, library: Library | None = None, **kwargs: str
     ) -> AuthProviderFixture:
         if "url" not in kwargs:
             kwargs["url"] = "http://url.com/"
@@ -169,7 +169,7 @@ class Sip2AuthIntegrationFixture:
         self.get_auth_protocol = get_auth_protocol
 
     def __call__(
-        self, library: Optional[Library] = None, **kwargs: str
+        self, library: Library | None = None, **kwargs: str
     ) -> AuthProviderFixture:
         if "url" not in kwargs:
             kwargs["url"] = "url.com"
@@ -202,7 +202,7 @@ class SamlAuthIntegrationFixture:
         self.get_auth_protocol = get_auth_protocol
 
     def __call__(
-        self, library: Optional[Library] = None, **kwargs: str
+        self, library: Library | None = None, **kwargs: str
     ) -> AuthProviderFixture:
         if "service_provider_xml_metadata" not in kwargs:
             kwargs["service_provider_xml_metadata"] = CORRECT_XML_WITH_ONE_SP

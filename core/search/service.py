@@ -1,8 +1,8 @@
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
 
 import opensearchpy.helpers
 from opensearch_dsl import MultiSearch, Search
@@ -81,11 +81,11 @@ class SearchService(ABC):
         """Get the name used for the write pointer."""
 
     @abstractmethod
-    def read_pointer(self) -> Optional[str]:
+    def read_pointer(self) -> str | None:
         """Get the read pointer, if it exists."""
 
     @abstractmethod
-    def write_pointer(self) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> SearchWritePointer | None:
         """Get the writer pointer, if it exists."""
 
     @abstractmethod
@@ -105,7 +105,7 @@ class SearchService(ABC):
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
-    def indexes_created(self) -> List[str]:
+    def indexes_created(self) -> list[str]:
         """A log of all the indexes that have been created by this client service."""
 
     @abstractmethod
@@ -125,7 +125,7 @@ class SearchService(ABC):
         self,
         pointer: str,
         documents: Iterable[dict],
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         """Submit search documents to the given index."""
 
     @abstractmethod
@@ -166,7 +166,7 @@ class SearchServiceOpensearch1(SearchService):
         self._search = Search(using=self._client)
         self.base_revision_name = base_revision_name
         self._multi_search = MultiSearch(using=self._client)
-        self._indexes_created: List[str] = []
+        self._indexes_created: list[str] = []
 
         # Documents are not allowed to automatically create indexes.
         # AWS OpenSearch only accepts the "flat" format
@@ -174,10 +174,10 @@ class SearchServiceOpensearch1(SearchService):
             body={"persistent": {"action.auto_create_index": "false"}}
         )
 
-    def indexes_created(self) -> List[str]:
+    def indexes_created(self) -> list[str]:
         return self._indexes_created
 
-    def write_pointer(self) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> SearchWritePointer | None:
         try:
             result: dict = self._client.indices.get_alias(
                 name=self.write_pointer_name()
@@ -278,7 +278,7 @@ class SearchServiceOpensearch1(SearchService):
 
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         self._logger.info(f"submitting documents to index {pointer}")
 
         # Specifically override the target in all documents to the target pointer
@@ -303,7 +303,7 @@ class SearchServiceOpensearch1(SearchService):
             yield_ok=False,
         )
 
-        error_results: List[SearchServiceFailedDocument] = []
+        error_results: list[SearchServiceFailedDocument] = []
         if isinstance(errors, list):
             for error in errors:
                 error_results.append(SearchServiceFailedDocument.from_bulk_error(error))
@@ -335,7 +335,7 @@ class SearchServiceOpensearch1(SearchService):
         self._logger.debug(f"setting write pointer {alias_name} to {target_index}")
         self._client.indices.update_aliases(body=action)
 
-    def read_pointer(self) -> Optional[str]:
+    def read_pointer(self) -> str | None:
         try:
             result: dict = self._client.indices.get_alias(name=self.read_pointer_name())
             for name in result.keys():

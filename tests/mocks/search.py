@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import Enum
-from typing import Dict, Iterable, List, Optional
 from unittest.mock import MagicMock
 
 from opensearch_dsl import MultiSearch, Search
@@ -32,29 +32,29 @@ class SearchServiceFailureMode(Enum):
 class SearchServiceFake(SearchService):
     """A search service that doesn't speak to a real service."""
 
-    _documents_by_index: Dict[str, List[dict]]
+    _documents_by_index: dict[str, list[dict]]
     _failing: SearchServiceFailureMode
     _search_client: Search
     _multi_search_client: MultiSearch
-    _indexes_created: List[str]
-    _document_submission_attempts: List[dict]
+    _indexes_created: list[str]
+    _document_submission_attempts: list[dict]
 
     def __init__(self):
         self.base_name = "test_index"
         self._failing = SearchServiceFailureMode.NOT_FAILING
         self._documents_by_index = {}
-        self._read_pointer: Optional[str] = None
-        self._write_pointer: Optional[SearchWritePointer] = None
+        self._read_pointer: str | None = None
+        self._write_pointer: SearchWritePointer | None = None
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._indexes_created = []
         self._document_submission_attempts = []
 
     @property
-    def document_submission_attempts(self) -> List[dict]:
+    def document_submission_attempts(self) -> list[dict]:
         return self._document_submission_attempts
 
-    def indexes_created(self) -> List[str]:
+    def indexes_created(self) -> list[str]:
         return self._indexes_created
 
     def _fail_if_necessary(self):
@@ -64,17 +64,17 @@ class SearchServiceFake(SearchService):
     def set_failing_mode(self, mode: SearchServiceFailureMode):
         self._failing = mode
 
-    def documents_for_index(self, index_name: str) -> List[dict]:
+    def documents_for_index(self, index_name: str) -> list[dict]:
         self._fail_if_necessary()
 
         if not (index_name in self._documents_by_index):
             return []
         return self._documents_by_index[index_name]
 
-    def documents_all(self) -> List[dict]:
+    def documents_all(self) -> list[dict]:
         self._fail_if_necessary()
 
-        results: List[dict] = []
+        results: list[dict] = []
         for documents in self._documents_by_index.values():
             for document in documents:
                 results.append(document)
@@ -93,11 +93,11 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         return f"{self.base_name}-search-write"
 
-    def read_pointer(self) -> Optional[str]:
+    def read_pointer(self) -> str | None:
         self._fail_if_necessary()
         return self._read_pointer
 
-    def write_pointer(self) -> Optional[SearchWritePointer]:
+    def write_pointer(self) -> SearchWritePointer | None:
         self._fail_if_necessary()
         return self._write_pointer
 
@@ -131,7 +131,7 @@ class SearchServiceFake(SearchService):
 
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         self._fail_if_necessary()
 
         _should_fail = False
@@ -145,7 +145,7 @@ class SearchServiceFake(SearchService):
         )
 
         if _should_fail:
-            results: List[SearchServiceFailedDocument] = []
+            results: list[SearchServiceFailedDocument] = []
             for document in documents:
                 self._document_submission_attempts.append(document)
                 if self._failing == SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS:
@@ -208,7 +208,7 @@ class SearchServiceFake(SearchService):
         return False
 
 
-def fake_hits(works: List[Work]):
+def fake_hits(works: list[Work]):
     return [
         Hit(
             {
@@ -237,14 +237,14 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
             _db, url, test_search_term, revision_directory, version, SearchServiceFake()
         )
 
-        self._mock_multi_works: List[Dict] = []
+        self._mock_multi_works: list[dict] = []
         self._mock_count_works = 0
-        self._queries: List[tuple] = []
+        self._queries: list[tuple] = []
 
-    def mock_query_works(self, works: List[Work]):
+    def mock_query_works(self, works: list[Work]):
         self.mock_query_works_multi(works)
 
-    def mock_query_works_multi(self, works: List[Work], *args: List[Work]):
+    def mock_query_works_multi(self, works: list[Work], *args: list[Work]):
         self._mock_multi_works = [fake_hits(works)]
         self._mock_multi_works.extend([fake_hits(arg_works) for arg_works in args])
 

@@ -1,7 +1,6 @@
 import datetime
 import urllib.parse
 from decimal import Decimal
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import feedparser
@@ -900,7 +899,7 @@ class TestLoanController:
             with_license_pool=True, data_source_name=DataSource.OVERDRIVE
         )
 
-        pool_opt: Optional[LicensePool] = work.active_license_pool()
+        pool_opt: LicensePool | None = work.active_license_pool()
         assert pool_opt is not None
         pool: LicensePool = pool_opt
         pool.loan_to(patron)

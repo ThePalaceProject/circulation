@@ -1,5 +1,4 @@
 import sys
-from typing import Union
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
@@ -55,7 +54,7 @@ class DeviceToken(Base):
         db,
         token_type: str,
         device_token: str,
-        patron: Union[Patron, int],
+        patron: Patron | int,
     ) -> Self:
         """Create a DeviceToken while ensuring sql issues are managed.
         Raises InvalidTokenTypeError, DuplicateDeviceTokenError"""

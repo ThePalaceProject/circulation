@@ -1,7 +1,6 @@
 import datetime
 import json
 from time import mktime
-from typing import Union
 from wsgiref.handlers import format_date_time
 
 import pytest
@@ -139,7 +138,7 @@ class TestAnnotationController:
             assert expected_time == response.headers["Last-Modified"]
 
     def test_post_to_container(self, annotation_fixture: AnnotationFixture):
-        data: dict[str, Union[str, dict]] = dict()
+        data: dict[str, str | dict] = dict()
         data["@context"] = AnnotationWriter.JSONLD_CONTEXT
         data["type"] = "Annotation"
         data["motivation"] = Annotation.IDLING

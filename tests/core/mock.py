@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import Optional, Union
 
 from core.coverage import (
     BibliographicCoverageProvider,
@@ -71,7 +70,7 @@ class LogCaptureHandler(logging.Handler):
 class MockCoverageProvider:
     """Mixin class for mock CoverageProviders that defines common constants."""
 
-    SERVICE_NAME: Optional[str] = "Generic mock CoverageProvider"
+    SERVICE_NAME: str | None = "Generic mock CoverageProvider"
 
     # Whenever a CoverageRecord is created, the data_source of that
     # record will be Project Gutenberg.
@@ -79,11 +78,11 @@ class MockCoverageProvider:
 
     # For testing purposes, this CoverageProvider will try to cover
     # every identifier in the database.
-    INPUT_IDENTIFIER_TYPES: Union[None, str, object] = None
+    INPUT_IDENTIFIER_TYPES: None | str | object = None
 
     # This CoverageProvider can work with any Collection that supports
     # the OPDS import protocol (e.g. DatabaseTest._default_collection).
-    PROTOCOL: Optional[str] = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL: str | None = ExternalIntegration.OPDS_IMPORT
 
 
 class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvider):

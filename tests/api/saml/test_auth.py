@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from copy import copy
-from typing import Callable
 from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
 

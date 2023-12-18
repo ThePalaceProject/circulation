@@ -7,19 +7,9 @@ import logging
 import sys
 import traceback
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Generator
 from datetime import datetime
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Any, ParamSpec, TypeVar
 
 from sqlalchemy.orm import Session
 
@@ -29,11 +19,6 @@ from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
 from core.util.log import LoggerMixin
 from core.util.opds_writer import AtomFeed
-
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -47,7 +32,7 @@ class SelfTestResult:
     HasSelfTest.run_self_tests() returns a list of these
     """
 
-    def __init__(self, name: Optional[str]):
+    def __init__(self, name: str | None):
         # Name of the test.
         self.name = name
 
@@ -55,7 +40,7 @@ class SelfTestResult:
         self.success = False
 
         # The exception raised, if any.
-        self.exception: Optional[Exception] = None
+        self.exception: Exception | None = None
 
         # The return value of the test method, assuming it ran to
         # completion.
@@ -65,13 +50,13 @@ class SelfTestResult:
         self.start: datetime = utc_now()
 
         # End time of the test.
-        self.end: Optional[datetime] = None
+        self.end: datetime | None = None
 
         # Collection associated with the test
-        self.collection: Optional[Collection] = None
+        self.collection: Collection | None = None
 
     @property
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert this SelfTestResult to a dictionary for use in
         JSON serialization.
         """
@@ -85,7 +70,7 @@ class SelfTestResult:
             }
         else:
             exception = None
-        value: Dict[str, Any] = dict(
+        value: dict[str, Any] = dict(
             name=self.name,
             success=self.success,
             duration=self.duration,
@@ -140,7 +125,7 @@ class SelfTestResult:
         return (self.end - self.start).total_seconds()
 
     @property
-    def debug_message(self) -> Optional[str]:
+    def debug_message(self) -> str | None:
         """The debug message associated with the Exception, if any."""
         if not self.exception:
             return None
@@ -158,12 +143,12 @@ class BaseHasSelfTests(ABC):
 
     @classmethod
     def run_self_tests(
-        cls: Type[Self],
+        cls: type[Self],
         _db: Session,
-        constructor_method: Optional[Callable[..., Self]] = None,
+        constructor_method: Callable[..., Self] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[SelfTestResult]]:
+    ) -> tuple[dict[str, Any], list[SelfTestResult]]:
         """Instantiate this class and call _run_self_tests on it.
 
         :param _db: A database connection. Will be passed into `_run_self_tests`.
@@ -262,8 +247,8 @@ class BaseHasSelfTests(ABC):
     def test_failure(
         cls,
         name: str,
-        message: Union[Optional[str], Exception],
-        debug_message: Optional[str] = None,
+        message: str | None | Exception,
+        debug_message: str | None = None,
     ) -> SelfTestResult:
         """Create a SelfTestResult for a known failure.
 
@@ -292,7 +277,7 @@ class BaseHasSelfTests(ABC):
 
     @abstractmethod
     def store_self_test_results(
-        self, _db: Session, value: Dict[str, Any], results: List[SelfTestResult]
+        self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
     ) -> None:
         ...
 
@@ -307,10 +292,10 @@ class HasSelfTests(BaseHasSelfTests, ABC):
     SELF_TEST_RESULTS_SETTING = "self_test_results"
 
     def store_self_test_results(
-        self, _db: Session, value: Dict[str, Any], results: List[SelfTestResult]
+        self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
     ) -> None:
         """Store the results of a self-test in the database."""
-        integration: Optional[ExternalIntegration]
+        integration: ExternalIntegration | None
         from core.external_search import ExternalSearchIndex
 
         if isinstance(self, ExternalSearchIndex):
@@ -328,19 +313,19 @@ class HasSelfTests(BaseHasSelfTests, ABC):
 
     @classmethod
     def prior_test_results(
-        cls: Type[Self],
+        cls: type[Self],
         _db: Session,
-        constructor_method: Optional[Callable[..., Self]] = None,
+        constructor_method: Callable[..., Self] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Union[Optional[Dict[str, Any]], str]:
+    ) -> dict[str, Any] | None | str:
         """Retrieve the last set of test results from the database.
 
         The arguments here are the same as the arguments to run_self_tests.
         """
         constructor_method = constructor_method or cls
         instance = constructor_method(*args, **kwargs)
-        integration: Optional[ExternalIntegration]
+        integration: ExternalIntegration | None
 
         from core.external_search import ExternalSearchIndex
 
@@ -357,7 +342,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
 
         return None
 
-    def external_integration(self, _db: Session) -> Optional[ExternalIntegration]:
+    def external_integration(self, _db: Session) -> ExternalIntegration | None:
         """Locate the ExternalIntegration associated with this object.
         The status of the self-tests will be stored as a ConfigurationSetting
         on this ExternalIntegration.
@@ -374,7 +359,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
 
 class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
     def store_self_test_results(
-        self, _db: Session, value: Dict[str, Any], results: List[SelfTestResult]
+        self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
     ) -> None:
         integration = self.integration(_db)
         if integration is None:
@@ -386,8 +371,8 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
 
     @classmethod
     def load_self_test_results(
-        cls, integration: Optional[IntegrationConfiguration]
-    ) -> Optional[Dict[str, Any]]:
+        cls, integration: IntegrationConfiguration | None
+    ) -> dict[str, Any] | None:
         if integration is None:
             cls.logger().error(
                 "No IntegrationConfiguration was found. Self-test results could not be loaded."
@@ -404,21 +389,21 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
 
     @classmethod
     def prior_test_results(
-        cls: Type[Self],
+        cls: type[Self],
         _db: Session,
-        constructor_method: Optional[Callable[..., Self]] = None,
+        constructor_method: Callable[..., Self] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Union[Optional[Dict[str, Any]], str]:
+    ) -> dict[str, Any] | None | str:
         """Retrieve the last set of test results from the database.
 
         The arguments here are the same as the arguments to run_self_tests.
         """
         constructor_method = constructor_method or cls
         instance = constructor_method(*args, **kwargs)
-        integration: Optional[IntegrationConfiguration] = instance.integration(_db)
+        integration: IntegrationConfiguration | None = instance.integration(_db)
         return cls.load_self_test_results(integration) or "No results yet"
 
     @abstractmethod
-    def integration(self, _db: Session) -> Optional[IntegrationConfiguration]:
+    def integration(self, _db: Session) -> IntegrationConfiguration | None:
         ...

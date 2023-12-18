@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
 
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
@@ -21,7 +21,7 @@ class SearchDocumentReceiverType(ABC):
     @abstractmethod
     def add_documents(
         self, documents: Iterable[dict]
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
 
     @abstractmethod
@@ -44,7 +44,7 @@ class SearchDocumentReceiver(SearchDocumentReceiverType):
 
     def add_documents(
         self, documents: Iterable[dict]
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
         return self._service.index_submit_documents(
             pointer=self._pointer, documents=documents
@@ -77,7 +77,7 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
 
     def add_documents(
         self, documents: Iterable[dict]
-    ) -> List[SearchServiceFailedDocument]:
+    ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
         return self._receiver.add_documents(documents)
 
@@ -109,9 +109,7 @@ class SearchMigrator:
         self._revisions = revisions
         self._service = service
 
-    def migrate(
-        self, base_name: str, version: int
-    ) -> Optional[SearchMigrationInProgress]:
+    def migrate(self, base_name: str, version: int) -> SearchMigrationInProgress | None:
         """
         Migrate to the given version using the given base name (such as 'circulation-works'). The function returns
         an object that expects to receive batches of search documents used to populate any new index. When all

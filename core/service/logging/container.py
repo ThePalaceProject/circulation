@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from logging import Handler
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import boto3
 from dependency_injector import providers
@@ -32,7 +32,7 @@ class Logging(DeclarativeContainer):
 
     json_formatter: Provider[JSONFormatter] = Singleton(JSONFormatter)
 
-    cloudwatch_handler: Provider[Optional[Handler]] = providers.Singleton(
+    cloudwatch_handler: Provider[Handler | None] = providers.Singleton(
         create_cloudwatch_handler,
         formatter=json_formatter,
         level=config.level,

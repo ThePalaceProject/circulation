@@ -1,7 +1,6 @@
 import datetime
 import logging
 from abc import ABCMeta
-from typing import Union
 
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
@@ -92,7 +91,7 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
 
         return parsed_date_time
 
-    def validate(self, federation: SAMLFederation, metadata: Union[str, bytes]) -> None:
+    def validate(self, federation: SAMLFederation, metadata: str | bytes) -> None:
         """Verify that federated SAML metadata has not expired.
 
         :param federation: SAML federation

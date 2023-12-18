@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,7 +11,7 @@ from api.admin.config import OperationalMode
 
 class TestAdminUI:
     @staticmethod
-    def _set_env(monkeypatch, key: str, value: Optional[str]):
+    def _set_env(monkeypatch, key: str, value: str | None):
         if value:
             monkeypatch.setenv(key, value)
         elif key in os.environ:
@@ -47,9 +46,9 @@ class TestAdminUI:
     def test_env_package_version(
         self,
         monkeypatch,
-        package_version: Optional[str],
+        package_version: str | None,
         resolves: bool,
-        expected_result: Optional[str],
+        expected_result: str | None,
     ):
         with patch(
             "api.admin.config.Configuration.resolve_package_version"
@@ -112,8 +111,8 @@ class TestAdminUI:
     def test_package_url(
         self,
         monkeypatch,
-        package_name: Optional[str],
-        package_version: Optional[str],
+        package_name: str | None,
+        package_version: str | None,
         mode: OperationalMode,
         expected_result_startswith: str,
     ):
@@ -145,8 +144,8 @@ class TestAdminUI:
     def test_package_development_directory(
         self,
         monkeypatch,
-        package_name: Optional[str],
-        package_version: Optional[str],
+        package_name: str | None,
+        package_version: str | None,
         expected_result: str,
     ):
         self._set_env(monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_NAME", package_name)

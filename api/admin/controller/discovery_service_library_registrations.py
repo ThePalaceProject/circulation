@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 import flask
 from flask import Response, url_for
@@ -38,7 +38,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
 
     def process_discovery_service_library_registrations(
         self,
-    ) -> Response | Dict[str, Any] | ProblemDetail:
+    ) -> Response | dict[str, Any] | ProblemDetail:
         self.require_system_admin()
         try:
             if flask.request.method == "GET":
@@ -49,7 +49,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
             self._db.rollback()
             return e.problem_detail
 
-    def process_get(self) -> Dict[str, Any]:
+    def process_get(self) -> dict[str, Any]:
         """Make a list of all discovery services, each with the
         list of libraries registered with that service and the
         status of the registration."""
@@ -94,7 +94,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
 
     def get_library_info(
         self, registration: DiscoveryServiceRegistration
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Find the relevant information about the library which the user
         is trying to register"""
 

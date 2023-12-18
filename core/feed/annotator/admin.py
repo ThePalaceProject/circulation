@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from api.circulation import CirculationAPI
 from core.feed.annotator.circulation import LibraryAnnotator
@@ -11,11 +10,11 @@ from core.model.library import Library
 
 
 class AdminAnnotator(LibraryAnnotator):
-    def __init__(self, circulation: Optional[CirculationAPI], library: Library) -> None:
+    def __init__(self, circulation: CirculationAPI | None, library: Library) -> None:
         super().__init__(circulation, None, library)
 
     def annotate_work_entry(
-        self, entry: WorkEntry, updated: Optional[datetime] = None
+        self, entry: WorkEntry, updated: datetime | None = None
     ) -> None:
         super().annotate_work_entry(entry)
         if not entry.computed:

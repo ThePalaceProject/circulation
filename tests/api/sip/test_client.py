@@ -2,8 +2,8 @@
 import socket
 import ssl
 import tempfile
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Optional
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -161,7 +161,7 @@ class TestSIPClient:
             socket.socket = old_socket
 
     def test_secure_connect_insecure(self, mock_socket: MockSocketFixture):
-        self.context: Optional[MagicMock] = None
+        self.context: MagicMock | None = None
 
         def create_context(protocol):
             self.context = Mock(spec=ssl.SSLContext)
@@ -221,7 +221,7 @@ class TestSIPClient:
 
         # Record the temporary files created.
         self.old_mkstemp = tempfile.mkstemp
-        self.temporary_files: List[str] = []
+        self.temporary_files: list[str] = []
 
         def create_temporary_file():
             (fd, name) = self.old_mkstemp()

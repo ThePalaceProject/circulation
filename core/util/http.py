@@ -1,7 +1,8 @@
 import logging
 import time
+from collections.abc import Callable
 from json import JSONDecodeError
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -407,7 +408,7 @@ class HTTP(LoggerMixin):
 
     @classmethod
     def debuggable_post(
-        cls, url: str, payload: Union[str, Dict[str, Any]], **kwargs: Any
+        cls, url: str, payload: str | dict[str, Any], **kwargs: Any
     ) -> Response:
         """Make a POST request that returns a detailed problem
         detail document on error.
@@ -420,7 +421,7 @@ class HTTP(LoggerMixin):
         cls,
         http_method: str,
         url: str,
-        make_request_with: Optional[Callable[..., Response]] = None,
+        make_request_with: Callable[..., Response] | None = None,
         **kwargs: Any,
     ) -> Response:
         """Make a request that raises a ProblemError with a detailed problem detail
@@ -451,8 +452,8 @@ class HTTP(LoggerMixin):
         cls,
         url: str,
         response: Response,
-        allowed_response_codes: Optional[List[Union[str, int]]] = None,
-        disallowed_response_codes: Optional[List[Union[str, int]]] = None,
+        allowed_response_codes: list[str | int] | None = None,
+        disallowed_response_codes: list[str | int] | None = None,
         expected_encoding: str = "utf-8",
     ) -> Response:
         """If there was a problem with an integration request,

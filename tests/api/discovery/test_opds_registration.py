@@ -1,9 +1,10 @@
 import base64
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, List, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -56,7 +57,7 @@ class RemoteRegistryFixture:
         )
 
     def create_registration(
-        self, library: Optional[Library] = None
+        self, library: Library | None = None
     ) -> DiscoveryServiceRegistration:
         obj, _ = create(
             self.db.session,
@@ -719,7 +720,7 @@ class TestLibraryRegistrationScript:
             url_for: Callable[..., str]
 
         class Mock(LibraryRegistrationScript):
-            processed: List[Processed] = []
+            processed: list[Processed] = []
 
             def process_library(  # type: ignore[override]
                 self,

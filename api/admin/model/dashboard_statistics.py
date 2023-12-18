@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, List
+from typing import Any
 
 from pydantic import Field, NonNegativeInt
 
@@ -87,10 +87,10 @@ class LibraryStatistics(CustomBaseModel):
     inventory_summary: InventoryStatistics = Field(
         description="Summary of inventory statistics for this library."
     )
-    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+    inventory_by_medium: dict[str, InventoryStatistics] = Field(
         description="Per-medium inventory statistics for this library."
     )
-    collection_ids: List[int] = Field(
+    collection_ids: list[int] = Field(
         description="List of associated collection identifiers."
     )
 
@@ -103,7 +103,7 @@ class CollectionInventory(CustomBaseModel):
     inventory: InventoryStatistics = Field(
         description="Inventory statistics for this collection."
     )
-    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+    inventory_by_medium: dict[str, InventoryStatistics] = Field(
         description="Per-medium inventory statistics for this collection."
     )
 
@@ -111,16 +111,16 @@ class CollectionInventory(CustomBaseModel):
 class StatisticsResponse(CustomBaseModel):
     """Statistics response for authorized libraries and collections."""
 
-    collections: List[CollectionInventory] = Field(
+    collections: list[CollectionInventory] = Field(
         description="List of collection-level statistics (includes collections not associated with a library."
     )
-    libraries: List[LibraryStatistics] = Field(
+    libraries: list[LibraryStatistics] = Field(
         description="List of library-level statistics."
     )
     inventory_summary: InventoryStatistics = Field(
         description="Summary inventory across all included collections."
     )
-    inventory_by_medium: Dict[str, InventoryStatistics] = Field(
+    inventory_by_medium: dict[str, InventoryStatistics] = Field(
         description="Per-medium summary inventory across all included collections."
     )
     patron_summary: PatronStatistics = Field(

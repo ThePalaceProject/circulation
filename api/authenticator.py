@@ -4,7 +4,8 @@ import json
 import logging
 import sys
 from abc import ABC
-from typing import Dict, Iterable, List, Optional, Tuple, Type
+from collections.abc import Iterable
+from typing import cast
 
 import flask
 import jwt
@@ -153,11 +154,11 @@ class LibraryAuthenticator(LoggerMixin):
 
     @classmethod
     def from_config(
-        cls: Type[Self],
+        cls: type[Self],
         _db: Session,
         library: Library,
-        analytics: Optional[Analytics] = None,
-        custom_catalog_source: Type[CustomPatronCatalog] = CustomPatronCatalog,
+        analytics: Analytics | None = None,
+        custom_catalog_source: type[CustomPatronCatalog] = CustomPatronCatalog,
     ) -> Self:
         """Initialize an Authenticator for the given Library based on its
         configured ExternalIntegrations.
@@ -175,7 +176,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         # Find all of this library's ExternalIntegrations set up with
         # the goal of authenticating patrons.
-        integrations: List[
+        integrations: list[
             IntegrationLibraryConfiguration
         ] = IntegrationLibraryConfiguration.for_library_and_goal(
             _db, library, Goals.PATRON_AUTH_GOAL
@@ -214,13 +215,12 @@ class LibraryAuthenticator(LoggerMixin):
         self,
         _db: Session,
         library: Library,
-        basic_auth_provider: Optional[BasicAuthenticationProvider] = None,
-        saml_providers: Optional[List[BaseSAMLAuthenticationProvider]] = None,
-        bearer_token_signing_secret: Optional[str] = None,
-        authentication_document_annotator: Optional[CustomPatronCatalog] = None,
-        integration_registry: Optional[
-            IntegrationRegistry[AuthenticationProvider]
-        ] = None,
+        basic_auth_provider: BasicAuthenticationProvider | None = None,
+        saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
+        bearer_token_signing_secret: str | None = None,
+        authentication_document_annotator: CustomPatronCatalog | None = None,
+        integration_registry: None
+        | (IntegrationRegistry[AuthenticationProvider]) = None,
     ):
         """Initialize a LibraryAuthenticator from a list of AuthenticationProviders.
 
@@ -254,8 +254,8 @@ class LibraryAuthenticator(LoggerMixin):
 
         self.saml_providers_by_name = {}
         self.bearer_token_signing_secret = bearer_token_signing_secret
-        self.initialization_exceptions: Dict[
-            Tuple[int | None, int | None], Exception
+        self.initialization_exceptions: dict[
+            tuple[int | None, int | None], Exception
         ] = {}
 
         self.basic_auth_provider: BasicAuthenticationProvider | None = None
@@ -451,7 +451,7 @@ class LibraryAuthenticator(LoggerMixin):
             ProblemDetail if an error occurs.
         """
         provider: AuthenticationProvider | None = None
-        provider_token: Dict[str, str | None] | str | None = None
+        provider_token: dict[str, str | None] | str | None = None
         if self.basic_auth_provider and auth.type.lower() == "basic":
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
@@ -552,12 +552,14 @@ class LibraryAuthenticator(LoggerMixin):
             # Maybe we should use something custom instead.
             iss=provider_name,
         )
-        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
+        return jwt.encode(
+            payload, cast(str, self.bearer_token_signing_secret), algorithm="HS256"
+        )
 
-    def decode_bearer_token(self, token: str) -> Tuple[str, str]:
+    def decode_bearer_token(self, token: str) -> tuple[str, str]:
         """Extract auth provider name and access token from JSON web token."""
         decoded = jwt.decode(
-            token, self.bearer_token_signing_secret, algorithms=["HS256"]
+            token, cast(str, self.bearer_token_signing_secret), algorithms=["HS256"]
         )
         provider_name = decoded["iss"]
         token = decoded["token"]
@@ -577,7 +579,7 @@ class LibraryAuthenticator(LoggerMixin):
         """Create the Authentication For OPDS document to be used when
         a request comes in with no authentication.
         """
-        links: List[Dict[str, Optional[str]]] = []
+        links: list[dict[str, str | None]] = []
         if self.library is None:
             raise ValueError("No library specified!")
 
@@ -755,8 +757,8 @@ class LibraryAuthenticator(LoggerMixin):
 
         # Add feature flags to signal to clients what features they should
         # offer.
-        enabled: List[str] = []
-        disabled: List[str] = []
+        enabled: list[str] = []
+        disabled: list[str] = []
         if self.library and self.library.settings.allow_holds:
             bucket = enabled
         else:

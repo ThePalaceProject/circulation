@@ -1,5 +1,3 @@
-from typing import List, Set, Type, Union
-
 import flask
 from flask import Response
 
@@ -32,14 +30,14 @@ class PatronAuthServicesController(
         return PatronAuthRegistry()
 
     @property
-    def basic_auth_protocols(self) -> Set[str]:
+    def basic_auth_protocols(self) -> set[str]:
         return {
             name
             for name, api in self.registry
             if issubclass(api, BasicAuthenticationProvider)
         }
 
-    def process_patron_auth_services(self) -> Union[Response, ProblemDetail]:
+    def process_patron_auth_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
 
         if flask.request.method == "GET":
@@ -59,7 +57,7 @@ class PatronAuthServicesController(
             mimetype="application/json",
         )
 
-    def process_post(self) -> Union[Response, ProblemDetail]:
+    def process_post(self) -> Response | ProblemDetail:
         try:
             form_data = flask.request.form
             libraries_data = self.get_libraries_data(form_data)
@@ -112,14 +110,14 @@ class PatronAuthServicesController(
 
     def process_updated_libraries(
         self,
-        libraries: List[UpdatedLibrarySettingsTuple],
-        settings_class: Type[BaseSettings],
+        libraries: list[UpdatedLibrarySettingsTuple],
+        settings_class: type[BaseSettings],
     ) -> None:
         super().process_updated_libraries(libraries, settings_class)
         for integration, _ in libraries:
             self.library_integration_validation(integration)
 
-    def process_delete(self, service_id: int) -> Union[Response, ProblemDetail]:
+    def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
         try:
             return self.delete_service(service_id)

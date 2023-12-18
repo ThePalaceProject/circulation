@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import wcag_contrast_ratio
 from pydantic import (
@@ -55,13 +55,13 @@ class Level(IntEnum):
 class LibraryConfFormItem(ConfigurationFormItem):
     category: str = "Basic Information"
     level: Level = Level.ALL_ACCESS
-    read_only: Optional[bool] = None
-    skip: Optional[bool] = None
-    paired: Optional[str] = None
+    read_only: bool | None = None
+    skip: bool | None = None
+    paired: str | None = None
 
     def to_dict(
         self, db: Session, key: str, required: bool = False, default: Any = None
-    ) -> Tuple[int, Dict[str, Any]]:
+    ) -> tuple[int, dict[str, Any]]:
         """Serialize additional form items specific to library settings."""
         weight, item = super().to_dict(db, key, required, default)
         item["category"] = self.category
@@ -144,7 +144,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_ONLY,
         ),
     )
-    enabled_entry_points: List[str] = FormField(
+    enabled_entry_points: list[str] = FormField(
         [x.INTERNAL_NAME for x in EntryPoint.DEFAULT_ENABLED],
         form=LibraryConfFormItem(
             label="Enabled entry points",
@@ -179,7 +179,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     )
-    facets_enabled_order: List[str] = FormField(
+    facets_enabled_order: list[str] = FormField(
         FacetConstants.DEFAULT_ENABLED_FACETS[FacetConstants.ORDER_FACET_GROUP_NAME],
         form=LibraryConfFormItem(
             label="Allow patrons to sort by",
@@ -206,7 +206,7 @@ class LibrarySettings(BaseSettings):
             skip=True,
         ),
     )
-    facets_enabled_available: List[str] = FormField(
+    facets_enabled_available: list[str] = FormField(
         FacetConstants.DEFAULT_ENABLED_FACETS[
             FacetConstants.AVAILABILITY_FACET_GROUP_NAME
         ],
@@ -235,7 +235,7 @@ class LibrarySettings(BaseSettings):
             skip=True,
         ),
     )
-    facets_enabled_collection: List[str] = FormField(
+    facets_enabled_collection: list[str] = FormField(
         FacetConstants.DEFAULT_ENABLED_FACETS[
             FacetConstants.COLLECTION_FACET_GROUP_NAME
         ],
@@ -264,7 +264,7 @@ class LibrarySettings(BaseSettings):
             skip=True,
         ),
     )
-    library_description: Optional[str] = FormField(
+    library_description: str | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="A short description of this library",
@@ -273,7 +273,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_ONLY,
         ),
     )
-    help_email: Optional[EmailStr] = FormField(
+    help_email: EmailStr | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Patron support email address",
@@ -284,7 +284,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="help-email",
     )
-    help_web: Optional[HttpUrl] = FormField(
+    help_web: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Patron support website",
@@ -295,7 +295,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="help-web",
     )
-    copyright_designated_agent_email_address: Optional[EmailStr] = FormField(
+    copyright_designated_agent_email_address: EmailStr | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Copyright designated agent email",
@@ -307,7 +307,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     )
-    configuration_contact_email_address: Optional[EmailStr] = FormField(
+    configuration_contact_email_address: EmailStr | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="A point of contact for the organization responsible for configuring this library",
@@ -388,7 +388,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="web-secondary-color",
     )
-    web_css_file: Optional[HttpUrl] = FormField(
+    web_css_file: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Custom CSS file for web",
@@ -398,7 +398,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="web-css-file",
     )
-    web_header_links: List[str] = FormField(
+    web_header_links: list[str] = FormField(
         [],
         form=LibraryConfFormItem(
             label="Web header links",
@@ -410,7 +410,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="web-header-links",
     )
-    web_header_labels: List[str] = FormField(
+    web_header_labels: list[str] = FormField(
         [],
         form=LibraryConfFormItem(
             label="Web header labels",
@@ -421,7 +421,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="web-header-labels",
     )
-    hidden_content_types: List[str] = FormField(
+    hidden_content_types: list[str] = FormField(
         [],
         form=LibraryConfFormItem(
             label="Hidden content types",
@@ -433,7 +433,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_ONLY,
         ),
     )
-    max_outstanding_fines: Optional[PositiveFloat] = FormField(
+    max_outstanding_fines: PositiveFloat | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Maximum amount in fines a patron can have before losing lending privileges",
@@ -441,7 +441,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     )
-    loan_limit: Optional[PositiveInt] = FormField(
+    loan_limit: PositiveInt | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Maximum number of books a patron can have on loan at once",
@@ -452,7 +452,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     )
-    hold_limit: Optional[PositiveInt] = FormField(
+    hold_limit: PositiveInt | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Maximum number of books a patron can have on hold at once",
@@ -463,7 +463,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     )
-    terms_of_service: Optional[HttpUrl] = FormField(
+    terms_of_service: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Terms of service URL",
@@ -472,7 +472,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="terms-of-service",
     )
-    privacy_policy: Optional[HttpUrl] = FormField(
+    privacy_policy: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Privacy policy URL",
@@ -481,7 +481,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="privacy-policy",
     )
-    copyright: Optional[HttpUrl] = FormField(
+    copyright: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Copyright URL",
@@ -489,7 +489,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     )
-    about: Optional[HttpUrl] = FormField(
+    about: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="About URL",
@@ -497,7 +497,7 @@ class LibrarySettings(BaseSettings):
             level=Level.ALL_ACCESS,
         ),
     )
-    license: Optional[HttpUrl] = FormField(
+    license: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="License URL",
@@ -505,7 +505,7 @@ class LibrarySettings(BaseSettings):
             level=Level.SYS_ADMIN_OR_MANAGER,
         ),
     )
-    registration_url: Optional[HttpUrl] = FormField(
+    registration_url: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Patron registration URL",
@@ -515,7 +515,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="register",
     )
-    patron_password_reset: Optional[HttpUrl] = FormField(
+    patron_password_reset: HttpUrl | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Password Reset Link",
@@ -525,7 +525,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="http://librarysimplified.org/terms/rel/patron-password-reset",
     )
-    large_collection_languages: Optional[List[str]] = FormField(
+    large_collection_languages: list[str] | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="The primary languages represented in this library's collection",
@@ -539,7 +539,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="large_collections",
     )
-    small_collection_languages: Optional[List[str]] = FormField(
+    small_collection_languages: list[str] | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Other major languages represented in this library's collection",
@@ -553,7 +553,7 @@ class LibrarySettings(BaseSettings):
         ),
         alias="small_collections",
     )
-    tiny_collection_languages: Optional[List[str]] = FormField(
+    tiny_collection_languages: list[str] | None = FormField(
         None,
         form=LibraryConfFormItem(
             label="Other languages in this library's collection",
@@ -570,8 +570,8 @@ class LibrarySettings(BaseSettings):
 
     @root_validator
     def validate_require_help_email_or_website(
-        cls, values: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        cls, values: dict[str, Any]
+    ) -> dict[str, Any]:
         if not values.get("help_email") and not values.get("help_web"):
             help_email_label = cls.get_form_field_label("help_email")
             help_website_label = cls.get_form_field_label("help_web")
@@ -584,7 +584,7 @@ class LibrarySettings(BaseSettings):
         return values
 
     @root_validator
-    def validate_header_links(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_header_links(cls, values: dict[str, Any]) -> dict[str, Any]:
         """Verify that header links and labels are the same length."""
         header_links = values.get("web_header_links")
         header_labels = values.get("web_header_labels")
@@ -604,7 +604,7 @@ class LibrarySettings(BaseSettings):
         white test, as well as text color on white backgrounds.
         """
 
-        def hex_to_rgb(hex: str) -> Tuple[float, ...]:
+        def hex_to_rgb(hex: str) -> tuple[float, ...]:
             hex = hex.lstrip("#")
             return tuple(int(hex[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
 
@@ -634,8 +634,8 @@ class LibrarySettings(BaseSettings):
         "tiny_collection_languages",
     )
     def validate_language_codes(
-        cls, value: Optional[List[str]], field: ModelField
-    ) -> Optional[List[str]]:
+        cls, value: list[str] | None, field: ModelField
+    ) -> list[str] | None:
         """Verify that collection languages are valid."""
         if value is not None:
             languages = []

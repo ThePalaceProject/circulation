@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 from core.search.document import LONG, SearchMappingDocument
 from core.search.revision import SearchSchemaRevision

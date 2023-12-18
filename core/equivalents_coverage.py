@@ -1,5 +1,3 @@
-from typing import List, Optional, Set
-
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Query, joinedload
 
@@ -26,7 +24,7 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         self, _db, batch_size=None, cutoff_time=None, registered_only=False, **kwargs
     ):
         # Set of identifiers covered this run of the provider
-        self._already_covered_identifiers: Set[int] = set()
+        self._already_covered_identifiers: set[int] = set()
         super().__init__(_db, batch_size, cutoff_time, registered_only)
 
     def run(self):
@@ -52,8 +50,8 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         return qu
 
     def _identifiers_for_coverage(
-        self, records: List[EquivalencyCoverageRecord]
-    ) -> Set[Optional[int]]:
+        self, records: list[EquivalencyCoverageRecord]
+    ) -> set[int | None]:
         """Get all identifiers this coverage run should recompute
         This involves inputs and outputs, and also any parent_identifier
         that has a direct relation with these identifiers
@@ -61,9 +59,9 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
 
         equivs = [r.equivalency for r in records]
         # process both inputs and outputs
-        identifier_ids_list: List[Optional[int]] = [eq.input_id for eq in equivs]
+        identifier_ids_list: list[int | None] = [eq.input_id for eq in equivs]
         identifier_ids_list.extend([eq.output_id for eq in equivs])
-        identifier_ids: Set[Optional[int]] = set(identifier_ids_list)
+        identifier_ids: set[int | None] = set(identifier_ids_list)
 
         # Any identifier found, should be recalculated
         # However we must recalculate any other chain these identifiers were part of also
@@ -77,8 +75,8 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
         return identifier_ids
 
     def process_batch(
-        self, batch: List[EquivalencyCoverageRecord]
-    ) -> List[EquivalencyCoverageRecord]:
+        self, batch: list[EquivalencyCoverageRecord]
+    ) -> list[EquivalencyCoverageRecord]:
         """Query for and store the chain of equivalent identifiers
         batch sizes are not exact since we pull the related identifiers into
         the current batch too, so they would start out larger than intended

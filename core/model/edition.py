@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Column,
@@ -93,12 +93,12 @@ class Edition(Base, EditionConstants):
     )
 
     # An Edition may show up in many CustomListEntries.
-    custom_list_entries: Mapped[List[CustomListEntry]] = relationship(
+    custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
         "CustomListEntry", backref="edition"
     )
 
     # An Edition may be the presentation edition for many LicensePools.
-    is_presentation_for: Mapped[List[LicensePool]] = relationship(
+    is_presentation_for: Mapped[list[LicensePool]] = relationship(
         "LicensePool", backref="presentation_edition"
     )
 
@@ -117,7 +117,7 @@ class Edition(Base, EditionConstants):
     author = Column(Unicode, index=True)
     sort_author = Column(Unicode, index=True)
 
-    contributions: Mapped[List[Contribution]] = relationship(
+    contributions: Mapped[list[Contribution]] = relationship(
         "Contribution", back_populates="edition", uselist=True
     )
 
@@ -151,7 +151,7 @@ class Edition(Base, EditionConstants):
     cover_thumbnail_url = Column(Unicode)
 
     # Information kept in here probably won't be used.
-    extra: Mapped[Dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)

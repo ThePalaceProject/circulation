@@ -1,5 +1,3 @@
-from typing import Dict
-
 from core.search.document import (
     BASIC_TEXT,
     BOOLEAN,
@@ -227,7 +225,7 @@ return champion;
             char_filter=self.AUTHOR_CHAR_FILTER_NAMES,
         )
 
-        self._fields: Dict[str, SearchMappingFieldType] = {
+        self._fields: dict[str, SearchMappingFieldType] = {
             "summary": BASIC_TEXT,
             "title": FILTERABLE_TEXT,
             "subtitle": FILTERABLE_TEXT,

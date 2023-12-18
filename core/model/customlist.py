@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from functools import total_ordering
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -62,12 +62,12 @@ class CustomList(Base):
     # cached when the list contents change.
     size = Column(Integer, nullable=False, default=0)
 
-    entries: Mapped[List[CustomListEntry]] = relationship(
+    entries: Mapped[list[CustomListEntry]] = relationship(
         "CustomListEntry", backref="customlist", uselist=True
     )
 
     # List sharing mechanisms
-    shared_locally_with_libraries: Mapped[List[Library]] = relationship(
+    shared_locally_with_libraries: Mapped[list[Library]] = relationship(
         "Library",
         secondary=lambda: customlist_sharedlibrary,
         back_populates="shared_custom_lists",
@@ -81,7 +81,7 @@ class CustomList(Base):
     auto_update_status: Mapped[str] = Column(auto_update_status_enum, default=INIT)  # type: ignore[assignment]
 
     # Typing specific
-    collections: List[Collection]
+    collections: list[Collection]
     library: Library
 
     __table_args__ = (

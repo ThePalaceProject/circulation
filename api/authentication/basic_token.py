@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Type, cast
+from collections.abc import Generator
+from typing import TYPE_CHECKING, cast
 
 from flask import url_for
 from sqlalchemy.orm import Session
@@ -31,11 +32,11 @@ class BasicTokenAuthenticationProvider(
     """
 
     @classmethod
-    def library_settings_class(cls) -> Type[LibrarySettingsType]:
+    def library_settings_class(cls) -> type[LibrarySettingsType]:
         raise NotImplementedError()
 
     @classmethod
-    def settings_class(cls) -> Type[SettingsType]:
+    def settings_class(cls) -> type[SettingsType]:
         raise NotImplementedError()
 
     FLOW_TYPE = "http://thepalaceproject.org/authtype/basic-token"

@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-from typing import Dict, List, Set
 from urllib.parse import unquote
 
 import feedparser
@@ -62,7 +61,7 @@ class CustomListImporter:
         CustomListImporter._fatal(CustomListImporter._error_response(message, response))
 
     @staticmethod
-    def _parse_arguments(args: List[str]) -> argparse.Namespace:
+    def _parse_arguments(args: list[str]) -> argparse.Namespace:
         parser: argparse.ArgumentParser = argparse.ArgumentParser(
             description="Import custom lists."
         )
@@ -133,7 +132,7 @@ class CustomListImporter:
         report: CustomListReport,
         customlist: CustomList,
         book: Book,
-        rejected_books: Set[str],
+        rejected_books: set[str],
     ) -> None:
         self._logger.info(
             f"Checking that book '{book.title()}' ({book.id()}) has a matching ID and title on the target CM."
@@ -217,7 +216,7 @@ class CustomListImporter:
         self,
         list_report: CustomListReport,
         customlist: CustomList,
-        rejected_collections: Set[str],
+        rejected_collections: set[str],
     ) -> None:
         self._logger.info(
             "Checking that all referenced collections exist on the target CM"
@@ -250,7 +249,7 @@ class CustomListImporter:
         self,
         list_report: CustomListReport,
         customlist: CustomList,
-        rejected_books: Set[str],
+        rejected_books: set[str],
     ) -> None:
         for book in customlist.books():
             self._process_check_book(
@@ -269,7 +268,7 @@ class CustomListImporter:
         self,
         list_report: CustomListReport,
         customlist: CustomList,
-        rejected_lists: Set[int],
+        rejected_lists: set[int],
     ) -> None:
         self._logger.info(
             f"Checking that list '{customlist.name()}' ({customlist.id()}) does not exist on the target CM"
@@ -300,20 +299,20 @@ class CustomListImporter:
         self,
         list_report: CustomListReport,
         customlist: CustomList,
-        rejected_books: Set[str],
-        rejected_collections: Set[str],
+        rejected_books: set[str],
+        rejected_collections: set[str],
     ) -> None:
         self._logger.info(
             f"Updating list '{customlist.name()}' ({customlist.id()}) on the target CM with {customlist.size()} books"
         )
         if not self._dry_run:
-            output_books: List[dict] = []
+            output_books: list[dict] = []
             for book in customlist.books():
                 if book.id() in rejected_books:
                     continue
                 output_books.append({"id": book.id(), "title": book.title()})
 
-            output_collections: List[int] = []
+            output_collections: list[int] = []
             for collection in customlist.collections():
                 if collection.name() in rejected_collections:
                     continue
@@ -362,10 +361,10 @@ class CustomListImporter:
         report: CustomListsReport,
         customlists: CustomListExports,
     ) -> None:
-        list_reports: Dict[int, CustomListReport] = {}
-        rejected_books: Set[str] = set({})
-        rejected_lists: Set[int] = set({})
-        rejected_collections: Set[str] = set({})
+        list_reports: dict[int, CustomListReport] = {}
+        rejected_books: set[str] = set({})
+        rejected_lists: set[int] = set({})
+        rejected_collections: set[str] = set({})
 
         for customlist in customlists.lists():
             list_report = CustomListReport(customlist.id(), customlist.name())
@@ -434,5 +433,5 @@ class CustomListImporter:
             self._logger.setLevel(logging.DEBUG)
 
     @staticmethod
-    def create(args: List[str]) -> "CustomListImporter":
+    def create(args: list[str]) -> "CustomListImporter":
         return CustomListImporter(CustomListImporter._parse_arguments(args))

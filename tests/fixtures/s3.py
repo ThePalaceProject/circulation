@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 import sys
-from typing import TYPE_CHECKING, BinaryIO, List, NamedTuple, Optional, Protocol
+from typing import TYPE_CHECKING, BinaryIO, NamedTuple, Protocol
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class MockS3ServiceUpload(NamedTuple):
     key: str
     content: bytes
-    media_type: Optional[str]
+    media_type: str | None
 
 
 class MockMultipartS3ContextManager(MultipartS3ContextManager):
@@ -32,14 +32,14 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
         bucket: str,
         key: str,
         url: str,
-        media_type: Optional[str] = None,
+        media_type: str | None = None,
     ) -> None:
         self.parent = parent
         self.key = key
         self.bucket = bucket
         self.media_type = media_type
         self.content = b""
-        self.content_parts: List[bytes] = []
+        self.content_parts: list[bytes] = []
         self._complete = False
         self._url = url
         self._exception = None
@@ -71,20 +71,20 @@ class MockS3Service(S3Service):
         url_template: str,
     ) -> None:
         super().__init__(client, region, bucket, url_template)
-        self.uploads: List[MockS3ServiceUpload] = []
-        self.mocked_multipart_upload: Optional[MockMultipartS3ContextManager] = None
+        self.uploads: list[MockS3ServiceUpload] = []
+        self.mocked_multipart_upload: MockMultipartS3ContextManager | None = None
 
     def store_stream(
         self,
         key: str,
         stream: BinaryIO,
-        content_type: Optional[str] = None,
-    ) -> Optional[str]:
+        content_type: str | None = None,
+    ) -> str | None:
         self.uploads.append(MockS3ServiceUpload(key, stream.read(), content_type))
         return self.generate_url(key)
 
     def multipart(
-        self, key: str, content_type: Optional[str] = None
+        self, key: str, content_type: str | None = None
     ) -> MultipartS3ContextManager:
         self.mocked_multipart_upload = MockMultipartS3ContextManager(
             self, self.bucket, key, self.generate_url(key), content_type
@@ -95,10 +95,10 @@ class MockS3Service(S3Service):
 class S3ServiceProtocol(Protocol):
     def __call__(
         self,
-        client: Optional[S3Client] = None,
-        region: Optional[str] = None,
-        bucket: Optional[str] = None,
-        url_template: Optional[str] = None,
+        client: S3Client | None = None,
+        region: str | None = None,
+        bucket: str | None = None,
+        url_template: str | None = None,
     ) -> S3Service:
         ...
 

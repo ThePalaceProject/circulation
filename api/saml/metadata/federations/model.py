@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, relationship
 
@@ -20,7 +18,7 @@ class SAMLFederation(Base):
 
     certificate = Column(Text(), nullable=True)
 
-    identity_providers: Mapped[List[SAMLFederatedIdentityProvider]] = relationship(
+    identity_providers: Mapped[list[SAMLFederatedIdentityProvider]] = relationship(
         "SAMLFederatedIdentityProvider", back_populates="federation"
     )
 

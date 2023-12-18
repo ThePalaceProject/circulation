@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import flask
 from sqlalchemy import func, or_
 
@@ -38,13 +36,13 @@ class AdminSearchController(AdminController):
         return self._search_field_values_cached(collection_ids)
 
     @classmethod
-    def _unzip(cls, values: List[Tuple[str, int]]) -> dict:
+    def _unzip(cls, values: list[tuple[str, int]]) -> dict:
         """Covert a list of tuples to a {value0: value1} dictionary"""
         return {a[0]: a[1] for a in values if type(a[0]) is str}
 
     # 1 hour in-memory cache
     @memoize(ttls=3600)
-    def _search_field_values_cached(self, collection_ids: List[int]) -> dict:
+    def _search_field_values_cached(self, collection_ids: list[int]) -> dict:
         licenses_filter = or_(
             LicensePool.open_access == True,
             LicensePool.licenses_owned != 0,

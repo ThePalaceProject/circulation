@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
 from urllib.parse import urlsplit
 
 import flask
@@ -147,7 +146,7 @@ class SanitizedRedirections:
     """Functions to sanitize redirects."""
 
     @staticmethod
-    def _check_redirect(target: str) -> Tuple[bool, str]:
+    def _check_redirect(target: str) -> tuple[bool, str]:
         """Check that a redirect is allowed.
         Because the URL redirect is assumed to be untrusted user input,
         we extract the URL path and forbid redirecting to external
