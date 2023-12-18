@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import boto3
 import flask
@@ -122,7 +123,7 @@ class QuickSightController(CirculationManagerController):
         delimiter = "|"
         max_chars_per_tag = 256
 
-        session_tags = []
+        session_tags: list[dict[Any, str]] = []
         per_tag_character_count = 0
         tag_index = 0
         tag_values = []

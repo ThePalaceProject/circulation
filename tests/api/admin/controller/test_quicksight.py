@@ -1,9 +1,10 @@
 import uuid
+from typing import cast
 from unittest import mock
 
 import pytest
 
-from core.model import create
+from core.model import Library, create
 from core.model.admin import Admin, AdminRole
 from core.util.problem_detail import ProblemError
 from tests.fixtures.api_admin import AdminControllerFixture
@@ -121,7 +122,7 @@ class TestQuicksightController:
         system_admin.add_role(AdminRole.SYSTEM_ADMIN)
         default = db.default_library()
 
-        libraries = []
+        libraries: list[Library] = []
         for x in range(0, 37):
             libraries.append(db.library(short_name="TL" + str(x).zfill(4)))
 
@@ -144,7 +145,7 @@ class TestQuicksightController:
 
             random_uuid = str(uuid.uuid4())
             with quicksight_fixture.request_context_with_admin(
-                f"/?library_uuids={','.join([x.uuid for x in libraries ])}",
+                f"/?library_uuids={','.join(cast(list[str], [x.uuid for x in libraries ]))}",
                 admin=system_admin,
             ) as ctx:
                 response = ctrl.generate_quicksight_url("primary")
@@ -165,11 +166,17 @@ class TestQuicksightController:
                     SessionTags=[
                         dict(
                             Key="library_short_name_0",
-                            Value="|".join([x.short_name for x in libraries[0:36]]),
+                            Value="|".join(
+                                cast(list[str], [x.short_name for x in libraries[0:36]])
+                            ),
                         ),
                         dict(
                             Key="library_short_name_1",
-                            Value="|".join([x.short_name for x in libraries[36:37]]),
+                            Value="|".join(
+                                cast(
+                                    list[str], [x.short_name for x in libraries[36:37]]
+                                )
+                            ),
                         ),
                     ],
                 )
