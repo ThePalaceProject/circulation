@@ -72,13 +72,15 @@ class QuickSightController(CirculationManagerController):
             )
 
         libraries = self._db.execute(
-            select(Library.name)
+            select(Library.short_name)
             .where(Library.uuid.in_(allowed_library_uuids))
             .order_by(Library.name)
         ).all()
 
         try:
-            delimiter = "|"
+            short_names = [x[0] for x in libraries]
+            session_tags = self._build_session_tags_array(short_names)
+
             client = boto3.client("quicksight", region_name=region)
             response = client.generate_embed_url_for_anonymous_user(
                 AwsAccountId=aws_account_id,
@@ -87,12 +89,7 @@ class QuickSightController(CirculationManagerController):
                 ExperienceConfiguration={
                     "Dashboard": {"InitialDashboardId": dashboard_id}
                 },
-                SessionTags=[
-                    dict(
-                        Key="library_name",
-                        Value=delimiter.join([l.name for l in libraries]),
-                    )
-                ],
+                SessionTags=session_tags,
             )
         except Exception as ex:
             log.error(f"Error while fetching the Quicksight Embed url: {ex}")
@@ -112,6 +109,37 @@ class QuickSightController(CirculationManagerController):
             )
 
         return QuicksightGenerateUrlResponse(embed_url=embed_url).api_dict()
+
+    def _build_session_tags_array(self, short_names: list[str]) -> list[dict]:
+        def append_to_session_tags():
+            session_tags.append(
+                dict(
+                    Key=f"library_short_name_{tag_index}",
+                    Value=delimiter.join(tag_values),
+                )
+            )
+
+        delimiter = "|"
+        max_chars_per_tag = 256
+
+        session_tags = []
+        per_tag_character_count = 0
+        tag_index = 0
+        tag_values = []
+        for short_name in short_names:
+            chars_to_be_added = len(short_name) + 1
+            if chars_to_be_added + per_tag_character_count <= max_chars_per_tag:
+                tag_values.append(short_name)
+                per_tag_character_count += chars_to_be_added
+            else:
+                append_to_session_tags()
+                per_tag_character_count = chars_to_be_added
+                tag_values = [short_name]
+                tag_index += 1
+
+        append_to_session_tags()
+
+        return session_tags
 
     def get_dashboard_names(self):
         """Get the named dashboard IDs defined in the configuration"""

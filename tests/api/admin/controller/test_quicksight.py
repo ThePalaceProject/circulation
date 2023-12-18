@@ -77,8 +77,10 @@ class TestQuicksightController:
                     },
                     SessionTags=[
                         dict(
-                            Key="library_name",
-                            Value="|".join([str(library1.name), str(default.name)]),
+                            Key="library_short_name_0",
+                            Value="|".join(
+                                [str(library1.short_name), str(default.short_name)]
+                            ),
                         )
                     ],
                 )
@@ -102,7 +104,73 @@ class TestQuicksightController:
                         "Dashboard": {"InitialDashboardId": "uuid2"}
                     },
                     SessionTags=[
-                        dict(Key="library_name", Value="|".join([str(library1.name)]))
+                        dict(
+                            Key="library_short_name_0",
+                            Value="|".join([str(library1.short_name)]),
+                        )
+                    ],
+                )
+
+    def test_generate_quicksight_url_with_a_large_number_of_libraries(
+        self, quicksight_fixture: QuickSightControllerFixture
+    ):
+        ctrl = quicksight_fixture.manager.admin_quicksight_controller
+        db = quicksight_fixture.ctrl.db
+
+        system_admin, _ = create(db.session, Admin, email="admin@email.com")
+        system_admin.add_role(AdminRole.SYSTEM_ADMIN)
+        default = db.default_library()
+
+        libraries = []
+        for x in range(0, 37):
+            libraries.append(db.library(short_name="TL" + str(x).zfill(4)))
+
+        with mock.patch(
+            "api.admin.controller.quicksight.boto3"
+        ) as mock_boto, mock.patch(
+            "api.admin.controller.quicksight.Configuration.quicksight_authorized_arns"
+        ) as mock_qs_arns:
+            arns = dict(
+                primary=[
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid1",
+                    "arn:aws:quicksight:us-west-1:aws-account-id:dashboard/uuid2",
+                ],
+            )
+            mock_qs_arns.return_value = arns
+            generate_method: mock.MagicMock = (
+                mock_boto.client().generate_embed_url_for_anonymous_user
+            )
+            generate_method.return_value = {"Status": 201, "EmbedUrl": "https://embed"}
+
+            random_uuid = str(uuid.uuid4())
+            with quicksight_fixture.request_context_with_admin(
+                f"/?library_uuids={','.join([x.uuid for x in libraries ])}",
+                admin=system_admin,
+            ) as ctx:
+                response = ctrl.generate_quicksight_url("primary")
+
+                # Assert the right client was created, with a region
+                assert mock_boto.client.call_args == mock.call(
+                    "quicksight", region_name="us-west-1"
+                )
+                # Assert the reqest and response formats
+                assert response["embedUrl"] == "https://embed"
+                assert generate_method.call_args == mock.call(
+                    AwsAccountId="aws-account-id",
+                    Namespace="default",
+                    AuthorizedResourceArns=arns["primary"],
+                    ExperienceConfiguration={
+                        "Dashboard": {"InitialDashboardId": "uuid1"}
+                    },
+                    SessionTags=[
+                        dict(
+                            Key="library_short_name_0",
+                            Value="|".join([x.short_name for x in libraries[0:36]]),
+                        ),
+                        dict(
+                            Key="library_short_name_1",
+                            Value="|".join([x.short_name for x in libraries[36:37]]),
+                        ),
                     ],
                 )
 
