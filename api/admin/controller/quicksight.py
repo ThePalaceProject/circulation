@@ -121,23 +121,33 @@ class QuickSightController(CirculationManagerController):
             )
 
         delimiter = "|"
+        # specified by AWS's session tag limit
         max_chars_per_tag = 256
 
         session_tags: list[dict[Any, str]] = []
+
+        if len(short_names) == 0:
+            return session_tags
+
         per_tag_character_count = 0
         tag_index = 0
         tag_values = []
         for short_name in short_names:
+            # add one for the delimiter
             chars_to_be_added = len(short_name) + 1
+            # Add values as long as they will not exceed the maximum limit
             if chars_to_be_added + per_tag_character_count <= max_chars_per_tag:
                 tag_values.append(short_name)
                 per_tag_character_count += chars_to_be_added
             else:
+                # otherwise append the tag and values and start a new tag with
+                # a new list of values
                 append_to_session_tags()
                 per_tag_character_count = chars_to_be_added
                 tag_values = [short_name]
                 tag_index += 1
 
+        # append the un-appended tag and values
         append_to_session_tags()
 
         return session_tags
