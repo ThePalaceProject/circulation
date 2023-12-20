@@ -359,7 +359,7 @@ class BibliothecaAPI(
 
             def _count_activity():
                 result = self.patron_activity(patron, pin)
-                return "Found %d loans/holds" % len(result)
+                return "Found %d loans/holds" % len(list(result))
 
             yield self.run_test(
                 "Checking activity for test patron for library %s" % library.name,
