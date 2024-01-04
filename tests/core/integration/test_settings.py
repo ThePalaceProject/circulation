@@ -159,6 +159,13 @@ def test_settings_extra_args(mock_settings, caplog):
     assert len(caplog.records) == 1
     assert "Unexpected extra argument 'extra' for model MockSettings" in caplog.text
 
+    # Exclude extra defaults to False, but we call it explicitly here
+    # to make sure it can be explicitly set to False.
+    assert settings.dict(exclude_extra=False) == {"number": 1, "extra": "extra"}
+
+    # The extra args will be ignored if we call dict with exclude_extra=True
+    assert settings.dict(exclude_extra=True) == {"number": 1}
+
 
 def test_settings_logger(mock_settings):
     log = mock_settings.logger()
