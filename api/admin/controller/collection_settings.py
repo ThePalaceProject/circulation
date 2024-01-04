@@ -43,8 +43,11 @@ class CollectionSettingsController(
         if service_info:
             # Add 'marked_for_deletion' to the service info
             service_info["marked_for_deletion"] = service.collection.marked_for_deletion
-
-            service_info["parent_id"] = service.collection.parent_id
+            service_info["parent_id"] = (
+                service.collection.parent.integration_configuration_id
+                if service.collection.parent
+                else None
+            )
             service_info["settings"]["export_marc_records"] = str(
                 service.collection.export_marc_records
             ).lower()
