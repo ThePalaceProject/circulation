@@ -132,7 +132,7 @@ class TestCollectionSettings:
                 "overdrive_client_secret"
             ] == settings2.get("overdrive_client_secret")
 
-            assert c2.id == coll3.get("parent_id")
+            assert c2.integration_configuration.id == coll3.get("parent_id")
 
             coll3_libraries = coll3.get("libraries")
             assert 2 == len(coll3_libraries)
