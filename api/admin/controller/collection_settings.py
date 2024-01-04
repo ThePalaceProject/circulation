@@ -46,7 +46,11 @@ class CollectionSettingsController(
         if service_info:
             # Add 'marked_for_deletion' to the service info
             service_info["marked_for_deletion"] = service.collection.marked_for_deletion
-            service_info["parent_id"] = service.collection.parent_id
+            service_info["parent_id"] = (
+                service.collection.parent.integration_configuration_id
+                if service.collection.parent
+                else None
+            )
             if user and user.can_see_collection(service.collection):
                 return service_info
         return None
