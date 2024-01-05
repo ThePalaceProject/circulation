@@ -25,7 +25,7 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     rows = conn.execute(
-        "SELECT ic.id as integration_id, ic.settings, ic.protocol, ic.goal, c.parent_id "
+        "SELECT ic.id as integration_id, ic.settings, ic.protocol, ic.goal, c.parent_id, ic.name "
         "FROM collections c JOIN integration_configurations ic ON c.integration_configuration_id = ic.id"
     ).all()
 
@@ -35,14 +35,15 @@ def upgrade() -> None:
         impl_class = registry.get(row.protocol)
         if impl_class is None:
             raise RuntimeError(
-                f"Could not find implementation for protocol {row.protocol}"
+                f"Could not find implementation for protocol {row.protocol} for "
+                f"integration {row.name}({row.integration_id})."
             )
         if row.parent_id is not None:
             if issubclass(impl_class, HasChildIntegrationConfiguration):
                 settings_obj = impl_class.child_settings_class()(**settings_dict)
             else:
                 raise RuntimeError(
-                    f"Integration {row.integration_id} is a child integration, "
+                    f"Integration {row.name}({row.integration_id}) is a child integration, "
                     f"but {row.protocol} does not support child integrations."
                 )
         else:
@@ -51,7 +52,8 @@ def upgrade() -> None:
         if row.settings != new_settings_dict:
             new_settings = json_serializer(new_settings_dict)
             log.info(
-                f"Updating settings for integration {row.integration_id} from {row.settings} to {new_settings}."
+                f"Updating settings for integration {row.name}({row.integration_id}) "
+                f"from {row.settings} to {new_settings}."
             )
             conn.execute(
                 "UPDATE integration_configurations SET settings = (%s) WHERE id = (%s)",
