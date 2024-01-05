@@ -19,11 +19,15 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "licensepools",
-        sa.Column("should_track_playtime", sa.Boolean(), nullable=True, default=False),
+        sa.Column(
+            "should_track_playtime",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.sql.false(),
+            default=False,
+        ),
     )
-    session = op.get_bind()
-    session.execute("UPDATE licensepools SET should_track_playtime=false")
-    op.alter_column("licensepools", "should_track_playtime", nullable=False)
+    op.alter_column("licensepools", "should_track_playtime", server_default=None)
 
 
 def downgrade() -> None:
