@@ -7,7 +7,8 @@
 # the first migration was added and initializing a new instance. Then we check out
 # the current version of our codebase and run the migrations. If the database is in
 # sync, then the migrations are up to date. If the database is out of sync, then
-# a new migration is required.
+# a new migration is required. We then repeat this process with our down migrations
+# to make sure that the down migrations stay in sync as well.
 #
 # This test is cannot be added to the normal migration test suite since it requires
 # manipulating the git history and checking out older versions of the codebase.
