@@ -241,7 +241,7 @@ def downgrade() -> None:
         "ix_collections_external_integration_id",
         "collections",
         ["external_integration_id"],
-        unique=False,
+        unique=True,
     )
 
     op.create_foreign_key(
@@ -305,5 +305,5 @@ def downgrade() -> None:
 
     op.drop_column("integration_configurations", "context")
 
-    op.create_index("ix_collections_name", "collections", ["name"], unique=False)
+    op.create_index("ix_collections_name", "collections", ["name"], unique=True)
     op.alter_column("collections", "name", existing_type=sa.VARCHAR(), nullable=False)
