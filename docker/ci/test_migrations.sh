@@ -13,10 +13,9 @@
 # then a new migration is required. We then repeat this process with our down
 # migrations to make sure that the down migrations stay in sync as well.
 #
-# This test cannot be added to the normal migration test suite since it requires
-# manipulating the git history and checking out older versions of the codebase.
-#
-# All of the commands in this script are run inside a docker-compose environment.
+# Note: This test cannot be added to the normal migration test suite since it requires
+# manipulating the git history and checking out older versions of the codebase. All of
+# the commands in this script are run inside a docker-compose environment.
 #
 # [1] https://alembic.sqlalchemy.org/en/latest/autogenerate.html#running-alembic-check-to-test-for-new-upgrade-operations
 
