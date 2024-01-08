@@ -3,17 +3,22 @@
 # This script makes sure that our database migrations bring the database up to date
 # so that the resulting database is the same as if we had initialized a new instance.
 #
-# This is done by checking out the an older version of our codebase. The commit when
-# the first migration was added and initializing a new instance. Then we check out
-# the current version of our codebase and run the migrations. If the database is in
-# sync, then the migrations are up to date. If the database is out of sync, then
-# a new migration is required. We then repeat this process with our down migrations
-# to make sure that the down migrations stay in sync as well.
+# This is done by (1) checking out an older version of our codebase at the commit on
+# which the first migration was added and then (2) initializing a new instance. Then
+# we check out the current version of our codebase and run our migrations.
 #
-# This test is cannot be added to the normal migration test suite since it requires
+# After the migrations are complete we use `alembic check` [1] to make sure that the
+# database model matches the migrated database. If the model matches, then the database
+# database is in sync and the migrations are up to date. If the database doesn't match
+# then a new migration is required. We then repeat this process with our down
+# migrations to make sure that the down migrations stay in sync as well.
+#
+# This test cannot be added to the normal migration test suite since it requires
 # manipulating the git history and checking out older versions of the codebase.
 #
 # All of the commands in this script are run inside a docker-compose environment.
+#
+# [1] https://alembic.sqlalchemy.org/en/latest/autogenerate.html#running-alembic-check-to-test-for-new-upgrade-operations
 
 
 compose_cmd() {
