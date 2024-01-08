@@ -232,7 +232,7 @@ class Annotator(LoggerMixin):
                 .order_by(Identifier.id)
                 .first()
             )
-        if isbn:
+        if isbn and isbn.identifier:
             record.add_field(
                 Field(
                     tag="020",
@@ -280,7 +280,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="245",
-                indicators=["0", non_filing_characters],
+                indicators=["0", str(non_filing_characters)],
                 subfields=subfields,
             )
         )
@@ -306,16 +306,17 @@ class Annotator(LoggerMixin):
         if len(edition.contributions) > 1:
             for contribution in edition.contributions:
                 contributor = contribution.contributor
-                record.add_field(
-                    Field(
-                        tag="700",
-                        indicators=["1", " "],
-                        subfields=[
-                            Subfield("a", str(contributor.sort_name)),
-                            Subfield("e", contribution.role),
-                        ],
+                if contributor.sort_name and contribution.role:
+                    record.add_field(
+                        Field(
+                            tag="700",
+                            indicators=["1", " "],
+                            subfields=[
+                                Subfield("a", str(contributor.sort_name)),
+                                Subfield("e", contribution.role),
+                            ],
+                        )
                     )
-                )
 
     @classmethod
     def add_publisher(cls, record: Record, edition: Edition) -> None:
