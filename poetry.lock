@@ -3109,13 +3109,13 @@ requests = ["requests"]
 
 [[package]]
 name = "pymarc"
-version = "5.1.0"
+version = "5.1.1"
 description = "Read, write and modify MARC bibliographic data"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pymarc-5.1.0-py3-none-any.whl", hash = "sha256:dfbfdc7368df487fd190316eeeed7c59bf3823cdb64da0e0e9f3664f6fed5f2d"},
-    {file = "pymarc-5.1.0.tar.gz", hash = "sha256:9ab6fcce9f04ee22c3e149379ad2206dc2a5df4674d00279eb867da2f7081308"},
+    {file = "pymarc-5.1.1-py3-none-any.whl", hash = "sha256:e7b0c4f0c7a53208150c1f93229a2c654f1d3c985f6dc465890201aff1e28a62"},
+    {file = "pymarc-5.1.1.tar.gz", hash = "sha256:9fa3d5f80d35d82e7f4ad353809bb8e5325eacd4400dea4323e6fe4cba7484c8"},
 ]
 
 [[package]]
@@ -4475,4 +4475,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "a7f2bfbfc1fbbc83baf50f4345c3cfe05044c52d9e8667213ce132f0ae6de148"
+content-hash = "ffcb9ca153a0a3c48ac5b881a5420459ac3c3fabbc297e06ca10366ea028bdea"
