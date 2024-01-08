@@ -110,6 +110,34 @@ jobs:
           files: ./coverage.xml
           flags: migration
 
+  docker-test-migrations:
+    name: Docker migration test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch. This prevents duplicated runs on internal PRs.
+    # Some discussion of this here:
+    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test migrations
+        run: ./docker/ci/test_migrations.sh
+
   docker-image-build:
     name: Docker build
     runs-on: ubuntu-latest
@@ -303,7 +331,7 @@ jobs:
   docker-image-push:
     name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [test, test-migrations, docker-image-build, docker-image-test]
+    needs: [test, test-migrations, docker-test-migrations, docker-image-build, docker-image-test]
     permissions:
       contents: read
       packages: write
