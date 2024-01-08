@@ -336,8 +336,16 @@ class BaseSettings(BaseModel, LoggerMixin):
 
     def dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Override the dict method to remove the default values"""
+
         if "exclude_defaults" not in kwargs:
             kwargs["exclude_defaults"] = True
+
+        # Allow us to exclude extra fields that are not defined on the model
+        if "exclude_extra" in kwargs:
+            exclude_extra = kwargs.pop("exclude_extra")
+            if exclude_extra:
+                kwargs["exclude"] = self.__fields_set__ - self.__fields__.keys()
+
         return super().dict(*args, **kwargs)
 
     @classmethod
