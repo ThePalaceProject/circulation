@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 import boto3
 import flask
@@ -79,7 +78,7 @@ class QuickSightController(CirculationManagerController):
         ).all()
 
         try:
-            short_names = [x[0] for x in libraries]
+            short_names = [x.short_name for x in libraries]
             session_tags = self._build_session_tags_array(short_names)
 
             client = boto3.client("quicksight", region_name=region)
@@ -111,46 +110,29 @@ class QuickSightController(CirculationManagerController):
 
         return QuicksightGenerateUrlResponse(embed_url=embed_url).api_dict()
 
-    def _build_session_tags_array(self, short_names: list[str]) -> list[dict]:
-        def append_to_session_tags():
-            session_tags.append(
-                dict(
-                    Key=f"library_short_name_{tag_index}",
-                    Value=delimiter.join(tag_values),
-                )
-            )
-
-        delimiter = "|"
-        # specified by AWS's session tag limit
+    def _build_session_tags_array(self, short_names: list[str]) -> list[dict[str, str]]:
+        delimiter = "|"  # specified by AWS's session tag limit
         max_chars_per_tag = 256
-
-        session_tags: list[dict[Any, str]] = []
-
-        if len(short_names) == 0:
-            return session_tags
-
-        per_tag_character_count = 0
-        tag_index = 0
-        tag_values = []
+        session_tags: list[str] = []
+        session_tag = ""
         for short_name in short_names:
-            # add one for the delimiter
-            chars_to_be_added = len(short_name) + 1
-            # Add values as long as they will not exceed the maximum limit
-            if chars_to_be_added + per_tag_character_count <= max_chars_per_tag:
-                tag_values.append(short_name)
-                per_tag_character_count += chars_to_be_added
+            if len(session_tag + delimiter + short_name) > max_chars_per_tag:
+                session_tags.append(session_tag)
+                session_tag = ""
+            if session_tag:
+                session_tag += delimiter + short_name
             else:
-                # otherwise append the tag and values and start a new tag with
-                # a new list of values
-                append_to_session_tags()
-                per_tag_character_count = chars_to_be_added
-                tag_values = [short_name]
-                tag_index += 1
+                session_tag = short_name
+        if session_tag:
+            session_tags.append(session_tag)
 
-        # append the un-appended tag and values
-        append_to_session_tags()
-
-        return session_tags
+        return [
+            {
+                "Key": f"library_short_name_{tag_index}",
+                "Value": tag_value,
+            }
+            for tag_index, tag_value in enumerate(session_tags)
+        ]
 
     def get_dashboard_names(self):
         """Get the named dashboard IDs defined in the configuration"""
