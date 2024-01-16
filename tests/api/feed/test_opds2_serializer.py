@@ -146,6 +146,11 @@ class TestOPDS2Serializer:
         assert metadata["narrator"] == dict(name="narrator2")
 
     def test__serialize_acquisition_link(self):
+        drm_licensor = FeedEntryType()
+        drm_licensor.add_attributes(
+            {"vendor": "vendor_name", "clientToken": FeedEntryType(text="token_value")}
+        )
+
         serializer = OPDS2Serializer()
         acquisition = Acquisition(
             href="http://acquisition",
@@ -164,6 +169,7 @@ class TestOPDS2Serializer:
                     ],
                 ),
             ],
+            drm_licensor=drm_licensor,
         )
 
         result = serializer._serialize_acquisition_link(acquisition)
@@ -184,6 +190,7 @@ class TestOPDS2Serializer:
                 }
             ],
             lcp_hashed_passphrase="LCPPassphrase",
+            licensor={"clientToken": "token_value", "vendor": "vendor_name"},
         )
 
         # Test availability states

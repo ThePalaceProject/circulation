@@ -171,7 +171,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         if link.drm_licensor:
             props["licensor"] = {
-                "clientToken": getattr(link.drm_licensor, "clientToken"),
+                "clientToken": getattr(
+                    getattr(link.drm_licensor, "clientToken"), "text"
+                ),
                 "vendor": getattr(link.drm_licensor, "vendor"),
             }
 
