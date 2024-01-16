@@ -1206,13 +1206,13 @@ Flask = ">=0.9"
 
 [[package]]
 name = "flask-pydantic-spec"
-version = "0.5.0"
+version = "0.6.0"
 description = "generate OpenAPI document and validate request & response with Python annotations."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "flask_pydantic_spec-0.5.0-py3-none-any.whl", hash = "sha256:3add259e5736d8e1b2b6a9db307ee55b2b3a0154d81633d4c3bcc933b20acb9a"},
-    {file = "flask_pydantic_spec-0.5.0.tar.gz", hash = "sha256:8d1f3d173c2a288e61e01bd64752374c6007338a5cd0ab78a5a8ba860c27295e"},
+    {file = "flask_pydantic_spec-0.6.0-py3-none-any.whl", hash = "sha256:480689102eed43900b2164d07af930221a2379253ed06337d280a47224990035"},
+    {file = "flask_pydantic_spec-0.6.0.tar.gz", hash = "sha256:f20d63cba821dfaaa92fa19c1e1975e0acf544ea6a3cc9eb5cbac62a81117790"},
 ]
 
 [package.dependencies]
@@ -4494,4 +4494,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "690c788efce9ab7e148ab3d2fab9e0845e150dab297d2f4af3045f75091d87de"
+content-hash = "e1b57fcc2f4b7d942892cd619212101d0ba831e39a8ad220db827cb306f336f7"
