@@ -78,11 +78,11 @@ class PlaytimeEntriesEmailReportsScript(Script):
 
     @classmethod
     def arg_parser(cls):
-        # The default `start` and `until` dates encompass the previous three months.
+        # The default `start` and `until` dates encompass the previous month.
         # We convert them to strings here so that they are handled the same way
         # as non-default dates specified as arguments.
         default_start, default_until = (
-            date.isoformat() for date in previous_months(number_of_months=3)
+            date.isoformat() for date in previous_months(number_of_months=1)
         )
 
         parser = argparse.ArgumentParser(

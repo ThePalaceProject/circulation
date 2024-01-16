@@ -271,15 +271,16 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         reporting_name = "test cm"
 
-        # Horrible unbracketed syntax for python 3.8
-        with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
-            "core.jobs.playtime_entries.EmailManager"
-        ) as email, patch(
-            "core.jobs.playtime_entries.os.environ",
-            new={
-                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
-                Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
-            },
+        with (
+            patch("core.jobs.playtime_entries.csv.writer") as writer,
+            patch("core.jobs.playtime_entries.EmailManager") as email,
+            patch(
+                "core.jobs.playtime_entries.os.environ",
+                new={
+                    Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
+                    Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
+                },
+            ),
         ):
             # Act
             PlaytimeEntriesEmailReportsScript(db.session).run()
