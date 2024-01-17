@@ -200,8 +200,8 @@ class TestPlaytimeEntriesSummationScript:
         ) == [("4",), ("5",)]
 
 
-def date3m(days):
-    return previous_months(number_of_months=3)[0] + timedelta(days=days)
+def date1m(days):
+    return previous_months(number_of_months=1)[0] + timedelta(days=days)
 
 
 def playtime(session, identifier, collection, library, timestamp, total_seconds):
@@ -251,35 +251,36 @@ class TestPlaytimeEntriesEmailReportsScript:
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
 
-        playtime(db.session, identifier, collection, library, date3m(3), 1)
-        playtime(db.session, identifier, collection, library, date3m(31), 2)
+        playtime(db.session, identifier, collection, library, date1m(3), 1)
+        playtime(db.session, identifier, collection, library, date1m(31), 2)
         playtime(
-            db.session, identifier, collection, library, date3m(-31), 60
-        )  # out of range: more than a month prior to the quarter
+            db.session, identifier, collection, library, date1m(-31), 60
+        )  # out of range: prior to the beginning of the default reporting period
         playtime(
-            db.session, identifier, collection, library, date3m(95), 60
+            db.session, identifier, collection, library, date1m(95), 60
         )  # out of range: future
-        playtime(db.session, identifier2, collection, library, date3m(3), 5)
-        playtime(db.session, identifier2, collection, library, date3m(4), 6)
+        playtime(db.session, identifier2, collection, library, date1m(3), 5)
+        playtime(db.session, identifier2, collection, library, date1m(4), 6)
 
         # Collection2
-        playtime(db.session, identifier, collection2, library, date3m(3), 100)
+        playtime(db.session, identifier, collection2, library, date1m(3), 100)
         # library2
-        playtime(db.session, identifier, collection, library2, date3m(3), 200)
+        playtime(db.session, identifier, collection, library2, date1m(3), 200)
         # collection2 library2
-        playtime(db.session, identifier, collection2, library2, date3m(3), 300)
+        playtime(db.session, identifier, collection2, library2, date1m(3), 300)
 
         reporting_name = "test cm"
 
-        # Horrible unbracketed syntax for python 3.8
-        with patch("core.jobs.playtime_entries.csv.writer") as writer, patch(
-            "core.jobs.playtime_entries.EmailManager"
-        ) as email, patch(
-            "core.jobs.playtime_entries.os.environ",
-            new={
-                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
-                Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
-            },
+        with (
+            patch("core.jobs.playtime_entries.csv.writer") as writer,
+            patch("core.jobs.playtime_entries.EmailManager") as email,
+            patch(
+                "core.jobs.playtime_entries.os.environ",
+                new={
+                    Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
+                    Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
+                },
+            ),
         ):
             # Act
             PlaytimeEntriesEmailReportsScript(db.session).run()
@@ -289,7 +290,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             writer().writerow.call_count == 6
         )  # 1 header, 5 identifier,collection,library entries
 
-        cutoff = date3m(0).replace(day=1)
+        cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
         column1 = f"{cutoff} - {until}"
         call_args = writer().writerow.call_args_list
@@ -346,7 +347,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     collection.name,
                     library.name,
                     None,
-                    3,
+                    1,
                 )
             ),  # Identifier without edition
             call(
@@ -376,7 +377,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-        _ = playtime(db.session, identifier, collection, library, date3m(20), 1)
+        _ = playtime(db.session, identifier, collection, library, date1m(20), 1)
 
         with patch("core.jobs.playtime_entries.os.environ", new={}):
             script = PlaytimeEntriesEmailReportsScript(db.session)
@@ -473,14 +474,14 @@ class TestPlaytimeEntriesEmailReportsScript:
             [
                 datetime(2020, 1, 1, 0, 0, 0),
                 None,
-                datetime_utc(2019, 10, 1, 0, 0, 0),
+                datetime_utc(2019, 12, 1, 0, 0, 0),
                 None,
                 datetime_utc(2020, 1, 1, 0, 0, 0),
             ],
             [
                 datetime(2020, 1, 31, 0, 0, 0),
                 None,
-                datetime_utc(2019, 10, 1, 0, 0, 0),
+                datetime_utc(2019, 12, 1, 0, 0, 0),
                 None,
                 datetime_utc(2020, 1, 1, 0, 0, 0),
             ],
@@ -496,9 +497,9 @@ class TestPlaytimeEntriesEmailReportsScript:
             [
                 datetime(2020, 1, 31, 0, 0, 0),
                 None,
-                datetime_utc(2019, 10, 1, 0, 0, 0),
-                "2019-11-20",
-                datetime_utc(2019, 11, 20, 0, 0, 0),
+                datetime_utc(2019, 12, 1, 0, 0, 0),
+                "2019-12-20",
+                datetime_utc(2019, 12, 20, 0, 0, 0),
             ],
             # When both dates are specified, the current datetime doesn't matter.
             # Both dates specified, but we test at a specific time here anyway.
@@ -563,7 +564,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             [
                 datetime(2020, 1, 31, 0, 0, 0),
                 None,
-                datetime_utc(2019, 10, 1, 0, 0, 0),
+                datetime_utc(2019, 12, 1, 0, 0, 0),
                 "2019-06-11",
                 datetime_utc(2019, 6, 11, 0, 0, 0),
             ],
