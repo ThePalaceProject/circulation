@@ -72,13 +72,15 @@ class QuickSightController(CirculationManagerController):
             )
 
         libraries = self._db.execute(
-            select(Library.name)
+            select(Library.short_name)
             .where(Library.uuid.in_(allowed_library_uuids))
             .order_by(Library.name)
         ).all()
 
         try:
-            delimiter = "|"
+            short_names = [x.short_name for x in libraries]
+            session_tags = self._build_session_tags_array(short_names)
+
             client = boto3.client("quicksight", region_name=region)
             response = client.generate_embed_url_for_anonymous_user(
                 AwsAccountId=aws_account_id,
@@ -87,12 +89,7 @@ class QuickSightController(CirculationManagerController):
                 ExperienceConfiguration={
                     "Dashboard": {"InitialDashboardId": dashboard_id}
                 },
-                SessionTags=[
-                    dict(
-                        Key="library_name",
-                        Value=delimiter.join([l.name for l in libraries]),
-                    )
-                ],
+                SessionTags=session_tags,
             )
         except Exception as ex:
             log.error(f"Error while fetching the Quicksight Embed url: {ex}")
@@ -112,6 +109,30 @@ class QuickSightController(CirculationManagerController):
             )
 
         return QuicksightGenerateUrlResponse(embed_url=embed_url).api_dict()
+
+    def _build_session_tags_array(self, short_names: list[str]) -> list[dict[str, str]]:
+        delimiter = "|"  # specified by AWS's session tag limit
+        max_chars_per_tag = 256
+        session_tags: list[str] = []
+        session_tag = ""
+        for short_name in short_names:
+            if len(session_tag + delimiter + short_name) > max_chars_per_tag:
+                session_tags.append(session_tag)
+                session_tag = ""
+            if session_tag:
+                session_tag += delimiter + short_name
+            else:
+                session_tag = short_name
+        if session_tag:
+            session_tags.append(session_tag)
+
+        return [
+            {
+                "Key": f"library_short_name_{tag_index}",
+                "Value": tag_value,
+            }
+            for tag_index, tag_value in enumerate(session_tags)
+        ]
 
     def get_dashboard_names(self):
         """Get the named dashboard IDs defined in the configuration"""
