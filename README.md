@@ -163,7 +163,15 @@ export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/c
 
 #### Opensearch
 
-To let the application know which Opensearch instance to use, set the `PALACE_SEARCH_URL` environment variable.
+To let the application know which Opensearch instance to use, you can set the following environment variables:
+
+- `PALACE_SEARCH_URL`: The url of the Opensearch instance (**required**).
+- `PALACE_SEARCH_INDEX_PREFIX`: The prefix to use for the Opensearch indices. The default is `circulation-works`.
+    This is useful if you want to use the same Opensearch instance for multiple CM (optional).
+- `PALACE_SEARCH_TIMEOUT`: The timeout in seconds to use when connecting to the Opensearch instance. The default is `20`
+  (optional).
+- `PALACE_SEARCH_MAXSIZE`: The maximum size of the connection pool to use when connecting to the Opensearch instance.
+  (optional).
 
 ```sh
 export PALACE_SEARCH_URL="http://localhost:9200"
