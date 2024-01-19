@@ -284,13 +284,14 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
                             )
                         )
 
-        metadata.circulation.licenses = licenses
-        metadata.circulation.licenses_owned = None
-        metadata.circulation.licenses_available = None
-        metadata.circulation.licenses_reserved = None
-        metadata.circulation.patrons_in_hold_queue = None
-        metadata.circulation.formats.extend(formats)
-        metadata.medium = medium
+        if len(licenses) != 0:
+            metadata.circulation.licenses = licenses
+            metadata.circulation.licenses_owned = None
+            metadata.circulation.licenses_available = None
+            metadata.circulation.licenses_reserved = None
+            metadata.circulation.patrons_in_hold_queue = None
+            metadata.circulation.formats.extend(formats)
+            metadata.medium = medium
 
         return metadata
 

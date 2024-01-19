@@ -346,6 +346,11 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         if loan.count() < 1:
             raise NotCheckedOut()
         loan_result = loan.one()
+
+        if loan_result.license_pool.open_access:
+            # If this is an open-access book, we don't need to do anything.
+            return
+
         self._checkin(loan_result)
 
     def _checkin(self, loan: Loan) -> bool:
@@ -410,16 +415,25 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         if loan.count() > 0:
             raise AlreadyCheckedOut()
 
-        hold = get_one(_db, Hold, patron=patron, license_pool_id=licensepool.id)
-        loan_obj = self._checkout(patron, licensepool, hold)
+        if licensepool.open_access:
+            loan_start = None
+            loan_end = None
+            external_identifier = None
+        else:
+            hold = get_one(_db, Hold, patron=patron, license_pool_id=licensepool.id)
+            loan_obj = self._checkout(patron, licensepool, hold)
+            loan_start = loan_obj.start
+            loan_end = loan_obj.end
+            external_identifier = loan_obj.external_identifier
+
         return LoanInfo(
             licensepool.collection,
             licensepool.data_source.name,
             licensepool.identifier.type,
             licensepool.identifier.identifier,
-            loan_obj.start,
-            loan_obj.end,
-            external_identifier=loan_obj.external_identifier,
+            loan_start,
+            loan_end,
+            external_identifier=external_identifier,
         )
 
     def _checkout(
@@ -548,25 +562,42 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> FulfillmentInfo:
         licensepool = loan.license_pool
-        doc = self.get_license_status_document(loan)
-        status = doc.get("status")
 
-        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
-            # This loan isn't available for some reason. It's possible
-            # the distributor revoked it or the patron already returned it
-            # through the DRM system, and we didn't get a notification
-            # from the distributor yet.
-            self.update_loan(loan, doc)
-            raise CannotFulfill()
+        if licensepool.open_access:
+            expires = None
+            requested_mechanism = delivery_mechanism.delivery_mechanism
+            fulfillment = next(
+                (
+                    lpdm
+                    for lpdm in licensepool.delivery_mechanisms
+                    if lpdm.delivery_mechanism == requested_mechanism
+                ),
+                None,
+            )
+            if fulfillment is None:
+                raise FormatNotAvailable()
+            content_link = fulfillment.resource.representation.public_url
+            content_type = fulfillment.resource.representation.media_type
+        else:
+            doc = self.get_license_status_document(loan)
+            status = doc.get("status")
 
-        expires = doc.get("potential_rights", {}).get("end")
-        expires = dateutil.parser.parse(expires)
+            if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
+                # This loan isn't available for some reason. It's possible
+                # the distributor revoked it or the patron already returned it
+                # through the DRM system, and we didn't get a notification
+                # from the distributor yet.
+                self.update_loan(loan, doc)
+                raise CannotFulfill()
 
-        links = doc.get("links", [])
+            expires = doc.get("potential_rights", {}).get("end")
+            expires = dateutil.parser.parse(expires)
 
-        content_link, content_type = self._find_content_link_and_type(
-            links, delivery_mechanism.delivery_mechanism.drm_scheme
-        )
+            links = doc.get("links", [])
+
+            content_link, content_type = self._find_content_link_and_type(
+                links, delivery_mechanism.delivery_mechanism.drm_scheme
+            )
 
         return FulfillmentInfo(
             licensepool.collection,
@@ -822,7 +853,12 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
             .join(Loan.license_pool)
             .filter(LicensePool.collection_id == self.collection_id)
             .filter(Loan.patron == patron)
-            .filter(Loan.end >= utc_now())
+            .filter(
+                or_(
+                    Loan.end >= utc_now(),
+                    Loan.end == None,
+                )
+            )
         )
 
         # Get the patron's holds. If there are any expired holds, delete them.

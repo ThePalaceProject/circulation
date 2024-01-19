@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "title": "Feedbooks"
+  },
+  "links": [
+    {
+      "type": "application/opds+json",
+      "rel": "self",
+      "href": "https://market.feedbooks.com/api/libraries/harvest.json"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "http://schema.org/Book",
+        "title": "Maria: or, The Wrongs of Woman",
+        "language": "en",
+        "modified": "2024-01-17T14:34:03+01:00",
+        "published": "1798-01-01T00:00:00+00:09",
+        "identifier": "https://www.feedbooks.com/book/7256",
+        "schema:encodingFormat": "application/epub+zip",
+        "presentation": {
+          "layout": "reflowable"
+        },
+        "author": [
+          {
+            "name": "Mary Wollstonecraft",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/publicdomain/browse/recent.json?author_id=1315&lang=en"
+              }
+            ]
+          }
+        ],
+        "publisher": {
+          "name": "Feedbooks",
+          "links": [
+            {
+              "type": "application/opds+json",
+              "href": "https://market.feedbooks.com/publicdomain/browse/recent.json?lang=en&publisher=Feedbooks"
+            }
+          ]
+        },
+        "description": "Wollstonecraft's philosophical and gothic novel revolves around the story of a woman imprisoned in an insane asylum by her husband. It focuses on the societal rather than the individual \"wrongs of woman\" and criticizes what Wollstonecraft viewed as the patriarchal institution of marriage in eighteenth-century Britain and the legal system that protected it. [Source: Wikipedia]",
+        "subject": [
+          {
+            "code": "FBFIC000000",
+            "name": "Fiction",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/publicdomain/browse/top.json?cat=FBFIC000000&lang=en"
+              }
+            ]
+          },
+          {
+            "code": "FBFIC019000",
+            "name": "Literary",
+            "scheme": "http://www.feedbooks.com/categories",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/publicdomain/browse/top.json?cat=FBFIC019000&lang=en"
+              }
+            ]
+          },
+          {
+            "code": "READ0000",
+            "scheme": "http://schema.org/Audience",
+            "name": "Adult",
+            "links": [
+              {
+                "type": "application/opds+json",
+                "href": "https://market.feedbooks.com/publicdomain/browse/top.json?age=READ0000&lang=en"
+              }
+            ]
+          }
+        ]
+      },
+      "images": [
+        {
+          "href": "https://covers.feedbooks.net/book/7256.jpg?size=large&t=1549045914",
+          "type": "image/jpeg",
+          "width": 260,
+          "height": 420
+        },
+        {
+          "href": "https://covers.feedbooks.net/book/7256.jpg?t=1549045914",
+          "type": "image/jpeg",
+          "width": 100,
+          "height": 180
+        }
+      ],
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition/open-access",
+          "href": "https://license.feedbooks.net/loan/open_content",
+          "type": "application/epub+zip"
+        },
+        {
+          "rel": "self",
+          "href": "https://market.feedbooks.com/book/7256.json",
+          "type": "application/opds-publication+json",
+          "properties": {
+            "authenticate": {
+              "href": "https://market.feedbooks.com/user/authentication",
+              "type": "application/opds-authentication+json"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
