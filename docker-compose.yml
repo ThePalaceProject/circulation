@@ -54,7 +54,7 @@ services:
       POSTGRES_PASSWORD: test
       POSTGRES_DB: circ
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U palace -d circ"]
       interval: 30s
       timeout: 30s
       retries: 3
