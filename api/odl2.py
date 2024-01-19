@@ -284,6 +284,8 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
                             )
                         )
 
+        # If we don't have any licenses, then this title is an open-access title.
+        # So we don't change the circulation data.
         if len(licenses) != 0:
             metadata.circulation.licenses = licenses
             metadata.circulation.licenses_owned = None
