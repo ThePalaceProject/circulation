@@ -331,7 +331,6 @@ class TestODL2Importer:
     def test_import_open_access(
         self,
         odl2_importer: ODL2Importer,
-        odl_mock_get: MockGet,
         api_odl2_files_fixture: ODL2APIFilesFixture,
     ) -> None:
         """
@@ -341,7 +340,6 @@ class TestODL2Importer:
         feed = api_odl2_files_fixture.sample_text("oa-title.json")
         imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
 
-        # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
 
