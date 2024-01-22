@@ -41,7 +41,7 @@ class TestODL2Importer:
     def _get_delivery_mechanism_by_drm_scheme_and_content_type(
         delivery_mechanisms: list[LicensePoolDeliveryMechanism],
         content_type: str,
-        drm_scheme: str,
+        drm_scheme: str | None,
     ) -> DeliveryMechanism | None:
         """Find a license pool in the list by its identifier.
 
@@ -326,6 +326,49 @@ class TestODL2Importer:
             )
         )
         assert lcp_delivery_mechanism is not None
+
+    @freeze_time("2016-01-01T00:00:00+00:00")
+    def test_import_open_access(
+        self,
+        odl2_importer: ODL2Importer,
+        api_odl2_files_fixture: ODL2APIFilesFixture,
+    ) -> None:
+        """
+        Ensure that ODL2Importer2 correctly processes and imports a feed with an
+        open access book.
+        """
+        feed = api_odl2_files_fixture.sample_text("oa-title.json")
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
+
+        assert isinstance(imported_editions, list)
+        assert 1 == len(imported_editions)
+
+        [edition] = imported_editions
+        assert isinstance(edition, Edition)
+        assert (
+            edition.primary_identifier.identifier
+            == "https://www.feedbooks.com/book/7256"
+        )
+        assert edition.primary_identifier.type == "URI"
+        assert edition.medium == EditionConstants.BOOK_MEDIUM
+
+        # Make sure that license pools have correct configuration
+        assert isinstance(pools, list)
+        assert 1 == len(pools)
+
+        [license_pool] = pools
+        assert license_pool.open_access is True
+
+        assert 1 == len(license_pool.delivery_mechanisms)
+
+        oa_ebook_delivery_mechanism = (
+            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+                license_pool.delivery_mechanisms,
+                MediaTypes.EPUB_MEDIA_TYPE,
+                None,
+            )
+        )
+        assert oa_ebook_delivery_mechanism is not None
 
 
 class TestODL2API:

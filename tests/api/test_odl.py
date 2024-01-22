@@ -288,6 +288,23 @@ class TestODLAPI:
             odl_api_test_fixture.patron, "pin", odl_api_test_fixture.pool
         )
 
+    def test_checkin_open_access(
+        self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
+    ) -> None:
+        # Checking in an open-access book doesn't need to call out to the distributor API.
+        oa_work = db.work(
+            with_open_access_download=True, collection=odl_api_test_fixture.collection
+        )
+        pool = oa_work.license_pools[0]
+        loan, ignore = pool.loan_to(odl_api_test_fixture.patron)
+
+        # make sure that _checkin isn't called since it is not needed for an open access work
+        odl_api_test_fixture.api._checkin = MagicMock(
+            side_effect=Exception("Should not be called")
+        )
+
+        odl_api_test_fixture.api.checkin(odl_api_test_fixture.patron, "pin", pool)
+
     def test_checkout_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
     ) -> None:
@@ -320,6 +337,24 @@ class TestODLAPI:
         # The pool's availability and the license's remaining checkouts have decreased.
         assert 5 == odl_api_test_fixture.pool.licenses_available
         assert 29 == odl_api_test_fixture.license.checkouts_left
+
+    def test_checkout_open_access(
+        self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
+    ) -> None:
+        # This book is available to check out.
+        oa_work = db.work(
+            with_open_access_download=True, collection=odl_api_test_fixture.collection
+        )
+        loan = odl_api_test_fixture.api.checkout(
+            odl_api_test_fixture.patron, "pin", oa_work.license_pools[0], None
+        )
+
+        assert loan.collection(db.session) == odl_api_test_fixture.collection
+        assert loan.identifier == oa_work.license_pools[0].identifier.identifier
+        assert loan.identifier_type == oa_work.license_pools[0].identifier.type
+        assert loan.start_date is None
+        assert loan.end_date is None
+        assert loan.external_identifier is None
 
     def test_checkout_success_with_hold(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
@@ -655,6 +690,42 @@ class TestODLAPI:
         assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
         assert correct_link == fulfillment.content_link
         assert correct_type == fulfillment.content_type
+
+    def test_fulfill_open_access(
+        self,
+        odl_api_test_fixture: ODLAPITestFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        oa_work = db.work(
+            with_open_access_download=True, collection=odl_api_test_fixture.collection
+        )
+        pool = oa_work.license_pools[0]
+        loan, ignore = pool.loan_to(odl_api_test_fixture.patron)
+
+        # If we can't find a delivery mechanism, we can't fulfill the loan.
+        pytest.raises(
+            CannotFulfill,
+            odl_api_test_fixture.api.fulfill,
+            odl_api_test_fixture.patron,
+            "pin",
+            pool,
+            MagicMock(spec=LicensePoolDeliveryMechanism),
+        )
+
+        lpdm = pool.delivery_mechanisms[0]
+        fulfillment = odl_api_test_fixture.api.fulfill(
+            odl_api_test_fixture.patron, "pin", pool, lpdm
+        )
+
+        assert odl_api_test_fixture.collection == fulfillment.collection(db.session)
+        assert (
+            odl_api_test_fixture.pool.data_source.name == fulfillment.data_source_name
+        )
+        assert fulfillment.identifier_type == pool.identifier.type
+        assert fulfillment.identifier == pool.identifier.identifier
+        assert fulfillment.content_expires is None
+        assert fulfillment.content_link == pool.open_access_download_url
+        assert fulfillment.content_type == lpdm.delivery_mechanism.content_type
 
     def test_fulfill_cannot_fulfill(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture
@@ -1299,6 +1370,38 @@ class TestODLAPI:
         assert 1 == len(activity)
         assert odl_api_test_fixture.pool.identifier.identifier == activity[0].identifier
         odl_api_test_fixture.checkin(pool=pool2)
+
+        # Open access loans are included.
+        oa_work = db.work(
+            with_open_access_download=True, collection=odl_api_test_fixture.collection
+        )
+        pool3 = oa_work.license_pools[0]
+        loan3, ignore = pool3.loan_to(odl_api_test_fixture.patron)
+
+        activity = odl_api_test_fixture.api.patron_activity(
+            odl_api_test_fixture.patron, "pin"
+        )
+        assert 2 == len(activity)
+        [l1, l2] = sorted(activity, key=lambda x: x.start_date)
+
+        assert odl_api_test_fixture.collection == l1.collection(db.session)
+        assert odl_api_test_fixture.pool.data_source.name == l1.data_source_name
+        assert odl_api_test_fixture.pool.identifier.type == l1.identifier_type
+        assert odl_api_test_fixture.pool.identifier.identifier == l1.identifier
+        assert loan.start == l1.start_date
+        assert loan.end == l1.end_date
+        assert loan.external_identifier == l1.external_identifier
+
+        assert odl_api_test_fixture.collection == l2.collection(db.session)
+        assert pool3.data_source.name == l2.data_source_name
+        assert pool3.identifier.type == l2.identifier_type
+        assert pool3.identifier.identifier == l2.identifier
+        assert loan3.start == l2.start_date
+        assert loan3.end == l2.end_date
+        assert loan3.external_identifier == l2.external_identifier
+
+        # remove the open access loan
+        db.session.delete(loan3)
 
         # One hold.
         other_patron = db.patron()
