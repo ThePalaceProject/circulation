@@ -9,7 +9,6 @@ from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
 from core.external_search import ExternalSearchIndex
-from core.model import Work
 from core.model.work import Work
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
@@ -49,6 +48,10 @@ class SearchServiceFake(SearchService):
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._indexes_created = []
         self._document_submission_attempts = []
+
+    @property
+    def base_revision_name(self) -> str:
+        return self.base_name
 
     @property
     def document_submission_attempts(self) -> list[dict]:
@@ -227,14 +230,14 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
 
     def __init__(
         self,
-        _db,
-        url: str | None = None,
-        test_search_term: str | None = None,
         revision_directory: SearchRevisionDirectory | None = None,
         version: int | None = None,
     ):
+        revision_directory = revision_directory or SearchRevisionDirectory.create()
         super().__init__(
-            _db, url, test_search_term, revision_directory, version, SearchServiceFake()
+            service=SearchServiceFake(),
+            revision_directory=revision_directory,
+            version=version,
         )
 
         self._mock_multi_works: list[dict] = []

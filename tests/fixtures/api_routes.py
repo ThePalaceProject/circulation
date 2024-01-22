@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Generator
 from typing import Any
+from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -128,7 +129,7 @@ class RouteTestFixture:
         self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
         if not RouteTestFixture.REAL_CIRCULATION_MANAGER:
-            manager = MockCirculationManager(self.db.session)
+            manager = MockCirculationManager(self.db.session, MagicMock())
             RouteTestFixture.REAL_CIRCULATION_MANAGER = manager
 
         app = MockApp()

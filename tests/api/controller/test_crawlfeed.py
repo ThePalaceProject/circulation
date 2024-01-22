@@ -235,11 +235,6 @@ class TestCrawlableFeed:
             assert INVALID_INPUT.uri == response.uri
             assert None == self.page_called_with
 
-        # Bad search engine -> problem detail
-        circulation_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: circulation_fixture.manager.opds_feeds._crawlable_feed(**in_kwargs)
-        )
-
         # Good pagination data -> feed_class.page() is called.
         sort_key = ["sort", "pagination", "key"]
         with circulation_fixture.request_context_with_library(
@@ -297,7 +292,10 @@ class TestCrawlableFeed:
         # Finally, remove the mock feed class and verify that a real OPDS
         # feed is generated from the result of MockLane.works()
         del in_kwargs["feed_class"]
-        with circulation_fixture.request_context_with_library("/"):
+        with (
+            circulation_fixture.request_context_with_library("/"),
+            circulation_fixture.wired_container(),
+        ):
             response = circulation_fixture.manager.opds_feeds._crawlable_feed(
                 **in_kwargs
             )

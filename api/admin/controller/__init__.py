@@ -37,16 +37,9 @@ def setup_admin_controllers(manager: CirculationManager):
     )
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.reset_password import ResetPasswordController
-    from api.admin.controller.search_service_self_tests import (
-        SearchServiceSelfTestsController,
-    )
     from api.admin.controller.self_tests import SelfTestsController
     from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
-    from api.admin.controller.sitewide_services import (
-        SearchServicesController,
-        SitewideServicesController,
-    )
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
     )
@@ -92,11 +85,6 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_individual_admin_settings_controller = (
         IndividualAdminSettingsController(manager)
     )
-    manager.admin_sitewide_services_controller = SitewideServicesController(manager)
-    manager.admin_search_service_self_tests_controller = (
-        SearchServiceSelfTestsController(manager)
-    )
-    manager.admin_search_services_controller = SearchServicesController(manager)
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
     manager.admin_announcement_service = AnnouncementSettings(manager)
     manager.admin_search_controller = AdminSearchController(manager)

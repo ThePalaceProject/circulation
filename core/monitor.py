@@ -920,11 +920,9 @@ class WorkReaper(ReaperMonitor):
     MODEL_CLASS = Work
 
     def __init__(self, *args, **kwargs):
-        from core.external_search import ExternalSearchIndex
-
         search_index_client = kwargs.pop("search_index_client", None)
         super().__init__(*args, **kwargs)
-        self.search_index_client = search_index_client or ExternalSearchIndex(self._db)
+        self.search_index_client = search_index_client or self.services.search.index()
 
     def query(self):
         return (
@@ -935,7 +933,7 @@ class WorkReaper(ReaperMonitor):
 
     def delete(self, work):
         """Delete work from opensearch and database."""
-        work.delete(self.search_index_client)
+        work.delete(search_index=self.search_index_client)
 
 
 ReaperMonitor.REGISTRY.append(WorkReaper)

@@ -19,6 +19,7 @@ from core.model.integration import IntegrationLibraryConfiguration
 from core.model.licensing import Hold, License, LicensePool, Loan
 from core.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class ExampleCollectionFixture:
@@ -551,7 +552,11 @@ class TestCollection:
         setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.FEEDBOOKS])
         expect(qu, [overdrive_ebook])
 
-    def test_delete(self, example_collection_fixture: ExampleCollectionFixture):
+    def test_delete(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        services_fixture_wired: ServicesFixture,
+    ):
         """Verify that Collection.delete will only operate on collections
         flagged for deletion, and that deletion cascades to all
         relevant related database objects.
@@ -649,12 +654,15 @@ class TestCollection:
         index.remove_work.assert_called_once_with(work)
 
         # If no search_index is passed into delete() (the default behavior),
-        # we try to instantiate the normal ExternalSearchIndex object. Since
-        # no search index is configured, this will raise an exception -- but
-        # delete() will catch the exception and carry out the delete,
-        # without trying to delete any Works from the search index.
+        # then it will use the search index injected from the services
+        # container.
         collection2.marked_for_deletion = True
         collection2.delete()
+
+        # The search index was injected and told to remove the second work.
+        services_fixture_wired.search_fixture.index_mock.remove_work.assert_called_once_with(
+            work2
+        )
 
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()

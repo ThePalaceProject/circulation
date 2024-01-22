@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 import pytz
+from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
     Boolean,
     Column,
@@ -30,7 +31,6 @@ from sqlalchemy.sql.expression import and_, case, join, literal_column, or_, sel
 from sqlalchemy.sql.functions import func
 
 from core.classifier import Classifier, WorkClassifier
-from core.config import CannotLoadConfiguration
 from core.model import (
     Base,
     PresentationCalculationPolicy,
@@ -58,6 +58,7 @@ else:
 
 # Import related models when doing type checking
 if TYPE_CHECKING:
+    from core.external_search import ExternalSearchIndex
     from core.model import CustomListEntry, Library, LicensePool
 
 
@@ -2169,19 +2170,13 @@ class Work(Base):
         )
         return genre.name if genre else None
 
-    def delete(self, search_index=None):
+    @inject
+    def delete(
+        self, search_index: ExternalSearchIndex = Provide["search.index"]
+    ) -> None:
         """Delete the work from both the DB and search index."""
         _db = Session.object_session(self)
-        if search_index is None:
-            try:
-                from core.external_search import ExternalSearchIndex
-
-                search_index = ExternalSearchIndex(_db)
-            except CannotLoadConfiguration as e:
-                # No search index is configured. This is fine -- just skip that part.
-                pass
-        if search_index is not None:
-            search_index.remove_work(self)
+        search_index.remove_work(self)
         _db.delete(self)
 
 

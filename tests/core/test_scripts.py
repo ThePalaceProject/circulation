@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from api.lanes import create_default_lanes
 from core.classifier import Classifier
-from core.config import CannotLoadConfiguration, Configuration, ConfigurationConstants
+from core.config import Configuration, ConfigurationConstants
 from core.external_search import ExternalSearchIndex, Filter
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
@@ -90,6 +90,7 @@ from tests.core.mock import (
 )
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.fixtures.services import ServicesFixture
 
 
 class TestScript:
@@ -1608,23 +1609,6 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
 
 
 class TestWhereAreMyBooksScript:
-    def test_no_search_integration(self, db: DatabaseTransactionFixture):
-        # We can't even get started without a working search integration.
-
-        # We'll also test the out() method by mocking the script's
-        # standard output and using the normal out() implementation.
-        # In other tests, which have more complicated output, we mock
-        # out(), so this verifies that output actually gets written
-        # out.
-        output = StringIO()
-        pytest.raises(
-            CannotLoadConfiguration, WhereAreMyBooksScript, db.session, output=output
-        )
-        assert (
-            "Here's your problem: the search integration is missing or misconfigured.\n"
-            == output.getvalue()
-        )
-
     @pytest.mark.skip(
         reason="This test currently freezes inside pytest and has to be killed with SIGKILL."
     )
@@ -2018,7 +2002,9 @@ class TestRebuildSearchIndexScript:
 
         # The mock methods were called with the values we expect.
         assert {work.id, work2.id} == set(
-            map(lambda d: d["_id"], external_search_fake_fixture.search.documents_all())
+            map(
+                lambda d: d["_id"], external_search_fake_fixture.service.documents_all()
+            )
         )
 
         # The script returned a list containing a single
@@ -2286,38 +2272,33 @@ class TestCustomListUpdateEntriesScript:
         assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
         assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
 
-    def test_search_facets(self, end_to_end_search_fixture: EndToEndSearchFixture):
-        with patch("core.query.customlist.ExternalSearchIndex") as mock_index:
-            fixture = end_to_end_search_fixture
-            db, session = (
-                fixture.external_search.db,
-                fixture.external_search.db.session,
-            )
-            data = self._populate_works(fixture)
-            fixture.populate_search_index()
+    def test_search_facets(
+        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
+    ):
+        mock_index = services_fixture_wired.search_fixture.index_mock
 
-            last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
-            custom_list, _ = db.customlist()
-            custom_list.library = db.default_library()
-            custom_list.auto_update_enabled = True
-            custom_list.auto_update_query = json.dumps(
-                dict(query=dict(key="title", value="Populated Book"))
-            )
-            custom_list.auto_update_facets = json.dumps(
-                dict(order="title", languages="fr", media=["book", "audio"])
-            )
-            custom_list.auto_update_last_update = last_updated
+        last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
+        custom_list, _ = db.customlist()
+        custom_list.library = db.default_library()
+        custom_list.auto_update_enabled = True
+        custom_list.auto_update_query = json.dumps(
+            dict(query=dict(key="title", value="Populated Book"))
+        )
+        custom_list.auto_update_facets = json.dumps(
+            dict(order="title", languages="fr", media=["book", "audio"])
+        )
+        custom_list.auto_update_last_update = last_updated
 
-            script = CustomListUpdateEntriesScript(session)
-            script.process_custom_list(custom_list)
+        script = CustomListUpdateEntriesScript(db.session)
+        script.process_custom_list(custom_list)
 
-            assert mock_index().query_works.call_count == 1
-            filter: Filter = mock_index().query_works.call_args_list[0][0][1]
-            assert filter.sort_order[0] == {
-                "sort_title": "asc"
-            }  # since we asked for title ordering this should come up first
-            assert filter.languages == ["fr"]
-            assert filter.media == ["book", "audio"]
+        assert mock_index.query_works.call_count == 1
+        filter: Filter = mock_index.query_works.call_args_list[0][0][1]
+        assert filter.sort_order[0] == {
+            "sort_title": "asc"
+        }  # since we asked for title ordering this should come up first
+        assert filter.languages == ["fr"]
+        assert filter.media == ["book", "audio"]
 
     @freeze_time("2022-01-01", as_kwarg="frozen_time")
     def test_no_last_update(

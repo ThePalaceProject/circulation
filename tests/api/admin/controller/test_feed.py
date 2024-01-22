@@ -15,7 +15,10 @@ class TestFeedController:
 
         unsuppressed_work = admin_librarian_fixture.ctrl.db.work()
 
-        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+        with (
+            admin_librarian_fixture.request_context_with_library_and_admin("/"),
+            admin_librarian_fixture.ctrl.wired_container(),
+        ):
             response = (
                 admin_librarian_fixture.manager.admin_feed_controller.suppressed()
             )

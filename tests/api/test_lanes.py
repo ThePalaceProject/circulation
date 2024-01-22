@@ -1048,7 +1048,7 @@ class TestCrawlableCollectionBasedLane:
         lane = CrawlableCollectionBasedLane()
         lane.initialize([db.default_collection()])
         search = external_search_fake_fixture.external_search
-        search.query_works = MagicMock(return_value=[])  # type: ignore [method-assign]
+        search.query_works = MagicMock(return_value=[])
         lane.works(
             db.session, facets=CrawlableFacets.default(None), search_engine=search
         )

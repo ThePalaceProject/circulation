@@ -26,7 +26,7 @@ compose_cmd() {
 
 run_in_container()
 {
-  compose_cmd run --build --rm webapp /bin/bash -c "source env/bin/activate && $*"
+  compose_cmd run --build --rm --no-deps webapp /bin/bash -c "source env/bin/activate && $*"
 }
 
 cleanup() {
@@ -105,10 +105,12 @@ if [[ -z $first_migration_commit ]]; then
   exit 1
 fi
 
-echo "Starting containers and initializing database at commit ${first_migration_commit}"
-git checkout -q "${first_migration_commit}"
+echo "Starting containers"
 compose_cmd down
 compose_cmd up -d pg
+
+echo "Initializing database at commit ${first_migration_commit}"
+git checkout -q "${first_migration_commit}"
 run_in_container "./bin/util/initialize_instance"
 initialize_exit_code=$?
 if [[ $initialize_exit_code -ne 0 ]]; then

@@ -1,35 +1,51 @@
 version: "3.9"
 
-# Common set of CM environment variables
+# Common CM setup
 # see: https://github.com/compose-spec/compose-spec/blob/master/spec.md#extension
-x-cm-env-variables: &cm-env-variables
-  SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
-  PALACE_STORAGE_ACCESS_KEY: "palace"
-  PALACE_STORAGE_SECRET_KEY: "test123456789"
-  PALACE_STORAGE_ENDPOINT_URL: "http://minio:9000"
-  PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
-  PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
-  PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
-  PALACE_REPORTING_NAME: "TEST CM"
+x-cm-variables: &cm
+  platform: "${BUILD_PLATFORM-}"
+  environment:
+    SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+    PALACE_SEARCH_URL: "http://os:9200"
+    PALACE_STORAGE_ACCESS_KEY: "palace"
+    PALACE_STORAGE_SECRET_KEY: "test123456789"
+    PALACE_STORAGE_ENDPOINT_URL: "http://minio:9000"
+    PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
+    PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
+    PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
+    PALACE_REPORTING_NAME: "TEST CM"
+  depends_on:
+    pg:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+    os:
+      condition: service_healthy
+
+x-cm-build: &cm-build
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    - BASE_IMAGE=${BUILD_BASE_IMAGE-ghcr.io/thepalaceproject/circ-baseimage:latest}
+  cache_from:
+    - ${BUILD_CACHE_FROM-ghcr.io/thepalaceproject/circ-webapp:main}
 
 services:
   # example docker compose configuration for testing and development
 
   webapp:
+    <<: *cm
     build:
-      context: .
-      dockerfile: docker/Dockerfile
+      <<: *cm-build
       target: webapp
     ports:
       - "6500:80"
-    environment: *cm-env-variables
 
   scripts:
+    <<: *cm
     build:
-      context: .
-      dockerfile: docker/Dockerfile
+      <<: *cm-build
       target: scripts
-    environment: *cm-env-variables
 
   pg:
     image: "postgres:12"
@@ -37,6 +53,11 @@ services:
       POSTGRES_USER: palace
       POSTGRES_PASSWORD: test
       POSTGRES_DB: circ
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U palace -d circ"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
 
   minio:
     image: "bitnami/minio:2023.2.27"
@@ -48,11 +69,22 @@ services:
       MINIO_ROOT_PASSWORD: "test123456789"
       MINIO_SCHEME: "http"
       MINIO_DEFAULT_BUCKETS: "public:download,analytics"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   os:
     build:
       dockerfile: docker/Dockerfile.ci
       target: opensearch
+      context: .
     environment:
-      discovery.type: single-node
-      DISABLE_SECURITY_PLUGIN: true
+      discovery.type: "single-node"
+      DISABLE_SECURITY_PLUGIN: "true"
+    healthcheck:
+      test: curl --silent http://localhost:9200 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      interval: 30s
+      timeout: 10s
+      retries: 5

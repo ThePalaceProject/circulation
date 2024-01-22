@@ -120,7 +120,7 @@ Elasticsearch is no longer supported.
 We recommend that you run Opensearch with docker using the following docker commands:
 
 ```sh
-docker run --name opensearch -d --rm -p 9006:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
+docker run --name opensearch -d --rm -p 9200:9200 -e "discovery.type=single-node" -e "plugins.security.disabled=true" "opensearchproject/opensearch:1"
 docker exec opensearch opensearch-plugin -s install analysis-icu
 docker restart opensearch
 ```
@@ -159,6 +159,22 @@ To let the application know which database to use, set the `SIMPLIFIED_PRODUCTIO
 
 ```sh
 export SIMPLIFIED_PRODUCTION_DATABASE="postgresql://palace:test@localhost:5432/circ"
+```
+
+#### Opensearch
+
+To let the application know which Opensearch instance to use, you can set the following environment variables:
+
+- `PALACE_SEARCH_URL`: The url of the Opensearch instance (**required**).
+- `PALACE_SEARCH_INDEX_PREFIX`: The prefix to use for the Opensearch indices. The default is `circulation-works`.
+    This is useful if you want to use the same Opensearch instance for multiple CM (optional).
+- `PALACE_SEARCH_TIMEOUT`: The timeout in seconds to use when connecting to the Opensearch instance. The default is `20`
+  (optional).
+- `PALACE_SEARCH_MAXSIZE`: The maximum size of the connection pool to use when connecting to the Opensearch instance.
+  (optional).
+
+```sh
+export PALACE_SEARCH_URL="http://localhost:9200"
 ```
 
 #### Storage Service
@@ -642,7 +658,7 @@ If you already have elastic search or postgres running locally, you can run them
 following environment variables:
 
 - `SIMPLIFIED_TEST_DATABASE`
-- `SIMPLIFIED_TEST_OPENSEARCH`
+- `PALACE_TEST_SEARCH_URL`
 
 Make sure the ports and usernames are updated to reflect the local configuration.
 

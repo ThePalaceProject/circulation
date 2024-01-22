@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
     Boolean,
     Column,
@@ -570,7 +571,10 @@ class Collection(Base, HasSessionCache):
             )
         return query
 
-    def delete(self, search_index: ExternalSearchIndex | None = None) -> None:
+    @inject
+    def delete(
+        self, search_index: ExternalSearchIndex = Provide["search.index"]
+    ) -> None:
         """Delete a collection.
 
         Collections can have hundreds of thousands of
@@ -599,7 +603,7 @@ class Collection(Base, HasSessionCache):
                 # https://docs.sqlalchemy.org/en/14/orm/cascades.html#notes-on-delete-deleting-objects-referenced-from-collections-and-scalar-relationships
                 work.license_pools.remove(pool)
                 if not work.license_pools:
-                    work.delete(search_index)
+                    work.delete(search_index=search_index)
 
             _db.delete(pool)
 

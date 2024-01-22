@@ -24,7 +24,6 @@ from api.admin.problem_details import (
 )
 from api.admin.validator import Validator
 from api.controller.circulation_manager import CirculationManagerController
-from core.external_search import ExternalSearchIndex
 from core.integration.base import (
     HasChildIntegrationConfiguration,
     HasIntegrationConfiguration,
@@ -406,11 +405,7 @@ class SettingsController(CirculationManagerController, AdminPermissionsControlle
         self_test_results = None
 
         try:
-            if self.type == "search service":
-                self_test_results = ExternalSearchIndex.prior_test_results(
-                    self._db, None, self._db, item
-                )
-            elif self.type == "metadata service" and protocol_class:
+            if self.type == "metadata service" and protocol_class:
                 self_test_results = protocol_class.prior_test_results(
                     self._db, *extra_args
                 )

@@ -449,7 +449,10 @@ class TestCustomListsController:
         list.add_entry(work1)
         list.add_entry(work2)
 
-        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+        with (
+            admin_librarian_fixture.request_context_with_library_and_admin("/"),
+            admin_librarian_fixture.ctrl.wired_container(),
+        ):
             assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id

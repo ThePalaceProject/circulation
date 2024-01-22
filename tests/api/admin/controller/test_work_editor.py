@@ -1,4 +1,5 @@
 import json
+from collections.abc import Generator
 
 import feedparser
 import flask
@@ -64,8 +65,12 @@ class WorkFixture(AdminControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def work_fixture(controller_fixture: ControllerFixture) -> WorkFixture:
-    return WorkFixture(controller_fixture)
+def work_fixture(
+    controller_fixture: ControllerFixture,
+) -> Generator[WorkFixture, None, None]:
+    fixture = WorkFixture(controller_fixture)
+    with fixture.ctrl.wired_container():
+        yield fixture
 
 
 class TestWorkController:

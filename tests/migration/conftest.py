@@ -13,6 +13,7 @@ from pytest_alembic.config import Config
 
 from core.model import json_serializer
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from pytest_alembic import MigrationContext
@@ -21,8 +22,15 @@ if TYPE_CHECKING:
     import alembic.config
 
 
+pytest_plugins = [
+    "tests.fixtures.services",
+]
+
+
 @pytest.fixture(scope="function")
-def application() -> Generator[ApplicationFixture, None, None]:
+def application(
+    services_fixture: ServicesFixture,
+) -> Generator[ApplicationFixture, None, None]:
     app = ApplicationFixture.create()
     yield app
     app.close()

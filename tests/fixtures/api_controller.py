@@ -37,9 +37,11 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
+from core.service.container import Services, wire_container
 from core.util import base64
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.mocks.search import ExternalSearchIndexFake
 
 
 class ControllerFixtureSetupOverrides:
@@ -97,11 +99,17 @@ class ControllerFixture:
         # were created in the test setup.
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
+        # Set up the fake search index.
+        self.search_index = ExternalSearchIndexFake()
+        self.services_container = Services()
+        self.services_container.search.index.override(self.search_index)
+
         if setup_cm:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in
             # TestScopedSession to hang.
             self.set_base_url()
+
             app.manager = self.circulation_manager_setup()
 
     def set_base_url(self):
@@ -109,6 +117,18 @@ class ControllerFixture:
             self.db.session, Configuration.BASE_URL_KEY
         )
         base_url.value = "http://test-circulation-manager/"
+
+    def wire_container(self):
+        wire_container(self.services_container)
+
+    def unwire_container(self):
+        self.services_container.unwire()
+
+    @contextmanager
+    def wired_container(self):
+        self.wire_container()
+        yield
+        self.unwire_container()
 
     def circulation_manager_setup_with_session(
         self, session: Session, overrides: ControllerFixtureSetupOverrides | None = None
@@ -159,7 +179,9 @@ class ControllerFixture:
         self.default_patron = self.default_patrons[self.library]
 
         self.authdata = AuthdataUtility.from_config(self.library)
-        self.manager = MockCirculationManager(session)
+
+        # Create mock CM instance
+        self.manager = MockCirculationManager(session, self.services_container)
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
@@ -338,33 +360,6 @@ class CirculationControllerFixture(ControllerFixture):
             self.manager.external_search._search_write_pointer, [self.works]
         )
         self.manager.external_search.mock_query_works_multi(self.works)
-
-    def assert_bad_search_index_gives_problem_detail(self, test_function):
-        """Helper method to test that a controller method serves a problem
-        detail document when the search index isn't set up.
-
-        Mocking a broken search index is a lot of work; thus the helper method.
-        """
-        old_setup = self.manager.setup_external_search
-        old_value = self.manager._external_search
-
-        try:
-            self.manager._external_search = None
-            self.manager.setup_external_search = lambda: None
-            with self.request_context_with_library("/"):
-                response = test_function()
-                assert 502 == response.status_code
-                assert (
-                    "http://librarysimplified.org/terms/problem/remote-integration-failed"
-                    == response.uri
-                )
-                assert (
-                    "The search index for this site is not properly configured."
-                    == response.detail
-                )
-        finally:
-            self.manager.setup_external_search = old_setup
-            self.manager._external_search = old_value
 
 
 @pytest.fixture(scope="function")

@@ -36,7 +36,7 @@ from core.model.constants import LinkRelations
 from core.util.datetime_helpers import utc_now
 from core.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from core.util.opds_writer import OPDSFeed, OPDSMessage
-from tests.api.feed.fixtures import PatchedUrlFor, patch_url_for  # noqa
+from tests.api.feed.conftest import PatchedUrlFor, patch_url_for  # noqa
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -996,7 +996,7 @@ class TestEntrypointLinkInsertionFixture:
 
 @pytest.fixture()
 def entrypoint_link_insertion_fixture(
-    db,
+    db: DatabaseTransactionFixture,
 ) -> Generator[TestEntrypointLinkInsertionFixture, None, None]:
     data = TestEntrypointLinkInsertionFixture()
     data.db = db
@@ -1076,7 +1076,7 @@ class TestEntrypointLinkInsertion:
                 MockAnnotator(),
                 None,
                 facets,
-                search,
+                search_engine=search,
             )
             return data.mock.called_with
 

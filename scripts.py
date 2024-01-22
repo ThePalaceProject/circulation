@@ -31,7 +31,6 @@ from api.opds_for_distributors import (
     OPDSForDistributorsReaperMonitor,
 )
 from api.overdrive import OverdriveAPI
-from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
 from core.lane import Lane
 from core.marc import Annotator as MarcAnnotator
@@ -96,7 +95,7 @@ class MetadataCalculationScript(Script):
 
     def run(self):
         q = self.q()
-        search_index_client = ExternalSearchIndex(self._db)
+        search_index_client = self.services.search.index()
         self.log.info("Attempting to repair metadata for %d works" % q.count())
 
         success = 0
@@ -528,26 +527,12 @@ class InstanceInitializationScript:
             # Create a secret key if one doesn't already exist.
             ConfigurationSetting.sitewide_secret(session, Configuration.SECRET_KEY)
 
-            # Initialize the search client to create the "-current" alias.
-            try:
-                ExternalSearchIndex(session)
-            except CannotLoadConfiguration:
-                # Opensearch isn't configured, so do nothing.
-                pass
-
         # Stamp the most recent migration as the current state of the DB
         alembic_conf = self._get_alembic_config(connection)
         command.stamp(alembic_conf, "head")
 
-    def initialize_search_indexes(self, _db: Session) -> bool:
-        try:
-            search = ExternalSearchIndex(_db)
-        except CannotLoadConfiguration as ex:
-            self.log.error(
-                "No search integration found yet, cannot initialize search indices."
-            )
-            self.log.error(f"Error: {ex}")
-            return False
+    def initialize_search_indexes(self) -> bool:
+        search = self._container.search.index()
         return search.initialize_indices()
 
     def initialize(self, connection: Connection):
@@ -569,8 +554,7 @@ class InstanceInitializationScript:
             self.initialize_database(connection)
             self.log.info("Initialization complete.")
 
-        with Session(connection) as session:
-            self.initialize_search_indexes(session)
+        self.initialize_search_indexes()
 
     def run(self) -> None:
         """

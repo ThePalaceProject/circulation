@@ -22,6 +22,7 @@ from core.model import (
     get_one,
 )
 from core.model.coverage import EquivalencyCoverageRecord
+from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 from core.util.worker_pools import DatabaseJob
 
@@ -200,6 +201,10 @@ class BaseCoverageProvider:
         self.cutoff_time = cutoff_time
         self.registered_only = registered_only
         self.collection_id = None
+
+        # Call init_resources() to initialize the logging configuration.
+        self.services = container_instance()
+        self.services.init_resources()
 
     @property
     def log(self):

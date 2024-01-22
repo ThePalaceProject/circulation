@@ -42,7 +42,6 @@ from core.model import (
     get_one_or_create,
 )
 from core.model.licensing import LicenseFunctions, LicenseStatus
-from core.service.container import Services
 from core.util import LanguageCodes
 from core.util.datetime_helpers import to_utc, utc_now
 from core.util.median import median
@@ -83,7 +82,7 @@ class ReplacementPolicy:
     @classmethod
     @inject
     def from_license_source(
-        cls, _db, analytics: Analytics = Provide[Services.analytics.analytics], **args
+        cls, _db, analytics: Analytics = Provide["analytics.analytics"], **args
     ):
         """When gathering data from the license source, overwrite all old data
         from this source with new data from the same source. Also

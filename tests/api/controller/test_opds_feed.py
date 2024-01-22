@@ -6,9 +6,7 @@ from urllib.parse import quote_plus
 import feedparser
 from flask import url_for
 
-from api.circulation_manager import CirculationManager
 from api.lanes import HasSeriesFacets, JackpotFacets, JackpotWorkList
-from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.app_server import load_facets_from_request
 from core.entrypoint import AudiobooksEntryPoint, EverythingEntryPoint
 from core.external_search import SortKeyPagination
@@ -78,11 +76,6 @@ class TestOPDSFeedController:
                 == response.uri
             )
 
-        # Bad search index setup -> Problem detail
-        circulation_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: circulation_fixture.manager.opds_feeds.feed(lane_id)
-        )
-
         # Now let's make a real feed.
 
         # Set up configuration settings for links and entry points
@@ -94,8 +87,11 @@ class TestOPDSFeedController:
         settings.about = "d"  # type: ignore[assignment]
 
         # Make a real OPDS feed and poke at it.
-        with circulation_fixture.request_context_with_library(
-            "/?entrypoint=Book&size=10"
+        with (
+            circulation_fixture.request_context_with_library(
+                "/?entrypoint=Book&size=10"
+            ),
+            circulation_fixture.wired_container(),
         ):
             response = circulation_fixture.manager.opds_feeds.feed(
                 circulation_fixture.english_adult_fiction.id
@@ -275,11 +271,6 @@ class TestOPDSFeedController:
                 "http://librarysimplified.org/terms/problem/unknown-lane"
                 == response.uri
             )
-
-        # Bad search index setup -> Problem detail
-        circulation_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: circulation_fixture.manager.opds_feeds.groups(None)
-        )
 
         # A grouped feed has no pagination, and the FeaturedFacets
         # constructor never raises an exception. So we don't need to
@@ -491,11 +482,6 @@ class TestOPDSFeedController:
                 == response.uri
             )
 
-        # Bad search index setup -> Problem detail
-        circulation_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: circulation_fixture.manager.opds_feeds.search(None)
-        )
-
         # Loading the SearchFacets object from a request can't return
         # a problem detail, so we can't test that case.
 
@@ -666,28 +652,6 @@ class TestOPDSFeedController:
                 == response.detail
             )
 
-    def test_misconfigured_search(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        circulation_fixture.add_works(self._EXTRA_BOOKS)
-
-        class BadSearch(CirculationManager):
-            @property
-            def setup_search(self):
-                raise Exception("doomed!")
-
-        circulation = BadSearch(circulation_fixture.db.session)
-
-        # An attempt to call FeedController.search() will return a
-        # problem detail.
-        with circulation_fixture.request_context_with_library("/?q=t"):
-            problem = circulation.opds_feeds.search(None)
-            assert REMOTE_INTEGRATION_FAILED.uri == problem.uri
-            assert (
-                "The search index for this site is not properly configured."
-                == problem.detail
-            )
-
     def test__qa_feed(self, circulation_fixture: CirculationControllerFixture):
         circulation_fixture.add_works(self._EXTRA_BOOKS)
 
@@ -701,11 +665,6 @@ class TestOPDSFeedController:
 
         m = circulation_fixture.manager.opds_feeds._qa_feed
         args = (feed_method, "QA test feed", "qa_feed", Facets, worklist_factory)
-
-        # Bad search index setup -> Problem detail
-        circulation_fixture.assert_bad_search_index_gives_problem_detail(
-            lambda: m(*args)
-        )
 
         # Bad faceting information -> Problem detail
         with circulation_fixture.request_context_with_library("/?order=nosuchorder"):

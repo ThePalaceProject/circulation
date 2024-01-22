@@ -295,16 +295,7 @@ class HasSelfTests(BaseHasSelfTests, ABC):
         self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
     ) -> None:
         """Store the results of a self-test in the database."""
-        integration: ExternalIntegration | None
-        from core.external_search import ExternalSearchIndex
-
-        if isinstance(self, ExternalSearchIndex):
-            integration = self.search_integration(_db)
-            for idx, result in enumerate(value.get("results")):  # type: ignore[arg-type]
-                if isinstance(results[idx].result, list):
-                    result["result"] = results[idx].result
-        else:
-            integration = self.external_integration(_db)
+        integration = self.external_integration(_db)
 
         if integration is not None:
             integration.setting(self.SELF_TEST_RESULTS_SETTING).value = json.dumps(
@@ -325,14 +316,8 @@ class HasSelfTests(BaseHasSelfTests, ABC):
         """
         constructor_method = constructor_method or cls
         instance = constructor_method(*args, **kwargs)
-        integration: ExternalIntegration | None
 
-        from core.external_search import ExternalSearchIndex
-
-        if isinstance(instance, ExternalSearchIndex):
-            integration = instance.search_integration(_db)
-        else:
-            integration = instance.external_integration(_db)
+        integration = instance.external_integration(_db)
 
         if integration:
             return (

@@ -2,6 +2,7 @@ import logging
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -80,7 +81,7 @@ class AdminRouteFixture:
         self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
         if not self.REAL_CIRCULATION_MANAGER:
-            circ_manager = MockCirculationManager(self.db.session)
+            circ_manager = MockCirculationManager(self.db.session, MagicMock())
             setup_admin_controllers(circ_manager)
             self.REAL_CIRCULATION_MANAGER = circ_manager
 
@@ -618,45 +619,6 @@ class TestAdminMetadataServices:
             url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
         )
         fixture.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminSearchServices:
-    CONTROLLER_NAME = "admin_search_services_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_process_services(self, fixture: AdminRouteFixture):
-        url = "/admin/search_services"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_services  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self, fixture: AdminRouteFixture):
-        url = "/admin/search_service/<service_id>"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminSearchServicesSelfTests:
-    CONTROLLER_NAME = "admin_search_service_self_tests_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_process_search_service_self_tests(self, fixture: AdminRouteFixture):
-        url = "/admin/search_service_self_tests/<identifier>"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_search_service_self_tests, "<identifier>"  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "GET", "POST")
 
 
 class TestAdminCatalogServices:

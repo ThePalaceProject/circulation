@@ -72,6 +72,11 @@ class SearchService(ABC):
     sensible types, rather than the untyped pile of JSON the actual search client provides.
     """
 
+    @property
+    @abstractmethod
+    def base_revision_name(self) -> str:
+        """The base name used for all indexes."""
+
     @abstractmethod
     def read_pointer_name(self) -> str:
         """Get the name used for the read pointer."""
@@ -164,7 +169,7 @@ class SearchServiceOpensearch1(SearchService):
         self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
         self._search = Search(using=self._client)
-        self.base_revision_name = base_revision_name
+        self._base_revision_name = base_revision_name
         self._multi_search = MultiSearch(using=self._client)
         self._indexes_created: list[str] = []
 
@@ -173,6 +178,10 @@ class SearchServiceOpensearch1(SearchService):
         self._client.cluster.put_settings(
             body={"persistent": {"action.auto_create_index": "false"}}
         )
+
+    @property
+    def base_revision_name(self) -> str:
+        return self._base_revision_name
 
     def indexes_created(self) -> list[str]:
         return self._indexes_created

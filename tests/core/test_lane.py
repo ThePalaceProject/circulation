@@ -1,6 +1,7 @@
 import datetime
 import logging
 import random
+from typing import cast
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -15,7 +16,7 @@ from core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
 )
-from core.external_search import Filter, WorkSearchResult, mock_search_index
+from core.external_search import ExternalSearchIndex, Filter, WorkSearchResult
 from core.lane import (
     DatabaseBackedFacets,
     DatabaseBackedWorkList,
@@ -2341,7 +2342,11 @@ class TestWorkList:
         # Ask the WorkList for a page of works, using the search index
         # to drive the query instead of the database.
         result = wl.works(
-            db.session, facets, mock_pagination, search_client, mock_debug
+            db.session,
+            facets,
+            mock_pagination,
+            search_engine=cast(ExternalSearchIndex, search_client),
+            debug=mock_debug,
         )
 
         # MockSearchClient.query_works was used to grab a list of work
@@ -3551,8 +3556,7 @@ class TestLane:
         fiction = db.lane(display_name="Fiction", fiction=True)
         fiction.size = 44
         fiction.size_by_entrypoint = {"Nonexistent entrypoint": 33}
-        with mock_search_index(search_engine):
-            fiction.update_size(db.session)
+        fiction.update_size(db.session, search_engine=search_engine)
 
         # The lane size is also calculated individually for every
         # enabled entry point. EverythingEntryPoint is used for the
@@ -4222,7 +4226,6 @@ class TestWorkListGroupsEndToEnd:
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
-        fixture.external_search_index.start_migration().finish()  # type: ignore [union-attr]
 
         # Tell the fixture to call our populate_works method.
         # In this library, the groups feed includes at most two books
