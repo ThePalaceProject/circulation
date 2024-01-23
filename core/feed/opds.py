@@ -84,7 +84,9 @@ class BaseOPDSFeed(FeedInterface):
             logging.getLogger().error(f"Entry data has not been generated for {entry}")
             raise ValueError(f"Entry data has not been generated")
         response = OPDSEntryResponse(
-            response=serializer.serialize_work_entry(entry.computed),
+            response=serializer.to_string(
+                serializer.serialize_work_entry(entry.computed)
+            ),
             **response_kwargs,
         )
         if isinstance(serializer, OPDS2Serializer):
