@@ -182,7 +182,21 @@ class TestLoanController:
             )
             assert (hold, other_pool) == result
 
-    def test_borrow_success(self, loan_fixture: LoanFixture):
+    @pytest.mark.parametrize(
+        "accept_header,expected_content_type_prefix",
+        [
+            (None, "application/atom+xml"),
+            ("default-foo-bar", "application/atom+xml"),
+            ("application/atom+xml", "application/atom+xml"),
+            ("application/opds+json", "application/opds+json"),
+        ],
+    )
+    def test_borrow_success(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type_prefix,
+    ):
         # Create a loanable LicensePool.
         work = loan_fixture.db.work(
             with_license_pool=True, with_open_access_download=False
@@ -199,9 +213,36 @@ class TestLoanController:
                 utc_now() + datetime.timedelta(seconds=3600),
             ),
         )
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
+
+        # Setup headers for the request.
+        headers = {"Authorization": loan_fixture.valid_auth} | (
+            {"Accept": accept_header} if accept_header else {}
+        )
+
+        # Create a new loan.
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier.type, loan_fixture.identifier.identifier
+            )
+            loan = get_one(
+                loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
+            )
+
+            # A new loan should return a 201 status.
+            assert 201 == response.status_code
+
+            # A loan has been created for this license pool.
+            assert loan is not None
+            # The loan has yet to be fulfilled.
+            assert loan.fulfillment is None
+
+            # We've been given an OPDS feed with one entry, which tells us how
+            # to fulfill the license.
+            new_feed_content = response.get_data()
+
+        # Borrow again with an existing loan.
+        with loan_fixture.request_context_with_library("/", headers=headers):
             loan_fixture.manager.loans.authenticated_patron_from_request()
             response = loan_fixture.manager.loans.borrow(
                 loan_fixture.identifier.type, loan_fixture.identifier.identifier
@@ -211,15 +252,28 @@ class TestLoanController:
             loan = get_one(
                 loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
             )
+            # An existing loan should return a 200 status.
+            assert 200 == response.status_code
+
+            # There is still a loan that has not yet been fulfilled.
             assert loan is not None
-            # The loan has yet to be fulfilled.
-            assert None == loan.fulfillment
+            assert loan.fulfillment is None
 
             # We've been given an OPDS feed with one entry, which tells us how
             # to fulfill the license.
-            assert 201 == response.status_code
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
+            existing_feed_content = response.get_data()
+
+            # The new loan feed should look the same as the existing loan feed.
+            assert new_feed_content == existing_feed_content
+
+            if expected_content_type_prefix == "application/atom+xml":
+                assert response.content_type.startswith("application/atom+xml")
+                feed = feedparser.parse(response.get_data())
+                [entry] = feed["entries"]
+            elif expected_content_type_prefix == "application/opds+json":
+                assert "application/opds+json" == response.content_type
+                entry = response.get_json()
+
             fulfillment_links = [
                 x["href"]
                 for x in entry["links"]
