@@ -1,126 +1,115 @@
+from typing import Any
+
 import flask
 from flask import Response
-from flask_babel import lazy_gettext as _
 
-from api.admin.controller.settings import SettingsController
-from api.admin.problem_details import (
-    INCOMPLETE_CONFIGURATION,
-    NO_PROTOCOL_FOR_NEW_SERVICE,
+from api.admin.controller.base import AdminPermissionsControllerMixin
+from api.admin.controller.integration_settings import (
+    IntegrationSettingsSelfTestsController,
 )
-from api.novelist import NoveListAPI
-from api.nyt import NYTBestSellerAPI
-from core.model import ExternalIntegration, get_one
-from core.util.problem_detail import ProblemDetail
+from api.admin.form_data import ProcessFormData
+from api.admin.problem_details import DUPLICATE_INTEGRATION
+from api.integration.registry.metadata import MetadataRegistry
+from api.metadata.base import MetadataServiceType
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.registry import IntegrationRegistry
+from core.model import (
+    IntegrationConfiguration,
+    get_one,
+    json_serializer,
+    site_configuration_has_changed,
+)
+from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 
-class MetadataServicesController(SettingsController):
-    def __init__(self, manager):
-        super().__init__(manager)
-        self.provider_apis = [
-            NYTBestSellerAPI,
-            NoveListAPI,
-        ]
+class MetadataServicesController(
+    IntegrationSettingsSelfTestsController[MetadataServiceType],
+    AdminPermissionsControllerMixin,
+):
+    def create_new_service(self, name: str, protocol: str) -> IntegrationConfiguration:
+        impl_cls = self.registry[protocol]
+        if not impl_cls.multiple_services_allowed():
+            # If the service doesn't allow multiple instances, check if one already exists
+            existing_service = get_one(
+                self._db,
+                IntegrationConfiguration,
+                goal=self.registry.goal,
+                protocol=protocol,
+            )
+            if existing_service is not None:
+                raise ProblemError(DUPLICATE_INTEGRATION)
+        return super().create_new_service(name, protocol)
 
-        self.protocols = self._get_integration_protocols(
-            self.provider_apis, protocol_name_attr="PROTOCOL"
-        )
-        self.goal = ExternalIntegration.METADATA_GOAL
-        self.type = _("metadata service")
+    def default_registry(self) -> IntegrationRegistry[MetadataServiceType]:
+        return MetadataRegistry()
 
-    def process_metadata_services(self):
+    def process_metadata_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
         if flask.request.method == "GET":
             return self.process_get()
         else:
             return self.process_post()
 
-    def process_get(self):
-        metadata_services = self._get_integration_info(self.goal, self.protocols)
-        for service in metadata_services:
-            service_object = get_one(
-                self._db,
-                ExternalIntegration,
-                id=service.get("id"),
-                goal=ExternalIntegration.METADATA_GOAL,
-            )
-            protocol_class, tuple = self.find_protocol_class(service_object)
-            service["self_test_results"] = self._get_prior_test_results(
-                service_object, protocol_class, *tuple
-            )
-
-        return dict(
-            metadata_services=metadata_services,
-            protocols=self.protocols,
+    def process_get(self) -> Response:
+        return Response(
+            json_serializer(
+                {
+                    "metadata_services": self.configured_services,
+                    "protocols": list(self.protocols.values()),
+                }
+            ),
+            status=200,
+            mimetype="application/json",
         )
 
-    def find_protocol_class(self, integration):
-        if integration.protocol == ExternalIntegration.NYT:
-            return (NYTBestSellerAPI, (NYTBestSellerAPI.from_config, self._db))
-        elif integration.protocol == ExternalIntegration.NOVELIST:
-            return (NoveListAPI, (NoveListAPI.from_config, self._db))
-        raise NotImplementedError(
-            "No metadata self-test class for protocol %s" % integration.protocol
-        )
+    def process_post(self) -> Response | ProblemDetail:
+        try:
+            form_data = flask.request.form
+            libraries_data = self.get_libraries_data(form_data)
+            metadata_service, protocol, response_code = self.get_service(form_data)
 
-    def process_post(self):
-        name = flask.request.form.get("name")
-        protocol = flask.request.form.get("protocol")
-        url = flask.request.form.get("url")
-        fields = {"name": name, "protocol": protocol, "url": url}
-        form_field_error = self.validate_form_fields(**fields)
-        if form_field_error:
-            return form_field_error
+            # Update settings
+            impl_cls = self.registry[protocol]
+            settings_class = impl_cls.settings_class()
+            validated_settings = ProcessFormData.get_settings(settings_class, form_data)
+            metadata_service.settings_dict = validated_settings.dict()
 
-        id = flask.request.form.get("id")
-        is_new = False
-        if id:
-            # Find an existing service in order to edit it
-            service = self.look_up_service_by_id(id, protocol)
-        else:
-            service, is_new = self._create_integration(
-                self.protocols, protocol, self.goal
+            # Update library settings
+            if libraries_data and issubclass(
+                impl_cls, HasLibraryIntegrationConfiguration
+            ):
+                self.process_libraries(
+                    metadata_service, libraries_data, impl_cls.library_settings_class()
+                )
+
+            # Trigger a site configuration change
+            site_configuration_has_changed(self._db)
+
+        except ProblemError as e:
+            self._db.rollback()
+            return e.problem_detail
+
+        return Response(str(metadata_service.id), response_code)
+
+    def process_delete(self, service_id: int) -> Response:
+        self.require_system_admin()
+        return self.delete_service(service_id)
+
+    def run_self_tests(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        protocol_class = self.get_protocol_class(integration.protocol)
+        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+            settings = protocol_class.settings_load(integration)
+            test_result, _ = protocol_class.run_self_tests(
+                self._db, protocol_class, self._db, settings
             )
+            return test_result
 
-        if isinstance(service, ProblemDetail):
-            self._db.rollback()
-            return service
+        return None
 
-        name_error = self.check_name_unique(service, name)
-        if name_error:
-            self._db.rollback()
-            return name_error
-
-        protocol_error = self.set_protocols(service, protocol)
-        if protocol_error:
-            self._db.rollback()
-            return protocol_error
-
-        service.name = name
-
-        if is_new:
-            return Response(str(service.id), 201)
-        else:
-            return Response(str(service.id), 200)
-
-    def validate_form_fields(self, **fields):
-        """The 'name' and 'protocol' fields cannot be blank, and the protocol must
-        be selected from the list of recognized protocols.  The URL must be valid."""
-        name = fields.get("name")
-        protocol = fields.get("protocol")
-        url = fields.get("url")
-
-        if not name:
-            return INCOMPLETE_CONFIGURATION
-        if not protocol:
-            return NO_PROTOCOL_FOR_NEW_SERVICE
-
-        error = self.validate_protocol()
-        if error:
-            return error
-
-        wrong_format = self.validate_formats()
-        if wrong_format:
-            return wrong_format
-
-    def process_delete(self, service_id):
-        return self._delete_integration(service_id, self.goal)
+    def process_metadata_service_self_tests(
+        self, identifier: int | None
+    ) -> Response | ProblemDetail:
+        return self.process_self_tests(identifier)

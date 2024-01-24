@@ -26,14 +26,10 @@ def setup_admin_controllers(manager: CirculationManager):
     )
     from api.admin.controller.lanes import LanesController
     from api.admin.controller.library_settings import LibrarySettingsController
-    from api.admin.controller.metadata_service_self_tests import (
-        MetadataServiceSelfTestsController,
-    )
     from api.admin.controller.metadata_services import MetadataServicesController
     from api.admin.controller.patron import PatronController
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.reset_password import ResetPasswordController
-    from api.admin.controller.self_tests import SelfTestsController
     from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_settings import (
@@ -54,15 +50,11 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_dashboard_controller = DashboardController(manager)
     manager.admin_settings_controller = SettingsController(manager)
     manager.admin_patron_controller = PatronController(manager)
-    manager.admin_self_tests_controller = SelfTestsController(manager)
     manager.admin_discovery_services_controller = DiscoveryServicesController(manager)
     manager.admin_discovery_service_library_registrations_controller = (
         DiscoveryServiceLibraryRegistrationsController(manager)
     )
     manager.admin_metadata_services_controller = MetadataServicesController(manager)
-    manager.admin_metadata_service_self_tests_controller = (
-        MetadataServiceSelfTestsController(manager)
-    )
     manager.admin_patron_auth_services_controller = PatronAuthServicesController(
         manager
     )

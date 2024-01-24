@@ -2,7 +2,8 @@ import logging
 
 import core.classifier as genres
 from api.config import CannotLoadConfiguration, Configuration
-from api.novelist import NoveListAPI
+from api.metadata.novelist import NoveListAPI
+from api.metadata.nyt import NYTBestSellerAPI
 from core import classifier
 from core.classifier import Classifier, GenreData, fiction_genres, nonfiction_genres
 from core.lane import (
@@ -12,16 +13,7 @@ from core.lane import (
     Lane,
     WorkList,
 )
-from core.model import (
-    Contributor,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Library,
-    Session,
-    create,
-    get_one,
-)
+from core.model import Contributor, DataSource, Edition, Library, Session, create
 from core.util import LanguageCodes
 
 
@@ -275,16 +267,13 @@ def create_lanes_for_large_collection(_db, library, languages, priority=0):
     adult_common_args = dict(common_args)
     adult_common_args["audiences"] = ADULT
 
-    include_best_sellers = False
     nyt_data_source = DataSource.lookup(_db, DataSource.NYT)
-    nyt_integration = get_one(
-        _db,
-        ExternalIntegration,
-        goal=ExternalIntegration.METADATA_GOAL,
-        protocol=ExternalIntegration.NYT,
-    )
-    if nyt_integration:
+    try:
+        NYTBestSellerAPI.from_config(_db)
         include_best_sellers = True
+    except CannotLoadConfiguration:
+        # No NYT Best Seller integration is configured.
+        include_best_sellers = False
 
     sublanes = []
     if include_best_sellers:

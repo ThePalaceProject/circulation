@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import feedparser
 import flask
@@ -19,7 +19,7 @@ from api.lanes import (
     SeriesFacets,
     SeriesLane,
 )
-from api.novelist import MockNoveListAPI
+from api.metadata.novelist import NoveListAPI
 from api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
@@ -47,7 +47,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.mocks.search import fake_hits
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -496,7 +495,7 @@ class TestWorkController:
         # Prep an empty recommendation.
         source = DataSource.lookup(work_fixture.db.session, self.datasource)
         metadata = Metadata(source)
-        mock_api = MockNoveListAPI(work_fixture.db.session)
+        mock_api = create_autospec(NoveListAPI)
 
         args = [self.identifier.type, self.identifier.identifier]
         kwargs: dict[str, Any] = dict(novelist_api=mock_api)
@@ -524,12 +523,6 @@ class TestWorkController:
 
         # If the NoveList API is configured, the search index is asked
         # about its recommendations.
-        #
-        # This test no longer makes sense, the external_search no longer blindly returns information
-        # The query_works is not overidden, so we mock it manually
-        work_fixture.manager.external_search.query_works = MagicMock(
-            return_value=fake_hits([work_fixture.english_1])
-        )
         with work_fixture.request_context_with_library("/"):
             response = work_fixture.manager.work_controller.recommendations(
                 *args, **kwargs
@@ -666,7 +659,7 @@ class TestWorkController:
         )
         work_fixture.manager.external_search.mock_query_works([same_author_and_series])
 
-        mock_api = MockNoveListAPI(work_fixture.db.session)
+        mock_api = create_autospec(NoveListAPI)
 
         # Create a fresh book, and set up a mock NoveList API to
         # recommend its identifier for any input.
@@ -680,7 +673,7 @@ class TestWorkController:
         metadata = Metadata(overdrive)
         recommended_identifier = work_fixture.db.identifier()
         metadata.recommendations = [recommended_identifier]
-        mock_api.setup_method(metadata)
+        mock_api.lookup.return_value = metadata
 
         # Now, ask for works related to work_fixture.english_1.
         with work_fixture.request_context_with_library("/?entrypoint=Book"):
@@ -742,7 +735,6 @@ class TestWorkController:
                 resp.as_response.return_value = Response("An OPDS feed")
                 return resp
 
-        mock_api.setup_method(metadata)
         with work_fixture.request_context_with_library("/?entrypoint=Audio"):
             response = work_fixture.manager.work_controller.related(
                 work_fixture.identifier.type,

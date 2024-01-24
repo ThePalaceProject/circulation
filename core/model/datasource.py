@@ -56,7 +56,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can generate many IDEquivalencies.
     id_equivalencies: Mapped[list[Equivalency]] = relationship(
-        "Equivalency", backref="data_source"
+        "Equivalency", back_populates="data_source"
     )
 
     # One DataSource can grant access to many LicensePools.

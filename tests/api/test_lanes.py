@@ -1,8 +1,9 @@
 from collections import Counter
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from api.integration.registry.metadata import MetadataRegistry
 from api.lanes import (
     ContributorFacets,
     ContributorLane,
@@ -25,20 +26,15 @@ from api.lanes import (
     create_lanes_for_large_collection,
     create_world_languages_lane,
 )
-from api.novelist import MockNoveListAPI
+from api.metadata.novelist import NoveListAPI
+from api.metadata.nyt import NYTBestSellerAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import Filter
+from core.integration.goals import Goals
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
-from core.model import (
-    Contributor,
-    DataSource,
-    Edition,
-    ExternalIntegration,
-    Library,
-    create,
-)
+from core.model import Contributor, DataSource, Edition, ExternalIntegration, Library
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
@@ -123,11 +119,12 @@ class TestLaneCreation:
             db.session.delete(lane)
 
         # If there's an NYT Best Sellers integration and we create the lanes again...
-        integration, ignore = create(
-            db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.METADATA_GOAL,
-            protocol=ExternalIntegration.NYT,
+        nyt_protocol = MetadataRegistry().get_protocol(NYTBestSellerAPI)
+        assert nyt_protocol is not None
+        db.integration_configuration(
+            nyt_protocol,
+            goal=Goals.METADATA_GOAL,
+            password="foo",
         )
 
         create_lanes_for_large_collection(db.session, db.default_library(), languages)
@@ -553,18 +550,11 @@ class TestRelatedBooksLane:
 
         # When NoveList is configured and recommendations are available,
         # a RecommendationLane will be included.
-        db.external_integration(
-            ExternalIntegration.NOVELIST,
-            goal=ExternalIntegration.METADATA_GOAL,
-            username="library",
-            password="sure",
-            libraries=[db.default_library()],
-        )
-        mock_api = MockNoveListAPI(db.session)
+        mock_api = create_autospec(NoveListAPI)
         response = Metadata(
             related_books_fixture.edition.data_source, recommendations=[db.identifier()]
         )
-        mock_api.setup_method(response)
+        mock_api.lookup.return_value = response
         result = RelatedBooksLane(
             db.default_library(), related_books_fixture.work, "", novelist_api=mock_api
         )
@@ -692,8 +682,8 @@ class TestRecommendationLane:
         source = DataSource.lookup(lane_fixture.db.session, DataSource.OVERDRIVE)
         metadata = Metadata(source)
 
-        mock_api = MockNoveListAPI(lane_fixture.db.session)
-        mock_api.setup_method(metadata)
+        mock_api = create_autospec(NoveListAPI)
+        mock_api.lookup.return_value = metadata
         return mock_api
 
     def test_modify_search_filter_hook(self, lane_fixture: LaneFixture):

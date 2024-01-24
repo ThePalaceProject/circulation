@@ -481,7 +481,7 @@ def metadata_service(service_id):
 @requires_admin
 @requires_csrf_token
 def metadata_service_self_tests(identifier):
-    return app.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+    return app.manager.admin_metadata_services_controller.process_metadata_service_self_tests(
         identifier
     )
 

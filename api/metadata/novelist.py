@@ -1,15 +1,24 @@
+import datetime
 import json
 import logging
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
+from collections.abc import Mapping
+from typing import Any
 
-from flask_babel import lazy_gettext as _
+from requests import Response
+from sqlalchemy.engine import Row
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql import and_, join, or_, select
 
+from api.metadata.base import MetadataService, MetadataServiceSettings
 from core.config import CannotLoadConfiguration
+from core.integration.base import HasLibraryIntegrationConfiguration
+from core.integration.goals import Goals
+from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
 from core.metadata_layer import (
     ContributorData,
     IdentifierData,
@@ -24,9 +33,10 @@ from core.model import (
     DataSource,
     Edition,
     Equivalency,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
+    IntegrationConfiguration,
+    Library,
     LicensePool,
     Measurement,
     Representation,
@@ -35,32 +45,48 @@ from core.model import (
 )
 from core.util import TitleProcessor
 from core.util.http import HTTP
+from core.util.log import LoggerMixin
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 
-class NoveListAPI:
-    PROTOCOL = ExternalIntegration.NOVELIST
-    NAME = _("Novelist API")
+class NoveListApiSettings(MetadataServiceSettings):
+    """Settings for the NoveList API"""
 
+    username: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Profile",
+        ),
+    )
+    password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="Password",
+        ),
+    )
+
+
+class NoveListApiLibrarySettings(BaseSettings):
+    ...
+
+
+class NoveListAPI(
+    MetadataService[NoveListApiSettings],
+    HasLibraryIntegrationConfiguration[NoveListApiSettings, NoveListApiLibrarySettings],
+    LoggerMixin,
+):
     # Hardcoded authentication key used as a Header for calling the NoveList
     # Collections API. It identifies the client, and lets NoveList know that
     # SimplyE is making the requests.
+    # TODO: This is leftover from before the fork with SimplyE. We should probably
+    #  get a new API key for Palace and use that instead.
     AUTHORIZED_IDENTIFIER = "62521fa1-bdbb-4939-84aa-aee2a52c8d59"
 
-    SETTINGS = [
-        {"key": ExternalIntegration.USERNAME, "label": _("Profile"), "required": True},
-        {"key": ExternalIntegration.PASSWORD, "label": _("Password"), "required": True},
-    ]
-
-    # Different libraries may have different NoveList integrations
-    # on the same circulation manager.
-    SITEWIDE = False
-
-    IS_CONFIGURED = None
-    _configuration_library_id = None
-
-    log = logging.getLogger("NoveList API")
     version = "2.2"
-
     NO_ISBN_EQUIVALENCY = "No clear ISBN equivalency: %r"
 
     # While the NoveList API doesn't require parameters to be passed via URL,
@@ -74,66 +100,81 @@ class NoveListAPI:
     AUTH_PARAMS = "&profile=%(profile)s&password=%(password)s"
     MAX_REPRESENTATION_AGE = 7 * 24 * 60 * 60  # one week
 
-    currentQueryIdentifier = None
-
     medium_to_book_format_type_values = {
         Edition.BOOK_MEDIUM: "EBook",
         Edition.AUDIO_MEDIUM: "Audiobook",
     }
 
     @classmethod
-    def from_config(cls, library):
-        profile, password = cls.values(library)
-        if not (profile and password):
+    def from_config(cls, library: Library) -> Self:
+        settings = cls.values(library)
+        if not settings:
             raise CannotLoadConfiguration(
                 "No NoveList integration configured for library (%s)."
                 % library.short_name
             )
 
         _db = Session.object_session(library)
-        return cls(_db, profile, password)
+        return cls(_db, settings)
 
     @classmethod
-    def values(cls, library):
+    def integration(cls, library: Library) -> IntegrationConfiguration | None:
         _db = Session.object_session(library)
-
-        integration = ExternalIntegration.lookup(
-            _db,
-            ExternalIntegration.NOVELIST,
-            ExternalIntegration.METADATA_GOAL,
-            library=library,
+        query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.goal == Goals.METADATA_GOAL,
+            IntegrationConfiguration.libraries.contains(library),
+            IntegrationConfiguration.protocol.in_(cls.protocols()),
         )
 
-        if not integration:
-            return (None, None)
-
-        profile = integration.username
-        password = integration.password
-        return (profile, password)
+        return _db.execute(query).scalar_one_or_none()
 
     @classmethod
-    def is_configured(cls, library):
-        if cls.IS_CONFIGURED is None or library.id != cls._configuration_library_id:
-            profile, password = cls.values(library)
-            cls.IS_CONFIGURED = bool(profile and password)
-            cls._configuration_library_id = library.id
-        return cls.IS_CONFIGURED
+    def values(cls, library: Library) -> NoveListApiSettings | None:
+        integration = cls.integration(library)
+        if not integration:
+            return None
 
-    def __init__(self, _db, profile, password):
+        return cls.settings_load(integration)
+
+    @classmethod
+    def is_configured(cls, library: Library) -> bool:
+        integration = cls.integration(library)
+        return integration is not None
+
+    @classmethod
+    def label(cls) -> str:
+        return "Novelist API"
+
+    @classmethod
+    def description(cls) -> str:
+        return ""
+
+    @classmethod
+    def settings_class(cls) -> type[NoveListApiSettings]:
+        return NoveListApiSettings
+
+    @classmethod
+    def library_settings_class(cls) -> type[NoveListApiLibrarySettings]:
+        return NoveListApiLibrarySettings
+
+    @classmethod
+    def multiple_services_allowed(cls) -> bool:
+        return True
+
+    def __init__(self, _db: Session, settings: NoveListApiSettings) -> None:
         self._db = _db
-        self.profile = profile
-        self.password = password
+        self.profile = settings.username
+        self.password = settings.password
 
     @property
-    def source(self):
-        return DataSource.lookup(self._db, DataSource.NOVELIST)
+    def source(self) -> DataSource:
+        return DataSource.lookup(self._db, DataSource.NOVELIST)  # type: ignore[no-any-return]
 
-    def lookup_equivalent_isbns(self, identifier):
+    def lookup_equivalent_isbns(self, identifier: Identifier) -> Metadata | None:
         """Finds NoveList data for all ISBNs equivalent to an identifier.
 
         :return: Metadata object or None
         """
-        lookup_metadata = []
         license_sources = DataSource.license_sources_for(self._db, identifier)
 
         # Find strong ISBN equivalents.
@@ -179,14 +220,17 @@ class NoveListAPI:
         best_metadata, confidence = self.choose_best_metadata(
             lookup_metadata, identifier
         )
-        if best_metadata:
-            if round(confidence, 2) < 0.5:
-                self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
-                return None
-            return metadata
+        if best_metadata is None or confidence is None:
+            return None
+
+        if round(confidence, 2) < 0.5:
+            self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
+            return None
+
+        return best_metadata
 
     @classmethod
-    def _confirm_same_identifier(self, metadata_objects):
+    def _confirm_same_identifier(self, metadata_objects: list[Metadata]) -> bool:
         """Ensures that all metadata objects have the same NoveList ID"""
 
         novelist_ids = {
@@ -194,7 +238,9 @@ class NoveListAPI:
         }
         return len(novelist_ids) == 1
 
-    def choose_best_metadata(self, metadata_objects, identifier):
+    def choose_best_metadata(
+        self, metadata_objects: list[Metadata], identifier: Identifier
+    ) -> tuple[Metadata, float] | tuple[None, None]:
         """Chooses the most likely book metadata from a list of Metadata objects
 
         Given several Metadata objects with different NoveList IDs, this
@@ -208,7 +254,7 @@ class NoveListAPI:
 
         # One or more of the equivalents did not return the same NoveList work
         self.log.warning("%r has inaccurate ISBN equivalents", identifier)
-        counter = Counter()
+        counter: Counter[Identifier] = Counter()
         for metadata in metadata_objects:
             counter[metadata.primary_identifier] += 1
 
@@ -225,7 +271,7 @@ class NoveListAPI:
         ]
         return target_metadata[0], confidence
 
-    def lookup(self, identifier, **kwargs):
+    def lookup(self, identifier: Identifier, **kwargs: Any) -> Metadata | None:
         """Requests NoveList metadata for a particular identifier
 
         :param kwargs: Keyword arguments passed into Representation.post().
@@ -236,9 +282,13 @@ class NoveListAPI:
         if identifier.type != Identifier.ISBN:
             return self.lookup_equivalent_isbns(identifier)
 
+        isbn = identifier.identifier
+        if isbn is None:
+            return None
+
         params = dict(
             ClientIdentifier=client_identifier,
-            ISBN=identifier.identifier,
+            ISBN=isbn,
             version=self.version,
             profile=self.profile,
             password=self.password,
@@ -251,7 +301,7 @@ class NoveListAPI:
         # We want to make an HTTP request for `url` but cache the
         # result under `scrubbed_url`. Define a 'URL normalization'
         # function that always returns `scrubbed_url`.
-        def normalized_url(original):
+        def normalized_url(original: str) -> str:
             return scrubbed_url
 
         representation, from_cache = Representation.post(
@@ -272,22 +322,21 @@ class NoveListAPI:
         return self.lookup_info_to_metadata(representation)
 
     @classmethod
-    def review_response(cls, response):
+    def review_response(cls, response: tuple[int, dict[str, str], bytes]) -> None:
         """Performs NoveList-specific error review of the request response"""
         status_code, headers, content = response
         if status_code == 403:
             raise Exception("Invalid NoveList credentials")
         if content.startswith(b'"Missing'):
             raise Exception("Invalid NoveList parameters: %s" % content.decode("utf-8"))
-        return response
 
     @classmethod
-    def scrubbed_url(cls, params):
+    def scrubbed_url(cls, params: Mapping[str, str]) -> str:
         """Removes authentication details from cached Representation.url"""
         return cls.build_query_url(params, include_auth=False)
 
     @classmethod
-    def _scrub_subtitle(cls, subtitle):
+    def _scrub_subtitle(cls, subtitle: str | None) -> str | None:
         """Removes common NoveList subtitle annoyances"""
         if subtitle:
             subtitle = subtitle.replace("[electronic resource]", "")
@@ -296,7 +345,9 @@ class NoveListAPI:
         return subtitle
 
     @classmethod
-    def build_query_url(cls, params, include_auth=True):
+    def build_query_url(
+        cls, params: Mapping[str, str], include_auth: bool = True
+    ) -> str:
         """Builds a unique and url-encoded query endpoint"""
         url = cls.QUERY_ENDPOINT
         if include_auth:
@@ -307,7 +358,9 @@ class NoveListAPI:
             urlencoded_params[name] = urllib.parse.quote(value)
         return url % urlencoded_params
 
-    def lookup_info_to_metadata(self, lookup_representation):
+    def lookup_info_to_metadata(
+        self, lookup_representation: Response
+    ) -> Metadata | None:
         """Transforms a NoveList JSON representation into a Metadata object"""
 
         if not lookup_representation.content:
@@ -415,10 +468,15 @@ class NoveListAPI:
             or metadata.subtitle
             or metadata.recommendations
         ):
-            metadata = None
+            return None
         return metadata
 
-    def get_series_information(self, metadata, series_info, book_info):
+    def get_series_information(
+        self,
+        metadata: Metadata,
+        series_info: Mapping[str, Any] | None,
+        book_info: Mapping[str, Any],
+    ) -> tuple[Metadata, str]:
         """Returns metadata object with series info and optimal title key"""
 
         title_key = "main_title"
@@ -456,10 +514,10 @@ class NoveListAPI:
 
         return metadata, title_key
 
-    def _extract_isbns(self, book_info):
+    def _extract_isbns(self, book_info: Mapping[str, Any]) -> list[IdentifierData]:
         isbns = []
 
-        synonymous_ids = book_info.get("manifestations")
+        synonymous_ids = book_info.get("manifestations", [])
         for synonymous_id in synonymous_ids:
             isbn = synonymous_id.get("ISBN")
             if isbn:
@@ -468,18 +526,20 @@ class NoveListAPI:
 
         return isbns
 
-    def get_recommendations(self, metadata, recommendations_info):
+    def get_recommendations(
+        self, metadata: Metadata, recommendations_info: Mapping[str, Any] | None
+    ) -> Metadata:
         if not recommendations_info:
             return metadata
 
-        related_books = recommendations_info.get("titles")
+        related_books = recommendations_info.get("titles", [])
         related_books = [b for b in related_books if b.get("is_held_locally")]
         if related_books:
             for book_info in related_books:
                 metadata.recommendations += self._extract_isbns(book_info)
         return metadata
 
-    def get_items_from_query(self, library):
+    def get_items_from_query(self, library: Library) -> list[dict[str, str]]:
         """Gets identifiers and its related title, medium, and authors from the
         database.
         Keeps track of the current 'ISBN' identifier and current item object that
@@ -515,18 +575,18 @@ class NoveListAPI:
             )
             .select_from(
                 join(LicensePool, i1, i1.id == LicensePool.identifier_id)
-                .join(Equivalency, i1.id == Equivalency.input_id, LEFT_OUTER_JOIN)
+                .join(Equivalency, i1.id == Equivalency.input_id, LEFT_OUTER_JOIN)  # type: ignore[arg-type]
                 .join(i2, Equivalency.output_id == i2.id, LEFT_OUTER_JOIN)
                 .join(
-                    Edition,
+                    Edition,  # type: ignore[arg-type]
                     or_(
                         Edition.primary_identifier_id == i1.id,
                         Edition.primary_identifier_id == i2.id,
                     ),
                 )
-                .join(Contribution, Edition.id == Contribution.edition_id)
-                .join(Contributor, Contribution.contributor_id == Contributor.id)
-                .join(DataSource, DataSource.id == LicensePool.data_source_id)
+                .join(Contribution, Edition.id == Contribution.edition_id)  # type: ignore[arg-type]
+                .join(Contributor, Contribution.contributor_id == Contributor.id)  # type: ignore[arg-type]
+                .join(DataSource, DataSource.id == LicensePool.data_source_id)  # type: ignore[arg-type]
             )
             .where(
                 and_(
@@ -541,9 +601,9 @@ class NoveListAPI:
         result = self._db.execute(isbnQuery)
 
         items = []
-        newItem = None
-        existingItem = None
-        currentIdentifier = None
+        newItem: dict[str, str] | None = None
+        existingItem: dict[str, str] | None = None
+        currentIdentifier: str | None = None
 
         # Loop through the query result. There's a need to keep track of the
         # previously processed object and the currently processed object because
@@ -571,7 +631,14 @@ class NoveListAPI:
 
         return items
 
-    def create_item_object(self, object, currentIdentifier, existingItem):
+    def create_item_object(
+        self,
+        object: Row
+        | tuple[str, str, str, str, str, datetime.date, str, str, str]
+        | None,
+        currentIdentifier: str | None,
+        existingItem: dict[str, str] | None,
+    ) -> tuple[str | None, dict[str, str] | None, dict[str, str] | None, bool]:
         """Returns a new item if the current identifier that was processed
         is not the same as the new object's ISBN being processed. If the new
         object's ISBN matches the current identifier, the previous object's
@@ -654,10 +721,10 @@ class NoveListAPI:
 
             return (isbn, existingItem, newItem, addItem)
 
-    def put_items_novelist(self, library):
+    def put_items_novelist(self, library: Library) -> dict[str, Any] | None:
         items = self.get_items_from_query(library)
 
-        content = None
+        content: dict[str, Any] | None = None
         if items:
             data = json.dumps(self.make_novelist_data_object(items))
             response = self.put(
@@ -679,34 +746,16 @@ class NoveListAPI:
 
         return content
 
-    def make_novelist_data_object(self, items):
+    def make_novelist_data_object(self, items: list[dict[str, str]]) -> dict[str, Any]:
         return {
             "customer": f"{self.profile}:{self.password}",
             "records": items,
         }
 
-    def put(self, url, headers, **kwargs):
-        data = kwargs.get("data")
-        if "data" in kwargs:
-            del kwargs["data"]
+    def put(self, url: str, headers: Mapping[str, str], **kwargs: Any) -> Response:
+        data = kwargs.pop("data", None)
         # This might take a very long time -- disable the normal
         # timeout.
         kwargs["timeout"] = None
         response = HTTP.put_with_timeout(url, data, headers=headers, **kwargs)
-        return response
-
-
-class MockNoveListAPI(NoveListAPI):
-    def __init__(self, _db, *args, **kwargs):
-        self._db = _db
-        self.responses = []
-
-    def setup_method(self, *args):
-        self.responses = self.responses + list(args)
-
-    def lookup(self, identifier):
-        if not self.responses:
-            return []
-        response = self.responses[0]
-        self.responses = self.responses[1:]
         return response

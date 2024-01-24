@@ -1,8 +1,9 @@
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import flask
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -11,14 +12,21 @@ from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     DUPLICATE_INTEGRATION,
+    FAILED_TO_RUN_SELF_TESTS,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_IDENTIFIER,
     MISSING_SERVICE,
+    MISSING_SERVICE_NAME,
     NO_PROTOCOL_FOR_NEW_SERVICE,
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from core.model import ExternalIntegration, IntegrationConfiguration, create, get_one
+from api.integration.registry.metadata import MetadataRegistry
+from api.metadata.novelist import NoveListAPI, NoveListApiSettings
+from api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
+from core.integration.goals import Goals
+from core.model import IntegrationConfiguration, get_one
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
@@ -26,41 +34,44 @@ from tests.fixtures.flask import FlaskAppFixture
 
 class MetadataServicesFixture:
     def __init__(self, db: DatabaseTransactionFixture):
-        novelist_protocol = ExternalIntegration.NOVELIST
+        self.registry = MetadataRegistry()
+
+        novelist_protocol = self.registry.get_protocol(NoveListAPI)
         assert novelist_protocol is not None
         self.novelist_protocol = novelist_protocol
 
-        nyt_protocol = ExternalIntegration.NYT
+        nyt_protocol = self.registry.get_protocol(NYTBestSellerAPI)
         assert nyt_protocol is not None
         self.nyt_protocol = nyt_protocol
 
         manager = MagicMock()
         manager._db = db.session
-        self.controller = MetadataServicesController(manager)
+        self.controller = MetadataServicesController(manager, self.registry)
         self.db = db
 
     def create_novelist_integration(
         self,
         username: str = "user",
         password: str = "pass",
-    ) -> ExternalIntegration:
-        integration = self.db.external_integration(
+    ) -> IntegrationConfiguration:
+        integration = self.db.integration_configuration(
             protocol=self.novelist_protocol,
-            goal=ExternalIntegration.METADATA_GOAL,
+            goal=Goals.METADATA_GOAL,
         )
-        integration.username = username
-        integration.password = password
+        settings = NoveListApiSettings(username=username, password=password)
+        NoveListAPI.settings_update(integration, settings)
         return integration
 
     def create_nyt_integration(
         self,
         api_key: str = "xyz",
-    ) -> ExternalIntegration:
-        integration = self.db.external_integration(
+    ) -> IntegrationConfiguration:
+        integration = self.db.integration_configuration(
             protocol=self.nyt_protocol,
-            goal=ExternalIntegration.METADATA_GOAL,
+            goal=Goals.METADATA_GOAL,
         )
-        integration.password = api_key
+        settings = NytBestSellerApiSettings(password=api_key)
+        NYTBestSellerAPI.settings_update(integration, settings)
         return integration
 
 
@@ -103,7 +114,8 @@ class TestMetadataServices:
     def test_process_get_with_no_services(
         self, metadata_services_fixture: MetadataServicesFixture
     ):
-        response_content = metadata_services_fixture.controller.process_get()
+        response = metadata_services_fixture.controller.process_get()
+        response_content = response.json
         assert isinstance(response_content, dict)
         assert response_content.get("metadata_services") == []
         [nyt, novelist] = response_content.get("protocols", [])
@@ -124,7 +136,8 @@ class TestMetadataServices:
         novelist_service = metadata_services_fixture.create_novelist_integration()
         controller = metadata_services_fixture.controller
 
-        response_data = controller.process_get()
+        response = controller.process_get()
+        response_data = response.json
         assert isinstance(response_data, dict)
         [service] = response_data.get("metadata_services", [])
 
@@ -134,7 +147,8 @@ class TestMetadataServices:
         assert service.get("settings").get("password") == "pass"
 
         novelist_service.libraries += [db.default_library()]
-        response_data = controller.process_get()
+        response = controller.process_get()
+        response_data = response.json
         assert isinstance(response_data, dict)
         [service] = response_data.get("metadata_services", [])
 
@@ -158,10 +172,14 @@ class TestMetadataServices:
             assert response == UNKNOWN_PROTOCOL
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict([])
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("protocol", metadata_services_fixture.novelist_protocol),
+                ]
+            )
             response = controller.process_post()
             assert isinstance(response, ProblemDetail)
-            assert response == INCOMPLETE_CONFIGURATION
+            assert response == MISSING_SERVICE_NAME
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -265,14 +283,15 @@ class TestMetadataServices:
         # information.
         service = get_one(
             db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.METADATA_GOAL,
+            IntegrationConfiguration,
+            goal=Goals.METADATA_GOAL,
         )
         assert service is not None
         assert service.id == int(response.get_data(as_text=True))
         assert service.protocol == metadata_services_fixture.novelist_protocol
-        assert service.username == "user"
-        assert service.password == "pass"
+        settings = NoveListAPI.settings_load(service)
+        assert settings.username == "user"
+        assert settings.password == "pass"
         assert service.libraries == [library]
 
     def test_metadata_services_post_create_multiple(
@@ -345,10 +364,11 @@ class TestMetadataServices:
             response = controller.process_post()
             assert response.status_code == 200
 
-        # The existing integration has been updated based on the submitted
+        # The existing IntegrationConfiguration has been updated based on the submitted
         # information.
-        assert novelist_service.username == "newuser"
-        assert novelist_service.password == "newpass"
+        settings = NoveListAPI.settings_load(novelist_service)
+        assert settings.username == "newuser"
+        assert settings.password == "newpass"
         assert novelist_service.libraries == [l2]
 
     def test_check_name_unique(
@@ -357,19 +377,15 @@ class TestMetadataServices:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
-        existing_service, ignore = create(
-            db.session,
-            ExternalIntegration,
+        existing_service = db.integration_configuration(
+            protocol=metadata_services_fixture.novelist_protocol,
+            goal=Goals.METADATA_GOAL,
             name="existing service",
-            protocol=ExternalIntegration.NYT,
-            goal=ExternalIntegration.METADATA_GOAL,
         )
-        new_service, ignore = create(
-            db.session,
-            ExternalIntegration,
+        new_service = db.integration_configuration(
+            protocol=metadata_services_fixture.novelist_protocol,
+            goal=Goals.METADATA_GOAL,
             name="new service",
-            protocol=ExternalIntegration.NYT,
-            goal=ExternalIntegration.METADATA_GOAL,
         )
 
         # Try to change new service so that it has the same name as existing service
@@ -454,3 +470,126 @@ class TestMetadataServices:
             id=novelist_service.id,
         )
         assert service is None
+
+    def test_metadata_service_self_tests_with_no_identifier(
+        self, metadata_services_fixture: MetadataServicesFixture
+    ):
+        response = (
+            metadata_services_fixture.controller.process_metadata_service_self_tests(
+                None
+            )
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.title == MISSING_IDENTIFIER.title
+        assert response.detail == MISSING_IDENTIFIER.detail
+        assert response.status_code == 400
+
+    def test_metadata_service_self_tests_with_no_metadata_service_found(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context("/"):
+            response = metadata_services_fixture.controller.process_metadata_service_self_tests(
+                -1
+            )
+        assert response == MISSING_SERVICE
+        assert response.status_code == 404
+
+    def test_metadata_service_self_tests_test_get(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        metadata_service = metadata_services_fixture.create_nyt_integration()
+        metadata_service.self_test_results = {"test": "results"}
+
+        # Make sure that HasSelfTest.prior_test_results() was called and that
+        # it is in the response's self tests object.
+        with flask_app_fixture.test_request_context("/"):
+            response = metadata_services_fixture.controller.process_metadata_service_self_tests(
+                metadata_service.id
+            )
+            assert isinstance(response, Response)
+            response_data = response.json
+            assert isinstance(response_data, dict)
+            response_metadata_service = response_data.get("self_test_results", {})
+
+            assert response_metadata_service.get("id") == metadata_service.id
+            assert response_metadata_service.get("name") == metadata_service.name
+            assert (
+                response_metadata_service.get("protocol")
+                == metadata_services_fixture.nyt_protocol
+            )
+            assert metadata_service.goal is not None
+            assert response_metadata_service.get("goal") == metadata_service.goal.value
+            assert response_metadata_service.get("self_test_results") == {
+                "test": "results"
+            }
+
+    def test_metadata_service_self_tests_test_get_not_supported(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        metadata_service = metadata_services_fixture.create_novelist_integration()
+        with flask_app_fixture.test_request_context("/"):
+            response = metadata_services_fixture.controller.process_metadata_service_self_tests(
+                metadata_service.id
+            )
+
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        response_metadata_service = response_data.get("self_test_results", {})
+        assert response_metadata_service.get("id") == metadata_service.id
+        assert response_metadata_service.get("name") == metadata_service.name
+        assert response_metadata_service.get("protocol") == metadata_service.protocol
+        assert metadata_service.goal is not None
+        assert response_metadata_service.get("goal") == metadata_service.goal.value
+        assert response_metadata_service.get("self_test_results") == {
+            "exception": "Self tests are not supported for this integration.",
+            "disabled": True,
+        }
+
+    def test_metadata_service_self_tests_post(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+        monkeypatch: MonkeyPatch,
+        db: DatabaseTransactionFixture,
+    ):
+        metadata_service = metadata_services_fixture.create_nyt_integration()
+        mock_run_self_tests = create_autospec(
+            NYTBestSellerAPI.run_self_tests, return_value=(dict(test="results"), None)
+        )
+        monkeypatch.setattr(NYTBestSellerAPI, "run_self_tests", mock_run_self_tests)
+
+        controller = metadata_services_fixture.controller
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_metadata_service_self_tests(
+                metadata_service.id
+            )
+            assert isinstance(response, Response)
+            assert response.status_code == 200
+            assert "Successfully ran new self tests" == response.get_data(as_text=True)
+
+        mock_run_self_tests.assert_called_once_with(
+            db.session, NYTBestSellerAPI, db.session, {"password": "xyz"}
+        )
+
+    def test_metadata_service_self_tests_post_not_supported(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        metadata_service = metadata_services_fixture.create_novelist_integration()
+        controller = metadata_services_fixture.controller
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_metadata_service_self_tests(
+                metadata_service.id
+            )
+            assert isinstance(response, ProblemDetail)
+            assert response == FAILED_TO_RUN_SELF_TESTS

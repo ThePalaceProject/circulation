@@ -42,11 +42,6 @@ class ExternalIntegration(Base):
     PATRON_AUTH_GOAL = "patron_auth"
 
     # These integrations are associated with external services such as
-    # the metadata wrangler, which provide information about books,
-    # but not the books themselves.
-    METADATA_GOAL = "metadata"
-
-    # These integrations are associated with external services such as
     # Opensearch that provide indexed search.
     SEARCH_GOAL = "search"
 
@@ -101,14 +96,6 @@ class ExternalIntegration(Base):
         ENKI: DataSourceConstants.ENKI,
         FEEDBOOKS: DataSourceConstants.FEEDBOOKS,
     }
-
-    # Integrations with METADATA_GOAL
-    BIBBLIO = "Bibblio"
-    CONTENT_CAFE = "Content Cafe"
-    NOVELIST = "NoveList Select"
-    NYPL_SHADOWCAT = "Shadowcat"
-    NYT = "New York Times"
-    CONTENT_SERVER = "Content Server"
 
     # Integrations with SEARCH_GOAL
     OPENSEARCH = "Opensearch"

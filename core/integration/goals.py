@@ -10,3 +10,4 @@ class Goals(Enum):
     LICENSE_GOAL = "licenses"
     DISCOVERY_GOAL = "discovery"
     CATALOG_GOAL = "catalog"
+    METADATA_GOAL = "metadata"
