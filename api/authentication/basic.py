@@ -191,13 +191,13 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     library_identifier_restriction_type: LibraryIdentifierRestriction = FormField(
         LibraryIdentifierRestriction.NONE,
         form=ConfigurationFormItem(
-            label="Library Identifier Restriction",
+            label="Library Identifier Restriction Type",
             type=ConfigurationFormItemType.SELECT,
             description="When multiple libraries share an ILS, a person may be able to "
-            "authenticate with the ILS but not be considered a patron of "
+            "authenticate with the ILS, but not be considered a patron of "
             "<em>this</em> library. This setting contains the rule for determining "
             "whether an identifier is valid for this specific library. <p/> "
-            "If this setting it set to 'No Restriction' then the values for "
+            "If this setting is set to 'No Restriction', then the values for "
             "<em>Library Identifier Field</em> and <em>Library Identifier "
             "Restriction</em> will not be used.",
             options={
