@@ -172,7 +172,7 @@ jobs:
       # using these changes throughout the rest of the build. If the base image
       # build wasn't changed, we don't use it and just rely on scheduled build.
       - name: Check if base image was changed by this branch
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
