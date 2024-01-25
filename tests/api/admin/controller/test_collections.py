@@ -1,10 +1,12 @@
 import json
+from unittest.mock import MagicMock, create_autospec
 
 import flask
 import pytest
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
+from api.admin.controller.collection_settings import CollectionSettingsController
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
@@ -20,47 +22,79 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.integration.registry.license_providers import LicenseProvidersRegistry
-from core.model import (
-    Admin,
-    AdminRole,
-    Collection,
-    ExternalIntegration,
-    create,
-    get_one,
-)
+from core.model import AdminRole, Collection, ExternalIntegration, get_one
 from core.util.problem_detail import ProblemDetail
-from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> CollectionSettingsController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return CollectionSettingsController(mock_manager)
 
 
 class TestCollectionSettings:
+    def test_process_collections(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        # Make sure when we call process_collections with a get request that
+        # we call process_get and when we call it with a post request that
+        # we call process_post.
+
+        mock_process_get = create_autospec(
+            controller.process_get, return_value="get_response"
+        )
+        controller.process_get = mock_process_get
+
+        mock_process_post = create_autospec(
+            controller.process_post, return_value="post_response"
+        )
+        controller.process_post = mock_process_post
+
+        with flask_app_fixture.test_request_context("/"):
+            response = controller.process_collections()
+            assert response == "get_response"
+
+        assert mock_process_get.call_count == 1
+        assert mock_process_post.call_count == 0
+
+        mock_process_get.reset_mock()
+        mock_process_post.reset_mock()
+
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_collections()
+            assert response == "post_response"
+
+        assert mock_process_get.call_count == 0
+        assert mock_process_post.call_count == 1
+
     def test_collections_get_with_no_collections(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self, controller: CollectionSettingsController, db: DatabaseTransactionFixture
     ) -> None:
-        db = admin_ctrl_fixture.ctrl.db
         # Delete any existing collections created by the test setup.
         db.session.delete(db.default_collection())
 
-        with admin_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
-            assert isinstance(response, Response)
-            assert response.status_code == 200
-            data = response.json
-            assert isinstance(data, dict)
-            assert data.get("collections") == []
+        response = controller.process_get()
+        assert isinstance(response, Response)
+        assert response.status_code == 200
+        data = response.json
+        assert isinstance(data, dict)
+        assert data.get("collections") == []
 
-            names = {p.get("name") for p in data.get("protocols", {})}
-            expected_names = {k for k, v in LicenseProvidersRegistry()}
-            assert names == expected_names
+        names = {p.get("name") for p in data.get("protocols", {})}
+        expected_names = {k for k, v in LicenseProvidersRegistry()}
+        assert names == expected_names
 
     def test_collections_get_collections_with_multiple_collections(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
     ) -> None:
-        session = admin_ctrl_fixture.ctrl.db.session
-        db = admin_ctrl_fixture.ctrl.db
-
         [c1] = db.default_library().collections
 
         c2 = db.collection(
@@ -87,76 +121,71 @@ class TestCollectionSettings:
         l1_config = c3.integration_configuration.for_library(l1.id)
         assert l1_config is not None
         DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
-        # Commit the config changes
-        session.commit()
 
-        l1_librarian, ignore = create(session, Admin, email="admin@l1.org")
-        l1_librarian.add_role(AdminRole.LIBRARIAN, l1)
+        admin = flask_app_fixture.admin_user()
+        l1_librarian = flask_app_fixture.admin_user(
+            email="admin@l1.org", role=AdminRole.LIBRARIAN, library=l1
+        )
 
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context("/", admin=admin):
+            response1 = controller.process_get()
+        assert isinstance(response1, Response)
+        assert response1.status_code == 200
+        data = response1.json
+        assert isinstance(data, dict)
+        # The system admin can see all collections.
+        coll2, coll3, coll1 = sorted(
+            data.get("collections", []), key=lambda c: c.get("name", "")
+        )
+        assert c1.integration_configuration.id == coll1.get("id")
+        assert c2.integration_configuration.id == coll2.get("id")
+        assert c3.integration_configuration.id == coll3.get("id")
 
-        with admin_ctrl_fixture.request_context_with_admin("/"):
-            controller = admin_ctrl_fixture.manager.admin_collection_settings_controller
-            response = controller.process_collections()
-            assert isinstance(response, Response)
-            assert response.status_code == 200
-            data = response.json
-            assert isinstance(data, dict)
-            # The system admin can see all collections.
-            coll2, coll3, coll1 = sorted(
-                data.get("collections", []), key=lambda c: c.get("name", "")
-            )
-            assert c1.integration_configuration.id == coll1.get("id")
-            assert c2.integration_configuration.id == coll2.get("id")
-            assert c3.integration_configuration.id == coll3.get("id")
+        assert c1.name == coll1.get("name")
+        assert c2.name == coll2.get("name")
+        assert c3.name == coll3.get("name")
 
-            assert c1.name == coll1.get("name")
-            assert c2.name == coll2.get("name")
-            assert c3.name == coll3.get("name")
+        assert c1.protocol == coll1.get("protocol")
+        assert c2.protocol == coll2.get("protocol")
+        assert c3.protocol == coll3.get("protocol")
 
-            assert c1.protocol == coll1.get("protocol")
-            assert c2.protocol == coll2.get("protocol")
-            assert c3.protocol == coll3.get("protocol")
+        settings1 = coll1.get("settings", {})
+        settings2 = coll2.get("settings", {})
+        settings3 = coll3.get("settings", {})
 
-            settings1 = coll1.get("settings", {})
-            settings2 = coll2.get("settings", {})
-            settings3 = coll3.get("settings", {})
+        assert settings1.get("external_account_id") == "http://opds.example.com/feed"
+        assert settings2.get("external_account_id") == "1234"
+        assert settings3.get("external_account_id") == "5678"
 
-            assert (
-                settings1.get("external_account_id") == "http://opds.example.com/feed"
-            )
-            assert settings2.get("external_account_id") == "1234"
-            assert settings3.get("external_account_id") == "5678"
+        assert c2.integration_configuration.settings_dict[
+            "overdrive_client_secret"
+        ] == settings2.get("overdrive_client_secret")
 
-            assert c2.integration_configuration.settings_dict[
-                "overdrive_client_secret"
-            ] == settings2.get("overdrive_client_secret")
+        assert c2.integration_configuration.id == coll3.get("parent_id")
 
-            assert c2.integration_configuration.id == coll3.get("parent_id")
+        coll3_libraries = coll3.get("libraries")
+        assert 2 == len(coll3_libraries)
+        coll3_l1, coll3_default = sorted(
+            coll3_libraries, key=lambda x: x.get("short_name")
+        )
+        assert "L1" == coll3_l1.get("short_name")
+        assert "14" == coll3_l1.get("ebook_loan_duration")
+        assert db.default_library().short_name == coll3_default.get("short_name")
 
-            coll3_libraries = coll3.get("libraries")
-            assert 2 == len(coll3_libraries)
-            coll3_l1, coll3_default = sorted(
-                coll3_libraries, key=lambda x: x.get("short_name")
-            )
-            assert "L1" == coll3_l1.get("short_name")
-            assert "14" == coll3_l1.get("ebook_loan_duration")
-            assert db.default_library().short_name == coll3_default.get("short_name")
-
-        with admin_ctrl_fixture.request_context_with_admin("/", admin=l1_librarian):
+        with flask_app_fixture.test_request_context("/", admin=l1_librarian):
             # A librarian only sees collections associated with their library.
-            response = controller.process_collections()
-            assert isinstance(response, Response)
-            assert response.status_code == 200
-            data = response.json
-            assert isinstance(data, dict)
-            [coll3] = data.get("collections", [])
-            assert c3.integration_configuration.id == coll3.get("id")
+            response2 = controller.process_collections()
+        assert isinstance(response2, Response)
+        assert response2.status_code == 200
+        data = response2.json
+        assert isinstance(data, dict)
+        [coll3] = data.get("collections", [])
+        assert c3.integration_configuration.id == coll3.get("id")
 
-            coll3_libraries = coll3.get("libraries")
-            assert 1 == len(coll3_libraries)
-            assert "L1" == coll3_libraries[0].get("short_name")
-            assert "14" == coll3_libraries[0].get("ebook_loan_duration")
+        coll3_libraries = coll3.get("libraries")
+        assert 1 == len(coll3_libraries)
+        assert "L1" == coll3_libraries[0].get("short_name")
+        assert "14" == coll3_libraries[0].get("ebook_loan_duration")
 
     @pytest.mark.parametrize(
         "post_data,expected,detailed",
@@ -269,25 +298,23 @@ class TestCollectionSettings:
     )
     def test_collections_post_errors(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
         post_data: dict[str, str],
         expected: ProblemDetail,
         detailed: bool,
     ):
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-
-        collection = admin_ctrl_fixture.ctrl.db.collection(
+        collection = db.collection(
             name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
         )
 
         if "id" in post_data and post_data["id"] == "":
             post_data["id"] = str(collection.integration_configuration.id)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(post_data)
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
 
         if detailed:
             assert isinstance(response, ProblemDetail)
@@ -297,9 +324,11 @@ class TestCollectionSettings:
             assert response == expected
 
     def test_collections_post_errors_no_permissions(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Collection 1"),
@@ -308,12 +337,15 @@ class TestCollectionSettings:
             )
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections,
+                controller.process_collections,
             )
 
-    def test_collections_post_create(self, admin_ctrl_fixture: AdminControllerFixture):
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-        db = admin_ctrl_fixture.ctrl.db
+    def test_collections_post_create(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
         l1 = db.library(
             name="Library 1",
             short_name="L1",
@@ -327,7 +359,7 @@ class TestCollectionSettings:
             short_name="L3",
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New Collection"),
@@ -347,9 +379,7 @@ class TestCollectionSettings:
                     ("overdrive_website_id", "1234"),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert isinstance(response, Response)
             assert response.status_code == 201
 
@@ -397,7 +427,7 @@ class TestCollectionSettings:
         assert "l2_ils" == l2_settings.settings_dict["ils_name"]
 
         # This collection will be a child of the first collection.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Child Collection"),
@@ -410,9 +440,7 @@ class TestCollectionSettings:
                     ("external_account_id", "child-acctid"),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert isinstance(response, Response)
             assert response.status_code == 201
 
@@ -438,10 +466,13 @@ class TestCollectionSettings:
         assert l3_settings is not None
         assert "l3_ils" == l3_settings.settings_dict["ils_name"]
 
-    def test_collections_post_edit(self, admin_ctrl_fixture: AdminControllerFixture):
+    def test_collections_post_edit(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
         # The collection exists.
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-        db = admin_ctrl_fixture.ctrl.db
         collection = db.collection(
             name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
         )
@@ -451,7 +482,7 @@ class TestCollectionSettings:
             short_name="L1",
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -468,9 +499,7 @@ class TestCollectionSettings:
                     ),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
             assert isinstance(response, Response)
 
@@ -487,7 +516,7 @@ class TestCollectionSettings:
         )
 
         # A library now has access to the collection.
-        assert [collection] == l1.collections
+        assert collection.libraries == [l1]
 
         # Additional settings were set on the collection.
         assert "1234" == collection.integration_configuration.settings_dict.get(
@@ -498,7 +527,7 @@ class TestCollectionSettings:
         assert l1_settings is not None
         assert "the_ils" == l1_settings.settings_dict.get("ils_name")
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -511,9 +540,7 @@ class TestCollectionSettings:
                     ("libraries", json.dumps([])),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
             assert isinstance(response, Response)
 
@@ -526,7 +553,7 @@ class TestCollectionSettings:
         assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # But the library has been removed.
-        assert [] == l1.collections
+        assert collection.libraries == []
 
         # All ConfigurationSettings for that library and collection
         # have been deleted.
@@ -534,7 +561,7 @@ class TestCollectionSettings:
 
         parent = db.collection(name="Parent", protocol=ExternalIntegration.OVERDRIVE)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -545,9 +572,7 @@ class TestCollectionSettings:
                     ("libraries", json.dumps([])),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
             assert isinstance(response, Response)
 
@@ -560,7 +585,7 @@ class TestCollectionSettings:
         collection2 = db.collection(
             name="Collection 2", protocol=ExternalIntegration.ODL
         )
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection2.integration_configuration.id)),
@@ -585,13 +610,10 @@ class TestCollectionSettings:
                     ),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
             assert isinstance(response, Response)
 
-        admin_ctrl_fixture.ctrl.db.session.refresh(collection2)
         assert len(collection2.integration_configuration.library_configurations) == 1
         # The library configuration value was correctly coerced to int
         assert (
@@ -602,11 +624,12 @@ class TestCollectionSettings:
         )
 
     def test_collections_post_edit_library_specific_configuration(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        db = admin_ctrl_fixture.ctrl.db
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
         collection = db.collection(
             name="Collection 1", protocol=ExternalIntegration.AXIS_360
         )
@@ -616,7 +639,7 @@ class TestCollectionSettings:
             short_name="L1",
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -632,9 +655,7 @@ class TestCollectionSettings:
                     ),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
 
         # Additional settings were set on the collection+library.
@@ -644,7 +665,7 @@ class TestCollectionSettings:
         assert "14" == l1_settings.settings_dict.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -657,9 +678,7 @@ class TestCollectionSettings:
                     ("libraries", json.dumps([])),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_collections()
-            )
+            response = controller.process_collections()
             assert response.status_code == 200
             assert isinstance(response, Response)
 
@@ -671,21 +690,25 @@ class TestCollectionSettings:
         assert collection.integration_configuration.for_library(l1.id) is None
         assert [] == collection.libraries
 
-    def test_collection_delete(self, admin_ctrl_fixture: AdminControllerFixture):
-        db = admin_ctrl_fixture.ctrl.db
+    def test_collection_delete(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
         collection = db.collection()
         assert collection.marked_for_deletion is False
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+        with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.manager.admin_collection_settings_controller.process_delete,
+                controller.process_delete,
                 collection.integration_configuration.id,
             )
 
-            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
             assert collection.integration_configuration.id is not None
-            response = admin_ctrl_fixture.manager.admin_collection_settings_controller.process_delete(
+            response = controller.process_delete(
                 collection.integration_configuration.id
             )
             assert response.status_code == 200
@@ -699,17 +722,16 @@ class TestCollectionSettings:
         assert fetched_collection.marked_for_deletion is True
 
     def test_collection_delete_cant_delete_parent(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
     ):
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-        db = admin_ctrl_fixture.ctrl.db
         parent = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         child = db.collection(protocol=ExternalIntegration.OVERDRIVE)
         child.parent = parent
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
             assert parent.integration_configuration.id is not None
-            response = admin_ctrl_fixture.manager.admin_collection_settings_controller.process_delete(
-                parent.integration_configuration.id
-            )
+            response = controller.process_delete(parent.integration_configuration.id)
             assert response == CANNOT_DELETE_COLLECTION_WITH_CHILDREN

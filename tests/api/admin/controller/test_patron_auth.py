@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import flask
@@ -11,13 +10,16 @@ from _pytest.monkeypatch import MonkeyPatch
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
+from api.admin.controller.patron_auth_services import PatronAuthServicesController
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
+    FAILED_TO_RUN_SELF_TESTS,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
     INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
+    MISSING_IDENTIFIER,
     MISSING_SERVICE,
     MISSING_SERVICE_NAME,
     MULTIPLE_BASIC_AUTH_SERVICES,
@@ -35,54 +37,21 @@ from api.saml.provider import SAMLWebSSOAuthenticationProvider
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from core.integration.goals import Goals
-from core.model import AdminRole, Library, get_one
+from core.model import Library, get_one
 from core.model.integration import IntegrationConfiguration
 from core.problem_details import INVALID_INPUT
+from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.flask import FlaskAppFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.api_admin import SettingsControllerFixture
     from tests.fixtures.authenticator import (
         MilleniumAuthIntegrationFixture,
         SamlAuthIntegrationFixture,
         SimpleAuthIntegrationFixture,
         Sip2AuthIntegrationFixture,
     )
-    from tests.fixtures.database import (
-        DatabaseTransactionFixture,
-        IntegrationLibraryConfigurationFixture,
-    )
-
-
-@pytest.fixture
-def get_response(
-    settings_ctrl_fixture: SettingsControllerFixture,
-) -> Callable[[], dict[str, Any] | ProblemDetail]:
-    def get() -> dict[str, Any] | ProblemDetail:
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response_obj = (
-                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-        if isinstance(response_obj, ProblemDetail):
-            return response_obj
-        return json.loads(response_obj.response[0])  # type: ignore[index]
-
-    return get
-
-
-@pytest.fixture
-def post_response(
-    settings_ctrl_fixture: SettingsControllerFixture,
-) -> Callable[..., Response | ProblemDetail]:
-    def post(form: ImmutableMultiDict[str, str]) -> Response | ProblemDetail:
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            flask.request.form = form
-            response = (
-                settings_ctrl_fixture.manager.admin_patron_auth_services_controller.process_patron_auth_services()
-            )
-        return response
-
-    return post
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 @pytest.fixture
@@ -96,43 +65,56 @@ def common_args() -> list[tuple[str, str]]:
     ]
 
 
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> PatronAuthServicesController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return PatronAuthServicesController(mock_manager)
+
+
 class TestPatronAuth:
     def test_patron_auth_services_get_with_no_services(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
-        get_response: Callable[[], dict[str, Any] | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        response = get_response()
-        assert isinstance(response, dict)
-        assert response.get("patron_auth_services") == []
-        protocols = response.get("protocols")
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        assert response_data.get("patron_auth_services") == []
+        protocols = response_data.get("protocols")
         assert isinstance(protocols, list)
         assert 7 == len(protocols)
         assert "settings" in protocols[0]
         assert "library_settings" in protocols[0]
 
-        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        settings_ctrl_fixture.ctrl.db.session.flush()
-        pytest.raises(
-            AdminNotAuthorized,
-            get_response,
-        )
+        # Test request without admin set
+        with flask_app_fixture.test_request_context("/"):
+            pytest.raises(
+                AdminNotAuthorized,
+                controller.process_patron_auth_services,
+            )
 
     def test_patron_auth_services_get_with_simple_auth_service(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
-        create_integration_library_configuration: IntegrationLibraryConfigurationFixture,
-        get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_simple_auth_integration(
             test_identifier="user", test_password="pass"
         )
 
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
         assert auth_service.name == service.get("name")
@@ -141,34 +123,25 @@ class TestPatronAuth:
         assert "pass" == service.get("settings").get("test_password")
         assert [] == service.get("libraries")
 
-        create_integration_library_configuration(db.default_library(), auth_service)
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
+        auth_service.libraries += [db.default_library()]
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        [service] = response_data.get("patron_auth_services", [])
 
         assert "user" == service.get("settings").get("test_identifier")
         [library] = service.get("libraries")
-        assert (
-            settings_ctrl_fixture.ctrl.db.default_library().short_name
-            == library.get("short_name")
-        )
-
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
-
-        [library] = service.get("libraries", [])
-        assert (
-            settings_ctrl_fixture.ctrl.db.default_library().short_name
-            == library.get("short_name")
-        )
+        assert db.default_library().short_name == library.get("short_name")
 
     def test_patron_auth_services_get_with_millenium_auth_service(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
         create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
-        get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_millenium_auth_integration(
             db.default_library(),
@@ -178,9 +151,12 @@ class TestPatronAuth:
             password_regular_expression="p*",
         )
 
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
         assert MilleniumPatronAPI.__module__ == service.get("protocol")
@@ -189,17 +165,14 @@ class TestPatronAuth:
         assert "u*" == service.get("settings").get("identifier_regular_expression")
         assert "p*" == service.get("settings").get("password_regular_expression")
         [library] = service.get("libraries")
-        assert (
-            settings_ctrl_fixture.ctrl.db.default_library().short_name
-            == library.get("short_name")
-        )
+        assert db.default_library().short_name == library.get("short_name")
 
     def test_patron_auth_services_get_with_sip2_auth_service(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
         create_sip2_auth_integration: Sip2AuthIntegrationFixture,
-        get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_sip2_auth_integration(
             db.default_library(),
@@ -211,9 +184,12 @@ class TestPatronAuth:
             field_separator=",",
         )
 
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
         assert SIP2AuthenticationProvider.__module__ == service.get("protocol")
@@ -224,70 +200,74 @@ class TestPatronAuth:
         assert "5" == service.get("settings").get("location_code")
         assert "," == service.get("settings").get("field_separator")
         [library] = service.get("libraries")
-        assert (
-            settings_ctrl_fixture.ctrl.db.default_library().short_name
-            == library.get("short_name")
-        )
+        assert db.default_library().short_name == library.get("short_name")
 
     def test_patron_auth_services_get_with_saml_auth_service(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
         create_saml_auth_integration: SamlAuthIntegrationFixture,
-        get_response: Callable[[], dict[str, Any] | ProblemDetail],
     ):
         auth_service, _ = create_saml_auth_integration(
             db.default_library(),
         )
 
-        response = get_response()
-        assert isinstance(response, dict)
-        [service] = response.get("patron_auth_services", [])
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
+        response_data = response.json
+        assert isinstance(response_data, dict)
+        [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
         assert SAMLWebSSOAuthenticationProvider.__module__ == service.get("protocol")
         [library] = service.get("libraries")
-        assert (
-            settings_ctrl_fixture.ctrl.db.default_library().short_name
-            == library.get("short_name")
-        )
+        assert db.default_library().short_name == library.get("short_name")
 
     def test_patron_auth_services_post_unknown_protocol(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        form = ImmutableMultiDict(
-            [
-                ("protocol", "Unknown"),
-            ]
-        )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("protocol", "Unknown"),
+                ]
+            )
+            response = controller.process_patron_auth_services()
         assert response == UNKNOWN_PROTOCOL
 
     def test_patron_auth_services_post_no_protocol(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        form: ImmutableMultiDict[str, str] = ImmutableMultiDict([])
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict([])
+            response = controller.process_patron_auth_services()
         assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
     def test_patron_auth_services_post_missing_service(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        form = ImmutableMultiDict(
-            [
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                ("id", "123"),
-            ]
-        )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    ("id", "123"),
+                ]
+            )
+            response = controller.process_patron_auth_services()
         assert response == MISSING_SERVICE
 
     def test_patron_auth_services_post_cannot_change_protocol(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
@@ -297,27 +277,33 @@ class TestPatronAuth:
                 ("protocol", SIP2AuthenticationProvider.__module__),
             ]
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert response == CANNOT_CHANGE_PROTOCOL
 
     def test_patron_auth_services_post_name_in_use(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
         form = ImmutableMultiDict(
             [
-                ("name", auth_service.name),
+                ("name", str(auth_service.name)),
                 ("protocol", SIP2AuthenticationProvider.__module__),
             ]
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
     def test_patron_auth_services_post_invalid_configuration(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
@@ -333,13 +319,16 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INVALID_CONFIGURATION_OPTION.uri
 
     def test_patron_auth_services_post_incomplete_configuration(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
@@ -350,13 +339,16 @@ class TestPatronAuth:
                 ("protocol", SimpleAuthenticationProvider.__module__),
             ]
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
     def test_patron_auth_services_post_missing_patron_auth_name(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
         form = ImmutableMultiDict(
@@ -365,13 +357,16 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response == MISSING_SERVICE_NAME
 
     def test_patron_auth_services_post_no_such_library(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
         form = ImmutableMultiDict(
@@ -382,13 +377,16 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == NO_SUCH_LIBRARY.uri
 
     def test_patron_auth_services_post_missing_short_name(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
         form = ImmutableMultiDict(
@@ -399,14 +397,17 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INVALID_INPUT.uri
         assert response.detail == "Invalid library settings, missing short_name."
 
     def test_patron_auth_services_post_missing_patron_auth_multiple_basic(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
         default_library: Library,
         common_args: list[tuple[str, str]],
@@ -431,13 +432,16 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == MULTIPLE_BASIC_AUTH_SERVICES.uri
 
     def test_patron_auth_services_post_invalid_library_identifier_restriction_regex(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         default_library: Library,
         common_args: list[tuple[str, str]],
     ):
@@ -461,30 +465,34 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response == INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION
 
     def test_patron_auth_services_post_not_authorized(
         self,
         common_args: list[tuple[str, str]],
-        settings_ctrl_fixture: SettingsControllerFixture,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
         form = ImmutableMultiDict(
             [
                 ("protocol", SimpleAuthenticationProvider.__module__),
             ]
             + common_args
         )
-        pytest.raises(AdminNotAuthorized, post_response, form)
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            flask.request.form = form
+            pytest.raises(AdminNotAuthorized, controller.process_patron_auth_services)
 
     def test_patron_auth_services_post_create(
         self,
         common_args: list[tuple[str, str]],
         default_library: Library,
-        post_response: Callable[..., Response | ProblemDetail],
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
         form = ImmutableMultiDict(
@@ -507,7 +515,10 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
         assert response.status_code == 201
 
         auth_service = get_one(
@@ -539,7 +550,10 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
         assert response.status_code == 201
 
         auth_service2 = get_one(
@@ -562,9 +576,9 @@ class TestPatronAuth:
 
     def test_patron_auth_services_post_edit(
         self,
-        post_response: Callable[..., Response | ProblemDetail],
         common_args: list[tuple[str, str]],
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
         db: DatabaseTransactionFixture,
         monkeypatch: MonkeyPatch,
@@ -603,10 +617,13 @@ class TestPatronAuth:
             ]
             + common_args
         )
-        response = post_response(form)
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = form
+            response = controller.process_patron_auth_services()
+        assert isinstance(response, Response)
         assert response.status_code == 200
 
-        assert auth_service.id == int(response.response[0])  # type: ignore[index]
+        assert auth_service.id == int(response.get_data(as_text=True))
         assert SimpleAuthenticationProvider.__module__ == auth_service.protocol
         assert isinstance(auth_service.settings_dict, dict)
         settings = SimpleAuthenticationProvider.settings_load(auth_service)
@@ -628,12 +645,11 @@ class TestPatronAuth:
     def test_patron_auth_service_delete(
         self,
         common_args: list[tuple[str, str]],
-        settings_ctrl_fixture: SettingsControllerFixture,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        db: DatabaseTransactionFixture,
     ):
-        controller = settings_ctrl_fixture.manager.admin_patron_auth_services_controller
-        db = settings_ctrl_fixture.ctrl.db
-
         l1 = db.library("Library 1", "L1")
         auth_service, _ = create_simple_auth_integration(
             l1,
@@ -641,22 +657,165 @@ class TestPatronAuth:
             "old_password",
         )
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
-            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
                 controller.process_delete,
                 auth_service.id,
             )
 
-            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
             assert auth_service.id is not None
             response = controller.process_delete(auth_service.id)
             assert response.status_code == 200
 
         service = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
+            db.session,
             IntegrationConfiguration,
             id=auth_service.id,
         )
         assert service is None
+
+    def test_patron_auth_self_tests_with_no_identifier(
+        self, controller: PatronAuthServicesController
+    ):
+        response = controller.process_patron_auth_service_self_tests(None)
+        assert isinstance(response, ProblemDetail)
+        assert response.title == MISSING_IDENTIFIER.title
+        assert response.detail == MISSING_IDENTIFIER.detail
+        assert response.status_code == 400
+
+    def test_patron_auth_self_tests_with_no_auth_service_found(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context("/"):
+            response = controller.process_patron_auth_service_self_tests(-1)
+        assert isinstance(response, ProblemDetail)
+        assert response == MISSING_SERVICE
+        assert response.status_code == 404
+
+    def test_patron_auth_self_tests_get_with_no_libraries(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+    ):
+        auth_service, _ = create_simple_auth_integration()
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        results = response.get("self_test_results", {}).get("self_test_results")
+        assert results.get("disabled") is True
+        assert (
+            results.get("exception")
+            == "You must associate this service with at least one library before you can run self tests for it."
+        )
+
+    def test_patron_auth_self_tests_test_get_no_results(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        default_library: Library,
+    ):
+        auth_service, _ = create_simple_auth_integration(library=default_library)
+
+        # Make sure that we return the correct response when there are no results
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        response_auth_service = response.get("self_test_results", {})
+
+        assert response_auth_service.get("name") == auth_service.name
+        assert response_auth_service.get("protocol") == auth_service.protocol
+        assert response_auth_service.get("id") == auth_service.id
+        assert response_auth_service.get("self_test_results") == "No results yet"
+
+    def test_patron_auth_self_tests_test_get(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        default_library: Library,
+    ):
+        expected_results = dict(
+            duration=0.9,
+            start="2018-08-08T16:04:05Z",
+            end="2018-08-08T16:05:05Z",
+            results=[],
+        )
+        auth_service, _ = create_simple_auth_integration(library=default_library)
+        auth_service.self_test_results = expected_results
+
+        # Make sure that HasSelfTest.prior_test_results() was called and that
+        # it is in the response's self tests object.
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        response_auth_service = response.get("self_test_results", {})
+
+        assert response_auth_service.get("name") == auth_service.name
+        assert response_auth_service.get("protocol") == auth_service.protocol
+        assert response_auth_service.get("id") == auth_service.id
+        assert response_auth_service.get("self_test_results") == expected_results
+
+    def test_patron_auth_self_tests_post_with_no_libraries(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+    ):
+        auth_service, _ = create_simple_auth_integration()
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_patron_auth_service_self_tests(
+                auth_service.id,
+            )
+        assert isinstance(response, ProblemDetail)
+        assert response.title == FAILED_TO_RUN_SELF_TESTS.title
+        assert response.detail is not None
+        assert "Failed to run self tests" in response.detail
+        assert response.status_code == 400
+
+    def test_patron_auth_self_tests_test_post(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        monkeypatch: MonkeyPatch,
+        db: DatabaseTransactionFixture,
+    ):
+        expected_results = ("value", "results")
+        mock = MagicMock(return_value=expected_results)
+        monkeypatch.setattr(
+            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
+        )
+        library = db.default_library()
+        auth_service, _ = create_simple_auth_integration(library=library)
+
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response, Response)
+        assert response.status == "200 OK"
+        assert "Successfully ran new self tests" == response.get_data(as_text=True)
+
+        assert mock.call_count == 1
+        assert mock.call_args.args[0] == db.session
+        assert mock.call_args.args[1] is None
+        assert mock.call_args.args[2] == library.id
+        assert mock.call_args.args[3] == auth_service.id
