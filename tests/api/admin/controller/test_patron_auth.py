@@ -14,12 +14,10 @@ from api.admin.controller.patron_auth_services import PatronAuthServicesControll
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
-    FAILED_TO_RUN_SELF_TESTS,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
     INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
-    MISSING_IDENTIFIER,
     MISSING_SERVICE,
     MISSING_SERVICE_NAME,
     MULTIPLE_BASIC_AUTH_SERVICES,
@@ -40,7 +38,6 @@ from core.integration.goals import Goals
 from core.model import Library, get_one
 from core.model.integration import IntegrationConfiguration
 from core.problem_details import INVALID_INPUT
-from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -271,14 +268,13 @@ class TestPatronAuth:
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
-        form = ImmutableMultiDict(
-            [
-                ("id", str(auth_service.id)),
-                ("protocol", SIP2AuthenticationProvider.__module__),
-            ]
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("id", str(auth_service.id)),
+                    ("protocol", SIP2AuthenticationProvider.__module__),
+                ]
+            )
             response = controller.process_patron_auth_services()
         assert response == CANNOT_CHANGE_PROTOCOL
 
@@ -289,14 +285,13 @@ class TestPatronAuth:
         create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         auth_service, _ = create_simple_auth_integration()
-        form = ImmutableMultiDict(
-            [
-                ("name", str(auth_service.name)),
-                ("protocol", SIP2AuthenticationProvider.__module__),
-            ]
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", str(auth_service.name)),
+                    ("protocol", SIP2AuthenticationProvider.__module__),
+                ]
+            )
             response = controller.process_patron_auth_services()
         assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
@@ -308,19 +303,18 @@ class TestPatronAuth:
         common_args: list[tuple[str, str]],
     ):
         auth_service, _ = create_millenium_auth_integration()
-        form = ImmutableMultiDict(
-            [
-                ("name", "some auth name"),
-                ("id", str(auth_service.id)),
-                ("protocol", MilleniumPatronAPI.__module__),
-                ("url", "http://url"),
-                ("authentication_mode", "Invalid mode"),
-                ("verify_certificate", "true"),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "some auth name"),
+                    ("id", str(auth_service.id)),
+                    ("protocol", MilleniumPatronAPI.__module__),
+                    ("url", "http://url"),
+                    ("authentication_mode", "Invalid mode"),
+                    ("verify_certificate", "true"),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INVALID_CONFIGURATION_OPTION.uri
@@ -333,14 +327,13 @@ class TestPatronAuth:
         common_args: list[tuple[str, str]],
     ):
         auth_service, _ = create_simple_auth_integration()
-        form = ImmutableMultiDict(
-            [
-                ("id", str(auth_service.id)),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-            ]
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("id", str(auth_service.id)),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                ]
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INCOMPLETE_CONFIGURATION.uri
@@ -351,14 +344,13 @@ class TestPatronAuth:
         flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
-        form = ImmutableMultiDict(
-            [
-                ("protocol", SimpleAuthenticationProvider.__module__),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response == MISSING_SERVICE_NAME
@@ -369,16 +361,15 @@ class TestPatronAuth:
         flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth name"),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                ("libraries", json.dumps([{"short_name": "not-a-library"}])),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    ("libraries", json.dumps([{"short_name": "not-a-library"}])),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == NO_SUCH_LIBRARY.uri
@@ -389,16 +380,15 @@ class TestPatronAuth:
         flask_app_fixture: FlaskAppFixture,
         common_args: list[tuple[str, str]],
     ):
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth name"),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                ("libraries", json.dumps([{}])),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    ("libraries", json.dumps([{}])),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == INVALID_INPUT.uri
@@ -413,27 +403,26 @@ class TestPatronAuth:
         common_args: list[tuple[str, str]],
     ):
         auth_service, _ = create_simple_auth_integration(default_library)
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth name"),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                (
-                    "libraries",
-                    json.dumps(
-                        [
-                            {
-                                "short_name": default_library.short_name,
-                                "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
-                                "library_identifier_field": "barcode",
-                            }
-                        ]
-                    ),
-                ),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": default_library.short_name,
+                                    "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
+                                    "library_identifier_field": "barcode",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response.uri == MULTIPLE_BASIC_AUTH_SERVICES.uri
@@ -445,28 +434,27 @@ class TestPatronAuth:
         default_library: Library,
         common_args: list[tuple[str, str]],
     ):
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth name"),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                (
-                    "libraries",
-                    json.dumps(
-                        [
-                            {
-                                "short_name": default_library.short_name,
-                                "library_identifier_restriction_type": LibraryIdentifierRestriction.REGEX.value,
-                                "library_identifier_field": "barcode",
-                                "library_identifier_restriction_criteria": "(invalid re",
-                            }
-                        ]
-                    ),
-                ),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": default_library.short_name,
+                                    "library_identifier_restriction_type": LibraryIdentifierRestriction.REGEX.value,
+                                    "library_identifier_field": "barcode",
+                                    "library_identifier_restriction_criteria": "(invalid re",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, ProblemDetail)
         assert response == INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION
@@ -477,14 +465,13 @@ class TestPatronAuth:
         controller: PatronAuthServicesController,
         flask_app_fixture: FlaskAppFixture,
     ):
-        form = ImmutableMultiDict(
-            [
-                ("protocol", SimpleAuthenticationProvider.__module__),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                ]
+                + common_args
+            )
             pytest.raises(AdminNotAuthorized, controller.process_patron_auth_services)
 
     def test_patron_auth_services_post_create(
@@ -495,28 +482,27 @@ class TestPatronAuth:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth name"),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                (
-                    "libraries",
-                    json.dumps(
-                        [
-                            {
-                                "short_name": default_library.short_name,
-                                "library_identifier_restriction_type": LibraryIdentifierRestriction.REGEX.value,
-                                "library_identifier_field": "barcode",
-                                "library_identifier_restriction_criteria": "^1234",
-                            }
-                        ]
-                    ),
-                ),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth name"),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": default_library.short_name,
+                                    "library_identifier_restriction_type": LibraryIdentifierRestriction.REGEX.value,
+                                    "library_identifier_field": "barcode",
+                                    "library_identifier_restriction_criteria": "^1234",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, Response)
         assert response.status_code == 201
@@ -540,18 +526,17 @@ class TestPatronAuth:
             == "^1234"
         )
 
-        form = ImmutableMultiDict(
-            [
-                ("name", "testing auth 2 name"),
-                ("protocol", MilleniumPatronAPI.__module__),
-                ("url", "https://url.com"),
-                ("verify_certificate", "false"),
-                ("authentication_mode", "pin"),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "testing auth 2 name"),
+                    ("protocol", MilleniumPatronAPI.__module__),
+                    ("url", "https://url.com"),
+                    ("verify_certificate", "false"),
+                    ("authentication_mode", "pin"),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, Response)
         assert response.status_code == 201
@@ -598,27 +583,26 @@ class TestPatronAuth:
             "old_password",
         )
 
-        form = ImmutableMultiDict(
-            [
-                ("id", str(auth_service.id)),
-                ("protocol", SimpleAuthenticationProvider.__module__),
-                (
-                    "libraries",
-                    json.dumps(
-                        [
-                            {
-                                "short_name": l2.short_name,
-                                "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
-                                "library_identifier_field": "barcode",
-                            }
-                        ]
-                    ),
-                ),
-            ]
-            + common_args
-        )
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
-            flask.request.form = form
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("id", str(auth_service.id)),
+                    ("protocol", SimpleAuthenticationProvider.__module__),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": l2.short_name,
+                                    "library_identifier_restriction_type": LibraryIdentifierRestriction.NONE.value,
+                                    "library_identifier_field": "barcode",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+                + common_args
+            )
             response = controller.process_patron_auth_services()
         assert isinstance(response, Response)
         assert response.status_code == 200
@@ -675,147 +659,3 @@ class TestPatronAuth:
             id=auth_service.id,
         )
         assert service is None
-
-    def test_patron_auth_self_tests_with_no_identifier(
-        self, controller: PatronAuthServicesController
-    ):
-        response = controller.process_patron_auth_service_self_tests(None)
-        assert isinstance(response, ProblemDetail)
-        assert response.title == MISSING_IDENTIFIER.title
-        assert response.detail == MISSING_IDENTIFIER.detail
-        assert response.status_code == 400
-
-    def test_patron_auth_self_tests_with_no_auth_service_found(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-    ):
-        with flask_app_fixture.test_request_context("/"):
-            response = controller.process_patron_auth_service_self_tests(-1)
-        assert isinstance(response, ProblemDetail)
-        assert response == MISSING_SERVICE
-        assert response.status_code == 404
-
-    def test_patron_auth_self_tests_get_with_no_libraries(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
-    ):
-        auth_service, _ = create_simple_auth_integration()
-        with flask_app_fixture.test_request_context("/"):
-            response_obj = controller.process_patron_auth_service_self_tests(
-                auth_service.id
-            )
-        assert isinstance(response_obj, Response)
-        response = response_obj.json
-        assert isinstance(response, dict)
-        results = response.get("self_test_results", {}).get("self_test_results")
-        assert results.get("disabled") is True
-        assert (
-            results.get("exception")
-            == "You must associate this service with at least one library before you can run self tests for it."
-        )
-
-    def test_patron_auth_self_tests_test_get_no_results(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
-        default_library: Library,
-    ):
-        auth_service, _ = create_simple_auth_integration(library=default_library)
-
-        # Make sure that we return the correct response when there are no results
-        with flask_app_fixture.test_request_context("/"):
-            response_obj = controller.process_patron_auth_service_self_tests(
-                auth_service.id
-            )
-        assert isinstance(response_obj, Response)
-        response = response_obj.json
-        assert isinstance(response, dict)
-        response_auth_service = response.get("self_test_results", {})
-
-        assert response_auth_service.get("name") == auth_service.name
-        assert response_auth_service.get("protocol") == auth_service.protocol
-        assert response_auth_service.get("id") == auth_service.id
-        assert response_auth_service.get("self_test_results") == "No results yet"
-
-    def test_patron_auth_self_tests_test_get(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
-        default_library: Library,
-    ):
-        expected_results = dict(
-            duration=0.9,
-            start="2018-08-08T16:04:05Z",
-            end="2018-08-08T16:05:05Z",
-            results=[],
-        )
-        auth_service, _ = create_simple_auth_integration(library=default_library)
-        auth_service.self_test_results = expected_results
-
-        # Make sure that HasSelfTest.prior_test_results() was called and that
-        # it is in the response's self tests object.
-        with flask_app_fixture.test_request_context("/"):
-            response_obj = controller.process_patron_auth_service_self_tests(
-                auth_service.id
-            )
-        assert isinstance(response_obj, Response)
-        response = response_obj.json
-        assert isinstance(response, dict)
-        response_auth_service = response.get("self_test_results", {})
-
-        assert response_auth_service.get("name") == auth_service.name
-        assert response_auth_service.get("protocol") == auth_service.protocol
-        assert response_auth_service.get("id") == auth_service.id
-        assert response_auth_service.get("self_test_results") == expected_results
-
-    def test_patron_auth_self_tests_post_with_no_libraries(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
-    ):
-        auth_service, _ = create_simple_auth_integration()
-        with flask_app_fixture.test_request_context("/", method="POST"):
-            response = controller.process_patron_auth_service_self_tests(
-                auth_service.id,
-            )
-        assert isinstance(response, ProblemDetail)
-        assert response.title == FAILED_TO_RUN_SELF_TESTS.title
-        assert response.detail is not None
-        assert "Failed to run self tests" in response.detail
-        assert response.status_code == 400
-
-    def test_patron_auth_self_tests_test_post(
-        self,
-        controller: PatronAuthServicesController,
-        flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
-        monkeypatch: MonkeyPatch,
-        db: DatabaseTransactionFixture,
-    ):
-        expected_results = ("value", "results")
-        mock = MagicMock(return_value=expected_results)
-        monkeypatch.setattr(
-            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
-        )
-        library = db.default_library()
-        auth_service, _ = create_simple_auth_integration(library=library)
-
-        with flask_app_fixture.test_request_context("/", method="POST"):
-            response = controller.process_patron_auth_service_self_tests(
-                auth_service.id
-            )
-        assert isinstance(response, Response)
-        assert response.status == "200 OK"
-        assert "Successfully ran new self tests" == response.get_data(as_text=True)
-
-        assert mock.call_count == 1
-        assert mock.call_args.args[0] == db.session
-        assert mock.call_args.args[1] is None
-        assert mock.call_args.args[2] == library.id
-        assert mock.call_args.args[3] == auth_service.id
