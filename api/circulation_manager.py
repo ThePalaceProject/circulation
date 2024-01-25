@@ -46,7 +46,6 @@ if TYPE_CHECKING:
     from api.admin.controller.admin_search import AdminSearchController
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
-    from api.admin.controller.collection_self_tests import CollectionSelfTestsController
     from api.admin.controller.collection_settings import CollectionSettingsController
     from api.admin.controller.custom_lists import CustomListsController
     from api.admin.controller.dashboard import DashboardController
@@ -65,9 +64,6 @@ if TYPE_CHECKING:
     )
     from api.admin.controller.metadata_services import MetadataServicesController
     from api.admin.controller.patron import PatronController
-    from api.admin.controller.patron_auth_service_self_tests import (
-        PatronAuthServiceSelfTestsController,
-    )
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.quicksight import QuickSightController
     from api.admin.controller.reset_password import ResetPasswordController
@@ -116,9 +112,7 @@ class CirculationManager(LoggerMixin):
     admin_metadata_services_controller: MetadataServicesController
     admin_metadata_service_self_tests_controller: MetadataServiceSelfTestsController
     admin_patron_auth_services_controller: PatronAuthServicesController
-    admin_patron_auth_service_self_tests_controller: PatronAuthServiceSelfTestsController
     admin_collection_settings_controller: CollectionSettingsController
-    admin_collection_self_tests_controller: CollectionSelfTestsController
     admin_sitewide_configuration_settings_controller: SitewideConfigurationSettingsController
     admin_library_settings_controller: LibrarySettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController

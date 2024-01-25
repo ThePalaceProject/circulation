@@ -4,7 +4,9 @@ import flask
 from flask import Response
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
-from api.admin.controller.integration_settings import IntegrationSettingsController
+from api.admin.controller.integration_settings import (
+    IntegrationSettingsSelfTestsController,
+)
 from api.admin.form_data import ProcessFormData
 from api.admin.problem_details import (
     CANNOT_DELETE_COLLECTION_WITH_CHILDREN,
@@ -26,11 +28,13 @@ from core.model import (
     json_serializer,
     site_configuration_has_changed,
 )
+from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class CollectionSettingsController(
-    IntegrationSettingsController[CirculationApiType], AdminPermissionsControllerMixin
+    IntegrationSettingsSelfTestsController[CirculationApiType],
+    AdminPermissionsControllerMixin,
 ):
     def default_registry(self) -> IntegrationRegistry[CirculationApiType]:
         return LicenseProvidersRegistry()
@@ -164,3 +168,20 @@ class CollectionSettingsController(
         # Flag the collection to be deleted by script in the background.
         collection.marked_for_deletion = True
         return Response("Deleted", 200)
+
+    def process_collection_self_tests(
+        self, identifier: int | None
+    ) -> Response | ProblemDetail:
+        return self.process_self_tests(identifier)
+
+    def run_self_tests(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        protocol_class = self.get_protocol_class(integration.protocol)
+        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+            test_result, _ = protocol_class.run_self_tests(
+                self._db, protocol_class, self._db, integration.collection
+            )
+            return test_result
+
+        return None

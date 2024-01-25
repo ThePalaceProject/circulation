@@ -10,7 +10,9 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
+    FAILED_TO_RUN_SELF_TESTS,
     INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_IDENTIFIER,
     MISSING_SERVICE,
     MISSING_SERVICE_NAME,
     NO_PROTOCOL_FOR_NEW_SERVICE,
@@ -31,11 +33,13 @@ from core.model import (
     Library,
     create,
     get_one,
+    json_serializer,
 )
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
+from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.cache import memoize
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
 
@@ -147,7 +151,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return configured_services
 
     def get_existing_service(
-        self, service_id: int, name: str | None, protocol: str
+        self, service_id: int, name: str | None = None, protocol: str | None = None
     ) -> IntegrationConfiguration:
         """
         Query for an existing service to edit.
@@ -165,7 +169,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         )
         if service is None:
             raise ProblemError(MISSING_SERVICE)
-        if service.protocol != protocol:
+        if protocol is not None and service.protocol != protocol:
             raise ProblemError(CANNOT_CHANGE_PROTOCOL)
         if name is not None and service.name != name:
             service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
@@ -206,6 +210,12 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         libraries_data = form_data.get("libraries", None, str)
         return libraries_data
 
+    def get_protocol_class(self, protocol: str | None) -> type[T]:
+        if protocol is None or protocol not in self.registry:
+            self.log.warning(f"Unknown service protocol: {protocol}")
+            raise ProblemError(UNKNOWN_PROTOCOL)
+        return self.registry[protocol]
+
     def get_service(
         self, form_data: ImmutableMultiDict[str, str]
     ) -> tuple[IntegrationConfiguration, str, int]:
@@ -216,9 +226,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         if protocol is None and _id is None:
             raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
 
-        if protocol is None or protocol not in self.registry:
-            self.log.warning(f"Unknown service protocol: {protocol}")
-            raise ProblemError(UNKNOWN_PROTOCOL)
+        # Lookup the protocol class to make sure it exists
+        # this will raise a ProblemError if the protocol is unknown
+        self.get_protocol_class(protocol)
+
+        # This should never happen, due to the call to get_protocol_class but
+        # mypy doesn't know that, so we make sure that protocol is not None before we use it.
+        assert protocol is not None
 
         if _id is not None:
             # Find an existing service to edit
@@ -402,3 +416,70 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             raise ProblemError(problem_detail=MISSING_SERVICE)
         self._db.delete(integration)
         return Response("Deleted", 200)
+
+
+class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], ABC):
+    @abstractmethod
+    def run_self_tests(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        ...
+
+    def configured_service_info(
+        self, service: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        service_info = super().configured_service_info(service)
+        if service_info is None:
+            return None
+        service_info["self_test_results"] = self.get_prior_test_results(service)
+        return service_info
+
+    @staticmethod
+    def get_library_configuration(
+        integration: IntegrationConfiguration,
+    ) -> IntegrationLibraryConfiguration | None:
+        if not integration.library_configurations:
+            return None
+        return integration.library_configurations[0]
+
+    def get_prior_test_results(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any]:
+        protocol_class = self.get_protocol_class(integration.protocol)
+        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+            self_test_results = protocol_class.load_self_test_results(integration)  # type: ignore[unreachable]
+        else:
+            self_test_results = dict(
+                exception=("Self tests are not supported for this integration."),
+                disabled=True,
+            )
+
+        return self_test_results
+
+    def process_self_tests(self, identifier: int | None) -> Response | ProblemDetail:
+        if not identifier:
+            return MISSING_IDENTIFIER
+        try:
+            if flask.request.method == "GET":
+                return self.self_tests_process_get(identifier)
+            else:
+                return self.self_tests_process_post(identifier)
+        except ProblemError as e:
+            return e.problem_detail
+
+    def self_tests_process_get(self, identifier: int) -> Response:
+        integration = self.get_existing_service(identifier)
+        info = self.configured_service_info(integration)
+        return Response(
+            json_serializer({"self_test_results": info}),
+            status=200,
+            mimetype="application/json",
+        )
+
+    def self_tests_process_post(self, identifier: int) -> Response:
+        integration = self.get_existing_service(identifier)
+        results = self.run_self_tests(integration)
+        if results is not None:
+            return Response("Successfully ran new self tests", 200)
+        else:
+            raise ProblemError(problem_detail=FAILED_TO_RUN_SELF_TESTS)

@@ -386,8 +386,10 @@ def collection(collection_id):
 @requires_admin
 @requires_csrf_token
 def collection_self_tests(identifier):
-    return app.manager.admin_collection_self_tests_controller.process_collection_self_tests(
-        identifier
+    return (
+        app.manager.admin_collection_settings_controller.process_collection_self_tests(
+            identifier
+        )
     )
 
 
@@ -435,7 +437,7 @@ def patron_auth_service(service_id):
 @requires_admin
 @requires_csrf_token
 def patron_auth_self_tests(identifier):
-    return app.manager.admin_patron_auth_service_self_tests_controller.process_patron_auth_service_self_tests(
+    return app.manager.admin_patron_auth_services_controller.process_patron_auth_service_self_tests(
         identifier
     )
 

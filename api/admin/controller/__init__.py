@@ -13,7 +13,6 @@ def setup_admin_controllers(manager: CirculationManager):
     from api.admin.controller.admin_search import AdminSearchController
     from api.admin.controller.announcement_service import AnnouncementSettings
     from api.admin.controller.catalog_services import CatalogServicesController
-    from api.admin.controller.collection_self_tests import CollectionSelfTestsController
     from api.admin.controller.collection_settings import CollectionSettingsController
     from api.admin.controller.custom_lists import CustomListsController
     from api.admin.controller.dashboard import DashboardController
@@ -32,9 +31,6 @@ def setup_admin_controllers(manager: CirculationManager):
     )
     from api.admin.controller.metadata_services import MetadataServicesController
     from api.admin.controller.patron import PatronController
-    from api.admin.controller.patron_auth_service_self_tests import (
-        PatronAuthServiceSelfTestsController,
-    )
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.reset_password import ResetPasswordController
     from api.admin.controller.self_tests import SelfTestsController
@@ -71,13 +67,7 @@ def setup_admin_controllers(manager: CirculationManager):
         manager
     )
 
-    manager.admin_patron_auth_service_self_tests_controller = (
-        PatronAuthServiceSelfTestsController(manager._db)
-    )
     manager.admin_collection_settings_controller = CollectionSettingsController(manager)
-    manager.admin_collection_self_tests_controller = CollectionSelfTestsController(
-        manager._db
-    )
     manager.admin_sitewide_configuration_settings_controller = (
         SitewideConfigurationSettingsController(manager)
     )

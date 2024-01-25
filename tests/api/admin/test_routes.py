@@ -495,15 +495,6 @@ class TestAdminCollectionSettings:
         )
         fixture.assert_supported_methods(url, "DELETE")
 
-
-class TestAdminCollectionSelfTests:
-    CONTROLLER_NAME = "admin_collection_self_tests_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
     def test_process_collection_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/collection_self_tests/<identifier>"
         fixture.assert_authenticated_request_calls(
@@ -555,15 +546,6 @@ class TestAdminPatronAuthServices:
             url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
         )
         fixture.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminPatronAuthServicesSelfTests:
-    CONTROLLER_NAME = "admin_patron_auth_service_self_tests_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
 
     def test_process_patron_auth_service_self_tests(self, fixture: AdminRouteFixture):
         url = "/admin/patron_auth_service_self_tests/<identifier>"
