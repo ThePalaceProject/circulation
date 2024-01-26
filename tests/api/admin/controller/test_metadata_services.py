@@ -378,9 +378,9 @@ class TestMetadataServices:
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", existing_service.name),
-                    ("id", new_service.id),
-                    ("protocol", new_service.protocol),
+                    ("name", str(existing_service.name)),
+                    ("id", str(new_service.id)),
+                    ("protocol", str(new_service.protocol)),
                     ("username", "user"),
                     ("password", "pass"),
                 ]
@@ -393,9 +393,9 @@ class TestMetadataServices:
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("name", existing_service.name),
-                    ("id", existing_service.id),
-                    ("protocol", new_service.protocol),
+                    ("name", str(existing_service.name)),
+                    ("id", str(existing_service.id)),
+                    ("protocol", str(new_service.protocol)),
                     ("username", "user"),
                     ("password", "pass"),
                 ]
@@ -409,8 +409,8 @@ class TestMetadataServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New Name"),
-                    ("id", existing_service.id),
-                    ("protocol", new_service.protocol),
+                    ("id", str(existing_service.id)),
+                    ("protocol", str(new_service.protocol)),
                     ("username", "user"),
                     ("password", "pass"),
                 ]

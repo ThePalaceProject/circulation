@@ -20,7 +20,9 @@ class MetadataServiceSelfTestsFixture(MetadataServicesFixture):
         super().__init__(db)
         manager = MagicMock()
         manager._db = db.session
-        self.controller = MetadataServiceSelfTestsController(manager)
+        self.controller: MetadataServiceSelfTestsController = (
+            MetadataServiceSelfTestsController(manager)
+        )
         self.db = db
 
 
