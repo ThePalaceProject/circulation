@@ -36,7 +36,7 @@ class CustomListQueries(LoggerMixin):
         for collection in customlist.collections:
             if collection not in library.collections:
                 log.info(
-                    f"Unable to share: Collection '{collection.name}' is missing from the library."
+                    f"Unable to share customlist: Collection '{collection.name}' is missing from the library."
                 )
                 return CUSTOMLIST_SOURCE_COLLECTION_MISSING
 
@@ -53,12 +53,20 @@ class CustomListQueries(LoggerMixin):
                 .first()
             )
             if valid_license is None:
-                log.info(f"Unable to share: No license for work '{entry.work.title}'.")
+                if entry.work:
+                    log.info(
+                        f"Unable to share customlist: No license for work '{entry.work.title}'."
+                    )
+                else:
+                    log.info(
+                        f"Unable to share customlist: No work associated with custom list entry where entry.id = {entry.id}"
+                    )
+
                 return CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
 
         customlist.shared_locally_with_libraries.append(library)
         log.info(
-            f"Successfully shared '{customlist.name}' with library '{library.name}'."
+            f"Successfully shared customlist '{customlist.name}' with library '{library.name}'."
         )
         return True
 
