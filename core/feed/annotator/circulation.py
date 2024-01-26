@@ -18,7 +18,7 @@ from api.annotations import AnnotationWriter
 from api.circulation import BaseCirculationAPI, CirculationAPI
 from api.config import Configuration
 from api.lanes import DynamicLane
-from api.novelist import NoveListAPI
+from api.metadata.novelist import NoveListAPI
 from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration

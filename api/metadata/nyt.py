@@ -1,25 +1,48 @@
+from __future__ import annotations
+
+from core.selftest import HasSelfTestsIntegrationConfiguration, SelfTestResult
+
 """Interface to the New York Times APIs."""
 import json
-import logging
-from datetime import datetime, timedelta
+import sys
+from collections.abc import Generator
+from datetime import date, datetime, timedelta
+from typing import Any
 
 from dateutil import tz
-from flask_babel import lazy_gettext as _
+from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
 from api.config import CannotLoadConfiguration, IntegrationException
+from api.metadata.base import MetadataService, MetadataServiceSettings
 from core.external_list import TitleFromExternalList
+from core.integration.goals import Goals
+from core.integration.settings import ConfigurationFormItem, FormField
 from core.metadata_layer import ContributorData, IdentifierData, Metadata
 from core.model import (
     CustomList,
     DataSource,
     Edition,
-    ExternalIntegration,
     Identifier,
+    IntegrationConfiguration,
     Representation,
     get_one_or_create,
 )
-from core.selftest import HasSelfTests
+from core.util.log import LoggerMixin
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
+
+
+class NytBestSellerApiSettings(MetadataServiceSettings):
+    password: str = FormField(
+        ...,
+        form=ConfigurationFormItem(
+            label="API key",
+        ),
+    )
 
 
 class NYTAPI:
@@ -36,7 +59,7 @@ class NYTAPI:
     TIME_ZONE = tz.gettz("America/New York")
 
     @classmethod
-    def parse_datetime(cls, d):
+    def parse_datetime(cls, d: str) -> datetime:
         """Used to parse the publication date of a NYT best-seller list.
 
         We take midnight Eastern time to be the publication time.
@@ -44,7 +67,7 @@ class NYTAPI:
         return datetime.strptime(d, cls.DATE_FORMAT).replace(tzinfo=cls.TIME_ZONE)
 
     @classmethod
-    def parse_date(cls, d):
+    def parse_date(cls, d: str) -> date:
         """Used to parse the publication date of a book.
 
         We don't know the timezone here, so the date will end up being
@@ -53,23 +76,16 @@ class NYTAPI:
         return cls.parse_datetime(d).date()
 
     @classmethod
-    def date_string(cls, d):
+    def date_string(cls, d: date) -> str:
         return d.strftime(cls.DATE_FORMAT)
 
 
-class NYTBestSellerAPI(NYTAPI, HasSelfTests):
-    PROTOCOL = ExternalIntegration.NYT
-    GOAL = ExternalIntegration.METADATA_GOAL
-    NAME = _("NYT Best Seller API")
-    CARDINALITY = 1
-
-    SETTINGS = [
-        {"key": ExternalIntegration.PASSWORD, "label": _("API key"), "required": True},
-    ]
-
-    # An NYT integration is shared by all libraries in a circulation manager.
-    SITEWIDE = True
-
+class NYTBestSellerAPI(
+    NYTAPI,
+    MetadataService[NytBestSellerApiSettings],
+    HasSelfTestsIntegrationConfiguration,
+    LoggerMixin,
+):
     BASE_URL = "http://api.nytimes.com/svc/books/v3/lists"
 
     LIST_NAMES_URL = BASE_URL + "/names.json"
@@ -80,37 +96,54 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
     HISTORICAL_LIST_MAX_AGE = timedelta(days=365)
 
     @classmethod
-    def from_config(cls, _db, **kwargs):
-        integration = cls.external_integration(_db)
-
-        if not integration:
-            message = "No ExternalIntegration found for the NYT."
-            raise CannotLoadConfiguration(message)
-
-        return cls(_db, api_key=integration.password, **kwargs)
-
-    def __init__(self, _db, api_key=None, do_get=None):
-        self.log = logging.getLogger("NYT API")
-        self._db = _db
-        if not api_key:
-            raise CannotLoadConfiguration("No NYT API key is specified")
-        self.api_key = api_key
-        self.do_get = do_get or Representation.simple_http_get
+    def label(cls) -> str:
+        return "NYT Best Seller API"
 
     @classmethod
-    def external_integration(cls, _db):
-        return ExternalIntegration.lookup(
-            _db, ExternalIntegration.NYT, ExternalIntegration.METADATA_GOAL
-        )
+    def description(cls) -> str:
+        return ""
 
-    def _run_self_tests(self, _db):
+    @classmethod
+    def settings_class(cls) -> type[NytBestSellerApiSettings]:
+        return NytBestSellerApiSettings
+
+    @classmethod
+    def integration(cls, _db: Session) -> IntegrationConfiguration | None:
+        query = select(IntegrationConfiguration).where(
+            IntegrationConfiguration.goal == Goals.METADATA_GOAL,
+            IntegrationConfiguration.protocol.in_(cls.protocols()),
+        )
+        return _db.execute(query).scalar_one_or_none()
+
+    @classmethod
+    def from_config(cls, _db: Session) -> Self:
+        integration = cls.integration(_db)
+
+        if not integration:
+            message = "No Integration found for the NYT."
+            raise CannotLoadConfiguration(message)
+
+        settings = cls.settings_load(integration)
+        return cls(_db, settings=settings)
+
+    def __init__(self, _db: Session, settings: NytBestSellerApiSettings) -> None:
+        self._db = _db
+        self.api_key = settings.password
+
+    @classmethod
+    def do_get(
+        cls, url: str, headers: dict[str, str], **kwargs: Any
+    ) -> tuple[int, dict[str, str], bytes]:
+        return Representation.simple_http_get(url, headers, **kwargs)
+
+    @classmethod
+    def multiple_services_allowed(cls) -> bool:
+        return False
+
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         yield self.run_test("Getting list of best-seller lists", self.list_of_lists)
 
-    @property
-    def source(self):
-        return DataSource.lookup(_db, DataSource.NYT)
-
-    def request(self, path, identifier=None, max_age=LIST_MAX_AGE):
+    def request(self, path: str, max_age: timedelta = LIST_MAX_AGE) -> dict[str, Any]:
         if not path.startswith(self.BASE_URL):
             if not path.startswith("/"):
                 path = "/" + path
@@ -133,7 +166,7 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
         if status == 200:
             # Everything's fine.
             content = json.loads(representation.content)
-            return content
+            return content  # type: ignore[no-any-return]
 
         diagnostic = "Response from {} was: {!r}".format(
             url,
@@ -150,25 +183,30 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
                 "Unknown API error (status %s)" % status, diagnostic
             )
 
-    def list_of_lists(self, max_age=LIST_OF_LISTS_MAX_AGE):
+    def list_of_lists(self, max_age: timedelta = LIST_MAX_AGE) -> dict[str, Any]:
         return self.request(self.LIST_NAMES_URL, max_age=max_age)
 
-    def list_info(self, list_name):
+    def list_info(self, list_name: str) -> dict[str, Any]:
         list_of_lists = self.list_of_lists()
         list_info = [
             x for x in list_of_lists["results"] if x["list_name_encoded"] == list_name
         ]
         if not list_info:
             raise ValueError("No such list: %s" % list_name)
-        return list_info[0]
+        return list_info[0]  # type: ignore[no-any-return]
 
-    def best_seller_list(self, list_info, date=None):
+    def best_seller_list(self, list_info: str | dict[str, Any]) -> NYTBestSellerList:
         """Create (but don't update) a NYTBestSellerList object."""
         if isinstance(list_info, str):
             list_info = self.list_info(list_info)
         return NYTBestSellerList(list_info)
 
-    def update(self, list, date=None, max_age=LIST_MAX_AGE):
+    def update(
+        self,
+        list: NYTBestSellerList,
+        date: date | None = None,
+        max_age: timedelta = LIST_MAX_AGE,
+    ) -> None:
         """Update the given list with data from the given date."""
         name = list.foreign_identifier
         url = self.LIST_URL % name
@@ -178,15 +216,15 @@ class NYTBestSellerAPI(NYTAPI, HasSelfTests):
         data = self.request(url, max_age=max_age)
         list.update(data)
 
-    def fill_in_history(self, list):
+    def fill_in_history(self, list: NYTBestSellerList) -> None:
         """Update the given list with current and historical data."""
         for date in list.all_dates:
             self.update(list, date, self.HISTORICAL_LIST_MAX_AGE)
             self._db.commit()
 
 
-class NYTBestSellerList(list):
-    def __init__(self, list_info):
+class NYTBestSellerList(list["NYTBestSellerListTitle"], LoggerMixin):
+    def __init__(self, list_info: dict[str, Any]) -> None:
         self.name = list_info["display_name"]
         self.created = NYTAPI.parse_datetime(list_info["oldest_published_date"])
         self.updated = NYTAPI.parse_datetime(list_info["newest_published_date"])
@@ -196,11 +234,10 @@ class NYTBestSellerList(list):
         elif list_info["updated"] == "MONTHLY":
             frequency = 30
         self.frequency = timedelta(frequency)
-        self.items_by_isbn = dict()
-        self.log = logging.getLogger("NYT Best-seller list %s" % self.name)
+        self.items_by_isbn: dict[str, NYTBestSellerListTitle] = dict()
 
     @property
-    def medium(self):
+    def medium(self) -> str | None:
         """What medium are the books on this list?
 
         Lists like "Audio Fiction" contain audiobooks; all others
@@ -216,7 +253,7 @@ class NYTBestSellerList(list):
         return Edition.BOOK_MEDIUM
 
     @property
-    def all_dates(self):
+    def all_dates(self) -> Generator[datetime, None, None]:
         """Yield a list of estimated dates when new editions of this list were
         probably published.
         """
@@ -230,7 +267,7 @@ class NYTBestSellerList(list):
                 # We overshot the end date.
                 yield end
 
-    def update(self, json_data):
+    def update(self, json_data: dict[str, Any]) -> None:
         """Update the list with information from the given JSON structure."""
         for li_data in json_data.get("results", []):
             try:
@@ -244,11 +281,13 @@ class NYTBestSellerList(list):
                     self.items_by_isbn[key] = item
                     self.append(item)
                     # self.log.debug("Newly seen ISBN: %r, %s", key, len(self))
-            except ValueError as e:
+            except ValueError:
                 # Should only happen when the book has no identifier, which...
                 # should never happen.
                 self.log.error("No identifier for %r", li_data)
                 item = None
+
+            if item is None:
                 continue
 
             # This is the date the *best-seller list* was published,
@@ -262,7 +301,7 @@ class NYTBestSellerList(list):
             ):
                 item.most_recent_appearance = list_date
 
-    def to_customlist(self, _db):
+    def to_customlist(self, _db: Session) -> CustomList:
         """Turn this NYTBestSeller list into a CustomList object."""
         data_source = DataSource.lookup(_db, DataSource.NYT)
         l, was_new = get_one_or_create(
@@ -279,7 +318,7 @@ class NYTBestSellerList(list):
         self.update_custom_list(l)
         return l
 
-    def update_custom_list(self, custom_list):
+    def update_custom_list(self, custom_list: CustomList) -> None:
         """Make sure the given CustomList's CustomListEntries reflect
         the current state of the NYTBestSeller list.
         """
@@ -293,10 +332,9 @@ class NYTBestSellerList(list):
 
 
 class NYTBestSellerListTitle(TitleFromExternalList):
-    def __init__(self, data, medium):
-        data = data
+    def __init__(self, data: dict[str, Any], medium: str | None) -> None:
         try:
-            bestsellers_date = NYTAPI.parse_datetime(data.get("bestsellers_date"))
+            bestsellers_date = NYTAPI.parse_datetime(data.get("bestsellers_date"))  # type: ignore[arg-type]
             first_appearance = bestsellers_date
             most_recent_appearance = bestsellers_date
         except ValueError as e:
@@ -306,7 +344,7 @@ class NYTBestSellerListTitle(TitleFromExternalList):
         try:
             # This is the date the _book_ was published, not the date
             # the _bestseller list_ was published.
-            published_date = NYTAPI.parse_date(data.get("published_date"))
+            published_date = NYTAPI.parse_date(data.get("published_date"))  # type: ignore[arg-type]
         except ValueError as e:
             published_date = None
 

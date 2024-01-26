@@ -14,7 +14,7 @@ from sqlalchemy.exc import NoResultFound
 from alembic.util import CommandError
 from api.adobe_vendor_id import AuthdataUtility
 from api.config import Configuration
-from api.novelist import NoveListAPI
+from api.metadata.novelist import NoveListAPI
 from core.integration.goals import Goals
 from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
 from core.model import (

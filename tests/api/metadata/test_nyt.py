@@ -1,11 +1,20 @@
 import datetime
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
-from api.nyt import NYTAPI, NYTBestSellerAPI, NYTBestSellerList, NYTBestSellerListTitle
+from api.integration.registry.metadata import MetadataRegistry
+from api.metadata.nyt import (
+    NYTAPI,
+    NYTBestSellerAPI,
+    NytBestSellerApiSettings,
+    NYTBestSellerList,
+    NYTBestSellerListTitle,
+)
 from core.config import CannotLoadConfiguration
-from core.model import Contributor, CustomListEntry, Edition, ExternalIntegration
+from core.integration.goals import Goals
+from core.model import Contributor, CustomListEntry, Edition
 from core.util.http import IntegrationException
 from tests.fixtures.api_nyt_files import NYTFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -40,6 +49,12 @@ class NYTBestSellerAPIFixture:
         """
         return datetime.datetime(*args, tzinfo=NYTAPI.TIME_ZONE)
 
+    def protocol(self) -> str:
+        registry = MetadataRegistry()
+        protocol = registry.get_protocol(NYTBestSellerAPI)
+        assert protocol is not None
+        return protocol
+
     def __init__(self, db: DatabaseTransactionFixture, files: NYTFilesFixture):
         self.db = db
         self.api = DummyNYTBestSellerAPI(db.session, files)
@@ -60,28 +75,19 @@ class TestNYTBestSellerAPI:
         # You have to have an ExternalIntegration for the NYT.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             NYTBestSellerAPI.from_config(nyt_fixture.db.session)
-        assert "No ExternalIntegration found for the NYT." in str(excinfo.value)
-        integration = nyt_fixture.db.external_integration(
-            protocol=ExternalIntegration.NYT, goal=ExternalIntegration.METADATA_GOAL
+        assert "No Integration found for the NYT." in str(excinfo.value)
+
+        integration = nyt_fixture.db.integration_configuration(
+            protocol=nyt_fixture.protocol(), goal=Goals.METADATA_GOAL
         )
+        settings = NytBestSellerApiSettings(password="api key")
+        NYTBestSellerAPI.settings_update(integration, settings)
 
-        # It has to have the api key in its 'password' setting.
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            NYTBestSellerAPI.from_config(nyt_fixture.db.session)
-        assert "No NYT API key is specified" in str(excinfo.value)
-
-        integration.password = "api key"
-
-        # It's okay if you don't have a Metadata Wrangler configuration
-        # configured.
         api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
         assert "api key" == api.api_key
 
-        api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
-
-        # external_integration() finds the integration used to create
-        # the API object.
-        assert integration == api.external_integration(nyt_fixture.db.session)
+        # integration() finds the integration used to create the API object.
+        assert integration == api.integration(nyt_fixture.db.session)
 
     def test_run_self_tests(self, nyt_fixture: NYTBestSellerAPIFixture):
         class Mock(NYTBestSellerAPI):
@@ -91,9 +97,9 @@ class TestNYTBestSellerAPI:
             def list_of_lists(self):
                 return "some lists"
 
-        [list_test] = Mock()._run_self_tests(object())
+        [list_test] = Mock()._run_self_tests(MagicMock())
         assert "Getting list of best-seller lists" == list_test.name
-        assert True == list_test.success
+        assert list_test.success is True
         assert "some lists" == list_test.result
 
     def test_list_of_lists(self, nyt_fixture: NYTBestSellerAPIFixture):

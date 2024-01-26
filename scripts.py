@@ -23,8 +23,8 @@ from api.bibliotheca import BibliothecaCirculationSweep
 from api.config import CannotLoadConfiguration, Configuration
 from api.lanes import create_default_lanes
 from api.local_analytics_exporter import LocalAnalyticsExporter
-from api.novelist import NoveListAPI
-from api.nyt import NYTBestSellerAPI
+from api.metadata.novelist import NoveListAPI
+from api.metadata.nyt import NYTBestSellerAPI
 from api.opds_for_distributors import (
     OPDSForDistributorsImporter,
     OPDSForDistributorsImportMonitor,

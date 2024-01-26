@@ -1118,6 +1118,9 @@ class Equivalency(Base):
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="id_equivalencies"
+    )
 
     # How many distinct votes went into this assertion? This will let
     # us scale the change to the strength when additional votes come
