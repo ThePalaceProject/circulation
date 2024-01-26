@@ -33,10 +33,15 @@ class FlaskAppFixture:
 
     @contextmanager
     def test_request_context(
-        self, *args: Any, admin: Admin | None = None, **kwargs: Any
+        self,
+        *args: Any,
+        admin: Admin | None = None,
+        library: Library | None = None,
+        **kwargs: Any,
     ) -> Generator[RequestContext, None, None]:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
+            flask.request.library = library  # type: ignore[attr-defined]
             flask.request.admin = admin  # type: ignore[attr-defined]
             flask.request.form = ImmutableMultiDict()
             flask.request.files = ImmutableMultiDict()
