@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
+from api.admin.controller.discovery_services import DiscoveryServicesController
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
@@ -19,12 +21,22 @@ from api.admin.problem_details import (
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals
-from core.model import AdminRole, ExternalIntegration, IntegrationConfiguration, get_one
+from core.model import ExternalIntegration, IntegrationConfiguration, get_one
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.flask import FlaskAppFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.api_admin import SettingsControllerFixture
-    from tests.fixtures.database import IntegrationConfigurationFixture
+    from tests.fixtures.database import (
+        DatabaseTransactionFixture,
+        IntegrationConfigurationFixture,
+    )
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> DiscoveryServicesController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return DiscoveryServicesController(mock_manager)
 
 
 class TestDiscoveryServices:
@@ -39,12 +51,12 @@ class TestDiscoveryServices:
         return registry.get_protocol(OpdsRegistrationService)
 
     def test_discovery_services_get_with_no_services_creates_default(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_discovery_services()
             assert response.status_code == 200
             assert isinstance(response, Response)
             json = response.get_json()
@@ -60,25 +72,26 @@ class TestDiscoveryServices:
                 "name"
             )
 
+        with flask_app_fixture.test_request_context("/"):
             # Only system admins can see the discovery services.
-            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-            settings_ctrl_fixture.ctrl.db.session.flush()
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services,
+                controller.process_discovery_services,
             )
 
     def test_discovery_services_get_with_one_service(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
+        db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         discovery_service = create_integration_configuration.discovery_service(
-            url=settings_ctrl_fixture.ctrl.db.fresh_str()
+            url=db.fresh_str()
         )
-        controller = settings_ctrl_fixture.manager.admin_discovery_services_controller
+        controller = controller
 
-        with settings_ctrl_fixture.request_context_with_admin("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller.process_discovery_services()
             assert isinstance(response, Response)
             [service] = response.get_json().get("discovery_services")
@@ -91,11 +104,13 @@ class TestDiscoveryServices:
 
     def test_discovery_services_post_errors(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
+        db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
-        controller = settings_ctrl_fixture.manager.admin_discovery_services_controller
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        controller = controller
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
@@ -105,7 +120,7 @@ class TestDiscoveryServices:
             response = controller.process_discovery_services()
             assert response == UNKNOWN_PROTOCOL
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
@@ -114,7 +129,7 @@ class TestDiscoveryServices:
             response = controller.process_discovery_services()
             assert response == NO_PROTOCOL_FOR_NEW_SERVICE
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
@@ -125,11 +140,11 @@ class TestDiscoveryServices:
             response = controller.process_discovery_services()
             assert response == MISSING_SERVICE
 
-        integration_url = settings_ctrl_fixture.ctrl.db.fresh_url()
+        integration_url = db.fresh_url()
         existing_integration = create_integration_configuration.discovery_service(
             url=integration_url
         )
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             assert isinstance(existing_integration.name, str)
             flask.request.form = ImmutableMultiDict(
                 [
@@ -141,7 +156,7 @@ class TestDiscoveryServices:
             response = controller.process_discovery_services()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             assert isinstance(existing_integration.protocol, str)
             flask.request.form = ImmutableMultiDict(
                 [
@@ -153,7 +168,7 @@ class TestDiscoveryServices:
             response = controller.process_discovery_services()
             assert response == INTEGRATION_URL_ALREADY_IN_USE
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(existing_integration.id)),
@@ -164,8 +179,7 @@ class TestDiscoveryServices:
             assert isinstance(response, ProblemDetail)
             assert response.uri == INCOMPLETE_CONFIGURATION.uri
 
-        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("protocol", self.protocol),
@@ -175,9 +189,12 @@ class TestDiscoveryServices:
             pytest.raises(AdminNotAuthorized, controller.process_discovery_services)
 
     def test_discovery_services_post_create(
-        self, settings_ctrl_fixture: SettingsControllerFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
+        db: DatabaseTransactionFixture,
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
@@ -185,13 +202,11 @@ class TestDiscoveryServices:
                     (ExternalIntegration.URL, "http://registry.url"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+            response = controller.process_discovery_services()
             assert response.status_code == 201
 
         service = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
+            db.session,
             IntegrationConfiguration,
             goal=Goals.DISCOVERY_GOAL,
         )
@@ -205,14 +220,15 @@ class TestDiscoveryServices:
 
     def test_discovery_services_post_edit(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         discovery_service = create_integration_configuration.discovery_service(
             url="registry url"
         )
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
@@ -221,9 +237,7 @@ class TestDiscoveryServices:
                     (ExternalIntegration.URL, "http://new_registry_url.com"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+            response = controller.process_discovery_services()
             assert response.status_code == 200
 
         assert isinstance(response, Response)
@@ -236,7 +250,8 @@ class TestDiscoveryServices:
 
     def test_check_name_unique(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         existing_service = create_integration_configuration.discovery_service()
@@ -244,7 +259,7 @@ class TestDiscoveryServices:
 
         # Try to change new service so that it has the same name as existing service
         # -- this is not allowed.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", str(existing_service.name)),
@@ -253,13 +268,11 @@ class TestDiscoveryServices:
                     ("url", "http://test.com"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+            response = controller.process_discovery_services()
             assert response == INTEGRATION_NAME_ALREADY_IN_USE
 
         # Try to edit existing service without changing its name -- this is fine.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", str(existing_service.name)),
@@ -268,14 +281,12 @@ class TestDiscoveryServices:
                     ("url", "http://test.com"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+            response = controller.process_discovery_services()
             assert isinstance(response, Response)
             assert response.status_code == 200
 
         # Changing the existing service's name is also fine.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "New name"),
@@ -284,38 +295,37 @@ class TestDiscoveryServices:
                     ("url", "http://test.com"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_discovery_services()
-            )
+            response = controller.process_discovery_services()
             assert isinstance(response, Response)
             assert response.status_code == 200
 
     def test_discovery_service_delete(
         self,
-        settings_ctrl_fixture: SettingsControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: DiscoveryServicesController,
+        db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         discovery_service = create_integration_configuration.discovery_service(
             url="registry url"
         )
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
-            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.manager.admin_discovery_services_controller.process_delete,
+                controller.process_delete,
                 discovery_service.id,
             )
 
-            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.manager.admin_discovery_services_controller.process_delete(
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+            response = controller.process_delete(
                 discovery_service.id  # type: ignore[arg-type]
             )
             assert response.status_code == 200
 
         service = get_one(
-            settings_ctrl_fixture.ctrl.db.session,
+            db.session,
             IntegrationConfiguration,
             id=discovery_service.id,
         )
-        assert None == service
+        assert service is None
