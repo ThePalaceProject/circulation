@@ -8,6 +8,7 @@ import flask
 import pytest
 from flask.ctx import RequestContext
 from flask_babel import Babel
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.util.flask import PalaceFlask
 from core.model import Admin, AdminRole, Library, get_one_or_create
@@ -37,6 +38,8 @@ class FlaskAppFixture:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
             flask.request.admin = admin  # type: ignore[attr-defined]
+            flask.request.form = ImmutableMultiDict()
+            flask.request.files = ImmutableMultiDict()
             yield c
 
             # Flush any changes that may have occurred during the request, then

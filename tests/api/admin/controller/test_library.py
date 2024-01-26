@@ -4,7 +4,8 @@ import base64
 import datetime
 import json
 from io import BytesIO
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, create_autospec
 
 import flask
 import pytest
@@ -30,13 +31,21 @@ from core.model.announcements import Announcement, AnnouncementData
 from core.model.library import LibraryLogo
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.fixtures.announcements import AnnouncementFixture
-from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> LibrarySettingsController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return LibrarySettingsController(mock_manager)
 
 
 class TestLibrarySettings:
     @pytest.fixture()
-    def logo_properties(self):
+    def logo_properties(self) -> dict[str, Any]:
         image_data_raw = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
         image_data_b64_bytes = base64.b64encode(image_data_raw)
         image_data_b64_unicode = image_data_b64_bytes.decode("utf-8")
@@ -52,7 +61,7 @@ class TestLibrarySettings:
 
     def library_form(
         self, library: Library, fields: dict[str, str | list[str]] | None = None
-    ):
+    ) -> ImmutableMultiDict[str, str]:
         fields = fields or {}
         defaults: dict[str, str | list[str]] = {
             "uuid": str(library.uuid),
@@ -75,39 +84,45 @@ class TestLibrarySettings:
         form = ImmutableMultiDict(form_data)
         return form
 
-    def test_libraries_get_with_no_libraries(self, settings_ctrl_fixture):
+    def test_libraries_get_with_no_libraries(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
         # Delete any existing library created by the controller test setup.
-        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
+        library = get_one(db.session, Library)
         if library:
-            settings_ctrl_fixture.ctrl.db.session.delete(library)
+            db.session.delete(library)
 
-        with settings_ctrl_fixture.ctrl.app.test_request_context("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
-            )
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_get()
+            assert isinstance(response.json, dict)
             assert response.json.get("libraries") == []
 
     def test_libraries_get_with_announcements(
-        self, settings_ctrl_fixture, announcement_fixture: AnnouncementFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        announcement_fixture: AnnouncementFixture,
     ):
-        db = settings_ctrl_fixture.ctrl.db
         # Delete any existing library created by the controller test setup.
         library = get_one(db.session, Library)
         if library:
             db.session.delete(library)
 
         # Set some announcements for this library.
-        test_library = settings_ctrl_fixture.ctrl.db.library("Library 1", "L1")
+        test_library = db.library("Library 1", "L1")
         a1 = announcement_fixture.active_announcement(db.session, test_library)
         a2 = announcement_fixture.expired_announcement(db.session, test_library)
         a3 = announcement_fixture.forthcoming_announcement(db.session, test_library)
 
         # When we request information about this library...
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
-            )
-            library_settings = response.json.get("libraries")[0].get("settings")
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_get()
+            assert isinstance(response.json, dict)
+            library_settings = response.json.get("libraries", [])[0].get("settings")
 
             # We find out about the library's announcements.
             announcements = library_settings.get(ANNOUNCEMENTS_SETTING_NAME)
@@ -130,21 +145,23 @@ class TestLibrarySettings:
                     datetime.date,
                 )
 
-    def test_libraries_get_with_logo(self, settings_ctrl_fixture, logo_properties):
-        db = settings_ctrl_fixture.ctrl.db
-
+    def test_libraries_get_with_logo(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        logo_properties: dict[str, Any],
+    ):
         library = db.default_library()
 
         # Give the library a logo
         library.logo = LibraryLogo(content=logo_properties["base64_bytes"])
 
         # When we request information about this library...
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
-            )
-
-        libraries = response.json.get("libraries")
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_get()
+        assert isinstance(response.json, dict)
+        libraries = response.json.get("libraries", [])
         assert len(libraries) == 1
         library_settings = libraries[0].get("settings")
 
@@ -152,12 +169,16 @@ class TestLibrarySettings:
         assert library_settings["logo"] == logo_properties["data_url"]
 
     def test_libraries_get_with_multiple_libraries(
-        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
     ):
         # Delete any existing library created by the controller test setup.
-        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library)
+        library = get_one(db.session, Library)
         if library:
-            settings_ctrl_fixture.ctrl.db.session.delete(library)
+            db.session.delete(library)
 
         l1 = library_fixture.library("Library 1", "L1")
         l2 = library_fixture.library("Library 2", "L2")
@@ -175,15 +196,15 @@ class TestLibrarySettings:
         l2.update_settings(settings)
 
         # The admin only has access to L1 and L2.
-        settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
-        settings_ctrl_fixture.admin.add_role(AdminRole.LIBRARIAN, l1)
-        settings_ctrl_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, l2)
+        admin = flask_app_fixture.admin_user()
+        admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        admin.add_role(AdminRole.LIBRARIAN, l1)
+        admin.add_role(AdminRole.LIBRARY_MANAGER, l2)
 
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_get()
-            )
-            libraries = response.json.get("libraries")
+        with flask_app_fixture.test_request_context("/", admin=admin):
+            response = controller.process_get()
+            assert isinstance(response.json, dict)
+            libraries = response.json.get("libraries", [])
             assert 2 == len(libraries)
 
             assert l1.uuid == libraries[0].get("uuid")
@@ -211,77 +232,82 @@ class TestLibrarySettings:
             ] == settings_dict.get("facets_enabled_order")
             assert ["fre"] == settings_dict.get("large_collection_languages")
 
-    def test_libraries_post_errors(self, settings_ctrl_fixture):
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+    def test_libraries_post_errors(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict([])
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
                 "Required field 'Name' is missing."
                 == excinfo.value.problem_detail.detail
             )
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
                 ]
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
                 "Required field 'Short name' is missing."
                 == excinfo.value.problem_detail.detail
             )
 
-        library = settings_ctrl_fixture.ctrl.db.library()
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        library = db.library()
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(library, {"uuid": "1234"})
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == LIBRARY_NOT_FOUND.uri
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Brooklyn Public Library"),
-                    ("short_name", library.short_name),
+                    ("short_name", str(library.short_name)),
                 ]
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
 
             assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-        bpl = settings_ctrl_fixture.ctrl.db.library(short_name="bpl")
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        bpl = db.library(short_name="bpl")
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("uuid", bpl.uuid),
+                    ("uuid", str(bpl.uuid)),
                     ("name", "Brooklyn Public Library"),
-                    ("short_name", library.short_name),
+                    ("short_name", str(library.short_name)),
                 ]
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("uuid", library.uuid),
+                    ("uuid", str(library.uuid)),
                     ("name", "The New York Public Library"),
-                    ("short_name", library.short_name),
+                    ("short_name", str(library.short_name)),
                 ]
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
 
         # Either patron support email or website MUST be present
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Email or Website Library"),
@@ -291,8 +317,9 @@ class TestLibrarySettings:
                 ]
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
+            assert excinfo.value.problem_detail.detail is not None
             assert (
                 "'Patron support email address' or 'Patron support website'"
                 in excinfo.value.problem_detail.detail
@@ -300,7 +327,7 @@ class TestLibrarySettings:
 
         # Test a web primary and secondary color that doesn't contrast
         # well on white. Here primary will, secondary should not.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(
                 library,
                 {
@@ -309,8 +336,9 @@ class TestLibrarySettings:
                 },
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert excinfo.value.problem_detail.detail is not None
             assert (
                 "contrast-ratio.com/#%23e0e0e0-on-%23ffffff"
                 in excinfo.value.problem_detail.detail
@@ -322,7 +350,7 @@ class TestLibrarySettings:
 
         # Test a list of web header links and a list of labels that
         # aren't the same length.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(
                 library,
                 {
@@ -334,24 +362,25 @@ class TestLibrarySettings:
                 },
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
 
         # Test bad language code
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(
                 library, {"tiny_collection_languages": "zzz"}
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == UNKNOWN_LANGUAGE.uri
+            assert excinfo.value.problem_detail.detail is not None
             assert (
                 '"zzz" is not a valid language code'
                 in excinfo.value.problem_detail.detail
             )
 
         # Test uploading a logo that is in the wrong format.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(library)
             flask.request.files = ImmutableMultiDict(
                 {
@@ -363,15 +392,16 @@ class TestLibrarySettings:
                 }
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert excinfo.value.problem_detail.detail is not None
             assert (
                 "Image upload must be in GIF, PNG, or JPG format."
                 in excinfo.value.problem_detail.detail
             )
 
         # Test uploading a logo that we can't open to resize.
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(library)
             flask.request.files = ImmutableMultiDict(
                 {
@@ -383,13 +413,14 @@ class TestLibrarySettings:
                 }
             )
             with pytest.raises(ProblemError) as excinfo:
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
+                controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+            assert excinfo.value.problem_detail.detail is not None
             assert (
                 "Unable to open uploaded image" in excinfo.value.problem_detail.detail
             )
 
-    def test__process_image(self, logo_properties, settings_ctrl_fixture):
+    def test__process_image(self, logo_properties: dict[str, Any]):
         image, expected_encoded_image = (
             logo_properties[key] for key in ("image", "base64_bytes")
         )
@@ -408,12 +439,12 @@ class TestLibrarySettings:
 
     def test_libraries_post_create(
         self,
-        logo_properties,
-        settings_ctrl_fixture,
+        logo_properties: dict[str, Any],
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
         announcement_fixture: AnnouncementFixture,
     ):
-        db = settings_ctrl_fixture.ctrl.db
-
         # Pull needed properties from logo fixture
         image_data, expected_logo_data_url, image = (
             logo_properties[key] for key in ("raw_bytes", "data_url", "image")
@@ -423,7 +454,7 @@ class TestLibrarySettings:
         # a mismatch between the expected data URL and the one configured.
         assert max(*image.size) <= Configuration.LOGO_MAX_DIMENSION
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "The New York Public Library"),
@@ -477,9 +508,7 @@ class TestLibrarySettings:
                     )
                 }
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
+            response = controller.process_post()
             assert response.status_code == 201
 
         library = get_one(db.session, Library, short_name="nypl")
@@ -532,7 +561,11 @@ class TestLibrarySettings:
         assert ["ger"] == german.languages
 
     def test_libraries_post_edit(
-        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
     ):
         # A library already exists.
         settings = library_fixture.mock_settings()
@@ -548,7 +581,7 @@ class TestLibrarySettings:
         library_to_edit.logo = LibraryLogo(content=b"A tiny image")
         library_fixture.reset_settings_cache(library_to_edit)
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", str(library_to_edit.uuid)),
@@ -576,15 +609,10 @@ class TestLibrarySettings:
                     ),
                 ]
             )
-            flask.request.files = ImmutableMultiDict([])
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
+            response = controller.process_post()
             assert response.status_code == 200
 
-        library = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library_to_edit.uuid
-        )
+        library = get_one(db.session, Library, uuid=library_to_edit.uuid)
 
         assert library is not None
         assert library.uuid == response.get_data(as_text=True)
@@ -609,7 +637,11 @@ class TestLibrarySettings:
         assert library.logo.content == b"A tiny image"
 
     def test_library_post_empty_values_edit(
-        self, settings_ctrl_fixture, library_fixture: LibraryFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
     ):
         settings = library_fixture.mock_settings()
         settings.library_description = "description"
@@ -618,7 +650,7 @@ class TestLibrarySettings:
         )
         library_fixture.reset_settings_cache(library_to_edit)
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("uuid", str(library_to_edit.uuid)),
@@ -629,19 +661,20 @@ class TestLibrarySettings:
                     ("help_email", "help@example.com"),
                 ]
             )
-            response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
+            response = controller.process_post()
             assert response.status_code == 200
 
-        library = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library_to_edit.uuid
-        )
+        library = get_one(db.session, Library, uuid=library_to_edit.uuid)
         assert library is not None
         assert library.settings.library_description is None
 
-    def test_library_post_empty_values_create(self, settings_ctrl_fixture):
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
+    def test_library_post_empty_values_create(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "The New York Public Library"),
@@ -651,75 +684,76 @@ class TestLibrarySettings:
                     ("help_email", "help@example.com"),
                 ]
             )
-            response: Response = (
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_post()
-            )
+            response: Response = controller.process_post()
             assert response.status_code == 201
             uuid = response.get_data(as_text=True)
 
-        library = get_one(settings_ctrl_fixture.ctrl.db.session, Library, uuid=uuid)
+        library = get_one(db.session, Library, uuid=uuid)
+        assert library is not None
         assert library.settings.library_description is None
 
-    def test_library_delete(self, settings_ctrl_fixture):
-        library = settings_ctrl_fixture.ctrl.db.library()
+    def test_library_delete(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+    ):
+        library = db.library()
 
-        with settings_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
-            settings_ctrl_fixture.admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
-                settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete,
+                controller.process_delete,
                 library.uuid,
             )
 
-            settings_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = settings_ctrl_fixture.manager.admin_library_settings_controller.process_delete(
-                library.uuid
-            )
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+            response = controller.process_delete(str(library.uuid))
             assert response.status_code == 200
 
-        library = get_one(
-            settings_ctrl_fixture.ctrl.db.session, Library, uuid=library.uuid
-        )
-        assert None == library
+        queried_library = get_one(db.session, Library, uuid=library.uuid)
+        assert queried_library is None
 
-    def test_process_libraries(self, controller_fixture: ControllerFixture):
-        manager = MagicMock()
-        controller = LibrarySettingsController(manager)
-        controller.process_get = MagicMock()
-        controller.process_post = MagicMock()
+    def test_process_libraries(
+        self, flask_app_fixture: FlaskAppFixture, controller: LibrarySettingsController
+    ):
+        mock_process_get = create_autospec(controller.process_get)
+        controller.process_get = mock_process_get
+        mock_process_post = create_autospec(controller.process_post)
+        controller.process_post = mock_process_post
 
         # Make sure we call process_get for a get request
-        with controller_fixture.request_context_with_library("/", method="GET"):
+        with flask_app_fixture.test_request_context("/", method="GET"):
             controller.process_libraries()
 
-        controller.process_get.assert_called_once()
-        controller.process_post.assert_not_called()
-        controller.process_get.reset_mock()
-        controller.process_post.reset_mock()
+        mock_process_get.assert_called_once()
+        mock_process_post.assert_not_called()
+        mock_process_get.reset_mock()
+        mock_process_post.reset_mock()
 
         # Make sure we call process_post for a post request
-        with controller_fixture.request_context_with_library("/", method="POST"):
+        with flask_app_fixture.test_request_context("/", method="POST"):
             controller.process_libraries()
 
-        controller.process_get.assert_not_called()
-        controller.process_post.assert_called_once()
-        controller.process_get.reset_mock()
-        controller.process_post.reset_mock()
+        mock_process_get.assert_not_called()
+        mock_process_post.assert_called_once()
+        mock_process_get.reset_mock()
+        mock_process_post.reset_mock()
 
         # For any other request, make sure we return a ProblemDetail
-        with controller_fixture.request_context_with_library("/", method="PUT"):
+        with flask_app_fixture.test_request_context("/", method="PUT"):
             resp = controller.process_libraries()
 
-        controller.process_get.assert_not_called()
-        controller.process_post.assert_not_called()
+        mock_process_get.assert_not_called()
+        mock_process_post.assert_not_called()
         assert isinstance(resp, ProblemDetail)
 
         # Make sure that if process_get or process_post raises a ProblemError,
         # we return the problem detail.
-        controller.process_get.side_effect = ProblemError(
+        mock_process_get.side_effect = ProblemError(
             problem_detail=INCOMPLETE_CONFIGURATION.detailed("test")
         )
-        with controller_fixture.request_context_with_library("/", method="GET"):
+        with flask_app_fixture.test_request_context("/", method="GET"):
             resp = controller.process_libraries()
         assert isinstance(resp, ProblemDetail)
         assert resp.detail == "test"
