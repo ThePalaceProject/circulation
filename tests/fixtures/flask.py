@@ -35,13 +35,14 @@ class FlaskAppFixture:
         self, *args: Any, admin: Admin | None = None, **kwargs: Any
     ) -> Generator[RequestContext, None, None]:
         with self.app.test_request_context(*args, **kwargs) as c:
+            self.db.session.begin_nested()
             flask.request.admin = admin  # type: ignore[attr-defined]
             yield c
 
             # Flush any changes that may have occurred during the request, then
             # expire all objects to ensure that the next request will see the
             # changes.
-            self.db.session.flush()
+            self.db.session.commit()
             self.db.session.expire_all()
 
     @contextmanager
