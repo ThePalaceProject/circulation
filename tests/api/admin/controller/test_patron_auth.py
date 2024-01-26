@@ -726,6 +726,8 @@ class TestPatronAuth:
         assert response_auth_service.get("name") == auth_service.name
         assert response_auth_service.get("protocol") == auth_service.protocol
         assert response_auth_service.get("id") == auth_service.id
+        assert auth_service.goal is not None
+        assert response_auth_service.get("goal") == auth_service.goal.value
         assert response_auth_service.get("self_test_results") == "No results yet"
 
     def test_patron_auth_self_tests_test_get(
@@ -758,6 +760,8 @@ class TestPatronAuth:
         assert response_auth_service.get("name") == auth_service.name
         assert response_auth_service.get("protocol") == auth_service.protocol
         assert response_auth_service.get("id") == auth_service.id
+        assert auth_service.goal is not None
+        assert response_auth_service.get("goal") == auth_service.goal.value
         assert response_auth_service.get("self_test_results") == expected_results
 
     def test_patron_auth_self_tests_post_with_no_libraries(

@@ -103,11 +103,19 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     def configured_service_info(
         self, service: IntegrationConfiguration
     ) -> dict[str, Any] | None:
+        if service.goal is None:
+            # We should never get here, since we only query for services with a goal, and goal
+            # is a required field, but for mypy and safety, we check for it anyway.
+            self.log.warning(
+                f"IntegrationConfiguration {service.name}({service.id}) has no goal set. Skipping."
+            )
+            return None
         return {
             "id": service.id,
             "name": service.name,
             "protocol": service.protocol,
             "settings": service.settings_dict,
+            "goal": service.goal.value,
         }
 
     def configured_service_library_info(
