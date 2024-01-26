@@ -1,47 +1,86 @@
+from unittest.mock import MagicMock, create_autospec
+
+import pytest
+from _pytest.monkeypatch import MonkeyPatch
+from flask import Response
+
+from api.admin.controller.metadata_service_self_tests import (
+    MetadataServiceSelfTestsController,
+)
 from api.admin.problem_details import *
 from api.nyt import NYTBestSellerAPI
-from core.model import ExternalIntegration, create
-from core.selftest import HasSelfTests
+from core.util.problem_detail import ProblemDetail
+from tests.api.admin.controller.test_metadata_services import MetadataServicesFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
+
+
+class MetadataServiceSelfTestsFixture(MetadataServicesFixture):
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__(db)
+        manager = MagicMock()
+        manager._db = db.session
+        self.controller: MetadataServiceSelfTestsController = (
+            MetadataServiceSelfTestsController(manager)
+        )
+        self.db = db
+
+
+@pytest.fixture
+def metadata_services_fixture(
+    db: DatabaseTransactionFixture,
+) -> MetadataServiceSelfTestsFixture:
+    return MetadataServiceSelfTestsFixture(db)
 
 
 class TestMetadataServiceSelfTests:
     def test_metadata_service_self_tests_with_no_identifier(
-        self, settings_ctrl_fixture
+        self, metadata_services_fixture: MetadataServiceSelfTestsFixture
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+        response = (
+            metadata_services_fixture.controller.process_metadata_service_self_tests(
                 None
             )
-            assert response.title == MISSING_IDENTIFIER.title
-            assert response.detail == MISSING_IDENTIFIER.detail
-            assert response.status_code == 400
+        )
+        assert isinstance(response, ProblemDetail)
+        assert response.title == MISSING_IDENTIFIER.title
+        assert response.detail == MISSING_IDENTIFIER.detail
+        assert response.status_code == 400
 
     def test_metadata_service_self_tests_with_no_metadata_service_found(
-        self, settings_ctrl_fixture
+        self,
+        metadata_services_fixture: MetadataServiceSelfTestsFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+        with flask_app_fixture.test_request_context("/"):
+            response = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 -1
             )
-            assert response == MISSING_SERVICE
-            assert response.status_code == 404
+        assert response == MISSING_SERVICE
+        assert response.status_code == 404
 
-    def test_metadata_service_self_tests_test_get(self, settings_ctrl_fixture):
-        old_prior_test_results = HasSelfTests.prior_test_results
-        HasSelfTests.prior_test_results = settings_ctrl_fixture.mock_prior_test_results
-        metadata_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.NYT,
-            goal=ExternalIntegration.METADATA_GOAL,
+    def test_metadata_service_self_tests_test_get(
+        self,
+        metadata_services_fixture: MetadataServiceSelfTestsFixture,
+        flask_app_fixture: FlaskAppFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        metadata_service = metadata_services_fixture.create_nyt_integration()
+        mock_prior_test_results = create_autospec(
+            NYTBestSellerAPI.prior_test_results, return_value={"test": "results"}
         )
+        monkeypatch.setattr(
+            NYTBestSellerAPI, "prior_test_results", mock_prior_test_results
+        )
+
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
-        with settings_ctrl_fixture.request_context_with_admin("/"):
-            response = settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.process_metadata_service_self_tests(
+        with flask_app_fixture.test_request_context("/"):
+            response_data = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 metadata_service.id
             )
-            response_metadata_service = response.get("self_test_results")
+            assert isinstance(response_data, dict)
+            response_metadata_service = response_data.get("self_test_results", {})
 
             assert response_metadata_service.get("id") == metadata_service.id
             assert response_metadata_service.get("name") == metadata_service.name
@@ -50,45 +89,32 @@ class TestMetadataServiceSelfTests:
                 == NYTBestSellerAPI.NAME
             )
             assert response_metadata_service.get("goal") == metadata_service.goal
-            assert (
-                response_metadata_service.get("self_test_results")
-                == HasSelfTests.prior_test_results()
+            assert response_metadata_service.get("self_test_results") == {
+                "test": "results"
+            }
+
+    def test_metadata_service_self_tests_post(
+        self,
+        metadata_services_fixture: MetadataServiceSelfTestsFixture,
+        flask_app_fixture: FlaskAppFixture,
+        monkeypatch: MonkeyPatch,
+        db: DatabaseTransactionFixture,
+    ):
+        metadata_service = metadata_services_fixture.create_nyt_integration()
+        mock_run_self_tests = create_autospec(
+            NYTBestSellerAPI.run_self_tests, return_value=(dict(test="results"), None)
+        )
+        monkeypatch.setattr(NYTBestSellerAPI, "run_self_tests", mock_run_self_tests)
+
+        controller = metadata_services_fixture.controller
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_metadata_service_self_tests(
+                metadata_service.id
             )
-        HasSelfTests.prior_test_results = old_prior_test_results
-
-    def test_metadata_service_self_tests_post(self, settings_ctrl_fixture):
-        old_run_self_tests = HasSelfTests.run_self_tests
-        HasSelfTests.run_self_tests = settings_ctrl_fixture.mock_run_self_tests
-
-        metadata_service, ignore = create(
-            settings_ctrl_fixture.ctrl.db.session,
-            ExternalIntegration,
-            protocol=ExternalIntegration.NYT,
-            goal=ExternalIntegration.METADATA_GOAL,
-        )
-        m = (
-            settings_ctrl_fixture.manager.admin_metadata_service_self_tests_controller.self_tests_process_post
-        )
-        with settings_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            response = m(metadata_service.id)
-            assert response._status == "200 OK"
+            assert isinstance(response, Response)
+            assert response.status_code == 200
             assert "Successfully ran new self tests" == response.get_data(as_text=True)
 
-        positional, keyword = settings_ctrl_fixture.run_self_tests_called_with
-        # run_self_tests was called with positional arguments:
-        # * The database connection
-        # * The method to call to instantiate a HasSelfTests implementation
-        #   (NYTBestSellerAPI.from_config)
-        # * The database connection again (to be passed into
-        #   NYTBestSellerAPI.from_config).
-        assert (
-            settings_ctrl_fixture.ctrl.db.session,
-            NYTBestSellerAPI.from_config,
-            settings_ctrl_fixture.ctrl.db.session,
-        ) == positional
-
-        # run_self_tests was not called with any keyword arguments.
-        assert {} == keyword
-
-        # Undo the mock.
-        HasSelfTests.run_self_tests = old_run_self_tests
+        mock_run_self_tests.assert_called_once_with(
+            db.session, NYTBestSellerAPI.from_config, db.session
+        )

@@ -16,6 +16,7 @@ from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 
 
 @pytest.fixture
@@ -50,16 +51,18 @@ class TestCollectionSelfTests:
         assert excinfo.value.problem_detail == UNKNOWN_PROTOCOL
 
     def test_collection_self_tests_with_unsupported_protocol(
-        self, db: DatabaseTransactionFixture, controller: CollectionSelfTestsController
+        self, db: DatabaseTransactionFixture, flask_app_fixture: FlaskAppFixture
     ):
         registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         controller = CollectionSelfTestsController(db.session, registry)
         assert collection.integration_configuration.id is not None
-        result = controller.self_tests_process_get(
-            collection.integration_configuration.id
-        )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            result = controller.self_tests_process_get(
+                collection.integration_configuration.id
+            )
 
         assert result.status_code == 200
         assert isinstance(result.json, dict)
@@ -72,6 +75,7 @@ class TestCollectionSelfTests:
         self,
         db: DatabaseTransactionFixture,
         controller: CollectionSelfTestsController,
+        flask_app_fixture: FlaskAppFixture,
         monkeypatch: MonkeyPatch,
     ):
         collection = MockAxis360API.mock_collection(
@@ -93,9 +97,10 @@ class TestCollectionSelfTests:
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's collection object.
         assert collection.integration_configuration.id is not None
-        response = controller.self_tests_process_get(
-            collection.integration_configuration.id
-        )
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.self_tests_process_get(
+                collection.integration_configuration.id
+            )
 
         data = response.json
         assert isinstance(data, dict)
