@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 
 import flask
@@ -16,7 +18,12 @@ from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
-from core.model import json_serializer, site_configuration_has_changed
+from core.model import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+    json_serializer,
+    site_configuration_has_changed,
+)
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -183,3 +190,11 @@ class PatronAuthServicesController(
             library_settings,
         )
         return value
+
+    @staticmethod
+    def get_library_configuration(
+        integration: IntegrationConfiguration,
+    ) -> IntegrationLibraryConfiguration | None:
+        if not integration.library_configurations:
+            return None
+        return integration.library_configurations[0]
