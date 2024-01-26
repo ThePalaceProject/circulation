@@ -1,25 +1,37 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from api.controller.device_tokens import DeviceTokensController
 from api.problem_details import DEVICE_TOKEN_NOT_FOUND, DEVICE_TOKEN_TYPE_INVALID
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
-from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> DeviceTokensController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return DeviceTokensController(mock_manager)
 
 
 @patch("api.controller.device_tokens.flask")
 class TestDeviceTokens:
-    def test_create_invalid_type(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_create_invalid_type(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         request = MagicMock()
         request.patron = db.patron()
         request.json = {"device_token": "xx", "token_type": "aninvalidtoken"}
         flask.request = request
-        detail = controller_fixture.app.manager.patron_devices.create_patron_device()
+        detail = controller.create_patron_device()
 
         assert detail is DEVICE_TOKEN_TYPE_INVALID
         assert detail.status_code == 400
 
-    def test_create_token(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_create_token(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         request = MagicMock()
         request.patron = db.patron()
         request.json = {
@@ -27,7 +39,7 @@ class TestDeviceTokens:
             "token_type": DeviceTokenTypes.FCM_ANDROID,
         }
         flask.request = request
-        response = controller_fixture.app.manager.patron_devices.create_patron_device()
+        response = controller.create_patron_device()
 
         assert response[1] == 201
 
@@ -42,8 +54,9 @@ class TestDeviceTokens:
         assert device.device_token == "xxx"
         assert device.token_type == DeviceTokenTypes.FCM_ANDROID
 
-    def test_get_token(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_get_token(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         patron = db.patron()
         device = DeviceToken.create(
             db.session, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -53,14 +66,15 @@ class TestDeviceTokens:
         request.patron = patron
         request.args = {"device_token": "xx"}
         flask.request = request
-        response = controller_fixture.app.manager.patron_devices.get_patron_device()
+        response = controller.get_patron_device()
 
         assert response[1] == 200
         assert response[0]["token_type"] == DeviceTokenTypes.FCM_ANDROID
         assert response[0]["device_token"] == "xx"
 
-    def test_get_token_not_found(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_get_token_not_found(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         patron = db.patron()
         device = DeviceToken.create(
             db.session, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -70,14 +84,13 @@ class TestDeviceTokens:
         request.patron = patron
         request.args = {"device_token": "xxs"}
         flask.request = request
-        detail = controller_fixture.app.manager.patron_devices.get_patron_device()
+        detail = controller.get_patron_device()
 
         assert detail == DEVICE_TOKEN_NOT_FOUND
 
     def test_get_token_different_patron(
-        self, flask, controller_fixture: ControllerFixture
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
     ):
-        db = controller_fixture.db
         patron = db.patron()
         device = DeviceToken.create(
             db.session, DeviceTokenTypes.FCM_ANDROID, "xx", patron
@@ -87,12 +100,13 @@ class TestDeviceTokens:
         request.patron = db.patron()
         request.args = {"device_token": "xx"}
         flask.request = request
-        detail = controller_fixture.app.manager.patron_devices.get_patron_device()
+        detail = controller.get_patron_device()
 
         assert detail == DEVICE_TOKEN_NOT_FOUND
 
-    def test_create_duplicate_token(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_create_duplicate_token(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         patron = db.patron()
         device = DeviceToken.create(db.session, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
@@ -105,7 +119,7 @@ class TestDeviceTokens:
         }
         flask.request = request
         nested = db.session.begin_nested()  # rollback only affects device create
-        response = controller_fixture.app.manager.patron_devices.create_patron_device()
+        response = controller.create_patron_device()
         assert response == (dict(exists=True), 200)
 
         # different patron same token
@@ -117,12 +131,13 @@ class TestDeviceTokens:
             "token_type": DeviceTokenTypes.FCM_ANDROID,
         }
         flask.request = request
-        response = controller_fixture.app.manager.patron_devices.create_patron_device()
+        response = controller.create_patron_device()
 
         assert response[1] == 201
 
-    def test_delete_token(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_delete_token(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         patron = db.patron()
         device = DeviceToken.create(db.session, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
@@ -134,14 +149,15 @@ class TestDeviceTokens:
         }
         flask.request = request
 
-        response = controller_fixture.app.manager.patron_devices.delete_patron_device()
+        response = controller.delete_patron_device()
         db.session.commit()
 
         assert response.status_code == 204
         assert db.session.query(DeviceToken).get(device.id) == None
 
-    def test_delete_no_token(self, flask, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
+    def test_delete_no_token(
+        self, flask, controller: DeviceTokensController, db: DatabaseTransactionFixture
+    ):
         patron = db.patron()
         device = DeviceToken.create(db.session, DeviceTokenTypes.FCM_IOS, "xxx", patron)
 
@@ -153,5 +169,5 @@ class TestDeviceTokens:
         }
         flask.request = request
 
-        response = controller_fixture.app.manager.patron_devices.delete_patron_device()
+        response = controller.delete_patron_device()
         assert response == DEVICE_TOKEN_NOT_FOUND
