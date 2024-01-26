@@ -10,7 +10,9 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
+    FAILED_TO_RUN_SELF_TESTS,
     INTEGRATION_NAME_ALREADY_IN_USE,
+    MISSING_IDENTIFIER,
     MISSING_SERVICE,
     MISSING_SERVICE_NAME,
     NO_PROTOCOL_FOR_NEW_SERVICE,
@@ -31,11 +33,13 @@ from core.model import (
     Library,
     create,
     get_one,
+    json_serializer,
 )
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
+from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.cache import memoize
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
 
@@ -69,7 +73,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
 
     @memoize(ttls=1800)
     def _cached_protocols(self) -> dict[str, dict[str, Any]]:
-        """Cached result for integration implementations"""
+        """Cached result for integration implementations."""
         protocols = []
         for name, api in self.registry:
             protocol = {
@@ -99,23 +103,43 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     def configured_service_info(
         self, service: IntegrationConfiguration
     ) -> dict[str, Any] | None:
+        """This is the default implementation for getting details about a configured integration.
+         It can be overridden by implementations that need to add additional information to the
+        service info dict that gets returned to the admin UI."""
+
+        if service.goal is None:
+            # We should never get here, since we only query for services with a goal, and goal
+            # is a required field, but for mypy and safety, we check for it anyway.
+            self.log.warning(
+                f"IntegrationConfiguration {service.name}({service.id}) has no goal set. Skipping."
+            )
+            return None
         return {
             "id": service.id,
             "name": service.name,
             "protocol": service.protocol,
             "settings": service.settings_dict,
+            "goal": service.goal.value,
         }
 
     def configured_service_library_info(
         self, library_configuration: IntegrationLibraryConfiguration
     ) -> dict[str, Any] | None:
+        """This is the default implementation for getting details about a library integration for
+        a configured integration. It can be overridden by implementations that need to add
+        additional information to the `libraries` dict that gets returned to the admin UI.
+        """
         library_info = {"short_name": library_configuration.library.short_name}
         library_info.update(library_configuration.settings_dict)
         return library_info
 
     @property
     def configured_services(self) -> list[dict[str, Any]]:
-        """Return a list of all currently configured services for the controller's goal."""
+        """Return a list of all currently configured services for the controller's goal.
+
+        If you need to add additional information to the service info dict that gets returned to the
+        admin UI, override the configured_service_info method instead of this one.
+        """
         configured_services = []
         for service in (
             self._db.query(IntegrationConfiguration)
@@ -147,7 +171,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return configured_services
 
     def get_existing_service(
-        self, service_id: int, name: str | None, protocol: str
+        self, service_id: int, name: str | None = None, protocol: str | None = None
     ) -> IntegrationConfiguration:
         """
         Query for an existing service to edit.
@@ -165,7 +189,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         )
         if service is None:
             raise ProblemError(MISSING_SERVICE)
-        if service.protocol != protocol:
+        if protocol is not None and service.protocol != protocol:
             raise ProblemError(CANNOT_CHANGE_PROTOCOL)
         if name is not None and service.name != name:
             service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
@@ -203,12 +227,31 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         return new_service
 
     def get_libraries_data(self, form_data: ImmutableMultiDict[str, str]) -> str | None:
+        """
+        Get the library settings data from the form data sent in the request by the admin ui
+        and return it as a JSON string.
+        """
         libraries_data = form_data.get("libraries", None, str)
         return libraries_data
+
+    def get_protocol_class(self, protocol: str | None) -> type[T]:
+        """
+        Get the protocol class for the given protocol. Raises a ProblemError if the protocol
+        is unknown.
+        """
+        if protocol is None or protocol not in self.registry:
+            self.log.warning(f"Unknown service protocol: {protocol}")
+            raise ProblemError(UNKNOWN_PROTOCOL)
+        return self.registry[protocol]
 
     def get_service(
         self, form_data: ImmutableMultiDict[str, str]
     ) -> tuple[IntegrationConfiguration, str, int]:
+        """
+        Get a service to edit or create, the protocol, and the response code to return to the
+        frontend. This method is used by both the process_post and process_delete methods to
+        get the service being operated on.
+        """
         protocol = form_data.get("protocol", None, str)
         _id = form_data.get("id", None, int)
         name = form_data.get("name", None, str)
@@ -216,9 +259,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         if protocol is None and _id is None:
             raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
 
-        if protocol is None or protocol not in self.registry:
-            self.log.warning(f"Unknown service protocol: {protocol}")
-            raise ProblemError(UNKNOWN_PROTOCOL)
+        # Lookup the protocol class to make sure it exists
+        # this will raise a ProblemError if the protocol is unknown
+        self.get_protocol_class(protocol)
+
+        # This should never happen, due to the call to get_protocol_class but
+        # mypy doesn't know that, so we make sure that protocol is not None before we use it.
+        assert protocol is not None
 
         if _id is not None:
             # Find an existing service to edit
@@ -250,7 +297,8 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         self, service: IntegrationConfiguration, short_name: str
     ) -> IntegrationLibraryConfiguration:
         """
-        Create a new IntegrationLibraryConfiguration for the given IntegrationConfiguration and library.
+        Create a new IntegrationLibraryConfiguration for the given IntegrationConfiguration and library,
+        based on the library's short name.
         """
         library = self.get_library(short_name)
         library_settings, _ = create(
@@ -402,3 +450,96 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             raise ProblemError(problem_detail=MISSING_SERVICE)
         self._db.delete(integration)
         return Response("Deleted", 200)
+
+
+class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], ABC):
+    @abstractmethod
+    def run_self_tests(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        """
+        Run self tests for the given integration. Returns a JSON-serializable dictionary
+        describing the results of the self-test run or None if there was an error running
+        the self tests.
+        """
+        ...
+
+    def configured_service_info(
+        self, service: IntegrationConfiguration
+    ) -> dict[str, Any] | None:
+        """
+        Add the `self_test_results` key to the service info dict that gets returned to the
+        admin UI. This key contains the results of the last self test run for the service.
+        """
+        service_info = super().configured_service_info(service)
+        if service_info is None:
+            return None
+        service_info["self_test_results"] = self.get_prior_test_results(service)
+        return service_info
+
+    def get_prior_test_results(
+        self, integration: IntegrationConfiguration
+    ) -> dict[str, Any]:
+        """
+        Get the results of the last self test run for the given integration. If the integration
+        doesn't have any self test results, return a dictionary with the `disabled` key set to
+        True.
+
+        This method is useful to override if you need to add additional information to the
+        self test results dict that gets returned to the admin UI.
+        """
+        protocol_class = self.get_protocol_class(integration.protocol)
+        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+            self_test_results = protocol_class.load_self_test_results(integration)  # type: ignore[unreachable]
+        else:
+            self_test_results = dict(
+                exception=("Self tests are not supported for this integration."),
+                disabled=True,
+            )
+
+        return self_test_results
+
+    def process_self_tests(self, identifier: int | None) -> Response | ProblemDetail:
+        """
+        Generic request handler for GET and POST requests to the self tests endpoint.
+        This is often used by implementations that don't need to do any additional
+        processing of the request data.
+        """
+        if not identifier:
+            return MISSING_IDENTIFIER
+        try:
+            if flask.request.method == "GET":
+                return self.self_tests_process_get(identifier)
+            else:
+                return self.self_tests_process_post(identifier)
+        except ProblemError as e:
+            return e.problem_detail
+
+    def self_tests_process_get(self, identifier: int) -> Response:
+        """
+        Return all the details for a given integration along with the self test results
+        for the integration as a JSON response.
+
+        TODO: It doesn't seem like all the details for an integration should be contained
+          in the `self_test_results` key. But this is what the admin ui expects, so for now
+          we'll return everything in that key.
+        """
+        integration = self.get_existing_service(identifier)
+        info = self.configured_service_info(integration)
+        return Response(
+            json_serializer({"self_test_results": info}),
+            status=200,
+            mimetype="application/json",
+        )
+
+    def self_tests_process_post(self, identifier: int) -> Response:
+        """
+        Attempt to run the self tests for the given integration and return a response
+        indicating whether we were able to run the self tests or not.
+        """
+        integration = self.get_existing_service(identifier)
+        results = self.run_self_tests(integration)
+        if results is not None:
+            return Response("Successfully ran new self tests", 200)
+        else:
+            raise ProblemError(problem_detail=FAILED_TO_RUN_SELF_TESTS)

@@ -357,7 +357,7 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
     @classmethod
     def load_self_test_results(
         cls, integration: IntegrationConfiguration | None
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | str | None:
         if integration is None:
             cls.logger().error(
                 "No IntegrationConfiguration was found. Self-test results could not be loaded."
@@ -370,24 +370,11 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
             )
             return None
 
+        if integration.self_test_results == {}:
+            # No self-test results have been stored yet.
+            return "No results yet"
+
         return integration.self_test_results
-
-    @classmethod
-    def prior_test_results(
-        cls: type[Self],
-        _db: Session,
-        constructor_method: Callable[..., Self] | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> dict[str, Any] | None | str:
-        """Retrieve the last set of test results from the database.
-
-        The arguments here are the same as the arguments to run_self_tests.
-        """
-        constructor_method = constructor_method or cls
-        instance = constructor_method(*args, **kwargs)
-        integration: IntegrationConfiguration | None = instance.integration(_db)
-        return cls.load_self_test_results(integration) or "No results yet"
 
     @abstractmethod
     def integration(self, _db: Session) -> IntegrationConfiguration | None:

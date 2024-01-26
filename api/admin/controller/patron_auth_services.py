@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+from typing import Any
+
 import flask
 from flask import Response
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.controller.integration_settings import (
-    IntegrationSettingsController,
+    IntegrationSettingsSelfTestsController,
     UpdatedLibrarySettingsTuple,
 )
 from api.admin.form_data import ProcessFormData
@@ -14,7 +18,12 @@ from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
-from core.model import json_serializer, site_configuration_has_changed
+from core.model import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+    json_serializer,
+    site_configuration_has_changed,
+)
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -23,7 +32,7 @@ from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class PatronAuthServicesController(
-    IntegrationSettingsController[AuthenticationProviderType],
+    IntegrationSettingsSelfTestsController[AuthenticationProviderType],
     AdminPermissionsControllerMixin,
 ):
     def default_registry(self) -> IntegrationRegistry[AuthenticationProviderType]:
@@ -124,3 +133,68 @@ class PatronAuthServicesController(
         except ProblemError as e:
             self._db.rollback()
             return e.problem_detail
+
+    def process_patron_auth_service_self_tests(
+        self, identifier: int | None
+    ) -> Response | ProblemDetail:
+        return self.process_self_tests(identifier)
+
+    def get_prior_test_results(
+        self,
+        integration: IntegrationConfiguration,
+    ) -> dict[str, Any]:
+        # Find the first library associated with this service.
+        library_configuration = self.get_library_configuration(integration)
+
+        if library_configuration is None:
+            return dict(
+                exception=(
+                    "You must associate this service with at least one library "
+                    "before you can run self tests for it."
+                ),
+                disabled=True,
+            )
+
+        return super().get_prior_test_results(integration)
+
+    def run_self_tests(self, integration: IntegrationConfiguration) -> dict[str, Any]:
+        # If the auth service doesn't have at least one library associated with it,
+        # we can't run self tests.
+        library_configuration = self.get_library_configuration(integration)
+        if library_configuration is None:
+            raise ProblemError(
+                problem_detail=FAILED_TO_RUN_SELF_TESTS.detailed(
+                    f"Failed to run self tests for {integration.name}, because it is not associated with any libraries."
+                )
+            )
+
+        if not isinstance(integration.settings_dict, dict) or not isinstance(
+            library_configuration.settings_dict, dict
+        ):
+            raise ProblemError(
+                problem_detail=FAILED_TO_RUN_SELF_TESTS.detailed(
+                    f"Failed to run self tests for {integration.name}, because its settings are not valid."
+                )
+            )
+
+        protocol_class = self.get_protocol_class(integration.protocol)
+        settings = protocol_class.settings_load(integration)
+        library_settings = protocol_class.library_settings_load(library_configuration)
+
+        value, _ = protocol_class.run_self_tests(
+            self._db,
+            None,
+            library_configuration.library_id,
+            integration.id,
+            settings,
+            library_settings,
+        )
+        return value
+
+    @staticmethod
+    def get_library_configuration(
+        integration: IntegrationConfiguration,
+    ) -> IntegrationLibraryConfiguration | None:
+        if not integration.library_configurations:
+            return None
+        return integration.library_configurations[0]

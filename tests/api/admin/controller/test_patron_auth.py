@@ -14,10 +14,12 @@ from api.admin.controller.patron_auth_services import PatronAuthServicesControll
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
+    FAILED_TO_RUN_SELF_TESTS,
     INCOMPLETE_CONFIGURATION,
     INTEGRATION_NAME_ALREADY_IN_USE,
     INVALID_CONFIGURATION_OPTION,
     INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION,
+    MISSING_IDENTIFIER,
     MISSING_SERVICE,
     MISSING_SERVICE_NAME,
     MULTIPLE_BASIC_AUTH_SERVICES,
@@ -38,6 +40,7 @@ from core.integration.goals import Goals
 from core.model import Library, get_one
 from core.model.integration import IntegrationConfiguration
 from core.problem_details import INVALID_INPUT
+from core.selftest import HasSelfTestsIntegrationConfiguration
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -659,3 +662,151 @@ class TestPatronAuth:
             id=auth_service.id,
         )
         assert service is None
+
+    def test_patron_auth_self_tests_with_no_identifier(
+        self, controller: PatronAuthServicesController
+    ):
+        response = controller.process_patron_auth_service_self_tests(None)
+        assert isinstance(response, ProblemDetail)
+        assert response.title == MISSING_IDENTIFIER.title
+        assert response.detail == MISSING_IDENTIFIER.detail
+        assert response.status_code == 400
+
+    def test_patron_auth_self_tests_with_no_auth_service_found(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context("/"):
+            response = controller.process_patron_auth_service_self_tests(-1)
+        assert isinstance(response, ProblemDetail)
+        assert response == MISSING_SERVICE
+        assert response.status_code == 404
+
+    def test_patron_auth_self_tests_get_with_no_libraries(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+    ):
+        auth_service, _ = create_simple_auth_integration()
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        results = response.get("self_test_results", {}).get("self_test_results")
+        assert results.get("disabled") is True
+        assert (
+            results.get("exception")
+            == "You must associate this service with at least one library before you can run self tests for it."
+        )
+
+    def test_patron_auth_self_tests_test_get_no_results(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        default_library: Library,
+    ):
+        auth_service, _ = create_simple_auth_integration(library=default_library)
+
+        # Make sure that we return the correct response when there are no results
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        response_auth_service = response.get("self_test_results", {})
+
+        assert response_auth_service.get("name") == auth_service.name
+        assert response_auth_service.get("protocol") == auth_service.protocol
+        assert response_auth_service.get("id") == auth_service.id
+        assert auth_service.goal is not None
+        assert response_auth_service.get("goal") == auth_service.goal.value
+        assert response_auth_service.get("self_test_results") == "No results yet"
+
+    def test_patron_auth_self_tests_test_get(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        default_library: Library,
+    ):
+        expected_results = dict(
+            duration=0.9,
+            start="2018-08-08T16:04:05Z",
+            end="2018-08-08T16:05:05Z",
+            results=[],
+        )
+        auth_service, _ = create_simple_auth_integration(library=default_library)
+        auth_service.self_test_results = expected_results
+
+        # Make sure that HasSelfTest.prior_test_results() was called and that
+        # it is in the response's self tests object.
+        with flask_app_fixture.test_request_context("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        response = response_obj.json
+        assert isinstance(response, dict)
+        response_auth_service = response.get("self_test_results", {})
+
+        assert response_auth_service.get("name") == auth_service.name
+        assert response_auth_service.get("protocol") == auth_service.protocol
+        assert response_auth_service.get("id") == auth_service.id
+        assert auth_service.goal is not None
+        assert response_auth_service.get("goal") == auth_service.goal.value
+        assert response_auth_service.get("self_test_results") == expected_results
+
+    def test_patron_auth_self_tests_post_with_no_libraries(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+    ):
+        auth_service, _ = create_simple_auth_integration()
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_patron_auth_service_self_tests(
+                auth_service.id,
+            )
+        assert isinstance(response, ProblemDetail)
+        assert response.title == FAILED_TO_RUN_SELF_TESTS.title
+        assert response.detail is not None
+        assert "Failed to run self tests" in response.detail
+        assert response.status_code == 400
+
+    def test_patron_auth_self_tests_test_post(
+        self,
+        controller: PatronAuthServicesController,
+        flask_app_fixture: FlaskAppFixture,
+        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        monkeypatch: MonkeyPatch,
+        db: DatabaseTransactionFixture,
+    ):
+        expected_results = ("value", "results")
+        mock = MagicMock(return_value=expected_results)
+        monkeypatch.setattr(
+            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
+        )
+        library = db.default_library()
+        auth_service, _ = create_simple_auth_integration(library=library)
+
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            response = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response, Response)
+        assert response.status == "200 OK"
+        assert "Successfully ran new self tests" == response.get_data(as_text=True)
+
+        assert mock.call_count == 1
+        assert mock.call_args.args[0] == db.session
+        assert mock.call_args.args[1] is None
+        assert mock.call_args.args[2] == library.id
+        assert mock.call_args.args[3] == auth_service.id
