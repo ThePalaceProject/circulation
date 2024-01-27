@@ -40,7 +40,7 @@ from core.integration.goals import Goals
 from core.model import Library, get_one
 from core.model.integration import IntegrationConfiguration
 from core.problem_details import INVALID_INPUT
-from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -791,9 +791,7 @@ class TestPatronAuth:
     ):
         expected_results = ("value", "results")
         mock = MagicMock(return_value=expected_results)
-        monkeypatch.setattr(
-            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
-        )
+        monkeypatch.setattr(HasSelfTests, "run_self_tests", mock)
         library = db.default_library()
         auth_service, _ = create_simple_auth_integration(library=library)
 

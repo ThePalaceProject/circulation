@@ -13,7 +13,7 @@ from core.integration.settings import BaseSettings
 from core.model import CirculationEvent, Library, Patron, get_one_or_create
 from core.model.hybrid import hybrid_property
 from core.model.integration import IntegrationConfiguration
-from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.selftest import HasSelfTests
 from core.util.authentication_for_opds import OPDSAuthenticationFlow
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
@@ -37,7 +37,7 @@ LibrarySettingsType = TypeVar(
 class AuthenticationProvider(
     OPDSAuthenticationFlow,
     HasLibraryIntegrationConfiguration[SettingsType, LibrarySettingsType],
-    HasSelfTestsIntegrationConfiguration,
+    HasSelfTests,
     LoggerMixin,
     ABC,
 ):

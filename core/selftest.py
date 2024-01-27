@@ -2,8 +2,6 @@
 """
 from __future__ import annotations
 
-import json
-import logging
 import sys
 import traceback
 from abc import ABC, abstractmethod
@@ -13,7 +11,7 @@ from typing import Any, ParamSpec, TypeVar
 
 from sqlalchemy.orm import Session
 
-from core.model import Collection, ExternalIntegration
+from core.model import Collection
 from core.model.integration import IntegrationConfiguration
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
@@ -136,7 +134,7 @@ T = TypeVar("T")
 P = ParamSpec("P")
 
 
-class BaseHasSelfTests(ABC):
+class HasSelfTests(LoggerMixin, ABC):
     """An object capable of verifying its own setup by running a
     series of self-tests.
     """
@@ -267,82 +265,6 @@ class BaseHasSelfTests(ABC):
         result.exception = exception
         return result
 
-    @abstractmethod
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
-        """Run the self-tests.
-
-        :return: A generator that yields SelfTestResult objects.
-        """
-        ...
-
-    @abstractmethod
-    def store_self_test_results(
-        self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
-    ) -> None:
-        ...
-
-
-class HasSelfTests(BaseHasSelfTests, ABC):
-    """An object capable of verifying its own setup by running a
-    series of self-tests.
-    """
-
-    # Self-test results are stored in a ConfigurationSetting with this name,
-    # associated with the appropriate ExternalIntegration.
-    SELF_TEST_RESULTS_SETTING = "self_test_results"
-
-    def store_self_test_results(
-        self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
-    ) -> None:
-        """Store the results of a self-test in the database."""
-        integration = self.external_integration(_db)
-
-        if integration is not None:
-            integration.setting(self.SELF_TEST_RESULTS_SETTING).value = json.dumps(
-                value
-            )
-
-    @classmethod
-    def prior_test_results(
-        cls: type[Self],
-        _db: Session,
-        constructor_method: Callable[..., Self] | None = None,
-        *args: Any,
-        **kwargs: Any,
-    ) -> dict[str, Any] | None | str:
-        """Retrieve the last set of test results from the database.
-
-        The arguments here are the same as the arguments to run_self_tests.
-        """
-        constructor_method = constructor_method or cls
-        instance = constructor_method(*args, **kwargs)
-
-        integration = instance.external_integration(_db)
-
-        if integration:
-            return (
-                integration.setting(cls.SELF_TEST_RESULTS_SETTING).json_value
-                or "No results yet"
-            )
-
-        return None
-
-    def external_integration(self, _db: Session) -> ExternalIntegration | None:
-        """Locate the ExternalIntegration associated with this object.
-        The status of the self-tests will be stored as a ConfigurationSetting
-        on this ExternalIntegration.
-
-        By default, there is no way to get from an object to its
-        ExternalIntegration, and self-test status will not be stored.
-        """
-        logger = logging.getLogger("Self-test system")
-        logger.error(
-            "No ExternalIntegration was found.  Self-test results will not be stored."
-        )
-        return None
-
-
-class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
     def store_self_test_results(
         self, _db: Session, value: dict[str, Any], results: list[SelfTestResult]
     ) -> None:
@@ -375,6 +297,14 @@ class HasSelfTestsIntegrationConfiguration(BaseHasSelfTests, LoggerMixin, ABC):
             return "No results yet"
 
         return integration.self_test_results
+
+    @abstractmethod
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+        """Run the self-tests.
+
+        :return: A generator that yields SelfTestResult objects.
+        """
+        ...
 
     @abstractmethod
     def integration(self, _db: Session) -> IntegrationConfiguration | None:

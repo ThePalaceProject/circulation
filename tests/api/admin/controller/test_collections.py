@@ -27,7 +27,7 @@ from api.admin.problem_details import (
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests
 from core.model import AdminRole, Collection, ExternalIntegration, get_one
-from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -809,9 +809,7 @@ class TestCollectionSettings:
             results=[],
         )
         mock = MagicMock(return_value=self_test_results)
-        monkeypatch.setattr(
-            HasSelfTestsIntegrationConfiguration, "load_self_test_results", mock
-        )
+        monkeypatch.setattr(HasSelfTests, "load_self_test_results", mock)
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's collection object.
@@ -846,9 +844,7 @@ class TestCollectionSettings:
         # This makes HasSelfTests.run_self_tests return no values
         self_test_results = (None, None)
         mock = MagicMock(return_value=self_test_results)
-        monkeypatch.setattr(
-            HasSelfTestsIntegrationConfiguration, "run_self_tests", mock
-        )
+        monkeypatch.setattr(HasSelfTests, "run_self_tests", mock)
 
         # Failed to run self tests
         assert collection.integration_configuration.id is not None

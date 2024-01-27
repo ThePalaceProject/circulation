@@ -36,7 +36,7 @@ from core.model import (
     json_serializer,
 )
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
-from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail, ProblemError
@@ -489,7 +489,7 @@ class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], A
         self test results dict that gets returned to the admin UI.
         """
         protocol_class = self.get_protocol_class(integration.protocol)
-        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+        if issubclass(protocol_class, HasSelfTests):
             self_test_results = protocol_class.load_self_test_results(integration)  # type: ignore[unreachable]
         else:
             self_test_results = dict(
