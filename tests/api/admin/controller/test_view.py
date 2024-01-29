@@ -6,8 +6,7 @@ from werkzeug.http import dump_cookie
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.config import Configuration
-from core.model import AdminRole, ConfigurationSetting, Library
+from core.model import AdminRole, Library
 from tests.fixtures.api_admin import AdminControllerFixture
 
 
@@ -128,42 +127,6 @@ class TestViewController:
             html = response.get_data(as_text=True)
             assert 'csrfToken: "%s"' % token in html
             assert token in response.headers.get("Set-Cookie")
-
-    def test_tos_link(self, admin_ctrl_fixture: AdminControllerFixture):
-        def assert_tos(expect_href, expect_text):
-            with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
-                flask.session["admin_email"] = admin_ctrl_fixture.admin.email
-                flask.session["auth_type"] = PasswordAdminAuthenticationProvider.NAME
-                response = admin_ctrl_fixture.manager.admin_view_controller(
-                    "collection", "book"
-                )
-                assert 200 == response.status_code
-                html = response.get_data(as_text=True)
-
-                assert ('tos_link_href: "%s",' % expect_href) in html
-                assert ('tos_link_text: "%s",' % expect_text) in html
-
-        # First, verify the default values, which very few circulation
-        # managers will have any need to change.
-        #
-        # The default value has an apostrophe in it, which gets
-        # escaped when the HTML is generated.
-        assert_tos(
-            Configuration.DEFAULT_TOS_HREF,
-            Configuration.DEFAULT_TOS_TEXT.replace("'", "&#39;"),
-        )
-
-        # Now set some custom values.
-        sitewide = ConfigurationSetting.sitewide
-        sitewide(
-            admin_ctrl_fixture.ctrl.db.session, Configuration.CUSTOM_TOS_HREF
-        ).value = "http://tos/"
-        sitewide(
-            admin_ctrl_fixture.ctrl.db.session, Configuration.CUSTOM_TOS_TEXT
-        ).value = "a tos"
-
-        # Verify that those values are picked up and used to build the page.
-        assert_tos("http://tos/", "a tos")
 
     def test_show_circ_events_download(
         self, admin_ctrl_fixture: AdminControllerFixture

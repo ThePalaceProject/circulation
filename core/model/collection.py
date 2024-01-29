@@ -21,11 +21,9 @@ from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
 from core.model import Base, create
-from core.model.configuration import ConfigurationSetting
 from core.model.constants import DataSourceConstants, EditionConstants
 from core.model.coverage import CoverageRecord
 from core.model.datasource import DataSource
-from core.model.edition import Edition
 from core.model.hassessioncache import HasSessionCache
 from core.model.hybrid import hybrid_property
 from core.model.identifier import Identifier
@@ -522,20 +520,6 @@ class Collection(Base, HasSessionCache):
             )
         )
         query = query.filter(exists_clause)
-
-        # Some sources of audiobooks may be excluded because the
-        # server can't fulfill them or the expected client can't play
-        # them.
-        _db = query.session
-        excluded = ConfigurationSetting.excluded_audio_data_sources(_db)
-        if excluded:
-            audio_excluded_ids = [DataSource.lookup(_db, x).id for x in excluded]
-            query = query.filter(
-                or_(
-                    Edition.medium != EditionConstants.AUDIO_MEDIUM,
-                    ~LicensePool.data_source_id.in_(audio_excluded_ids),
-                )
-            )
 
         # Only find books with unsuppressed LicensePools.
         if not show_suppressed:

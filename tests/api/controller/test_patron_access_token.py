@@ -6,20 +6,25 @@ from werkzeug.datastructures import Authorization
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from api.controller.patron_auth_token import PatronAuthTokenController
 
 
 class PatronAuthTokenControllerFixture(CirculationControllerFixture):
-    def __init__(self, db: DatabaseTransactionFixture) -> None:
-        super().__init__(db)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ) -> None:
+        super().__init__(db, services_fixture)
         self.controller: PatronAuthTokenController = self.manager.patron_auth_token
 
 
 @pytest.fixture(scope="function")
-def patron_auth_token_fixture(db: DatabaseTransactionFixture):
-    return PatronAuthTokenControllerFixture(db)
+def patron_auth_token_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
+    return PatronAuthTokenControllerFixture(db, services_fixture)
 
 
 class TestPatronAuthTokenController:

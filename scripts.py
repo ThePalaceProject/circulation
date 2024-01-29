@@ -39,7 +39,6 @@ from core.model import (
     LOCK_ID_DB_INIT,
     CirculationEvent,
     Collection,
-    ConfigurationSetting,
     Contribution,
     DataSource,
     DiscoveryServiceRegistration,
@@ -178,10 +177,11 @@ class CacheMARCFiles(LibraryInputScript):
         self.force = False
         self.parse_args(cmd_args)
         self.storage_service = self.services.storage.public()
-
-        self.cm_base_url = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
+        self.base_url = self.services.config.sitewide.base_url()
+        if self.base_url is None:
+            raise CannotLoadConfiguration(
+                f"Missing required environment variable: PALACE_BASE_URL."
+            )
 
         self.exporter = exporter or MARCExporter(self._db, self.storage_service)
 
@@ -265,7 +265,7 @@ class CacheMARCFiles(LibraryInputScript):
         )
 
         annotator = annotator_cls(
-            self.cm_base_url,
+            self.base_url,
             library.short_name or "",
             web_client_urls,
             library_settings.organization_code,

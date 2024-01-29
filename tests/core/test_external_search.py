@@ -25,7 +25,6 @@ from psycopg2.extras import NumericRange
 from sqlalchemy.sql import Delete as sqlaDelete
 
 from core.classifier import Classifier
-from core.config import Configuration
 from core.external_search import (
     ExternalSearchIndex,
     Filter,
@@ -40,7 +39,6 @@ from core.external_search import (
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.metadata_layer import ContributorData, IdentifierData
 from core.model import (
-    ConfigurationSetting,
     Contribution,
     Contributor,
     CustomList,
@@ -849,28 +847,6 @@ class TestExternalSearchWithWorks:
         expect([], None, nothing)
 
         # Filters that come from site or library settings.
-
-        # The source for the 'Pride and Prejudice' audiobook has been
-        # excluded, so it won't show up in search results.
-        f = Filter(
-            excluded_audiobook_data_sources=[
-                data.pride_audio.license_pools[0].data_source
-            ]
-        )
-        expect([data.pride], "pride and prejudice", f)
-
-        # Here, a different data source is excluded, and it shows up.
-        f = Filter(
-            excluded_audiobook_data_sources=[
-                DataSource.lookup(session, DataSource.BIBLIOTHECA)
-            ]
-        )
-        expect(
-            [data.pride, data.pride_audio],
-            "pride and prejudice",
-            f,
-            ordered=False,
-        )
 
         # "Moby Duck" is not currently available, so it won't show up in
         # search results if allow_holds is False.
@@ -3500,13 +3476,6 @@ class TestFilter:
         # WorkList.inherited_value() and WorkList.inherited_values()
         # are used to determine what should go into the constructor.
 
-        # Disable any excluded audiobook data sources -- they will
-        # introduce unwanted extra clauses into our filters.
-        excluded_audio_sources = ConfigurationSetting.sitewide(
-            session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
-        )
-        excluded_audio_sources.value = json.dumps([])
-
         library = transaction.default_library()
         assert library.settings.allow_holds is True
 
@@ -3600,13 +3569,6 @@ class TestFilter:
         settings.allow_holds = False
         filter = Filter.from_worklist(session, parent, facets)
         assert library.settings.allow_holds is False
-
-        # Any excluded audio sources in the sitewide settings
-        # will be propagated to all Filters.
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
-        excluded_audio_sources.value = json.dumps([overdrive.name])
-        filter = Filter.from_worklist(session, parent, facets)
-        assert [overdrive.id] == filter.excluded_audiobook_data_sources
 
         # A bit of setup to test how WorkList.collection_ids affects
         # the resulting Filter.
@@ -3763,7 +3725,6 @@ class TestFilter:
         filter._audiences = "CHILDREN"
         filter.target_age = (2, 3)
         overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
-        filter.excluded_audiobook_data_sources = [overdrive.id]
         filter.allow_holds = False
         last_update_time = datetime_utc(2019, 1, 1)
         i1 = transaction.identifier()
@@ -3801,7 +3762,6 @@ class TestFilter:
         [
             licensepool_filter,
             datasource_filter,
-            excluded_audiobooks_filter,
             no_holds_filter,
         ] = nested.pop("licensepools")
 
@@ -3816,15 +3776,6 @@ class TestFilter:
         assert {
             "terms": {"licensepools.data_source_id": [overdrive.id]}
         } == datasource_filter.to_dict()
-
-        # The 'excluded audiobooks' filter.
-        audio = Q("term", **{"licensepools.medium": Edition.AUDIO_MEDIUM})
-        excluded_audio_source = Q(
-            "terms", **{"licensepools.data_source_id": [overdrive.id]}
-        )
-        excluded_audio = Bool(must=[audio, excluded_audio_source])
-        not_excluded_audio = Bool(must_not=excluded_audio)
-        assert not_excluded_audio == excluded_audiobooks_filter
 
         # The 'no holds' filter.
         open_access = Q("term", **{"licensepools.open_access": True})

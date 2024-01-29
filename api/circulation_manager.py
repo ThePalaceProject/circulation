@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import urllib.parse
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -39,7 +38,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.lane import Lane, WorkList
-from core.model import Collection, ConfigurationSetting, Library
+from core.model import Collection, Library
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.service.container import Services
 from core.service.logging.configuration import LogLevel
@@ -68,9 +67,6 @@ if TYPE_CHECKING:
     from api.admin.controller.quicksight import QuickSightController
     from api.admin.controller.reset_password import ResetPasswordController
     from api.admin.controller.sign_in import SignInController
-    from api.admin.controller.sitewide_settings import (
-        SitewideConfigurationSettingsController,
-    )
     from api.admin.controller.timestamps import TimestampsController
     from api.admin.controller.view import ViewController
     from api.admin.controller.work_editor import WorkController as AdminWorkController
@@ -107,7 +103,6 @@ class CirculationManager(LoggerMixin):
     admin_metadata_services_controller: MetadataServicesController
     admin_patron_auth_services_controller: PatronAuthServicesController
     admin_collection_settings_controller: CollectionSettingsController
-    admin_sitewide_configuration_settings_controller: SitewideConfigurationSettingsController
     admin_library_settings_controller: LibrarySettingsController
     admin_individual_admin_settings_controller: IndividualAdminSettingsController
     admin_catalog_services_controller: CatalogServicesController
@@ -130,6 +125,13 @@ class CirculationManager(LoggerMixin):
             Configuration.site_configuration_last_update(self._db, timeout=0)
         )
         self.setup_one_time_controllers()
+        self.patron_web_domains: set[str] = set()
+        authentication_document_cache_time = (
+            self.services.config.sitewide.authentication_document_cache_time()
+        )
+        self.authentication_for_opds_documents = ExpiringDict(
+            max_len=1000, max_age_seconds=authentication_document_cache_time
+        )
         self.load_settings()
 
     def load_facets_from_request(self, *args, **kwargs):
@@ -163,6 +165,29 @@ class CirculationManager(LoggerMixin):
         if last_update > self.site_configuration_last_update:
             self.load_settings()
             self.site_configuration_last_update = last_update
+
+    def get_patron_web_domains(self) -> set[str]:
+        """Return the set of patron web client domains."""
+        # Assemble the list of patron web client domains from individual
+        # library registration settings as well as a sitewide setting.
+        patron_web_domains: set[str] = set()
+        sitewide_patron_web_domains = (
+            self.services.config.sitewide.patron_web_hostnames()
+        )
+        if isinstance(sitewide_patron_web_domains, list):
+            patron_web_domains.update(sitewide_patron_web_domains)
+        else:
+            patron_web_domains.add(sitewide_patron_web_domains)
+
+        domains = self._db.execute(
+            select(DiscoveryServiceRegistration.web_client).where(
+                DiscoveryServiceRegistration.web_client != None
+            )
+        ).all()
+        for row in domains:
+            patron_web_domains.add(row.web_client)
+
+        return patron_web_domains
 
     @log_elapsed_time(log_level=LogLevel.info, message_prefix="load_settings")
     def load_settings(self):
@@ -256,49 +281,9 @@ class CirculationManager(LoggerMixin):
         self.top_level_lanes = new_top_level_lanes
         self.circulation_apis = new_circulation_apis
 
-        # Assemble the list of patron web client domains from individual
-        # library registration settings as well as a sitewide setting.
-        patron_web_domains = set()
-
-        def get_domain(url):
-            url = url.strip()
-            if url == "*":
-                return url
-            scheme, netloc, path, parameters, query, fragment = urllib.parse.urlparse(
-                url
-            )
-            if scheme and netloc:
-                return scheme + "://" + netloc
-            else:
-                return None
-
-        sitewide_patron_web_client_urls = ConfigurationSetting.sitewide(
-            self._db, Configuration.PATRON_WEB_HOSTNAMES
-        ).value
-        if sitewide_patron_web_client_urls:
-            for url in sitewide_patron_web_client_urls.split("|"):
-                domain = get_domain(url)
-                if domain:
-                    patron_web_domains.add(domain)
-
-        domains = self._db.execute(
-            select(DiscoveryServiceRegistration.web_client).where(
-                DiscoveryServiceRegistration.web_client != None
-            )
-        ).all()
-        for row in domains:
-            patron_web_domains.add(get_domain(row.web_client))
-
-        self.patron_web_domains = patron_web_domains
+        self.patron_web_domains = self.get_patron_web_domains()
         self.setup_configuration_dependent_controllers()
-        authentication_document_cache_time = int(
-            ConfigurationSetting.sitewide(
-                self._db, Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME
-            ).value_or_default(3600)
-        )
-        self.authentication_for_opds_documents = ExpiringDict(
-            max_len=1000, max_age_seconds=authentication_document_cache_time
-        )
+        self.authentication_for_opds_documents.clear()
 
     def log_lanes(self, lanelist=None, level=0):
         """Output information about the lane layout."""

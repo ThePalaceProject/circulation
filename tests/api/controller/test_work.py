@@ -47,6 +47,7 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class WorkFixture(CirculationControllerFixture):
@@ -55,8 +56,10 @@ class WorkFixture(CirculationControllerFixture):
     datasource: DataSource
     edition: Edition
 
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        super().__init__(db, services_fixture)
         [self.lp] = self.english_1.license_pools
         self.edition = self.lp.presentation_edition
         self.datasource = self.lp.data_source.name  # type: ignore
@@ -64,8 +67,10 @@ class WorkFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def work_fixture(db: DatabaseTransactionFixture) -> Generator[WorkFixture, None, None]:
-    fixture = WorkFixture(db)
+def work_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> Generator[WorkFixture, None, None]:
+    fixture = WorkFixture(db, services_fixture)
     with fixture.wired_container():
         yield fixture
 
@@ -455,6 +460,7 @@ class TestWorkController:
             work_fixture.manager.loans.fulfill(
                 pool.id,
                 delivery_mechanism.delivery_mechanism.id,
+                do_get=MagicMock(return_value=(200, {}, b"")),
             )
 
             patron1_loan = pool.loans[0]

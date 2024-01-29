@@ -1,14 +1,16 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
+
+from _pytest.monkeypatch import MonkeyPatch
 
 from api.authenticator import LibraryAuthenticator
-from api.config import Configuration
+from api.circulation_manager import CirculationManager
 from api.problem_details import *
 from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
 from core.lane import Facets, WorkList
-from core.model import ConfigurationSetting, create
+from core.model import create
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.problem_details import *
 from core.util.problem_detail import ProblemDetail
@@ -16,15 +18,45 @@ from core.util.problem_detail import ProblemDetail
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import IntegrationConfigurationFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestCirculationManager:
     """Test the CirculationManager object itself."""
 
+    def test__init__(self, monkeypatch: MonkeyPatch, services_fixture: ServicesFixture):
+        # Test that the CirculationManager is created with the right
+        # configuration settings.
+        mock_db = MagicMock()
+
+        services_fixture.set_sitewide_config_option(
+            "authentication_document_cache_time", 12
+        )
+        mock_load_settings = create_autospec(CirculationManager.load_settings)
+        mock_setup_controllers = create_autospec(
+            CirculationManager.setup_one_time_controllers
+        )
+
+        monkeypatch.setattr(CirculationManager, "load_settings", mock_load_settings)
+        monkeypatch.setattr(
+            CirculationManager, "setup_one_time_controllers", mock_setup_controllers
+        )
+
+        manager = CirculationManager(mock_db, services_fixture.services)
+
+        assert mock_load_settings.called
+        assert mock_setup_controllers.called
+
+        assert manager.authentication_for_opds_documents.max_age == 12
+        assert manager.services is services_fixture.services
+        assert manager.analytics is services_fixture.analytics_fixture.analytics_mock
+        assert manager.external_search is services_fixture.search_fixture.index_mock
+
     def test_load_settings(
         self,
         circulation_fixture: CirculationControllerFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
+        services_fixture: ServicesFixture,
     ):
         # Here's a CirculationManager which we've been using for a while.
         manager = circulation_fixture.manager
@@ -32,7 +64,7 @@ class TestCirculationManager:
         # Certain fields of the CirculationManager have certain values
         # which are about to be reloaded.
         manager.auth = object()
-        manager.patron_web_domains = object()
+        manager.patron_web_domains = set()
 
         # But some fields are _not_ about to be reloaded
         index_controller = manager.index_controller
@@ -52,9 +84,9 @@ class TestCirculationManager:
 
         # We also set up some configuration settings that will
         # be loaded.
-        ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.PATRON_WEB_HOSTNAMES
-        ).value = "http://sitewide/1234"
+        services_fixture.set_sitewide_config_option(
+            "patron_web_hostnames", "http://sitewide"
+        )
 
         # And a discovery service registration, that sets a web client url.
         registry = create_integration_configuration.discovery_service()
@@ -66,10 +98,9 @@ class TestCirculationManager:
             web_client="http://registration",
         )
 
-        ConfigurationSetting.sitewide(
-            circulation_fixture.db.session,
-            Configuration.AUTHENTICATION_DOCUMENT_CACHE_TIME,
-        ).value = "60"
+        # And a library-specific configuration setting.
+        manager.authentication_for_opds_documents["test"] = "document"
+        assert len(manager.authentication_for_opds_documents) == 1
 
         # Then reload the CirculationManager...
         circulation_fixture.manager.load_settings()
@@ -87,29 +118,30 @@ class TestCirculationManager:
             LibraryAuthenticator,
         )
 
-        # So have the patron web domains, and their paths have been
-        # removed.
+        # So have the patron web domains
         assert {"http://sitewide", "http://registration"} == manager.patron_web_domains
 
-        # The authentication document cache has been rebuilt with a
-        # new max_age.
-        assert 60 == manager.authentication_for_opds_documents.max_age
+        # The authentication document cache has been cleared
+        assert len(manager.authentication_for_opds_documents) == 0
 
         # Controllers that don't depend on site configuration
         # have not been reloaded.
         assert index_controller == manager.index_controller
 
         # The sitewide patron web domain can also be set to *.
-        ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.PATRON_WEB_HOSTNAMES
-        ).value = "*"
+        services_fixture.set_sitewide_config_option("patron_web_hostnames", "*")
         circulation_fixture.manager.load_settings()
         assert {"*", "http://registration"} == manager.patron_web_domains
 
-        # The sitewide patron web domain can have pipe separated domains, and will get spaces stripped
-        ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.PATRON_WEB_HOSTNAMES
-        ).value = "https://1.com|http://2.com |  http://subdomain.3.com|4.com"
+        # The sitewide patron web domain can also be a list of domains
+        services_fixture.set_sitewide_config_option(
+            "patron_web_hostnames",
+            [
+                "https://1.com",
+                "http://2.com",
+                "http://subdomain.3.com",
+            ],
+        )
         circulation_fixture.manager.load_settings()
         assert {
             "https://1.com",

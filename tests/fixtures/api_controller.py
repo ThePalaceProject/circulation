@@ -13,7 +13,6 @@ from werkzeug.datastructures import Authorization
 from api.adobe_vendor_id import AuthdataUtility
 from api.app import app
 from api.circulation_manager import CirculationManager
-from api.config import Configuration
 from api.controller.circulation_manager import CirculationManagerController
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.lanes import create_default_lanes
@@ -25,7 +24,6 @@ from core.integration.goals import Goals
 from core.lane import Lane
 from core.model import (
     Collection,
-    ConfigurationSetting,
     Library,
     Patron,
     Session,
@@ -37,10 +35,10 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from core.service.container import Services, wire_container
 from core.util import base64
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import ExternalSearchIndexFake
 
 
@@ -85,6 +83,7 @@ class ControllerFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
         setup_cm: bool,
     ):
         self.db = db
@@ -100,35 +99,20 @@ class ControllerFixture:
         app.config["PRESERVE_CONTEXT_ON_EXCEPTION"] = False
 
         # Set up the fake search index.
+        self.services_fixture = services_fixture
         self.search_index = ExternalSearchIndexFake()
-        self.services_container = Services()
-        self.services_container.search.index.override(self.search_index)
+        self.services_fixture.services.search.index.override(self.search_index)
 
         if setup_cm:
             # NOTE: Any reference to self._default_library below this
             # point in this method will cause the tests in
             # TestScopedSession to hang.
-            self.set_base_url()
-
             app.manager = self.circulation_manager_setup()
-
-    def set_base_url(self):
-        base_url = ConfigurationSetting.sitewide(
-            self.db.session, Configuration.BASE_URL_KEY
-        )
-        base_url.value = "http://test-circulation-manager/"
-
-    def wire_container(self):
-        wire_container(self.services_container)
-
-    def unwire_container(self):
-        self.services_container.unwire()
 
     @contextmanager
     def wired_container(self):
-        self.wire_container()
-        yield
-        self.unwire_container()
+        with self.services_fixture.wired():
+            yield
 
     def circulation_manager_setup_with_session(
         self, session: Session, overrides: ControllerFixtureSetupOverrides | None = None
@@ -181,7 +165,7 @@ class ControllerFixture:
         self.authdata = AuthdataUtility.from_config(self.library)
 
         # Create mock CM instance
-        self.manager = MockCirculationManager(session, self.services_container)
+        self.manager = MockCirculationManager(session, self.services_fixture.services)
 
         # Set CirculationAPI and top-level lane for the default
         # library, for convenience in tests.
@@ -272,9 +256,11 @@ class ControllerFixture:
 
 
 @pytest.fixture(scope="function")
-def controller_fixture(db: DatabaseTransactionFixture):
+def controller_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, setup_cm=True)
+    fixture = ControllerFixture(db, services_fixture, setup_cm=True)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
@@ -282,9 +268,11 @@ def controller_fixture(db: DatabaseTransactionFixture):
 
 
 @pytest.fixture(scope="function")
-def controller_fixture_without_cm(db: DatabaseTransactionFixture):
+def controller_fixture_without_cm(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, setup_cm=False)
+    fixture = ControllerFixture(db, services_fixture, setup_cm=False)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
@@ -325,8 +313,10 @@ class CirculationControllerFixture(ControllerFixture):
         )
     ]
 
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db, setup_cm=True)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        super().__init__(db, services_fixture, setup_cm=True)
         self.works = []
         self.add_works(self.BOOKS)
 
@@ -363,9 +353,11 @@ class CirculationControllerFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def circulation_fixture(db: DatabaseTransactionFixture):
+def circulation_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
     time_then = datetime.datetime.now()
-    fixture = CirculationControllerFixture(db)
+    fixture = CirculationControllerFixture(db, services_fixture)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("circulation controller init took %s", time_diff)

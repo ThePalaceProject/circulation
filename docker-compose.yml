@@ -14,6 +14,7 @@ x-cm-variables: &cm
     PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
     PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
     PALACE_REPORTING_NAME: "TEST CM"
+    PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
   depends_on:
     pg:
       condition: service_healthy

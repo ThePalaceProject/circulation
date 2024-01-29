@@ -191,6 +191,7 @@ class LibraryAuthenticator(LoggerMixin):
 
         return authenticator
 
+    @inject
     def __init__(
         self,
         _db: Session,

@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -18,6 +17,7 @@ from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class MockAdminApp:
@@ -74,13 +74,18 @@ class AdminRouteFixture:
     REAL_CIRCULATION_MANAGER = None
 
     def __init__(
-        self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
+        controller_fixture: ControllerFixture,
+        services_fixture: ServicesFixture,
     ):
         self.db = db
         self.controller_fixture = controller_fixture
         self.setup_circulation_manager = False
         if not self.REAL_CIRCULATION_MANAGER:
-            circ_manager = MockCirculationManager(self.db.session, MagicMock())
+            circ_manager = MockCirculationManager(
+                self.db.session, services_fixture.services
+            )
             setup_admin_controllers(circ_manager)
             self.REAL_CIRCULATION_MANAGER = circ_manager
 
@@ -252,9 +257,11 @@ class AdminRouteFixture:
 
 @pytest.fixture(scope="function")
 def admin_route_fixture(
-    db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
+    db: DatabaseTransactionFixture,
+    controller_fixture: ControllerFixture,
+    services_fixture: ServicesFixture,
 ) -> Generator[AdminRouteFixture, Any, None]:
-    fix = AdminRouteFixture(db, controller_fixture)
+    fix = AdminRouteFixture(db, controller_fixture, services_fixture)
     yield fix
     fix.close()
 
@@ -644,29 +651,6 @@ class TestAdminDiscoveryServices:
         url = "/admin/discovery_service/<service_id>"
         fixture.assert_authenticated_request_calls(
             url, fixture.controller.process_delete, "<service_id>", http_method="DELETE"  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "DELETE")
-
-
-class TestAdminSitewideServices:
-    CONTROLLER_NAME = "admin_sitewide_configuration_settings_controller"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_process_services(self, fixture: AdminRouteFixture):
-        url = "/admin/sitewide_settings"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_services  # type: ignore
-        )
-        fixture.assert_supported_methods(url, "GET", "POST")
-
-    def test_process_delete(self, fixture: AdminRouteFixture):
-        url = "/admin/sitewide_setting/<key>"
-        fixture.assert_authenticated_request_calls(
-            url, fixture.controller.process_delete, "<key>", http_method="DELETE"  # type: ignore
         )
         fixture.assert_supported_methods(url, "DELETE")
 

@@ -1,19 +1,22 @@
 import datetime
-from unittest.mock import call, patch
+from unittest.mock import create_autospec, patch
 
 import pytest
 
-from core.config import Configuration, ConfigurationConstants
 from core.jobs.holds_notification import HoldsNotificationMonitor
-from core.model.configuration import ConfigurationSetting
 from core.util.datetime_helpers import utc_now
+from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class HoldsNotificationFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
-        self.monitor = HoldsNotificationMonitor(self.db.session)
+        self.mock_notifications = create_autospec(PushNotifications)
+        self.monitor = HoldsNotificationMonitor(
+            self.db.session, notifications=self.mock_notifications
+        )
 
 
 @pytest.fixture(scope="function")
@@ -41,25 +44,13 @@ class TestHoldsNotifications:
         # Only position 0 holds, that haven't bene notified today, should be queried for
         assert holds_fixture.monitor.item_query().all() == [hold2, hold3]
 
-    def test_script_run(self, holds_fixture: HoldsNotificationFixture):
-        db = holds_fixture.db
-        patron1 = db.patron()
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
-        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=0)
-        hold2, _ = work2.active_license_pool().on_hold_to(patron1, position=0)
-
-        with patch("core.jobs.holds_notification.PushNotifications") as mock_notf:
-            holds_fixture.monitor.run()
-            assert mock_notf.send_holds_notifications.call_count == 1
-            assert mock_notf.send_holds_notifications.call_args_list == [
-                call([hold1, hold2])
-            ]
-
-            # Sitewide notifications are turned off
-            mock_notf.send_holds_notifications.reset_mock()
-            ConfigurationSetting.sitewide(
-                db.session, Configuration.PUSH_NOTIFICATIONS_STATUS
-            ).value = ConfigurationConstants.FALSE
-            holds_fixture.monitor.run()
-            assert mock_notf.send_holds_notifications.call_count == 0
+    def test_constructor(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        services_fixture.set_base_url("http://test-circulation-manager")
+        with patch(
+            "core.jobs.holds_notification.PushNotifications", autospec=True
+        ) as mock_notifications:
+            monitor = HoldsNotificationMonitor(db.session)
+        assert monitor.notifications == mock_notifications.return_value
+        mock_notifications.assert_called_once_with("http://test-circulation-manager")

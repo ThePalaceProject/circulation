@@ -6,6 +6,7 @@ import flask_babel
 from flask import request
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
+from sqlalchemy.orm import Session
 
 from api.admin.controller import setup_admin_controllers
 from api.circulation_manager import CirculationManager
@@ -57,7 +58,7 @@ PalaceCProfileProfiler.configure(app)
 PalaceXrayProfiler.configure(app)
 
 
-def initialize_admin(_db=None):
+def initialize_admin(_db: Session | None = None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db

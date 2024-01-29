@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import os
-import urllib.parse
 
 import flask
 
@@ -16,26 +15,19 @@ from api.admin.problem_details import (
     INVALID_ADMIN_CREDENTIALS,
     INVALID_CSRF_TOKEN,
 )
-from api.config import Configuration
-from core.model import (
-    Admin,
-    AdminRole,
-    ConfigurationSetting,
-    Library,
-    get_one,
-    get_one_or_create,
-)
+from core.model import Admin, AdminRole, Library, get_one, get_one_or_create
 
 
 class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
+        self.secret_key = self.manager.services.config.sitewide.secret_key()
 
     @property
     def admin_auth_providers(self):
         if Admin.with_password(self._db).count() != 0:
-            return [PasswordAdminAuthenticationProvider()]
+            return [PasswordAdminAuthenticationProvider(self.secret_key)]
 
         return []
 
@@ -95,16 +87,6 @@ class AdminController:
         # A permanent session expires after a fixed time, rather than
         # when the user closes the browser.
         flask.session.permanent = True
-
-        # If this is the first time an admin has been authenticated,
-        # make sure there is a value set for the sitewide BASE_URL_KEY
-        # setting. If it's not set, set it to the hostname of the
-        # current request. This assumes the first authenticated admin
-        # is accessing the admin interface through the hostname they
-        # want to be used for the site itself.
-        base_url = ConfigurationSetting.sitewide(self._db, Configuration.BASE_URL_KEY)
-        if not base_url.value:
-            base_url.value = urllib.parse.urljoin(flask.request.url, "/")
 
         return admin
 

@@ -13,13 +13,12 @@ from sqlalchemy.exc import NoResultFound
 
 from alembic.util import CommandError
 from api.adobe_vendor_id import AuthdataUtility
-from api.config import Configuration
 from api.metadata.novelist import NoveListAPI
+from core.config import CannotLoadConfiguration
 from core.integration.goals import Goals
 from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
 from core.model import (
     LOCK_ID_DB_INIT,
-    ConfigurationSetting,
     Credential,
     DataSource,
     DiscoveryServiceRegistration,
@@ -39,8 +38,8 @@ from scripts import (
     LocalAnalyticsExportScript,
     NovelistSnapshotScript,
 )
-from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
@@ -93,42 +92,19 @@ class TestAdobeAccountIDResetScript:
         assert "Some other type" == credential.type
 
 
-class LaneScriptFixture:
-    def __init__(self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture):
-        self.db = db
-        base_url_setting = ConfigurationSetting.sitewide(
-            self.db.session, Configuration.BASE_URL_KEY
-        )
-        base_url_setting.value = "http://test-circulation-manager/"
-        library = db.default_library()
-        settings = library_fixture.mock_settings()
-        settings.large_collection_languages = []
-        settings.small_collection_languages = []
-        settings.tiny_collection_languages = ["eng", "fre"]
-        library.update_settings(settings)
-
-
-@pytest.fixture(scope="function")
-def lane_script_fixture(
-    db: DatabaseTransactionFixture, library_fixture: LibraryFixture
-) -> LaneScriptFixture:
-    return LaneScriptFixture(db, library_fixture)
-
-
 class CacheMARCFilesFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
         self.db = db
-        self.mock_services = MagicMock()
+        self.services_fixture = services_fixture
+        self.base_url = "http://test-circulation-manager"
+        services_fixture.set_base_url(self.base_url)
         self.exporter = MagicMock(spec=MARCExporter)
         self.library = self.db.default_library()
         self.collection = self.db.collection()
         self.collection.export_marc_records = True
         self.collection.libraries += [self.library]
-        self.cm_base_url = "http://test-circulation-manager/"
-
-        ConfigurationSetting.sitewide(
-            db.session, Configuration.BASE_URL_KEY
-        ).value = self.cm_base_url
 
     def integration(self, library: Library | None = None) -> IntegrationConfiguration:
         if library is None:
@@ -145,17 +121,28 @@ class CacheMARCFilesFixture:
         return CacheMARCFiles(
             self.db.session,
             exporter=self.exporter,
-            services=self.mock_services,
+            services=self.services_fixture.services,
             cmd_args=cmd_args,
         )
 
 
 @pytest.fixture
-def cache_marc_files(db: DatabaseTransactionFixture) -> CacheMARCFilesFixture:
-    return CacheMARCFilesFixture(db)
+def cache_marc_files(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> CacheMARCFilesFixture:
+    return CacheMARCFilesFixture(db, services_fixture)
 
 
 class TestCacheMARCFiles:
+    def test_constructor(self, cache_marc_files: CacheMARCFilesFixture):
+        cache_marc_files.services_fixture.set_base_url(None)
+        with pytest.raises(CannotLoadConfiguration):
+            cache_marc_files.script()
+
+        cache_marc_files.services_fixture.set_base_url("http://test.com")
+        script = cache_marc_files.script()
+        assert script.base_url == "http://test.com"
+
     def test_settings(self, cache_marc_files: CacheMARCFilesFixture):
         # Test that the script gets the correct settings.
         test_library = cache_marc_files.library
@@ -329,7 +316,7 @@ class TestCacheMARCFiles:
         after_call_time = utc_now()
 
         mock_annotator_cls.assert_called_once_with(
-            cache_marc_files.cm_base_url,
+            cache_marc_files.base_url,
             cache_marc_files.library.short_name,
             [library_settings.web_client_url],
             library_settings.organization_code,

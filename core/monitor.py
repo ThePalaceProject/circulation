@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
 
-from core.config import Configuration
 from core.metadata_layer import TimestampData
 from core.model import (
     Base,
@@ -30,7 +29,6 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.model.configuration import ConfigurationSetting
 from core.service.container import container_instance
 from core.util.datetime_helpers import utc_now
 
@@ -967,19 +965,6 @@ class MeasurementReaper(ReaperMonitor):
     """Remove measurements that are not the most recent"""
 
     MODEL_CLASS = Measurement
-
-    def run(self):
-        enabled = ConfigurationSetting.sitewide(
-            self._db, Configuration.MEASUREMENT_REAPER
-        ).bool_value
-        if enabled is not None and not enabled:
-            self.log.info(
-                "{} skipped because it is disabled in configuration.".format(
-                    self.service_name
-                )
-            )
-            return
-        return super(ReaperMonitor, self).run()
 
     @property
     def where_clause(self):

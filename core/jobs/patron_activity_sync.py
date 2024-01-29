@@ -1,8 +1,9 @@
 from datetime import timedelta
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Query
+from sqlalchemy.orm import Query, Session
 
+from core.model import Collection
 from core.model.devicetokens import DeviceToken
 from core.model.patron import Hold, Loan, Patron
 from core.monitor import PatronSweepMonitor
@@ -13,6 +14,18 @@ from core.util.notifications import PushNotifications
 class PatronActivitySyncNotificationScript(PatronSweepMonitor):
     """Find patrons with stale last_activity_sync timestamps, and also who have loans/holds
     and notify said patron devices to re-sync their data"""
+
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection | None = None,
+        batch_size: int | None = None,
+        notifications: PushNotifications | None = None,
+    ) -> None:
+        super().__init__(_db, collection, batch_size)
+        self.notifications = notifications or PushNotifications(
+            self.services.config.sitewide.base_url()
+        )
 
     STALE_ACTIVITY_SYNC_DAYS = 2
     SERVICE_NAME: str | None = "Patron Activity Sync Notification"
@@ -36,4 +49,4 @@ class PatronActivitySyncNotificationScript(PatronSweepMonitor):
         return query
 
     def process_items(self, items: list[Patron]) -> None:
-        PushNotifications.send_activity_sync_message(items)
+        self.notifications.send_activity_sync_message(items)
