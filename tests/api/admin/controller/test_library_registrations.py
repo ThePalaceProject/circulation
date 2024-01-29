@@ -6,11 +6,14 @@ from flask import Response, url_for
 from requests_mock import Mocker
 from werkzeug.datastructures import ImmutableMultiDict
 
+from api.admin.controller.discovery_service_library_registrations import (
+    DiscoveryServiceLibraryRegistrationsController,
+)
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.problem_details import REMOTE_INTEGRATION_FAILED
-from core.model import AdminRole, create
+from core.model import create
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -18,9 +21,21 @@ from core.model.discovery_service_registration import (
 )
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail, ProblemError
-from tests.fixtures.api_admin import AdminControllerFixture
-from tests.fixtures.database import IntegrationConfigurationFixture
+from tests.fixtures.database import (
+    DatabaseTransactionFixture,
+    IntegrationConfigurationFixture,
+)
+from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
+
+
+@pytest.fixture
+def controller(
+    db: DatabaseTransactionFixture,
+) -> DiscoveryServiceLibraryRegistrationsController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return DiscoveryServiceLibraryRegistrationsController(mock_manager)
 
 
 class TestLibraryRegistration:
@@ -28,13 +43,13 @@ class TestLibraryRegistration:
 
     def test_discovery_service_library_registrations_get(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
         library_fixture: LibraryFixture,
         requests_mock: Mocker,
     ) -> None:
-        db = admin_ctrl_fixture.ctrl.db
-
         # Here's a discovery service.
         discovery_service = create_integration_configuration.discovery_service(
             url="http://service-url.com/"
@@ -112,20 +127,18 @@ class TestLibraryRegistration:
             headers={"Content-Type": OpdsRegistrationService.OPDS_2_TYPE},
         )
 
-        controller = (
-            admin_ctrl_fixture.ctrl.manager.admin_discovery_service_library_registrations_controller
-        )
-        m = controller.process_discovery_service_library_registrations
-        with admin_ctrl_fixture.request_context_with_admin("/", method="GET"):
+        with flask_app_fixture.test_request_context("/", method="GET"):
             # When the user lacks the SYSTEM_ADMIN role, the
             # controller won't even start processing their GET
             # request.
-            pytest.raises(AdminNotAuthorized, m)
+            pytest.raises(
+                AdminNotAuthorized,
+                controller.process_discovery_service_library_registrations,
+            )
 
-            # Add the admin role and try again.
-            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-
-            response = m()
+        # Request again with system admin role
+        with flask_app_fixture.test_request_context_system_admin("/", method="GET"):
+            response = controller.process_discovery_service_library_registrations()
             # The document we get back from the controller is a
             # dictionary with useful information on all known
             # discovery integrations -- just one, in this case.
@@ -179,7 +192,7 @@ class TestLibraryRegistration:
                 status_code=502,
             )
 
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
 
             # Everything looks good, except that there's no TOS data
             # available.
@@ -198,7 +211,8 @@ class TestLibraryRegistration:
 
     def test_discovery_service_library_registrations_post(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        controller: DiscoveryServiceLibraryRegistrationsController,
+        flask_app_fixture: FlaskAppFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
         library_fixture: LibraryFixture,
     ) -> None:
@@ -206,34 +220,30 @@ class TestLibraryRegistration:
         discovery_service_library_registrations.
         """
 
-        controller = (
-            admin_ctrl_fixture.manager.admin_discovery_service_library_registrations_controller
-        )
-        m = controller.process_discovery_service_library_registrations
-
         # Here, the user doesn't have permission to start the
         # registration process.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
-            pytest.raises(AdminNotAuthorized, m)
-
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+        with flask_app_fixture.test_request_context("/", method="POST"):
+            pytest.raises(
+                AdminNotAuthorized,
+                controller.process_discovery_service_library_registrations,
+            )
 
         # We might not get an integration ID parameter.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict()
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
         # The integration ID might not correspond to a valid
         # ExternalIntegration.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", "1234"),
                 ]
             )
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert MISSING_SERVICE == response
 
@@ -243,44 +253,44 @@ class TestLibraryRegistration:
         )
 
         # We might not get a library short name.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", str(discovery_service.id)),
                 ]
             )
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
         # The library name might not correspond to a real library.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", str(discovery_service.id)),
                     ("library_short_name", "not-a-library"),
                 ]
             )
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert NO_SUCH_LIBRARY == response
 
         # Take care of that problem.
         library = library_fixture.library()
 
         # We might not get a registration stage.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", str(discovery_service.id)),
                     ("library_short_name", str(library.short_name)),
                 ]
             )
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
         # The registration stage might not be valid.
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("integration_id", str(discovery_service.id)),
@@ -288,7 +298,7 @@ class TestLibraryRegistration:
                     ("registration_stage", "not-a-stage"),
                 ]
             )
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
@@ -307,9 +317,9 @@ class TestLibraryRegistration:
         )
         controller.look_up_registry = MagicMock(return_value=mock_registry)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = form
-            response = m()
+            response = controller.process_discovery_service_library_registrations()
             assert REMOTE_INTEGRATION_FAILED == response
 
         # But if that doesn't happen, success!
@@ -317,7 +327,7 @@ class TestLibraryRegistration:
         mock_registry.register_library.return_value = True
         controller.look_up_registry = MagicMock(return_value=mock_registry)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = form
             response = controller.process_discovery_service_library_registrations()
             assert isinstance(response, Response)

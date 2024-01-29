@@ -1,19 +1,22 @@
+from unittest.mock import MagicMock
+
 import pytest
 
+from api.admin.controller.admin_search import AdminSearchController
 from core.model.classification import Subject
 from core.model.datasource import DataSource
 from core.model.licensing import LicensePool
 from core.model.work import Work
-from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 
 
 class AdminSearchFixture:
-    def __init__(self, admin_ctrl_fixture: AdminControllerFixture):
-        self.admin_ctrl_fixture = admin_ctrl_fixture
-        self.manager = admin_ctrl_fixture.manager
-        self.db = self.admin_ctrl_fixture.ctrl.db
-
-        db = self.db
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.db = db
+        mock_manager = MagicMock()
+        mock_manager._db = db.session
+        self.controller = AdminSearchController(mock_manager)
 
         # Setup works with subjects, languages, audiences etc...
         gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
@@ -77,20 +80,23 @@ class AdminSearchFixture:
 
 @pytest.fixture(scope="function")
 def admin_search_fixture(
-    admin_ctrl_fixture: AdminControllerFixture,
+    db: DatabaseTransactionFixture,
 ) -> AdminSearchFixture:
-    return AdminSearchFixture(admin_ctrl_fixture)
+    return AdminSearchFixture(db)
 
 
 class TestAdminSearchController:
-    def test_search_field_values(self, admin_search_fixture: AdminSearchFixture):
-        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+    def test_search_field_values(
+        self,
+        admin_search_fixture: AdminSearchFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        with flask_app_fixture.test_request_context(
             "/",
-            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+            library=db.default_library(),
         ):
-            response = (
-                admin_search_fixture.manager.admin_search_controller.search_field_values()
-            )
+            response = admin_search_fixture.controller.search_field_values()
 
         assert response["subjects"] == {
             "subject 1": 1,
@@ -104,14 +110,19 @@ class TestAdminSearchController:
         assert response["publishers"] == {"Publisher 1": 3, "Publisher 10": 10}
         assert response["distributors"] == {"Gutenberg": 13}
 
-    def test_different_license_types(self, admin_search_fixture: AdminSearchFixture):
+    def test_different_license_types(
+        self,
+        admin_search_fixture: AdminSearchFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ):
         # Remove the cache
-        admin_search_fixture.manager.admin_search_controller.__class__._search_field_values_cached.ttls = (  # type: ignore
+        admin_search_fixture.controller.__class__._search_field_values_cached.ttls = (  # type: ignore
             0
         )
 
         w = (
-            admin_search_fixture.db.session.query(Work)
+            db.session.query(Work)
             .filter(Work.presentation_edition.has(title="work3"))
             .first()
         )
@@ -122,24 +133,20 @@ class TestAdminSearchController:
 
         # A pool without licenses should not attribute to the count
         pool.licenses_owned = 0
-        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+        with flask_app_fixture.test_request_context(
             "/",
-            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+            library=db.default_library(),
         ):
-            response = (
-                admin_search_fixture.manager.admin_search_controller.search_field_values()
-            )
+            response = admin_search_fixture.controller.search_field_values()
             assert "Horror" not in response["genres"]
             assert "Spanish" not in response["languages"]
 
         # An open access license should get counted even without owned licenses
         pool.open_access = True
-        with admin_search_fixture.admin_ctrl_fixture.request_context_with_library_and_admin(
+        with flask_app_fixture.test_request_context(
             "/",
-            library=admin_search_fixture.admin_ctrl_fixture.ctrl.db.default_library(),
+            library=db.default_library(),
         ):
-            response = (
-                admin_search_fixture.manager.admin_search_controller.search_field_values()
-            )
+            response = admin_search_fixture.controller.search_field_values()
             assert "Horror" in response["genres"]
             assert "Spanish" in response["languages"]

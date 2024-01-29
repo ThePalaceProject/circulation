@@ -64,7 +64,6 @@ if TYPE_CHECKING:
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.quicksight import QuickSightController
     from api.admin.controller.reset_password import ResetPasswordController
-    from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
@@ -100,7 +99,6 @@ class CirculationManager(LoggerMixin):
     admin_custom_lists_controller: CustomListsController
     admin_lanes_controller: LanesController
     admin_dashboard_controller: DashboardController
-    admin_settings_controller: SettingsController
     admin_patron_controller: PatronController
     admin_discovery_services_controller: DiscoveryServicesController
     admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController

@@ -8,6 +8,7 @@ import flask
 import pytest
 from flask.ctx import RequestContext
 from flask_babel import Babel
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.util.flask import PalaceFlask
 from core.model import Admin, AdminRole, Library, get_one_or_create
@@ -32,11 +33,18 @@ class FlaskAppFixture:
 
     @contextmanager
     def test_request_context(
-        self, *args: Any, admin: Admin | None = None, **kwargs: Any
+        self,
+        *args: Any,
+        admin: Admin | None = None,
+        library: Library | None = None,
+        **kwargs: Any,
     ) -> Generator[RequestContext, None, None]:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
+            flask.request.library = library  # type: ignore[attr-defined]
             flask.request.admin = admin  # type: ignore[attr-defined]
+            flask.request.form = ImmutableMultiDict()
+            flask.request.files = ImmutableMultiDict()
             yield c
 
             # Flush any changes that may have occurred during the request, then

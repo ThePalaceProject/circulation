@@ -1,11 +1,13 @@
 import json
 from contextlib import nullcontext
+from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Response
 from werkzeug.datastructures import ImmutableMultiDict
 
+from api.admin.controller.catalog_services import CatalogServicesController
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
@@ -19,26 +21,31 @@ from api.admin.problem_details import (
 from api.integration.registry.catalog_services import CatalogServicesRegistry
 from core.integration.goals import Goals
 from core.marc import MARCExporter, MarcExporterLibrarySettings
-from core.model import AdminRole, IntegrationConfiguration, get_one
+from core.model import IntegrationConfiguration, get_one
 from core.util.problem_detail import ProblemDetail
-from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
+
+
+@pytest.fixture
+def controller(db: DatabaseTransactionFixture) -> CatalogServicesController:
+    mock_manager = MagicMock()
+    mock_manager._db = db.session
+    return CatalogServicesController(mock_manager)
 
 
 class TestCatalogServicesController:
     def test_catalog_services_get_with_no_services(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self, flask_app_fixture: FlaskAppFixture, controller: CatalogServicesController
     ):
-        with admin_ctrl_fixture.request_context_with_admin("/"):
+        with flask_app_fixture.test_request_context("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services,
+                controller.process_catalog_services,
             )
 
-            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-
-            response = (
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
-            )
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_catalog_services()
             assert isinstance(response, Response)
             assert response.status_code == 200
             data = response.json
@@ -55,10 +62,11 @@ class TestCatalogServicesController:
             assert "library_settings" in protocols[0]
 
     def test_catalog_services_get_with_marc_exporter(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
     ):
-        db = admin_ctrl_fixture.ctrl.db
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
         library_settings = MarcExporterLibrarySettings(
             include_summary=True, include_genres=True, organization_code="US-MaBoDPL"
         )
@@ -77,10 +85,8 @@ class TestCatalogServicesController:
             library_settings_integration, library_settings
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/"):
-            response = (
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
-            )
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_catalog_services()
             assert isinstance(response, Response)
             assert response.status_code == 200
             data = response.json
@@ -93,10 +99,7 @@ class TestCatalogServicesController:
             assert integration.name == service.get("name")
             assert integration.protocol == service.get("protocol")
             [library] = service.get("libraries")
-            assert (
-                admin_ctrl_fixture.ctrl.db.default_library().short_name
-                == library.get("short_name")
-            )
+            assert db.default_library().short_name == library.get("short_name")
             assert "US-MaBoDPL" == library.get("organization_code")
             assert library.get("include_summary") is True
             assert library.get("include_genres") is True
@@ -156,18 +159,21 @@ class TestCatalogServicesController:
     )
     def test_catalog_services_post_errors(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
         post_data: dict[str, str],
         expected: ProblemDetail | None,
         admin: bool,
         raises: type[Exception] | None,
     ):
         if admin:
-            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
+            make_request = flask_app_fixture.test_request_context_system_admin
+        else:
+            make_request = flask_app_fixture.test_request_context
 
         context_manager = pytest.raises(raises) if raises is not None else nullcontext()
 
-        db = admin_ctrl_fixture.ctrl.db
         service = db.integration_configuration(
             "fake protocol",
             Goals.CATALOG_GOAL,
@@ -178,12 +184,10 @@ class TestCatalogServicesController:
         if post_data.get("id") == "<existing>":
             post_data["id"] = str(service.id)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with make_request("/", method="POST"):
             flask.request.form = ImmutableMultiDict(post_data)
             with context_manager:
-                response = (
-                    admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
-                )
+                response = controller.process_catalog_services()
                 assert isinstance(response, ProblemDetail)
                 assert isinstance(expected, ProblemDetail)
                 assert response.uri == expected.uri
@@ -191,14 +195,15 @@ class TestCatalogServicesController:
                 assert response.title == expected.title
 
     def test_catalog_services_post_create(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
     ):
-        db = admin_ctrl_fixture.ctrl.db
         protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
         assert protocol is not None
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
@@ -217,9 +222,7 @@ class TestCatalogServicesController:
                     ),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
-            )
+            response = controller.process_catalog_services()
             assert isinstance(response, Response)
             assert response.status_code == 201
 
@@ -240,12 +243,13 @@ class TestCatalogServicesController:
         assert settings.include_genres is True
 
     def test_catalog_services_post_edit(
-        self, admin_ctrl_fixture: AdminControllerFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
     ):
-        db = admin_ctrl_fixture.ctrl.db
         protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
         assert protocol is not None
-        admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
 
         service = db.integration_configuration(
             protocol,
@@ -253,7 +257,7 @@ class TestCatalogServicesController:
             name="name",
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
@@ -273,9 +277,7 @@ class TestCatalogServicesController:
                     ),
                 ]
             )
-            response = (
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_catalog_services()
-            )
+            response = controller.process_catalog_services()
             assert isinstance(response, Response)
             assert response.status_code == 200
 
@@ -288,8 +290,12 @@ class TestCatalogServicesController:
         assert settings.include_summary is True
         assert settings.include_genres is False
 
-    def test_catalog_services_delete(self, admin_ctrl_fixture: AdminControllerFixture):
-        db = admin_ctrl_fixture.ctrl.db
+    def test_catalog_services_delete(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
+    ):
         protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
         assert protocol is not None
 
@@ -299,17 +305,15 @@ class TestCatalogServicesController:
             name="name",
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="DELETE"):
+        with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
-                admin_ctrl_fixture.manager.admin_catalog_services_controller.process_delete,
+                controller.process_delete,
                 service.id,
             )
 
-            admin_ctrl_fixture.admin.add_role(AdminRole.SYSTEM_ADMIN)
-            response = admin_ctrl_fixture.manager.admin_catalog_services_controller.process_delete(
-                service.id
-            )
+        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+            response = controller.process_delete(service.id)
             assert isinstance(response, Response)
             assert response.status_code == 200
 
