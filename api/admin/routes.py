@@ -8,6 +8,7 @@ from flask_pydantic_spec import Request as SpecRequest
 from flask_pydantic_spec import Response as SpecResponse
 
 from api.admin.config import Configuration as AdminClientConfig
+from api.admin.config import OperationalMode
 from api.admin.controller.custom_lists import CustomListsController
 from api.admin.dashboard_stats import generate_statistics
 from api.admin.model.dashboard_statistics import StatisticsResponse
@@ -18,6 +19,7 @@ from api.admin.model.quicksight import (
 )
 from api.admin.templates import admin_sign_in_again as sign_in_again_template
 from api.app import api_spec, app
+from api.controller.static_file import StaticFileController
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.util.problem_detail import ProblemDetail, ProblemDetailModel, ProblemError
@@ -748,9 +750,11 @@ def admin_base(**kwargs):
 
 
 # This path is used only in debug mode to serve frontend assets.
-@app.route("/admin/static/<filename>")
-@returns_problem_detail
-def admin_static_file(filename):
-    return app.manager.static_files.static_file(
-        AdminClientConfig.static_files_directory(), filename
-    )
+if AdminClientConfig.operational_mode() == OperationalMode.development:
+
+    @app.route("/admin/static/<filename>")
+    @returns_problem_detail
+    def admin_static_file(filename):
+        return StaticFileController.static_file(
+            AdminClientConfig.static_files_directory(), filename
+        )

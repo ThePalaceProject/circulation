@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Generator
-from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -800,37 +799,6 @@ class TestAdminView:
 
         url = "/admin/web/a/path"
         fixture.assert_request_calls(url, fixture.controller, None, None, path="a/path")
-
-
-class TestAdminStatic:
-    CONTROLLER_NAME = "static_files"
-
-    @pytest.fixture(scope="function")
-    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
-        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
-        return admin_route_fixture
-
-    def test_static_file(self, fixture: AdminRouteFixture):
-        # Go to the back to the root folder to get the right
-        # path for the static files.
-        root_path = Path(__file__).parent.parent.parent.parent
-        local_path = (
-            root_path
-            / "api/admin/node_modules/@thepalaceproject/circulation-admin/dist"
-        )
-
-        url = "/admin/static/circulation-admin.js"
-        fixture.assert_request_calls(
-            url, fixture.controller.static_file, str(local_path), "circulation-admin.js"  # type: ignore
-        )
-
-        url = "/admin/static/circulation-admin.css"
-        fixture.assert_request_calls(
-            url,
-            fixture.controller.static_file,  # type: ignore
-            str(local_path),
-            "circulation-admin.css",
-        )
 
 
 def test_returns_json_or_response_or_problem_detail():

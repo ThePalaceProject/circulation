@@ -23,7 +23,6 @@ from api.controller.opds_feed import OPDSFeedController
 from api.controller.patron_auth_token import PatronAuthTokenController
 from api.controller.playtime_entries import PlaytimeEntriesController
 from api.controller.profile import ProfileController
-from api.controller.static_file import StaticFileController
 from api.controller.urn_lookup import URNLookupController
 from api.controller.work import WorkController
 from api.custom_index import CustomIndexView
@@ -87,7 +86,6 @@ class CirculationManager(LoggerMixin):
     patron_devices: DeviceTokensController
     version: ApplicationVersionController
     odl_notification_controller: ODLNotificationController
-    static_files: StaticFileController
     playtime_entries: PlaytimeEntriesController
 
     # Admin controllers
@@ -289,7 +287,6 @@ class CirculationManager(LoggerMixin):
         self.patron_devices = DeviceTokensController(self)
         self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(self)
-        self.static_files = StaticFileController(self)
         self.patron_auth_token = PatronAuthTokenController(self)
         self.playtime_entries = PlaytimeEntriesController(self)
 
