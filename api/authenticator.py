@@ -9,6 +9,7 @@ from typing import cast
 
 import flask
 import jwt
+from dependency_injector.wiring import Provide, inject
 from flask import url_for
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
@@ -31,7 +32,7 @@ from api.problem_details import *
 from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
-from core.model import ConfigurationSetting, Library, Patron, PatronProfileStorage
+from core.model import Library, Patron, PatronProfileStorage
 from core.model.announcements import Announcement
 from core.model.integration import IntegrationLibraryConfiguration
 from core.user_profile import ProfileController
@@ -198,26 +199,19 @@ class LibraryAuthenticator(LoggerMixin):
                     (integration.parent.id, library.id)
                 ] = e
 
-        if authenticator.saml_providers_by_name:
-            # NOTE: this will immediately commit the database session,
-            # which may not be what you want during a test. To avoid
-            # this, you can create the bearer token signing secret as
-            # a regular site-wide ConfigurationSetting.
-            authenticator.bearer_token_signing_secret = (
-                BearerTokenSigner.bearer_token_signing_secret(_db)
-            )
-
         authenticator.assert_ready_for_token_signing()
 
         return authenticator
 
+    @inject
     def __init__(
         self,
         _db: Session,
         library: Library,
         basic_auth_provider: BasicAuthenticationProvider | None = None,
         saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
-        bearer_token_signing_secret: str | None = None,
+        bearer_token_signing_secret: str
+        | None = Provide["config.sitewide.bearer_token_signing_secret"],
         authentication_document_annotator: CustomPatronCatalog | None = None,
         integration_registry: None
         | (IntegrationRegistry[AuthenticationProvider]) = None,
@@ -816,28 +810,8 @@ class LibraryAuthenticator(LoggerMixin):
         return headers
 
 
-class BearerTokenSigner:
-    """Mixin class used for storing a secret used for signing Bearer tokens"""
-
-    # Name of the site-wide ConfigurationSetting containing the secret
-    # used to sign bearer tokens.
-    BEARER_TOKEN_SIGNING_SECRET = Configuration.BEARER_TOKEN_SIGNING_SECRET
-
-    @classmethod
-    def bearer_token_signing_secret(cls, db):
-        """Find or generate the site-wide bearer token signing secret.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: ConfigurationSetting object containing the signing secret
-        :rtype: ConfigurationSetting
-        """
-        return ConfigurationSetting.sitewide_secret(db, cls.BEARER_TOKEN_SIGNING_SECRET)
-
-
 class BaseSAMLAuthenticationProvider(
-    AuthenticationProvider[SettingsType, LibrarySettingsType], BearerTokenSigner, ABC
+    AuthenticationProvider[SettingsType, LibrarySettingsType], ABC
 ):
     """
     Base class for SAML authentication providers

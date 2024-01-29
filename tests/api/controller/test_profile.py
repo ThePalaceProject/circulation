@@ -1,24 +1,23 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import pytest
 
 from api.authenticator import CirculationPatronProfileStorage
-from core.model import Annotation, Patron
+from core.model import Annotation
 from core.user_profile import ProfileController, ProfileStorage
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class ProfileFixture(ControllerFixture):
-    auth: dict[Any, Any]
-    other_patron: Patron
-
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db, setup_cm=True)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        super().__init__(db, services_fixture, setup_cm=True)
         # Nothing will happen to this patron. This way we can verify
         # that a patron can only see/modify their own profile.
         self.other_patron = db.patron()
@@ -27,8 +26,8 @@ class ProfileFixture(ControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def profile_fixture(db: DatabaseTransactionFixture):
-    return ProfileFixture(db)
+def profile_fixture(db: DatabaseTransactionFixture, services_fixture: ServicesFixture):
+    return ProfileFixture(db, services_fixture)
 
 
 class TestProfileController:

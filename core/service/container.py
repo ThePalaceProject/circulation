@@ -8,6 +8,7 @@ from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
 from core.service.search.configuration import SearchConfiguration
 from core.service.search.container import Search
+from core.service.sitewide import SitewideConfiguration
 from core.service.storage.configuration import StorageConfiguration
 from core.service.storage.container import Storage
 
@@ -40,6 +41,7 @@ class Services(DeclarativeContainer):
 def wire_container(container: Services) -> None:
     container.wire(
         modules=[
+            "api.authenticator",
             "api.axis",
             "api.bibliotheca",
             "api.circulation_manager",
@@ -61,6 +63,7 @@ def create_container() -> Services:
     container = Services()
     container.config.from_dict(
         {
+            "sitewide": SitewideConfiguration().dict(),
             "storage": StorageConfiguration().dict(),
             "logging": LoggingConfiguration().dict(),
             "analytics": AnalyticsConfiguration().dict(),

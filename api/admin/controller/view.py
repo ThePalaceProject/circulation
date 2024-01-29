@@ -10,7 +10,7 @@ from api.admin.config import Configuration as AdminClientConfig
 from api.admin.controller.base import AdminController
 from api.admin.templates import admin as admin_template
 from api.config import Configuration
-from core.model import ConfigurationSetting, Library
+from core.model import Library
 from core.util.problem_detail import ProblemDetail
 
 
@@ -67,18 +67,6 @@ class ViewController(AdminController):
         admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
-        # Find the URL and text to use when rendering the Terms of
-        # Service link in the footer.
-        sitewide_tos_href = (
-            ConfigurationSetting.sitewide(self._db, Configuration.CUSTOM_TOS_HREF).value
-            or Configuration.DEFAULT_TOS_HREF
-        )
-
-        sitewide_tos_text = (
-            ConfigurationSetting.sitewide(self._db, Configuration.CUSTOM_TOS_TEXT).value
-            or Configuration.DEFAULT_TOS_TEXT
-        )
-
         # We always have local_analytics
         show_circ_events_download = True
 
@@ -87,8 +75,8 @@ class ViewController(AdminController):
                 admin_template,
                 app_name=AdminClientConfig.APP_NAME,
                 csrf_token=csrf_token,
-                sitewide_tos_href=sitewide_tos_href,
-                sitewide_tos_text=sitewide_tos_text,
+                sitewide_tos_href=Configuration.DEFAULT_TOS_HREF,
+                sitewide_tos_text=Configuration.DEFAULT_TOS_TEXT,
                 show_circ_events_download=show_circ_events_download,
                 setting_up=setting_up,
                 email=email,

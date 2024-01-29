@@ -2,28 +2,43 @@ from __future__ import annotations
 
 from argparse import ArgumentParser
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 from flask import url_for
 from sqlalchemy.orm import Session
 
 from api.circulation_manager import CirculationManager
-from api.config import Configuration
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from api.util.flask import PalaceFlask
+from core.config import CannotLoadConfiguration
 from core.integration.goals import Goals
-from core.model import ConfigurationSetting, Library, get_one
+from core.model import Library, get_one
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
 )
 from core.scripts import LibraryInputScript
+from core.service.container import Services
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
 class LibraryRegistrationScript(LibraryInputScript):
     """Register local libraries with a remote library registry."""
+
+    def __init__(
+        self,
+        _db: Session | None = None,
+        services: Services | None = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(_db, services, *args, **kwargs)
+        self.base_url = self.services.config.sitewide.base_url()
+        if self.base_url is None:
+            raise CannotLoadConfiguration(
+                f"Missing required environment variable: PALACE_BASE_URL."
+            )
 
     @classmethod
     def arg_parser(cls, _db: Session) -> ArgumentParser:  # type: ignore[override]
@@ -69,30 +84,25 @@ class LibraryRegistrationScript(LibraryInputScript):
         from api.app import app
 
         app.manager = manager or CirculationManager(self._db)
-        base_url = ConfigurationSetting.sitewide(
-            self._db, Configuration.BASE_URL_KEY
-        ).value
-        ctx = app.test_request_context(base_url=base_url)
-        ctx.push()
-        for library in parsed.libraries:
-            if not stage:
-                # Check if the library has already been registered.
-                registration = get_one(
-                    self._db,
-                    DiscoveryServiceRegistration,
-                    library=library,
-                    integration=registry.integration,
-                )
-                if registration and registration.stage is not None:
-                    library_stage = registration.stage
+        with app.test_request_context(base_url=self.base_url):
+            for library in parsed.libraries:
+                if not stage:
+                    # Check if the library has already been registered.
+                    registration = get_one(
+                        self._db,
+                        DiscoveryServiceRegistration,
+                        library=library,
+                        integration=registry.integration,
+                    )
+                    if registration and registration.stage is not None:
+                        library_stage = registration.stage
+                    else:
+                        # Don't know what stage to register this library in, so it defaults to test.
+                        library_stage = RegistrationStage.TESTING
                 else:
-                    # Don't know what stage to register this library in, so it defaults to test.
-                    library_stage = RegistrationStage.TESTING
-            else:
-                library_stage = stage
+                    library_stage = stage
 
-            self.process_library(registry, library, library_stage, url_for)
-        ctx.pop()
+                self.process_library(registry, library, library_stage, url_for)
 
         # For testing purposes, return the application object that was
         # created.

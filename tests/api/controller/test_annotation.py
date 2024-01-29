@@ -10,19 +10,24 @@ from core.model import Annotation, create
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class AnnotationFixture(CirculationControllerFixture):
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        super().__init__(db, services_fixture)
         self.pool = self.english_1.license_pools[0]
         self.edition = self.pool.presentation_edition
         self.identifier = self.edition.primary_identifier
 
 
 @pytest.fixture(scope="function")
-def annotation_fixture(db: DatabaseTransactionFixture):
-    return AnnotationFixture(db)
+def annotation_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
+    return AnnotationFixture(db, services_fixture)
 
 
 class TestAnnotationController:

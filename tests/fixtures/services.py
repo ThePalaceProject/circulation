@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
 import boto3
@@ -15,6 +18,7 @@ from core.service.container import Services, wire_container
 from core.service.logging.container import Logging
 from core.service.logging.log import setup_logging
 from core.service.search.container import Search
+from core.service.sitewide import SitewideConfiguration
 from core.service.storage.container import Storage
 from core.service.storage.s3 import S3Service
 
@@ -128,6 +132,35 @@ class ServicesFixture:
         self.services.search.override(search.search_container)
         self.services.analytics.override(analytics.analytics_container)
 
+        # setup basic configuration from default settings
+        secret_key = "012345678901234567890123"
+        sitewide_config = SitewideConfiguration(secret_key=secret_key)
+        self.services.config.from_dict({"sitewide": sitewide_config.dict()})
+
+    def build_config_mapping(self, path: list[str], value: Any) -> dict[str, Any]:
+        path_segment = path.pop()
+        if not path:
+            return {path_segment: value}
+        else:
+            return {path_segment: self.build_config_mapping(path, value)}
+
+    def set_config_option(self, key: str, value: Any) -> None:
+        path = key.split(".")
+        path.reverse()
+        self.services.config.from_dict(self.build_config_mapping(path, value))
+
+    def set_sitewide_config_option(self, key: str, value: Any) -> None:
+        self.set_config_option(f"sitewide.{key}", value)
+
+    def set_base_url(self, base_url: str | None) -> None:
+        self.set_sitewide_config_option("base_url", base_url)
+
+    @contextmanager
+    def wired(self) -> Generator[None, None, None]:
+        wire_container(self.services)
+        yield
+        self.services.unwire()
+
 
 @pytest.fixture(autouse=True)
 def services_fixture(
@@ -150,6 +183,5 @@ def services_fixture(
 def services_fixture_wired(
     services_fixture: ServicesFixture,
 ) -> Generator[ServicesFixture, None, None]:
-    wire_container(services_fixture.services)
-    yield services_fixture
-    services_fixture.services.unwire()
+    with services_fixture.wired():
+        yield services_fixture

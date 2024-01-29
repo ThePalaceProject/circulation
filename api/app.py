@@ -1,11 +1,14 @@
 import logging
 import os
+import secrets
+import string
 import urllib.parse
 
 import flask_babel
 from flask import request
 from flask_babel import Babel
 from flask_pydantic_spec import FlaskPydanticSpec
+from sqlalchemy.orm import Session
 
 from api.admin.controller import setup_admin_controllers
 from api.circulation_manager import CirculationManager
@@ -18,12 +21,7 @@ from api.util.profilers import (
 )
 from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
-from core.model import (
-    LOCK_ID_APP_INIT,
-    ConfigurationSetting,
-    SessionManager,
-    pg_advisory_lock,
-)
+from core.model import LOCK_ID_APP_INIT, SessionManager, pg_advisory_lock
 from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
@@ -61,12 +59,12 @@ PalaceCProfileProfiler.configure(app)
 PalaceXrayProfiler.configure(app)
 
 
-def initialize_admin(_db=None):
+def initialize_admin(_db: Session | None = None, secret_key: str | None = None):
     if getattr(app, "manager", None) is not None:
         setup_admin_controllers(app.manager)
     _db = _db or app._db
     # The secret key is used for signing cookies for admin login
-    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+    app.secret_key = secret_key
 
 
 def initialize_circulation_manager(container: Services):
@@ -123,7 +121,7 @@ def initialize_application() -> PalaceFlask:
         # move our settings off the configurationsettings system.
         with pg_advisory_lock(app._db, LOCK_ID_APP_INIT):
             initialize_circulation_manager(container)
-            initialize_admin()
+            initialize_admin(secret_key=container.config.sitewide.secret_key())
     return app
 
 
@@ -148,6 +146,12 @@ def run(url=None):
         import socket
 
         socket.setdefaulttimeout(None)
+
+    # Set our secret key if it's not already set
+    if "PALACE_SECRET_KEY" not in os.environ:
+        os.environ["PALACE_SECRET_KEY"] = "".join(
+            secrets.choice(string.ascii_lowercase) for i in range(24)
+        )
 
     # Setup database by initializing it or running migrations
     InstanceInitializationScript().run()

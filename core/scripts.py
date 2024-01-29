@@ -16,7 +16,6 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from core.config import Configuration, ConfigurationConstants
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
@@ -25,7 +24,6 @@ from core.metadata_layer import TimestampData
 from core.model import (
     BaseCoverageRecord,
     Collection,
-    ConfigurationSetting,
     Contributor,
     CustomList,
     DataSource,
@@ -957,62 +955,6 @@ class RunSelfTestsScript(LibraryInputScript):
             self.out.write("   Result: %s\n" % result.result)
         if result.exception:
             self.out.write("   Exception: '%s'\n" % result.exception)
-
-
-class ConfigureSiteScript(ConfigurationSettingScript):
-    """View or update site-wide configuration."""
-
-    def __init__(self, _db=None, config=Configuration):
-        self.config = config
-        super().__init__(_db=_db)
-
-    @classmethod
-    def arg_parser(cls):
-        parser = argparse.ArgumentParser()
-
-        parser.add_argument(
-            "--show-secrets",
-            help="Include secrets when displaying site settings.",
-            action="store_true",
-            default=False,
-        )
-
-        cls.add_setting_argument(
-            parser,
-            'Set a site-wide setting, such as default_nongrouped_feed_max_age. Format: --setting="default_nongrouped_feed_max_age=1200"',
-        )
-
-        parser.add_argument(
-            "--force",
-            help="Set a site-wide setting even if the key isn't a known setting.",
-            dest="force",
-            action="store_true",
-        )
-
-        return parser
-
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
-        _db = _db or self._db
-        args = self.parse_command_line(_db, cmd_args=cmd_args)
-        if args.setting:
-            for setting in args.setting:
-                key, value = self._parse_setting(setting)
-                if not args.force and not key in [
-                    s.get("key") for s in self.config.SITEWIDE_SETTINGS
-                ]:
-                    raise ValueError(
-                        "'%s' is not a known site-wide setting. Use --force to set it anyway."
-                        % key
-                    )
-                else:
-                    ConfigurationSetting.sitewide(_db, key).value = value
-        output.write(
-            "\n".join(
-                ConfigurationSetting.explain(_db, include_secrets=args.show_secrets)
-            )
-        )
-        site_configuration_has_changed(_db)
-        _db.commit()
 
 
 class ConfigureLibraryScript(ConfigurationSettingScript):
@@ -2735,17 +2677,21 @@ class LoanNotificationsScript(Script):
     LOAN_EXPIRATION_DAYS = [5, 1]
     BATCH_SIZE = 100
 
+    def __init__(
+        self,
+        _db: Session | None = None,
+        services: Services | None = None,
+        notifications: PushNotifications | None = None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(_db, services, *args, **kwargs)
+        self.notifications = notifications or PushNotifications(
+            self.services.config.sitewide.base_url()
+        )
+
     def do_run(self):
         self.log.info("Loan Notifications Job started")
-
-        setting = ConfigurationSetting.sitewide(
-            self._db, Configuration.PUSH_NOTIFICATIONS_STATUS
-        )
-        if setting.value == ConfigurationConstants.FALSE:
-            self.log.info(
-                "Push notifications have been turned off in the sitewide settings, skipping this job"
-            )
-            return
 
         _query = (
             self._db.query(Loan)
@@ -2801,7 +2747,7 @@ class LoanNotificationsScript(Script):
             self.log.info(
                 f"Patron {patron.authorization_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
             )
-            PushNotifications.send_loan_expiry_message(loan, delta.days, tokens)
+            self.notifications.send_loan_expiry_message(loan, delta.days, tokens)
 
 
 class MockStdin:

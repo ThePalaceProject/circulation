@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from core.config import CannotLoadConfiguration, Configuration
+from core.config import CannotLoadConfiguration
 from core.model import create, get_one
 from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.datasource import DataSource
@@ -293,22 +293,6 @@ class TestConfigurationSetting:
 
         jsondata.value = "tra la la"
         pytest.raises(ValueError, lambda: jsondata.json_value)
-
-    def test_excluded_audio_data_sources(self, db: DatabaseTransactionFixture):
-        # Get a handle on the underlying ConfigurationSetting
-        setting = ConfigurationSetting.sitewide(
-            db.session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
-        )
-        m = ConfigurationSetting.excluded_audio_data_sources
-        # When no explicit value is set for the ConfigurationSetting,
-        # the return value of the method is AUDIO_EXCLUSIONS -- whatever
-        # the default is for the current version of the circulation manager.
-        assert None == setting.value
-        assert ConfigurationSetting.EXCLUDED_AUDIO_DATA_SOURCES_DEFAULT == m(db.session)
-        # When an explicit value for the ConfigurationSetting, is set, that
-        # value is interpreted as JSON and returned.
-        setting.value = "[]"
-        assert [] == m(db.session)
 
     def test_explain(self, db: DatabaseTransactionFixture):
         """Test that ConfigurationSetting.explain gives information

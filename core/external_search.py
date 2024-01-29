@@ -36,9 +36,7 @@ from core.facets import FacetConstants
 from core.lane import Pagination
 from core.metadata_layer import IdentifierData
 from core.model import (
-    ConfigurationSetting,
     Contributor,
-    DataSource,
     Edition,
     Identifier,
     Library,
@@ -1560,10 +1558,6 @@ class Filter(SearchBase):
         genre_id_restrictions = inherit_some("genre_ids")
         customlist_id_restrictions = inherit_some("customlist_ids")
 
-        # See if there are any excluded audiobook sources on this
-        # site.
-        excluded = ConfigurationSetting.excluded_audio_data_sources(_db)
-        excluded_audiobook_data_sources = [DataSource.lookup(_db, x) for x in excluded]
         if library is None:
             allow_holds = True
         else:
@@ -1578,7 +1572,6 @@ class Filter(SearchBase):
             genre_id_restrictions,
             customlist_id_restrictions,
             facets,
-            excluded_audiobook_data_sources=excluded_audiobook_data_sources,
             allow_holds=allow_holds,
             license_datasource=license_datasource_id,
             lane_building=True,
@@ -1710,12 +1703,6 @@ class Filter(SearchBase):
             self.customlist_restriction_sets = []
 
         # Pull less-important values out of the keyword arguments.
-        excluded_audiobook_data_sources = kwargs.pop(
-            "excluded_audiobook_data_sources", []
-        )
-        self.excluded_audiobook_data_sources = self._filter_ids(
-            excluded_audiobook_data_sources
-        )
         self.allow_holds = kwargs.pop("allow_holds", True)
 
         self.updated_after = kwargs.pop("updated_after", None)
@@ -1950,17 +1937,6 @@ class Filter(SearchBase):
             # match.
             identifier_f = Bool(should=clauses, minimum_should_match=1)
             nested_filters["identifiers"].append(identifier_f)
-
-        # Some sources of audiobooks may be excluded because the
-        # server can't fulfill them or the anticipated client can't
-        # play them.
-        excluded = self.excluded_audiobook_data_sources
-        if excluded:
-            audio = Term(**{"licensepools.medium": Edition.AUDIO_MEDIUM})
-            excluded_audio_source = Terms(**{"licensepools.data_source_id": excluded})
-            excluded_audio = Bool(must=[audio, excluded_audio_source])
-            not_excluded_audio = Bool(must_not=excluded_audio)
-            nested_filters["licensepools"].append(not_excluded_audio)
 
         # If holds are not allowed, only license pools that are
         # currently available should be considered.

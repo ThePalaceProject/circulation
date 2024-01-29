@@ -3,13 +3,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.config import Configuration
 from core.metadata_layer import TimestampData
 from core.model import (
     CirculationEvent,
     Collection,
     CollectionMissing,
-    ConfigurationSetting,
     Credential,
     DataSource,
     Edition,
@@ -1236,33 +1234,6 @@ class TestMeasurementReaper:
         result = reaper.run_once()
         assert [measurement1] == db.session.query(Measurement).all()
         assert "Items deleted: 1" == result.achievements
-
-    def test_disable(self, db: DatabaseTransactionFixture):
-        # This reaper can be disabled with a configuration setting
-        enabled = ConfigurationSetting.sitewide(
-            db.session, Configuration.MEASUREMENT_REAPER
-        )
-        enabled.value = False
-        measurement1, created = get_one_or_create(
-            db.session,
-            Measurement,
-            quantity_measured="answer",
-            value=12,
-            is_most_recent=True,
-        )
-        measurement2, created = get_one_or_create(
-            db.session,
-            Measurement,
-            quantity_measured="answer",
-            value=42,
-            is_most_recent=False,
-        )
-        reaper = MeasurementReaper(db.session)
-        reaper.run()
-        assert [measurement1, measurement2] == db.session.query(Measurement).all()
-        enabled.value = True
-        reaper.run()
-        assert [measurement1] == db.session.query(Measurement).all()
 
 
 class TestScrubberMonitor:

@@ -2,21 +2,28 @@ import flask
 import pytest
 
 from api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
+from core.analytics import Analytics
 from core.model import CirculationEvent, get_one
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class AnalyticsFixture(CirculationControllerFixture):
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        services_fixture.services.analytics.analytics.override(Analytics())
+        super().__init__(db, services_fixture)
         [self.lp] = self.english_1.license_pools
         self.identifier = self.lp.identifier
 
 
 @pytest.fixture(scope="function")
-def analytics_fixture(db: DatabaseTransactionFixture):
-    return AnalyticsFixture(db)
+def analytics_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
+    return AnalyticsFixture(db, services_fixture)
 
 
 class TestAnalyticsController:

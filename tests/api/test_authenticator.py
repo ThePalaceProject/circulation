@@ -52,7 +52,7 @@ from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ConfigurationSetting, Library, Patron
+from core.model import CirculationEvent, Library, Patron
 from core.model.constants import LinkRelations
 from core.model.integration import (
     IntegrationConfiguration,
@@ -67,6 +67,7 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.api_controller import ControllerFixture
@@ -617,6 +618,24 @@ class TestAuthenticator:
 
 
 class TestLibraryAuthenticator:
+    def test_gets_bearer_token_in_init(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        """The bearer token is retrieved during initialization."""
+
+        # If the bearer token is not set, it's None.
+        with services_fixture.wired():
+            auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
+        assert auth.bearer_token_signing_secret == None
+
+        # Otherwise it is injected with the config
+        services_fixture.set_sitewide_config_option(
+            "bearer_token_signing_secret", "xyz"
+        )
+        with services_fixture.wired():
+            auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
+        assert auth.bearer_token_signing_secret == "xyz"
+
     def test_from_config_basic_auth_only(
         self,
         db: DatabaseTransactionFixture,
@@ -1093,9 +1112,6 @@ class TestLibraryAuthenticator:
         # Configure the various ways a patron can get help.
         library_settings.help_email = "help@library.org"  # type: ignore[assignment]
         library_settings.help_web = "http://library.help/"  # type: ignore[assignment]
-
-        base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
-        base_url.value = "http://circulation-manager/"
 
         # Configure three library announcements: two active and one inactive.
         a1_db = announcement_fixture.create_announcement(

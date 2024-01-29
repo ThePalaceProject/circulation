@@ -16,27 +16,13 @@ from core.util import MoneyUtility
 
 
 class Configuration(CoreConfiguration):
-    # The list of patron web urls allowed to access this CM
-    PATRON_WEB_HOSTNAMES = "patron_web_hostnames"
-
-    # The name of the sitewide secret used to sign cookies for admin login.
-    SECRET_KEY = "secret_key"
-
-    # The name of the setting that controls how long static files are cached.
-    STATIC_FILE_CACHE_TIME = "static_file_cache_time"
-
-    # The name of the setting controlling how long authentication
-    # documents are cached.
-    AUTHENTICATION_DOCUMENT_CACHE_TIME = "authentication_document_cache_time"
-
-    # A custom link to a Terms of Service document to be understood by
+    # A link to a Terms of Service document to be understood by
     # users of the administrative interface.
     #
     # This is _not_ the end-user terms of service for SimplyE or any
     # other mobile client. The default value links to the terms of
-    # service for a library's inclusion in the SimplyE library
+    # service for a library's inclusion in the Palace library
     # registry.
-    CUSTOM_TOS_HREF = "tos_href"
     DEFAULT_TOS_HREF = "https://thepalaceproject.org/terms-of-service/"
 
     # Custom text for the link defined in CUSTOM_TOS_LINK.
@@ -44,10 +30,6 @@ class Configuration(CoreConfiguration):
     DEFAULT_TOS_TEXT = (
         "Terms of Service for presenting content through the Palace client applications"
     )
-
-    # Name of the site-wide ConfigurationSetting containing the secret
-    # used to sign bearer tokens.
-    BEARER_TOKEN_SIGNING_SECRET = "bearer_token_signing_secret"
 
     # Maximum height and width for the saved logo image
     LOGO_MAX_DIMENSION = 135
@@ -64,60 +46,6 @@ class Configuration(CoreConfiguration):
     # Features of an OPDS client which a library may want to enable or
     # disable.
     RESERVATIONS_FEATURE = "https://librarysimplified.org/rel/policy/reservations"
-
-    SITEWIDE_SETTINGS = CoreConfiguration.SITEWIDE_SETTINGS + [
-        {
-            "key": BEARER_TOKEN_SIGNING_SECRET,
-            "label": _("Internal signing secret for OAuth and SAML bearer tokens"),
-            "required": True,
-        },
-        {
-            "key": SECRET_KEY,
-            "label": _("Internal secret key for admin interface cookies"),
-            "required": True,
-        },
-        {
-            "key": PATRON_WEB_HOSTNAMES,
-            "label": _("Hostnames for web application access"),
-            "required": True,
-            "description": _(
-                "Only web applications from these hosts can access this circulation manager. This can be a single hostname (http://catalog.library.org) or a pipe-separated list of hostnames (http://catalog.library.org|https://beta.library.org). You must include the scheme part of the URI (http:// or https://). You can also set this to '*' to allow access from any host, but you must not do this in a production environment -- only during development."
-            ),
-        },
-        {
-            "key": STATIC_FILE_CACHE_TIME,
-            "label": _(
-                "Cache time for static images and JS and CSS files (in seconds)"
-            ),
-            "required": True,
-            "type": "number",
-        },
-        {
-            "key": AUTHENTICATION_DOCUMENT_CACHE_TIME,
-            "label": _("Cache time for authentication documents (in seconds)"),
-            "required": True,
-            "type": "number",
-            "default": 0,
-        },
-        {
-            "key": CUSTOM_TOS_HREF,
-            "label": _("Custom Terms of Service link"),
-            "required": False,
-            "default": DEFAULT_TOS_HREF,
-            "description": _(
-                "If your inclusion in the SimplyE mobile app is governed by terms other than the default, put the URL to those terms in this link so that librarians will have access to them. This URL will be used for all libraries on this circulation manager."
-            ),
-        },
-        {
-            "key": CUSTOM_TOS_TEXT,
-            "label": _("Custom Terms of Service link text"),
-            "required": False,
-            "default": DEFAULT_TOS_TEXT,
-            "description": _(
-                "Custom text for the Terms of Service link in the footer of these administrative interface pages. This is primarily useful if you're not connecting this circulation manager to the SimplyE mobile app. This text will be used for all libraries on this circulation manager."
-            ),
-        },
-    ]
 
     ANNOUNCEMENT_SETTINGS = [
         {

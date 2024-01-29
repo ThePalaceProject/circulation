@@ -61,6 +61,7 @@ from tests.core.mock import DummyHTTPClient
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class LoanFixture(CirculationControllerFixture):
@@ -70,8 +71,10 @@ class LoanFixture(CirculationControllerFixture):
     mech1: LicensePoolDeliveryMechanism
     pool: LicensePool
 
-    def __init__(self, db: DatabaseTransactionFixture):
-        super().__init__(db)
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        super().__init__(db, services_fixture)
         self.pool = self.english_1.license_pools[0]
         [self.mech1] = self.pool.delivery_mechanisms
         self.mech2 = self.pool.set_delivery_mechanism(
@@ -86,8 +89,10 @@ class LoanFixture(CirculationControllerFixture):
 
 
 @pytest.fixture(scope="function")
-def loan_fixture(db: DatabaseTransactionFixture) -> Generator[LoanFixture, None, None]:
-    fixture = LoanFixture(db)
+def loan_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> Generator[LoanFixture, None, None]:
+    fixture = LoanFixture(db, services_fixture)
     with fixture.wired_container():
         yield fixture
 

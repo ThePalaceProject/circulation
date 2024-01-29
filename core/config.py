@@ -2,7 +2,6 @@ import json
 import logging
 import os
 
-from flask_babel import lazy_gettext as _
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -63,15 +62,6 @@ class Configuration(ConfigurationConstants):
     # Environment variable for used to distinguish one CM environment from another in reports
     REPORTING_NAME_ENVIRONMENT_VARIABLE = "PALACE_REPORTING_NAME"
 
-    # ConfigurationSetting key for the base url of the app.
-    BASE_URL_KEY = "base_url"
-
-    # ConfigurationSetting to enable the MeasurementReaper script
-    MEASUREMENT_REAPER = "measurement_reaper_enabled"
-
-    # Configuration key for push notifications status
-    PUSH_NOTIFICATIONS_STATUS = "push_notifications_status"
-
     # Integrations
     URL = "url"
     INTEGRATIONS = "integrations"
@@ -82,90 +72,6 @@ class Configuration(ConfigurationConstants):
     INFO = "INFO"
     WARN = "WARN"
     ERROR = "ERROR"
-
-    # The default value to put into the 'app' field of JSON-format logs,
-    # unless LOG_APP_NAME overrides it.
-    DEFAULT_APP_NAME = "simplified"
-
-    # Settings for the integration with protocol=INTERNAL_LOGGING
-    LOG_LEVEL = "log_level"
-    LOG_APP_NAME = "log_app"
-    DATABASE_LOG_LEVEL = "database_log_level"
-    LOG_LEVEL_UI = [
-        {"key": DEBUG, "label": _("Debug")},
-        {"key": INFO, "label": _("Info")},
-        {"key": WARN, "label": _("Warn")},
-        {"key": ERROR, "label": _("Error")},
-    ]
-
-    EXCLUDED_AUDIO_DATA_SOURCES = "excluded_audio_data_sources"
-
-    SITEWIDE_SETTINGS = [
-        {
-            "key": BASE_URL_KEY,
-            "label": _("Base url of the application"),
-            "required": True,
-            "format": "url",
-        },
-        {
-            "key": LOG_LEVEL,
-            "label": _("Log Level"),
-            "type": "select",
-            "options": LOG_LEVEL_UI,
-            "default": INFO,
-        },
-        {
-            "key": LOG_APP_NAME,
-            "label": _("Application name"),
-            "description": _(
-                "Log messages originating from this application will be tagged with this name. If you run multiple instances, giving each one a different application name will help you determine which instance is having problems."
-            ),
-            "default": DEFAULT_APP_NAME,
-            "required": True,
-        },
-        {
-            "key": DATABASE_LOG_LEVEL,
-            "label": _("Database Log Level"),
-            "type": "select",
-            "options": LOG_LEVEL_UI,
-            "description": _(
-                "Database logs are extremely verbose, so unless you're diagnosing a database-related problem, it's a good idea to set a higher log level for database messages."
-            ),
-            "default": WARN,
-        },
-        {
-            "key": EXCLUDED_AUDIO_DATA_SOURCES,
-            "label": _("Excluded audiobook sources"),
-            "description": _(
-                "Audiobooks from these data sources will be hidden from the collection, even if they would otherwise show up as available."
-            ),
-            "default": None,
-            "required": True,
-        },
-        {
-            "key": MEASUREMENT_REAPER,
-            "label": _("Cleanup old measurement data"),
-            "type": "select",
-            "description": _(
-                "If this settings is 'true' old book measurement data will be cleaned out of the database. Some sites may want to keep this data for later analysis."
-            ),
-            "options": {"true": "true", "false": "false"},
-            "default": "true",
-        },
-        {
-            "key": PUSH_NOTIFICATIONS_STATUS,
-            "label": _("Push notifications status"),
-            "type": "select",
-            "description": _(
-                "If this settings is 'true' push notification jobs will run as scheduled, and attempt to notify patrons via mobile push notifications."
-            ),
-            "options": [
-                {"key": ConfigurationConstants.TRUE, "label": _("True")},
-                {"key": ConfigurationConstants.FALSE, "label": _("False")},
-            ],
-            "default": ConfigurationConstants.TRUE,
-        },
-    ]
 
     @classmethod
     def database_url(cls):
@@ -407,9 +313,3 @@ class Configuration(ConfigurationConstants):
         if last_update:
             last_update = to_utc(last_update)
         return last_update
-
-
-class ConfigurationTrait:
-    """An abstract class that denotes a configuration mixin/trait. Configuration
-    traits should subclass this class in order to make implementations easy to find
-    in IDEs."""

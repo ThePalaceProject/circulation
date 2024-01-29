@@ -12,8 +12,7 @@ from api.admin.templates import (
     reset_password_template,
     sign_in_template,
 )
-from api.config import Configuration
-from core.model import Admin, ConfigurationSetting
+from core.model import Admin
 from core.util.email import EmailManager
 from core.util.problem_detail import ProblemDetail
 
@@ -32,6 +31,9 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
     RESET_PASSWORD_TEMPLATE = reset_password_template.format(
         label=label_style, input=input_style, button=button_style
     )
+
+    def __init__(self, secret_key: str):
+        self.secret_key = secret_key
 
     def sign_in_template(self, redirect):
         password_sign_in_url = url_for("password_auth")
@@ -83,10 +85,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
         return True
 
     def generate_reset_password_token(self, admin: Admin, _db: Session) -> str:
-        secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
-
-        reset_password_token = admin.generate_reset_password_token(secret_key)
-
+        reset_password_token = admin.generate_reset_password_token(self.secret_key)
         return reset_password_token
 
     def send_reset_password_email(self, admin: Admin, reset_password_url: str) -> None:
@@ -109,8 +108,6 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
     def validate_token_and_extract_admin(
         self, reset_password_token: str, admin_id: int, _db: Session
     ) -> Admin | ProblemDetail:
-        secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
-
         return Admin.validate_reset_password_token_and_fetch_admin(
-            reset_password_token, admin_id, _db, secret_key
+            reset_password_token, admin_id, _db, self.secret_key
         )
