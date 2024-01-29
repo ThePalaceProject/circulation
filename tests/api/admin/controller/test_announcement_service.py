@@ -1,23 +1,25 @@
 import json
 import uuid
 
-from werkzeug.datastructures import MultiDict
+from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.controller.announcement_service import AnnouncementSettings
 from core.model.announcements import Announcement, AnnouncementData
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
-from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 
 
 class TestAnnouncementService:
     def test_get(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
         announcement_fixture: AnnouncementFixture,
+        db: DatabaseTransactionFixture,
     ):
-        session = admin_ctrl_fixture.ctrl.db.session
+        session = db.session
         a1 = announcement_fixture.active_announcement(session)
         a2 = announcement_fixture.expired_announcement(session)
         a3 = announcement_fixture.forthcoming_announcement(session)
@@ -34,8 +36,8 @@ class TestAnnouncementService:
             session.execute(Announcement.global_announcements()).scalars().all()
         )
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="GET") as ctx:
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+        with flask_app_fixture.test_request_context("/", method="GET"):
+            response = AnnouncementSettings(db.session).process_many()
         assert isinstance(response, dict)
 
         assert set(response.keys()) == {"settings", "announcements"}
@@ -56,23 +58,24 @@ class TestAnnouncementService:
 
     def test_post(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
         announcement_fixture: AnnouncementFixture,
+        db: DatabaseTransactionFixture,
     ):
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
+        with flask_app_fixture.test_request_context("/", method="POST") as ctx:
             data = AnnouncementData(
                 id=uuid.uuid4(),
                 start=announcement_fixture.yesterday,
                 finish=announcement_fixture.tomorrow,
                 content="This is a test announcement.",
             )
-            ctx.request.form = MultiDict(
+            ctx.request.form = ImmutableMultiDict(
                 [("announcements", json.dumps([data.as_dict()]))]
             )
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+            response = AnnouncementSettings(db.session).process_many()
 
         assert response == {"success": True}
-        session = admin_ctrl_fixture.ctrl.db.session
+        session = db.session
         announcements = (
             session.execute(Announcement.global_announcements()).scalars().all()
         )
@@ -84,15 +87,16 @@ class TestAnnouncementService:
 
     def test_post_edit(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
         announcement_fixture: AnnouncementFixture,
+        db: DatabaseTransactionFixture,
     ):
         # Two existing announcements.
-        session = admin_ctrl_fixture.ctrl.db.session
+        session = db.session
         a1 = announcement_fixture.active_announcement(session)
         a2 = announcement_fixture.active_announcement(session)
 
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
+        with flask_app_fixture.test_request_context("/", method="POST") as ctx:
             # a1 is edited, a2 is deleted, a3 is added.
             a1_edited = a1.to_data()
             a1_edited.content = "This is an edited announcement."
@@ -102,10 +106,10 @@ class TestAnnouncementService:
                 finish=announcement_fixture.tomorrow,
                 content="This is new test announcement.",
             )
-            ctx.request.form = MultiDict(
+            ctx.request.form = ImmutableMultiDict(
                 [("announcements", json.dumps([a1_edited.as_dict(), a3.as_dict()]))]
             )
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+            response = AnnouncementSettings(db.session).process_many()
 
         assert response == {"success": True}
         announcements = (
@@ -120,21 +124,21 @@ class TestAnnouncementService:
 
     def test_post_errors(
         self,
-        admin_ctrl_fixture: AdminControllerFixture,
-        announcement_fixture: AnnouncementFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
     ):
-        with admin_ctrl_fixture.request_context_with_admin("/", method="POST") as ctx:
-            ctx.request.form = None
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+        with flask_app_fixture.test_request_context("/", method="POST") as ctx:
+            ctx.request.form = ImmutableMultiDict()
+            response = AnnouncementSettings(db.session).process_many()
             assert response == INVALID_INPUT
 
-            ctx.request.form = MultiDict([("somethingelse", json.dumps([]))])
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+            ctx.request.form = ImmutableMultiDict([("somethingelse", json.dumps([]))])
+            response = AnnouncementSettings(db.session).process_many()
             assert response == INVALID_INPUT
 
-            ctx.request.form = MultiDict(
+            ctx.request.form = ImmutableMultiDict(
                 [("announcements", json.dumps([{"id": str(uuid.uuid4())}]))]
             )
-            response = AnnouncementSettings(admin_ctrl_fixture.manager).process_many()
+            response = AnnouncementSettings(db.session).process_many()
             assert isinstance(response, ProblemDetail)
             assert "Missing required field: content" == response.detail

@@ -4,17 +4,20 @@ from collections.abc import Callable
 from typing import Any
 
 import flask
+from sqlalchemy.orm import Session
 
 from api.admin.announcement_list_validator import AnnouncementListValidator
-from api.admin.controller.settings import SettingsController
 from api.config import Configuration
 from core.model.announcements import Announcement
 from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
-class AnnouncementSettings(SettingsController):
+class AnnouncementSettings:
     """Controller that manages global announcements for all libraries"""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
 
     def _action(self) -> Callable:
         method = flask.request.method.lower()
