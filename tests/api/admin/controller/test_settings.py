@@ -71,9 +71,7 @@ class TestSettingsController:
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
         """Test the _get_integration_info helper method."""
-        m = (
-            settings_ctrl_fixture.manager.admin_settings_controller._get_integration_info
-        )
+        m = settings_ctrl_fixture.controller._get_integration_info
 
         # Test the case where there are integrations in the database
         # with the given goal, but none of them match the
@@ -87,7 +85,7 @@ class TestSettingsController:
     def test_create_integration(self, settings_ctrl_fixture: SettingsControllerFixture):
         """Test the _create_integration helper method."""
 
-        m = settings_ctrl_fixture.manager.admin_settings_controller._create_integration
+        m = settings_ctrl_fixture.controller._create_integration
 
         protocol_definitions = [
             dict(name="allow many"),
@@ -131,7 +129,7 @@ class TestSettingsController:
     def test_check_url_unique(self, settings_ctrl_fixture: SettingsControllerFixture):
         # Verify our ability to catch duplicate integrations for a
         # given URL.
-        m = settings_ctrl_fixture.manager.admin_settings_controller.check_url_unique
+        m = settings_ctrl_fixture.controller.check_url_unique
 
         # Here's an ExternalIntegration.
         original = settings_ctrl_fixture.ctrl.db.external_integration(
@@ -215,9 +213,7 @@ class TestSettingsController:
     def test__get_protocol_class(
         self, settings_ctrl_fixture: SettingsControllerFixture
     ):
-        _get_protocol_class = (
-            settings_ctrl_fixture.manager.admin_settings_controller._get_settings_class
-        )
+        _get_protocol_class = settings_ctrl_fixture.controller._get_settings_class
         registry = IntegrationRegistry[Any](Goals.LICENSE_GOAL)
 
         class P1Settings(BaseSettings):
@@ -261,7 +257,7 @@ class TestSettingsController:
         db = settings_ctrl_fixture.ctrl.db
         config = db.default_collection().integration_configuration
         _set_configuration_library = (
-            settings_ctrl_fixture.manager.admin_settings_controller._set_configuration_library
+            settings_ctrl_fixture.controller._set_configuration_library
         )
         library = db.library(short_name="short-name")
 

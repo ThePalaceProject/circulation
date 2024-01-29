@@ -30,7 +30,6 @@ def setup_admin_controllers(manager: CirculationManager):
     from api.admin.controller.patron import PatronController
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.reset_password import ResetPasswordController
-    from api.admin.controller.settings import SettingsController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.sitewide_settings import (
         SitewideConfigurationSettingsController,
@@ -48,7 +47,6 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_custom_lists_controller = CustomListsController(manager)
     manager.admin_lanes_controller = LanesController(manager)
     manager.admin_dashboard_controller = DashboardController(manager)
-    manager.admin_settings_controller = SettingsController(manager)
     manager.admin_patron_controller = PatronController(manager)
     manager.admin_discovery_services_controller = DiscoveryServicesController(manager)
     manager.admin_discovery_service_library_registrations_controller = (

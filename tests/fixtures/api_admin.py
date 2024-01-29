@@ -1,9 +1,11 @@
 from contextlib import contextmanager
+from unittest.mock import MagicMock
 
 import flask
 import pytest
 
 from api.admin.controller import setup_admin_controllers
+from api.admin.controller.settings import SettingsController
 from api.app import initialize_admin
 from api.circulation_manager import CirculationManager
 from api.config import Configuration
@@ -99,6 +101,10 @@ class SettingsControllerFixture(AdminControllerFixture):
 
         # Make the admin a system admin so they can do everything by default.
         self.admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+        mock_manager = MagicMock()
+        mock_manager._db = self.ctrl.db.session
+        self.controller = SettingsController(mock_manager)
 
     def do_request(self, url, *args, **kwargs):
         """Mock HTTP get/post method to replace HTTP.get_with_timeout or post_with_timeout."""
