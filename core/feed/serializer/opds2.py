@@ -33,6 +33,8 @@ MARC_CODE_TO_ROLES = {
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
+    CONTENT_TYPE = "application/opds+json"
+
     def __init__(self) -> None:
         pass
 
@@ -210,7 +212,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         return result
 
     def content_type(self) -> str:
-        return "application/opds+json"
+        return self.CONTENT_TYPE
 
     @classmethod
     def to_string(cls, data: dict[str, Any]) -> str:

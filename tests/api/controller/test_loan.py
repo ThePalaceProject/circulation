@@ -33,6 +33,7 @@ from api.problem_details import (
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
 )
+from core.feed.serializer.opds2 import OPDS2Serializer
 from core.model import (
     Collection,
     DataSource,
@@ -54,7 +55,7 @@ from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
-from core.util.opds_writer import OPDSFeed
+from core.util.opds_writer import AtomFeed, OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.core.mock import DummyHTTPClient
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -89,6 +90,45 @@ def loan_fixture(db: DatabaseTransactionFixture) -> Generator[LoanFixture, None,
     fixture = LoanFixture(db)
     with fixture.wired_container():
         yield fixture
+
+
+class OPDSSerializationTestHelper:
+    PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS = (
+        "accept_header,expected_content_type",
+        [
+            (None, OPDSFeed.ENTRY_TYPE),
+            ("default-foo-bar", OPDSFeed.ENTRY_TYPE),
+            (AtomFeed.ATOM_TYPE, OPDSFeed.ENTRY_TYPE),
+            (OPDS2Serializer.CONTENT_TYPE, OPDS2Serializer.CONTENT_TYPE),
+        ],
+    )
+
+    def __init__(
+        self,
+        accept_header: str | None = None,
+        expected_content_type: str | None = None,
+    ):
+        self.accept_header = accept_header
+        self.expected_content_type = expected_content_type
+
+    def merge_accept_header(self, headers):
+        return headers | ({"Accept": self.accept_header} if self.accept_header else {})
+
+    def verify_and_get_single_entry_feed_links(self, response):
+        assert response.content_type == self.expected_content_type
+        if self.expected_content_type == OPDSFeed.ENTRY_TYPE:
+            feed = feedparser.parse(response.get_data())
+            [entry] = feed["entries"]
+        elif self.expected_content_type == OPDS2Serializer.CONTENT_TYPE:
+            entry = response.get_json()
+        else:
+            assert (
+                False
+            ), f"Unexpected content type prefix: {self.expected_content_type}"
+
+        # Ensure that the response content parsed correctly.
+        assert "links" in entry
+        return entry["links"]
 
 
 class TestLoanController:
@@ -183,19 +223,13 @@ class TestLoanController:
             assert (hold, other_pool) == result
 
     @pytest.mark.parametrize(
-        "accept_header,expected_content_type_prefix",
-        [
-            (None, "application/atom+xml"),
-            ("default-foo-bar", "application/atom+xml"),
-            ("application/atom+xml", "application/atom+xml"),
-            ("application/opds+json", "application/opds+json"),
-        ],
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
     )
     def test_borrow_success(
         self,
         loan_fixture: LoanFixture,
         accept_header: str | None,
-        expected_content_type_prefix,
+        expected_content_type: str,
     ):
         # Create a loanable LicensePool.
         work = loan_fixture.db.work(
@@ -214,9 +248,11 @@ class TestLoanController:
             ),
         )
 
-        # Setup headers for the request.
-        headers = {"Authorization": loan_fixture.valid_auth} | (
-            {"Accept": accept_header} if accept_header else {}
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
         )
 
         # Create a new loan.
@@ -266,18 +302,12 @@ class TestLoanController:
             # The new loan feed should look the same as the existing loan feed.
             assert new_feed_content == existing_feed_content
 
-            if expected_content_type_prefix == "application/atom+xml":
-                assert response.content_type.startswith("application/atom+xml")
-                feed = feedparser.parse(response.get_data())
-                [entry] = feed["entries"]
-            elif expected_content_type_prefix == "application/opds+json":
-                assert "application/opds+json" == response.content_type
-                entry = response.get_json()
+            feed_links = serialization_helper.verify_and_get_single_entry_feed_links(
+                response
+            )
 
             fulfillment_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == OPDSFeed.ACQUISITION_REL
+                x["href"] for x in feed_links if x["rel"] == OPDSFeed.ACQUISITION_REL
             ]
 
             assert loan_fixture.mech1.resource is not None
@@ -1037,10 +1067,24 @@ class TestLoanController:
         assert response.status_code == 200
         assert response.json == {"book_vault_uuid": "Vault ID", "isbn": "ISBN ID"}
 
-    def test_revoke_loan(self, loan_fixture: LoanFixture):
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_revoke_loan(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        # Create a new loan.
+        with loan_fixture.request_context_with_library("/", headers=headers):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             loan, newly_created = loan_fixture.pool.loan_to(patron)
 
@@ -1049,11 +1093,25 @@ class TestLoanController:
             response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
 
             assert 200 == response.status_code
+            _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
 
-    def test_revoke_hold(self, loan_fixture: LoanFixture):
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_revoke_hold(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        with loan_fixture.request_context_with_library("/", headers=headers):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             hold, newly_created = loan_fixture.pool.on_hold_to(patron, position=0)
 
@@ -1064,6 +1122,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
 
             assert 200 == response.status_code
+            _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
 
     def test_revoke_hold_nonexistent_licensepool(self, loan_fixture: LoanFixture):
         with loan_fixture.request_context_with_library(
