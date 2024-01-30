@@ -186,7 +186,6 @@ class CirculationManager(LoggerMixin):
         ):
             # Populate caches
             Library.cache_warm(self._db, lambda: libraries)
-            ConfigurationSetting.cache_warm(self._db)
 
         self.auth = Authenticator(self._db, libraries, self.analytics)
 
