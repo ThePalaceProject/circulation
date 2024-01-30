@@ -3,13 +3,16 @@ import json
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from pydantic import EmailStr, parse_obj_as
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session
 
-from api.admin.controller.settings import SettingsController
+from api.admin.controller.base import AdminPermissionsControllerMixin
 from api.admin.exceptions import AdminNotAuthorized
 from api.admin.problem_details import (
     ADMIN_AUTH_NOT_CONFIGURED,
     INCOMPLETE_CONFIGURATION,
+    INVALID_EMAIL,
     MISSING_ADMIN,
     MISSING_PGCRYPTO_EXTENSION,
     UNKNOWN_ROLE,
@@ -19,7 +22,10 @@ from core.model import Admin, AdminRole, Library, get_one, get_one_or_create
 from core.util.problem_detail import ProblemDetail
 
 
-class IndividualAdminSettingsController(SettingsController):
+class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
+    def __init__(self, db: Session):
+        self._db = db
+
     def process_individual_admins(self):
         if flask.request.method == "GET":
             return self.process_get()
@@ -290,9 +296,12 @@ class IndividualAdminSettingsController(SettingsController):
                 _("The email field cannot be blank.")
             )
 
-        email_error = self.validate_formats(email)
-        if email_error:
-            return email_error
+        try:
+            parse_obj_as(EmailStr, email)
+        except ValueError:
+            return INVALID_EMAIL.detailed(
+                _('"%(email)s" is not a valid email address.', email=email)
+            )
 
     def validate_role_exists(self, role):
         if role.get("role") not in AdminRole.ROLES:

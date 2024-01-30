@@ -63,7 +63,7 @@ def setup_admin_controllers(manager: CirculationManager):
     )
     manager.admin_library_settings_controller = LibrarySettingsController(manager)
     manager.admin_individual_admin_settings_controller = (
-        IndividualAdminSettingsController(manager)
+        IndividualAdminSettingsController(manager._db)
     )
     manager.admin_catalog_services_controller = CatalogServicesController(manager)
     manager.admin_announcement_service = AnnouncementSettings(manager)
