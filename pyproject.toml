@@ -234,7 +234,7 @@ redmail = "^0.6.0"
 requests = "^2.29"
 sqlalchemy = {version = "^1.4", extras = ["mypy"]}
 textblob = "0.17.1"
-types-pyopenssl = "^23.1.0.3"
+types-pyopenssl = "^24.0.0.20240130"
 types-pyyaml = "^6.0.12.9"
 # We import typing_extensions, so we can use new annotation features.
 # - Self (Python 3.11)
