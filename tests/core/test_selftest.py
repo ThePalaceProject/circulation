@@ -182,7 +182,7 @@ class TestHasSelfTests:
         assert "a test result" == test.name
 
         # Since the HasSelfTests object no longer has an associated
-        # ExternalIntegration, the test results are not persisted
+        # Integration, the test results are not persisted
         # anywhere.
         assert integration.self_test_results == "this value will not be changed"
 
