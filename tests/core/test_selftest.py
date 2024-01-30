@@ -7,11 +7,13 @@ configured, not that the code is correct.
 
 import datetime
 from collections.abc import Generator
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
+from _pytest.monkeypatch import MonkeyPatch
 from sqlalchemy.orm import Session
 
-from core.model import ExternalIntegration
+from core.integration.goals import Goals
+from core.model import IntegrationConfiguration
 from core.selftest import HasSelfTests, SelfTestResult
 from core.util.datetime_helpers import utc_now
 from core.util.http import IntegrationException
@@ -93,60 +95,53 @@ class TestSelfTestResult:
 
 
 class MockSelfTest(HasSelfTests):
+    _integration: IntegrationConfiguration | None = None
+
+    def __init__(self, *args, **kwargs):
+        self.called_with_args = args
+        self.called_with_kwargs = kwargs
+
+    def integration(self, _db: Session) -> IntegrationConfiguration | None:
+        return self._integration
+
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
-        raise Exception("I don't work!")
+        raise Exception("oh no")
 
 
 class TestHasSelfTests:
-    def test_run_self_tests(self, db: DatabaseTransactionFixture):
+    def test_run_self_tests(
+        self, db: DatabaseTransactionFixture, monkeypatch: MonkeyPatch
+    ):
         """See what might happen when run_self_tests tries to instantiate an
         object and run its self-tests.
         """
-
-        class Tester(HasSelfTests):
-            integration: ExternalIntegration | None
-
-            def __init__(self, extra_arg=None):
-                """This constructor works."""
-                self.invoked_with = extra_arg
-
-            @classmethod
-            def good_alternate_constructor(self, another_extra_arg=None):
-                """This alternate constructor works."""
-                tester = Tester()
-                tester.another_extra_arg = another_extra_arg
-                return tester
-
-            @classmethod
-            def bad_alternate_constructor(self):
-                """This constructor doesn't work."""
-                raise Exception("I don't work!")
-
-            def external_integration(self, _db):
-                """This integration will be used to store the test results."""
-                return self.integration
-
-            def _run_self_tests(self, _db):
-                self._run_self_tests_called_with = _db
-                return [SelfTestResult("a test result")]
-
         mock_db = MagicMock(spec=Session)
 
         # This integration will be used to store the test results.
-        integration = db.external_integration(db.fresh_str())
-        Tester.integration = integration
+        integration = db.integration_configuration(
+            protocol="test", goal=Goals.PATRON_AUTH_GOAL
+        )
 
         # By default, the default constructor is instantiated and its
         # _run_self_tests method is called.
-        data, [setup, test] = Tester.run_self_tests(mock_db, extra_arg="a value")
-        assert mock_db == setup.result._run_self_tests_called_with
+        mock__run_self_tests = create_autospec(MockSelfTest._run_self_tests)
+        mock__run_self_tests.return_value = [SelfTestResult("a test result")]
+        monkeypatch.setattr(MockSelfTest, "_run_self_tests", mock__run_self_tests)
+        monkeypatch.setattr(MockSelfTest, "_integration", integration)
+
+        data, [setup, test] = MockSelfTest.run_self_tests(mock_db, extra_arg="a value")
+        assert mock__run_self_tests.call_count == 1
+        assert isinstance(mock__run_self_tests.call_args.args[0], MockSelfTest)
+        assert mock__run_self_tests.call_args.args[1] == mock_db
 
         # There are two results -- `setup` from the initial setup
         # and `test` from the _run_self_tests call.
-        assert "Initial setup." == setup.name
-        assert True == setup.success
-        assert "a value" == setup.result.invoked_with
-        assert "a test result" == test.name
+        assert setup.name == "Initial setup."
+        assert setup.success is True
+        assert isinstance(setup.result, MockSelfTest)
+        assert setup.result.called_with_args == ()
+        assert setup.result.called_with_kwargs == dict(extra_arg="a value")
+        assert test.name == "a test result"
 
         # The `data` variable contains a dictionary describing the test
         # suite as a whole.
@@ -161,119 +156,114 @@ class TestHasSelfTests:
         assert r2 == test.to_dict
 
         # A JSON version of `data` is stored in the
-        # ExternalIntegration returned by the external_integration()
+        # Integration returned by the integration()
         # method.
-        [result_setting] = integration.settings
-        assert HasSelfTests.SELF_TEST_RESULTS_SETTING == result_setting.key
-        assert data == result_setting.json_value
+        assert integration.self_test_results == data
 
         # Remove the testing integration to show what happens when
         # HasSelfTests doesn't support the storage of test results.
-        Tester.integration = None
-        result_setting.value = "this value will not be changed"
+        monkeypatch.setattr(MockSelfTest, "_integration", None)
 
         # You can specify a different class method to use as the
         # constructor. Once the object is instantiated, the same basic
         # code runs.
-        data, [setup, test] = Tester.run_self_tests(
+        integration.self_test_results = "this value will not be changed"
+        data, [setup, test] = MockSelfTest.run_self_tests(
             mock_db,
-            Tester.good_alternate_constructor,
-            another_extra_arg="another value",
+            lambda **kwargs: MockSelfTest(extra_extra_arg="foo", **kwargs),
+            extra_arg="a value",
         )
         assert "Initial setup." == setup.name
-        assert True == setup.success
-        assert None == setup.result.invoked_with
-        assert "another value" == setup.result.another_extra_arg
+        assert setup.success is True
+        assert setup.result.called_with_args == ()
+        assert setup.result.called_with_kwargs == dict(
+            extra_extra_arg="foo", extra_arg="a value"
+        )
         assert "a test result" == test.name
 
         # Since the HasSelfTests object no longer has an associated
-        # ExternalIntegration, the test results are not persisted
+        # Integration, the test results are not persisted
         # anywhere.
-        assert "this value will not be changed" == result_setting.value
+        assert integration.self_test_results == "this value will not be changed"
 
         # If there's an exception in the constructor, the result is a
         # single SelfTestResult describing that failure. Since there is
         # no instance, _run_self_tests can't be called.
-        data, [result] = Tester.run_self_tests(
+        data, [result] = MockSelfTest.run_self_tests(
             mock_db,
-            Tester.bad_alternate_constructor,
+            MagicMock(side_effect=Exception("I don't work!")),
         )
         assert isinstance(result, SelfTestResult)
-        assert False == result.success
-        assert "I don't work!" == str(result.exception)
+        assert result.success is False
+        assert str(result.exception) == "I don't work!"
 
     def test_exception_in_has_self_tests(self):
         """An exception raised in has_self_tests itself is converted into a
         test failure.
         """
 
-        class Tester(HasSelfTests):
-            def _run_self_tests(self, _db):
-                yield SelfTestResult("everything's ok so far")
-                raise Exception("oh no")
-                yield SelfTestResult("i'll never be called.")
+        status, [init, failure] = MockSelfTest.run_self_tests(MagicMock())
+        assert init.name == "Initial setup."
 
-        status, [init, success, failure] = Tester.run_self_tests(object())
-        assert "Initial setup." == init.name
-        assert "everything's ok so far" == success.name
-
-        assert "Uncaught exception in the self-test method itself." == failure.name
-        assert False == failure.success
+        assert failure.name == "Uncaught exception in the self-test method itself."
+        assert failure.success is False
         # The Exception was turned into an IntegrationException so that
         # its traceback could be included as debug_message.
         assert isinstance(failure.exception, IntegrationException)
-        assert "oh no" == str(failure.exception)
+        assert str(failure.exception) == "oh no"
         assert failure.exception.debug_message.startswith("Traceback")
 
     def test_run_test_success(self):
-        o = MockSelfTest()
+        mock = MockSelfTest()
 
         # This self-test method will succeed.
         def successful_test(arg, kwarg):
             return arg, kwarg
 
-        result = o.run_test("A successful test", successful_test, "arg1", kwarg="arg2")
-        assert True == result.success
-        assert "A successful test" == result.name
-        assert ("arg1", "arg2") == result.result
+        result = mock.run_test(
+            "A successful test", successful_test, "arg1", kwarg="arg2"
+        )
+        assert result.success is True
+        assert result.name == "A successful test"
+        assert result.result == ("arg1", "arg2")
         assert (result.end - result.start).total_seconds() < 1
 
     def test_run_test_failure(self):
-        o = MockSelfTest()
+        mock = MockSelfTest()
 
         # This self-test method will fail.
         def unsuccessful_test(arg, kwarg):
             raise IntegrationException(arg, kwarg)
 
-        result = o.run_test(
+        result = mock.run_test(
             "An unsuccessful test", unsuccessful_test, "arg1", kwarg="arg2"
         )
-        assert False == result.success
-        assert "An unsuccessful test" == result.name
-        assert None == result.result
-        assert "arg1" == str(result.exception)
-        assert "arg2" == result.exception.debug_message
+        assert result.success is False
+        assert result.name == "An unsuccessful test"
+        assert result.result is None
+        assert str(result.exception) == "arg1"
+        assert result.exception.debug_message == "arg2"
         assert (result.end - result.start).total_seconds() < 1
 
     def test_test_failure(self):
-        o = MockSelfTest()
+        mock = MockSelfTest()
 
         # You can pass in an Exception...
         exception = Exception("argh")
         now = utc_now()
-        result = o.test_failure("a failure", exception)
+        result = mock.test_failure("a failure", exception)
 
         # ...which will be turned into an IntegrationException.
-        assert "a failure" == result.name
+        assert result.name == "a failure"
         assert isinstance(result.exception, IntegrationException)
-        assert "argh" == str(result.exception)
+        assert str(result.exception) == "argh"
         assert (result.start - now).total_seconds() < 1
 
         # ... or you can pass in arguments to an IntegrationException
-        result = o.test_failure("another failure", "message", "debug")
+        result = mock.test_failure("another failure", "message", "debug")
         assert isinstance(result.exception, IntegrationException)
-        assert "message" == str(result.exception)
-        assert "debug" == result.exception.debug_message
+        assert str(result.exception) == "message"
+        assert result.exception.debug_message == "debug"
 
         # Since no test code actually ran, the end time is the
         # same as the start time.

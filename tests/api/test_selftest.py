@@ -11,18 +11,18 @@ import pytest
 
 from api.authentication.basic import BasicAuthenticationProvider
 from api.circulation import CirculationAPI
-from api.selftest import HasCollectionSelfTests, HasSelfTests, SelfTestResult
+from api.selftest import HasCollectionSelfTests, HasPatronSelfTests, SelfTestResult
 from core.exceptions import IntegrationException
 from core.model import Patron
 from core.scripts import RunSelfTestsScript
 from core.util.problem_detail import ProblemDetail
+from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestHasSelfTests:
+class TestHasPatronSelfTests:
     def test__determine_self_test_patron(
         self,
         db: DatabaseTransactionFixture,
@@ -35,8 +35,8 @@ class TestHasSelfTests:
         - raises the expected _NoValidLibrarySelfTestPatron exception.
         """
 
-        test_patron_lookup_method = HasSelfTests._determine_self_test_patron
-        test_patron_lookup_exception = HasSelfTests._NoValidLibrarySelfTestPatron
+        test_patron_lookup_method = HasPatronSelfTests._determine_self_test_patron
+        test_patron_lookup_exception = HasPatronSelfTests._NoValidLibrarySelfTestPatron
 
         # This library has no patron authentication integration configured.
         library_without_default_patron = db.library()
@@ -101,7 +101,7 @@ class TestHasSelfTests:
         default_patrons() method finds the default Patron for every
         Library associated with a given Collection.
         """
-        h = HasSelfTests
+        h = HasPatronSelfTests
 
         # This collection is not in any libraries, so there's no way
         # to test it.

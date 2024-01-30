@@ -30,7 +30,7 @@ from core.model import (
     json_serializer,
     site_configuration_has_changed,
 )
-from core.selftest import HasSelfTestsIntegrationConfiguration
+from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail, ProblemError
 
 
@@ -180,7 +180,7 @@ class CollectionSettingsController(
         self, integration: IntegrationConfiguration
     ) -> dict[str, Any] | None:
         protocol_class = self.get_protocol_class(integration.protocol)
-        if issubclass(protocol_class, HasSelfTestsIntegrationConfiguration):
+        if issubclass(protocol_class, HasSelfTests):
             test_result, _ = protocol_class.run_self_tests(
                 self._db, protocol_class, self._db, integration.collection
             )

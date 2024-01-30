@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.selftest import HasSelfTestsIntegrationConfiguration, SelfTestResult
+from core.selftest import HasSelfTests, SelfTestResult
 
 """Interface to the New York Times APIs."""
 import json
@@ -83,7 +83,7 @@ class NYTAPI:
 class NYTBestSellerAPI(
     NYTAPI,
     MetadataService[NytBestSellerApiSettings],
-    HasSelfTestsIntegrationConfiguration,
+    HasSelfTests,
     LoggerMixin,
 ):
     BASE_URL = "http://api.nytimes.com/svc/books/v3/lists"
