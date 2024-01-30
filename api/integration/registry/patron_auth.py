@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
     def __init__(self) -> None:
         super().__init__(Goals.PATRON_AUTH_GOAL)
-        from api.firstbook2 import FirstBookAuthenticationAPI
         from api.kansas_patron import KansasAuthenticationAPI
         from api.millenium_patron import MilleniumPatronAPI
         from api.saml.provider import SAMLWebSSOAuthenticationProvider
@@ -27,7 +26,6 @@ class PatronAuthRegistry(IntegrationRegistry["AuthenticationProviderType"]):
         )
         self.register(MilleniumPatronAPI, canonical="api.millenium_patron")
         self.register(SIP2AuthenticationProvider, canonical="api.sip")
-        self.register(FirstBookAuthenticationAPI, canonical="api.firstbook2")
         self.register(KansasAuthenticationAPI, canonical="api.kansas_patron")
         self.register(SAMLWebSSOAuthenticationProvider, canonical="api.saml.provider")
         self.register(
