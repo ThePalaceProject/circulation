@@ -544,7 +544,8 @@ class LoanController(CirculationManagerController):
         work = pool.work
         annotator = self.manager.annotator(None)
         return OPDSAcquisitionFeed.entry_as_response(
-            OPDSAcquisitionFeed.single_entry(work, annotator)
+            OPDSAcquisitionFeed.single_entry(work, annotator),
+            mime_types=flask.request.accept_mimetypes,
         )
 
     def detail(self, identifier_type, identifier):
