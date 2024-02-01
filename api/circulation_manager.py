@@ -34,7 +34,7 @@ from core.feed.annotator.circulation import (
     LibraryAnnotator,
 )
 from core.lane import Lane, WorkList
-from core.model import ConfigurationSetting, Library
+from core.model import Library
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.service.container import Services
 from core.service.logging.configuration import LogLevel
