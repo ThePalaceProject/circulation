@@ -18,12 +18,7 @@ from api.util.profilers import (
 )
 from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
-from core.model import (
-    LOCK_ID_APP_INIT,
-    ConfigurationSetting,
-    SessionManager,
-    pg_advisory_lock,
-)
+from core.model import ConfigurationSetting, SessionManager
 from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
@@ -115,15 +110,9 @@ def initialize_application() -> PalaceFlask:
         error_handler = ErrorHandler(app, container.config.logging.level())
         app.register_error_handler(Exception, error_handler.handle)
 
-        # TODO: Remove this lock once our settings are moved to integration settings.
-        # We need this lock, so that only one instance of the application is
-        # initialized at a time. This prevents database conflicts when multiple
-        # CM instances try to create the same configurationsettings at the same
-        # time during initialization. This should be able to go away once we
-        # move our settings off the configurationsettings system.
-        with pg_advisory_lock(app._db, LOCK_ID_APP_INIT):
-            initialize_circulation_manager(container)
-            initialize_admin()
+        # Initialize the circulation manager
+        initialize_circulation_manager(container)
+        initialize_admin()
     return app
 
 
