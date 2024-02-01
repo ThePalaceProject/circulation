@@ -110,29 +110,6 @@ class TestSitewideConfiguration:
             assert config.secret_key == expected
 
     @pytest.mark.parametrize(
-        "bearer_token_signing_secret, expected",
-        [
-            ("012345678901234567890123", "012345678901234567890123"),
-            ("too short", CannotLoadConfiguration),
-            (None, None),
-        ],
-    )
-    def test_bearer_token_signing_secret(
-        self,
-        sitewide_configuration_fixture: SitewideConfigurationFixture,
-        bearer_token_signing_secret: str | None,
-        expected: str | type[Exception] | None,
-    ):
-        sitewide_configuration_fixture.set(
-            "PALACE_BEARER_TOKEN_SIGNING_SECRET", bearer_token_signing_secret
-        )
-
-        context = sitewide_configuration_fixture.get_context_manager(expected)
-        with context:
-            config = SitewideConfiguration()
-            assert config.bearer_token_signing_secret == expected
-
-    @pytest.mark.parametrize(
         "patron_web_hostnames, expected",
         [
             (None, []),
