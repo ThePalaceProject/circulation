@@ -621,17 +621,9 @@ class TestLibraryAuthenticator:
     def test_gets_bearer_token_in_init(
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
-        """The bearer token is retrieved during initialization."""
-
-        # If the bearer token is not set, it's None.
-        with services_fixture.wired():
-            auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
-        assert auth.bearer_token_signing_secret == None
-
+        """The bearer token is injected from services container during initialization."""
         # Otherwise it is injected with the config
-        services_fixture.set_sitewide_config_option(
-            "bearer_token_signing_secret", "xyz"
-        )
+        services_fixture.set_sitewide_config_option("secret_key", "xyz")
         with services_fixture.wired():
             auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
         assert auth.bearer_token_signing_secret == "xyz"

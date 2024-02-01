@@ -14,7 +14,6 @@ class KeyStr(ConstrainedStr):
 class SitewideConfiguration(ServiceConfiguration):
     base_url: AnyHttpUrl | None = None
     secret_key: KeyStr
-    bearer_token_signing_secret: KeyStr | None = None
     patron_web_hostnames: list[AnyHttpUrl] | Literal["*"] = []
     authentication_document_cache_time: NonNegativeInt = 3600
 

@@ -5,7 +5,6 @@ import logging
 import sys
 from abc import ABC
 from collections.abc import Iterable
-from typing import cast
 
 import flask
 import jwt
@@ -199,8 +198,6 @@ class LibraryAuthenticator(LoggerMixin):
                     (integration.parent.id, library.id)
                 ] = e
 
-        authenticator.assert_ready_for_token_signing()
-
         return authenticator
 
     @inject
@@ -210,8 +207,7 @@ class LibraryAuthenticator(LoggerMixin):
         library: Library,
         basic_auth_provider: BasicAuthenticationProvider | None = None,
         saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
-        bearer_token_signing_secret: str
-        | None = Provide["config.sitewide.bearer_token_signing_secret"],
+        bearer_token_signing_secret: str = Provide["config.sitewide.secret_key"],
         authentication_document_annotator: CustomPatronCatalog | None = None,
         integration_registry: None
         | (IntegrationRegistry[AuthenticationProvider]) = None,
@@ -263,8 +259,6 @@ class LibraryAuthenticator(LoggerMixin):
             for provider in saml_providers:
                 self.saml_providers_by_name[provider.label()] = provider
 
-        self.assert_ready_for_token_signing()
-
     @property
     def supports_patron_authentication(self) -> bool:
         """Does this library have any way of authenticating patrons at all?"""
@@ -294,17 +288,6 @@ class LibraryAuthenticator(LoggerMixin):
         if self.library_id is None:
             return None
         return Library.by_id(self._db, self.library_id)
-
-    def assert_ready_for_token_signing(self):
-        """If this LibraryAuthenticator has SAML providers, ensure that it
-        also has a secret it can use to sign bearer tokens.
-        """
-        if self.saml_providers_by_name and not self.bearer_token_signing_secret:
-            raise CannotLoadConfiguration(
-                _(
-                    "SAML providers are configured, but secret for signing bearer tokens is not."
-                )
-            )
 
     def register_provider(
         self,
@@ -546,14 +529,12 @@ class LibraryAuthenticator(LoggerMixin):
             # Maybe we should use something custom instead.
             iss=provider_name,
         )
-        return jwt.encode(
-            payload, cast(str, self.bearer_token_signing_secret), algorithm="HS256"
-        )
+        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
 
     def decode_bearer_token(self, token: str) -> tuple[str, str]:
         """Extract auth provider name and access token from JSON web token."""
         decoded = jwt.decode(
-            token, cast(str, self.bearer_token_signing_secret), algorithms=["HS256"]
+            token, self.bearer_token_signing_secret, algorithms=["HS256"]
         )
         provider_name = decoded["iss"]
         token = decoded["token"]
