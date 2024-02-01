@@ -15,7 +15,7 @@ touch $SIMPLIFIED_ENVIRONMENT
 # cron tasks are run, since crontab doesn't load them automatically.
 # The values of the variables are escaped as needed for the shell.
 for var in $(printenv | grep -e SIMPLIFIED -e LIBSIMPLE -e PALACE | sed -e 's/^\([^=]*\)=.*$/\1/g'); do {
-  printf "export ${var}=%q\n" $(printenv "${var}")
+  printf "export ${var}=%q\n" "$(printenv "${var}")"
 } done > $SIMPLIFIED_ENVIRONMENT
 
 # Give it to the appropriate user.
