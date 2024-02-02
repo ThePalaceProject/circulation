@@ -20,9 +20,6 @@ from api.circulation import (
 )
 from api.circulation_exceptions import *
 from core.analytics import Analytics
-from core.config import CannotLoadConfiguration
-from core.integration.goals import Goals
-from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
     CirculationEvent,
@@ -66,15 +63,11 @@ class CirculationAPIFixture:
         [self.delivery_mechanism] = self.pool.delivery_mechanisms
         self.patron = db.patron()
         self.analytics = MockAnalyticsProvider()
-        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
-            Goals.LICENSE_GOAL
-        )
-        registry.register(MockBibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
         self.circulation = MockCirculationAPI(
             db.session,
             db.default_library(),
-            analytics=self.analytics,
-            registry=registry,
+            {self.collection.id: MockBibliothecaAPI(db.session, self.collection)},
+            analytics=cast(Analytics, self.analytics),
         )
         self.remote = self.circulation.api_for_license_pool(self.pool)
 
@@ -577,11 +570,9 @@ class TestCirculationAPI:
         mock_api = MagicMock(spec=MockPatronActivityCirculationAPI)
         mock_api.checkout.side_effect = NotImplementedError()
 
-        mock_circulation = CirculationAPI(
-            circulation_api.db.session, circulation_api.db.default_library()
-        )
-        mock_circulation.enforce_limits = MagicMock()  # type: ignore[method-assign]
-        mock_circulation.api_for_license_pool = MagicMock(return_value=mock_api)  # type: ignore[method-assign]
+        mock_circulation = circulation_api.circulation
+        mock_circulation.enforce_limits = MagicMock()
+        mock_circulation.api_for_license_pool = MagicMock(return_value=mock_api)
 
         # checkout() raised the expected NotImplementedError
         with pytest.raises(NotImplementedError):
@@ -743,7 +734,7 @@ class TestCirculationAPI:
                 self.patron_at_hold_limit_calls.append(patron)
                 return self.at_hold_limit
 
-        circulation = Mock(circulation_api.db.session, library)
+        circulation = Mock(circulation_api.db.session, library, {})
 
         # Sub-test 1: patron has reached neither limit.
         #
@@ -1095,7 +1086,8 @@ class TestCirculationAPI:
         lp1 = circulation_api.db.licensepool(edition=None)
         lp2 = circulation_api.db.licensepool(edition=None)
 
-        api = CirculationAPI(circulation_api.db.session, l1, cast(Analytics, analytics))
+        api = circulation_api.circulation
+        api.analytics = cast(Analytics, analytics)
 
         def assert_event(inp, outp):
             # Assert that passing `inp` into the mock _collect_event
@@ -1246,21 +1238,12 @@ class TestCirculationAPI:
         loan, ignore = circulation_api.pool.loan_to(circulation_api.patron)
         loan.start = self.YESTERDAY
 
-        class IncompleteCirculationAPI(MockCirculationAPI):
-            def patron_activity(self, patron, pin):
-                # A remote API failed, and we don't know if
-                # the patron has any loans or holds.
-                return [], [], False
+        circulation = circulation_api.circulation
+        mock_patron_activity = MagicMock(return_value=([], [], False))
+        circulation.patron_activity = mock_patron_activity
+        circulation.sync_bookshelf(circulation_api.patron, "1234")
 
-        incomplete_circulation = IncompleteCirculationAPI(
-            circulation_api.db.session,
-            circulation_api.db.default_library(),
-            registry=IntegrationRegistry(
-                Goals.LICENSE_GOAL,
-                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
-            ),
-        )
-        incomplete_circulation.sync_bookshelf(circulation_api.patron, "1234")
+        assert mock_patron_activity.call_count == 1
 
         # The loan is still in the db, since there was an
         # error from one of the remote APIs and we don't have
@@ -1273,21 +1256,11 @@ class TestCirculationAPI:
         # the data we have is unreliable.
         assert None == circulation_api.patron.last_loan_activity_sync
 
-        class CompleteCirculationAPI(MockCirculationAPI):
-            def patron_activity(self, patron, pin):
-                # All the remote API calls succeeded, so
-                # now we know the patron has no loans.
-                return [], [], True
-
-        circulation = CompleteCirculationAPI(
-            circulation_api.db.session,
-            circulation_api.db.default_library(),
-            registry=IntegrationRegistry(
-                Goals.LICENSE_GOAL,
-                {ExternalIntegration.BIBLIOTHECA: MockBibliothecaAPI},
-            ),
-        )
+        mock_patron_activity = MagicMock(return_value=([], [], True))
+        circulation.patron_activity = mock_patron_activity
         circulation.sync_bookshelf(circulation_api.patron, "1234")
+
+        assert mock_patron_activity.call_count == 1
 
         # Now the loan is gone.
         loans = circulation_api.db.session.query(Loan).all()
@@ -1444,17 +1417,15 @@ class TestCirculationAPI:
         api_bibliotheca_files_fixture: BibliothecaFilesFixture,
     ):
         # Get a CirculationAPI that doesn't mock out its API's patron activity.
-        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
-            goal=Goals.LICENSE_GOAL
+        mock_bibliotheca = MockBibliothecaAPI(
+            circulation_api.db.session, circulation_api.collection
         )
-        registry.register(MockBibliothecaAPI, canonical=ExternalIntegration.BIBLIOTHECA)
         circulation = CirculationAPI(
             circulation_api.db.session,
             circulation_api.db.default_library(),
-            registry=registry,
+            {circulation_api.collection.id: mock_bibliotheca},
         )
-        mock_bibliotheca = circulation.api_for_collection[circulation_api.collection.id]
-        assert isinstance(mock_bibliotheca, MockBibliothecaAPI)
+
         data = api_bibliotheca_files_fixture.sample_data("checkouts.xml")
         mock_bibliotheca.queue_response(200, content=data)
 
@@ -1479,17 +1450,14 @@ class TestCirculationAPI:
         the BaseCirculationAPI implementation for that title's colelction.
         """
 
-        class Mock(MockPatronActivityCirculationAPI):
-            def can_fulfill_without_loan(self, patron, pool, lpdm):
-                return "yep"
-
         pool = circulation_api.db.licensepool(None)
-        circulation = CirculationAPI(
-            circulation_api.db.session, circulation_api.db.default_library()
-        )
         mock = MagicMock(spec=MockPatronActivityCirculationAPI)
         mock.can_fulfill_without_loan = MagicMock(return_value="yep")
-        circulation.api_for_collection[pool.collection.id] = mock
+        circulation = CirculationAPI(
+            circulation_api.db.session,
+            circulation_api.db.default_library(),
+            {pool.collection.id: mock},
+        )
         assert "yep" == circulation.can_fulfill_without_loan(None, pool, MagicMock())
 
         # If format data is missing or the BaseCirculationAPI cannot
@@ -1604,34 +1572,6 @@ class TestDeliveryMechanismInfo:
         # The LicensePool is now considered an open-access LicensePool,
         # since it has an open-access delivery mechanism.
         assert True == pool.open_access
-
-
-class TestConfigurationFailures:
-    def test_configuration_exception_is_stored(self, db: DatabaseTransactionFixture):
-        # If the initialization of an API object raises
-        # CannotLoadConfiguration, the exception is stored with the
-        # CirculationAPI rather than being propagated.
-
-        registry: IntegrationRegistry[BaseCirculationAPI] = IntegrationRegistry(
-            Goals.LICENSE_GOAL
-        )
-        mock_api = MagicMock()
-        mock_api.side_effect = CannotLoadConfiguration("doomed!")
-        mock_api.__name__ = "mock api"
-        registry.register(mock_api, canonical=db.default_collection().protocol)
-        circulation = CirculationAPI(
-            db.session, db.default_library(), registry=registry
-        )
-
-        # Although the CirculationAPI was created, it has no functioning
-        # APIs.
-        assert {} == circulation.api_for_collection
-
-        # Instead, the CannotLoadConfiguration exception raised by the
-        # constructor has been stored in initialization_exceptions.
-        e = circulation.initialization_exceptions[db.default_collection().id]
-        assert isinstance(e, CannotLoadConfiguration)
-        assert "doomed!" == str(e)
 
 
 class TestFulfillmentInfo:

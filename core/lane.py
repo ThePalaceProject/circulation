@@ -1338,7 +1338,7 @@ class WorkList:
         return self.MAX_CACHE_AGE
 
     @classmethod
-    def top_level_for_library(self, _db, library):
+    def top_level_for_library(self, _db, library, collection_ids=None):
         """Create a WorkList representing this library's collection
         as a whole.
 
@@ -1377,6 +1377,7 @@ class WorkList:
             children=top_level_lanes,
             media=Edition.FULFILLABLE_MEDIA,
             entrypoints=library.entrypoints,
+            collection_ids=collection_ids,
         )
         return wl
 
@@ -1397,6 +1398,7 @@ class WorkList:
         fiction=None,
         license_datasource=None,
         target_age=None,
+        collection_ids=None,
     ):
         """Initialize with basic data.
 
@@ -1455,12 +1457,13 @@ class WorkList:
 
         """
         self.library_id = None
-        self.collection_ids = None
+        self.collection_ids = collection_ids
         if library:
             self.library_id = library.id
-            self.collection_ids = [
-                collection.id for collection in library.all_collections
-            ]
+            if self.collection_ids is None:
+                self.collection_ids = [
+                    collection.id for collection in library.collection_ids
+                ]
         self.display_name = display_name
         if genres:
             self.genre_ids = [x.id for x in genres]

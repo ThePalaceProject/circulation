@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Generator, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from Crypto.PublicKey import RSA
 from expiringdict import ExpiringDict
@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Query, relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql import Select
 from sqlalchemy.sql.functions import func
 
 from core.configuration.library import LibrarySettings
@@ -49,6 +50,13 @@ if TYPE_CHECKING:
         ExternalIntegration,
         Patron,
     )
+
+
+class CollectionInfoTuple(NamedTuple):
+    """A tuple containing information about a collection"""
+
+    id: int
+    protocol: str
 
 
 class Library(Base, HasSessionCache):
@@ -174,25 +182,42 @@ class Library(Base, HasSessionCache):
         uselist=False,
     )
 
-    @property
-    def collections(self) -> Sequence[Collection]:
-        """Get the collections for this library"""
+    def collections_query(self, base_query: Select | None = None) -> Select:
         from core.model import (
             Collection,
             IntegrationConfiguration,
             IntegrationLibraryConfiguration,
         )
 
-        _db = Session.object_session(self)
-        return _db.scalars(
-            select(Collection)
-            .join(IntegrationConfiguration)
+        # We can pass in a base query to build on, but if we don't, we'll start from the Collection table.
+        query = base_query if base_query is not None else select(Collection)
+        return (
+            query.join(IntegrationConfiguration)
             .join(IntegrationLibraryConfiguration)
             .where(
                 IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
                 IntegrationLibraryConfiguration.library_id == self.id,
             )
-        ).all()
+        )
+
+    @property
+    def collection_ids(self) -> list[CollectionInfoTuple]:
+        """Get the collection ids for this library"""
+        from core.model import Collection, IntegrationConfiguration
+
+        _db = Session.object_session(self)
+        query = select(Collection.id, IntegrationConfiguration.protocol).select_from(
+            Collection
+        )
+        query = self.collections_query(query)
+        results = _db.execute(query).all()
+        return [CollectionInfoTuple(*row) for row in results]
+
+    @property
+    def collections(self) -> Sequence[Collection]:
+        """Get the collections for this library"""
+        _db = Session.object_session(self)
+        return _db.scalars(self.collections_query()).all()
 
     # Cache of the libraries loaded settings object
     _settings: LibrarySettings | None

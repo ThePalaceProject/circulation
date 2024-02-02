@@ -16,6 +16,7 @@ from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.config import Configuration, ConfigurationConstants
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
 from core.external_search import ExternalSearchIndex, Filter
@@ -916,11 +917,9 @@ class RunSelfTestsScript(LibraryInputScript):
         self.out = output
 
     def do_run(self, *args, **kwargs):
-        from api.circulation import CirculationAPI
-
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
-            api_map = dict(CirculationAPI(self._db, library).registry)
+            api_map = LicenseProvidersRegistry()
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:

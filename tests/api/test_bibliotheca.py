@@ -42,8 +42,6 @@ from api.circulation_exceptions import (
 )
 from api.web_publication_manifest import FindawayManifest
 from core.analytics import Analytics
-from core.integration.goals import Goals
-from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import ReplacementPolicy, TimestampData
 from core.mock_analytics_provider import MockAnalyticsProvider
 from core.model import (
@@ -470,15 +468,10 @@ class TestBibliothecaAPI:
         circulation = CirculationAPI(
             db.session,
             db.default_library(),
-            registry=IntegrationRegistry(
-                Goals.LICENSE_GOAL,
-                {bibliotheca_fixture.collection.protocol: MockBibliothecaAPI},
-            ),
+            {bibliotheca_fixture.collection.id: bibliotheca_fixture.api},
         )
 
-        api = circulation.api_for_collection[bibliotheca_fixture.collection.id]
-        assert isinstance(api, MockBibliothecaAPI)
-        api.queue_response(
+        bibliotheca_fixture.api.queue_response(
             200, content=bibliotheca_fixture.files.sample_data("checkouts.xml")
         )
         circulation.sync_bookshelf(patron, "dummy pin")

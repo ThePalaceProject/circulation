@@ -1467,7 +1467,13 @@ class TestOPDSImporter:
             pool = pools[0]
             pool.loan_to(patron)
 
-            return CirculationAPI(session, library), patron, pool
+            return (
+                CirculationAPI(
+                    session, library, {collection.id: OPDSAPI(session, collection)}
+                ),
+                patron,
+                pool,
+            )
 
         yield _wayfless_circulation_api
 

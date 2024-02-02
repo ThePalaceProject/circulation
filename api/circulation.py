@@ -5,7 +5,7 @@ import logging
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from threading import Thread
 from types import TracebackType
 from typing import Any, Literal, TypeVar
@@ -17,12 +17,9 @@ from pydantic import PositiveInt
 from sqlalchemy.orm import Query
 
 from api.circulation_exceptions import *
-from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.util.patron import PatronUtility
 from core.analytics import Analytics
-from core.config import CannotLoadConfiguration
 from core.integration.base import HasLibraryIntegrationConfiguration
-from core.integration.registry import IntegrationRegistry
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -742,7 +739,7 @@ class PatronActivityCirculationAPI(
         ...
 
 
-class CirculationAPI:
+class CirculationAPI(LoggerMixin):
     """Implement basic circulation logic and abstract away the details
     between different circulation APIs behind generic operations like
     'borrow'.
@@ -752,8 +749,8 @@ class CirculationAPI:
         self,
         db: Session,
         library: Library,
+        library_collection_apis: Mapping[int | None, CirculationApiType],
         analytics: Analytics | None = None,
-        registry: IntegrationRegistry[CirculationApiType] | None = None,
     ):
         """Constructor.
 
@@ -778,36 +775,20 @@ class CirculationAPI:
         self._db = db
         self.library_id = library.id
         self.analytics = analytics
-        self.initialization_exceptions = dict()
-        self.registry = registry or LicenseProvidersRegistry()
 
         # Each of the Library's relevant Collections is going to be
         # associated with an API object.
-        self.api_for_collection = {}
+        self.api_for_collection = library_collection_apis
 
         # When we get our view of a patron's loans and holds, we need
         # to include loans whose license pools are in one of the
-        # Collections we manage. We don't need to care about loans
-        # from any other Collections.
-        self.collection_ids_for_sync = []
-
-        self.log = logging.getLogger("Circulation API")
-        for collection in library.collections:
-            if collection.protocol in self.registry:
-                api = None
-                try:
-                    api = self.registry[collection.protocol](db, collection)
-                except CannotLoadConfiguration as exception:
-                    self.log.exception(
-                        "Error loading configuration for {}: {}".format(
-                            collection.name, str(exception)
-                        )
-                    )
-                    self.initialization_exceptions[collection.id] = exception
-                if api:
-                    self.api_for_collection[collection.id] = api
-                    if isinstance(api, PatronActivityCirculationAPI):
-                        self.collection_ids_for_sync.append(collection.id)
+        # Collections we manage and whose API is capable of returning
+        # patron activity.
+        self.collection_ids_for_sync = [
+            _id
+            for _id, api in self.api_for_collection.items()
+            if isinstance(api, PatronActivityCirculationAPI)
+        ]
 
     @property
     def library(self) -> Library | None:
