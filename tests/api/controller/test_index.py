@@ -15,46 +15,6 @@ class TestIndexController:
             assert 302 == response.status_code
             assert "http://localhost/default/groups/" == response.headers["location"]
 
-    def test_custom_index_view(self, circulation_fixture: CirculationControllerFixture):
-        """If a custom index view is registered for a library,
-        it is called instead of the normal IndexController code.
-        """
-
-        class MockCustomIndexView:
-            def __call__(self, library, annotator):
-                self.called_with = (library, annotator)
-                return "fake response"
-
-        # Set up our MockCustomIndexView as the custom index for
-        # the default library.
-        mock = MockCustomIndexView()
-        circulation_fixture.manager.custom_index_views[
-            circulation_fixture.db.default_library().id
-        ] = mock
-
-        # Mock CirculationManager.annotator so it's easy to check
-        # that it was called.
-        mock_annotator = object()
-
-        def make_mock_annotator(lane):
-            assert lane == None
-            return mock_annotator
-
-        circulation_fixture.manager.annotator = make_mock_annotator  # type: ignore
-
-        # Make a request, and the custom index is invoked.
-        with circulation_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=circulation_fixture.invalid_auth)
-        ):
-            response = circulation_fixture.manager.index_controller()
-        assert "fake response" == response
-
-        # The custom index was invoked with the library associated
-        # with the request + the output of self.manager.annotator()
-        library, annotator = mock.called_with
-        assert circulation_fixture.db.default_library() == library
-        assert mock_annotator == annotator
-
     def test_authenticated_patron_root_lane(
         self, circulation_fixture: CirculationControllerFixture
     ):

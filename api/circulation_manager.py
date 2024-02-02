@@ -25,7 +25,6 @@ from api.controller.playtime_entries import PlaytimeEntriesController
 from api.controller.profile import ProfileController
 from api.controller.urn_lookup import URNLookupController
 from api.controller.work import WorkController
-from api.custom_index import CustomIndexView
 from api.lanes import load_lanes
 from api.problem_details import *
 from api.saml.controller import SAMLController
@@ -192,25 +191,19 @@ class CirculationManager(LoggerMixin):
         new_top_level_lanes = {}
         # Create a CirculationAPI for each library.
         new_circulation_apis = {}
-        # Potentially load a CustomIndexView for each library
-        new_custom_index_views = {}
 
         with elapsed_time_logging(
             log_method=self.log.debug,
-            message_prefix="load_settings - per-library lanes, custom indexes, api",
+            message_prefix="load_settings - per-library lanes, api",
         ):
             for library in libraries:
                 new_top_level_lanes[library.id] = load_lanes(self._db, library)
-                new_custom_index_views[library.id] = CustomIndexView.for_library(
-                    library
-                )
                 new_circulation_apis[library.id] = self.setup_circulation(
                     library, self.analytics
                 )
 
         self.top_level_lanes = new_top_level_lanes
         self.circulation_apis = new_circulation_apis
-        self.custom_index_views = new_custom_index_views
 
         # Assemble the list of patron web client domains from individual
         # library registration settings as well as a sitewide setting.

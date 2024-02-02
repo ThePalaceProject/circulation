@@ -12,13 +12,6 @@ class IndexController(CirculationManagerController):
     """Redirect the patron to the appropriate feed."""
 
     def __call__(self):
-        # If this library provides a custom index view, use that.
-        library = flask.request.library
-        custom = self.manager.custom_index_views.get(library.id)
-        if custom is not None:
-            annotator = self.manager.annotator(None)
-            return custom(library, annotator)
-
         # The simple case: the app is equally open to all clients.
         library_short_name = flask.request.library.short_name
         if not self.has_root_lanes():

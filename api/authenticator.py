@@ -25,7 +25,6 @@ from api.authentication.base import (
 from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.config import CannotLoadConfiguration, Configuration
-from api.custom_patron_catalog import CustomPatronCatalog
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.problem_details import *
 from core.analytics import Analytics
@@ -158,21 +157,12 @@ class LibraryAuthenticator(LoggerMixin):
         _db: Session,
         library: Library,
         analytics: Analytics | None = None,
-        custom_catalog_source: type[CustomPatronCatalog] = CustomPatronCatalog,
     ) -> Self:
         """Initialize an Authenticator for the given Library based on its
         configured ExternalIntegrations.
-
-        :param custom_catalog_source: The lookup class for CustomPatronCatalogs.
-            Intended for mocking during tests.
         """
-
-        custom_catalog = custom_catalog_source.for_library(library)
-
         # Start with an empty list of authenticators.
-        authenticator = cls(
-            _db=_db, library=library, authentication_document_annotator=custom_catalog
-        )
+        authenticator = cls(_db=_db, library=library)
 
         # Find all of this library's ExternalIntegrations set up with
         # the goal of authenticating patrons.
@@ -218,7 +208,6 @@ class LibraryAuthenticator(LoggerMixin):
         basic_auth_provider: BasicAuthenticationProvider | None = None,
         saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
         bearer_token_signing_secret: str | None = None,
-        authentication_document_annotator: CustomPatronCatalog | None = None,
         integration_registry: None
         | (IntegrationRegistry[AuthenticationProvider]) = None,
     ):
@@ -245,7 +234,6 @@ class LibraryAuthenticator(LoggerMixin):
         self.library_uuid = library.uuid
         self.library_name = library.name
         self.library_short_name = library.short_name
-        self.authentication_document_annotator = authentication_document_annotator
         self.integration_registry = (
             PatronAuthRegistry()
             if integration_registry is None
@@ -770,15 +758,6 @@ class LibraryAuthenticator(LoggerMixin):
         if self.library:
             doc["announcements"] = Announcement.authentication_document_announcements(
                 self.library
-            )
-
-        # Finally, give the active annotator a chance to modify the document.
-
-        if self.authentication_document_annotator:
-            doc = (
-                self.authentication_document_annotator.annotate_authentication_document(
-                    self.library, doc, url_for
-                )
             )
 
         return json.dumps(doc)
