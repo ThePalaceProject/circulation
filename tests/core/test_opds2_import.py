@@ -15,7 +15,6 @@ from core.model import (
     DeliveryMechanism,
     Edition,
     EditionConstants,
-    ExternalIntegration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -474,7 +473,7 @@ class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
         self.patron = db.patron()
         self.collection: Collection = db.collection(
-            protocol=ExternalIntegration.OPDS2_IMPORT,
+            protocol=OPDS2API.label(),
             data_source_name="test",
             external_account_id="http://opds2.example.org/feed",
         )

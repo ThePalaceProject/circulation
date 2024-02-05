@@ -11,6 +11,7 @@ from flask import url_for
 from werkzeug import Response as wkResponse
 
 from api.axis import Axis360API, Axis360FulfillmentInfo
+from api.bibliotheca import BibliothecaAPI
 from api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
@@ -38,7 +39,6 @@ from core.model import (
     Collection,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegration,
     Hold,
     Identifier,
     LicensePool,
@@ -51,6 +51,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.opds_import import OPDSAPI
 from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
@@ -1426,7 +1427,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-                ExternalIntegration.OPDS_IMPORT,
+                OPDSAPI.label(),
                 None,
                 None,
             ],  # DB and OPDS response loan duration mismatch
@@ -1435,7 +1436,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                ExternalIntegration.OPDS_IMPORT,
+                OPDSAPI.label(),
                 None,
                 None,
             ],
@@ -1444,7 +1445,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                ExternalIntegration.OPDS_IMPORT,
+                OPDSAPI.label(),
                 None,
                 None,
             ],
@@ -1453,7 +1454,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],  # DB and OPDS response loan duration mismatch
@@ -1462,7 +1463,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1471,7 +1472,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1480,7 +1481,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1489,7 +1490,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],  # DB and OPDS response loan duration mismatch
@@ -1498,7 +1499,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
@@ -1507,7 +1508,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
@@ -1516,7 +1517,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
-                ExternalIntegration.BIBLIOTHECA,
+                BibliothecaAPI.label(),
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],

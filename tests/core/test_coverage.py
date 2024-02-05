@@ -2,6 +2,7 @@ import datetime
 
 import pytest
 
+from api.overdrive import OverdriveAPI
 from core.coverage import (
     BaseCoverageProvider,
     CoverageFailure,
@@ -27,7 +28,6 @@ from core.model import (
     CoverageRecord,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -39,6 +39,7 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
+from core.opds_import import OPDSAPI
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.core.mock import (
     AlwaysSuccessfulBibliographicCoverageProvider,
@@ -1349,7 +1350,7 @@ class TestCollectionCoverageProvider:
         """Verify that class variables become appropriate instance
         variables.
         """
-        collection = db.collection(protocol=ExternalIntegration.OPDS_IMPORT)
+        collection = db.collection(protocol=OPDSAPI.label())
         provider = AlwaysSuccessfulCollectionCoverageProvider(collection)
         assert provider.DATA_SOURCE_NAME == provider.data_source.name
 
@@ -1364,7 +1365,7 @@ class TestCollectionCoverageProvider:
     def test_collection_protocol_must_match_class_protocol(
         self, db: DatabaseTransactionFixture
     ):
-        collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        collection = db.collection(protocol=OverdriveAPI.label())
         with pytest.raises(ValueError) as excinfo:
             AlwaysSuccessfulCollectionCoverageProvider(collection)
         assert (
@@ -1506,9 +1507,9 @@ class TestCollectionCoverageProvider:
         objects, one for each Collection that implements the
         appropriate protocol.
         """
-        opds1 = db.collection(protocol=ExternalIntegration.OPDS_IMPORT)
-        opds2 = db.collection(protocol=ExternalIntegration.OPDS_IMPORT)
-        overdrive = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        opds1 = db.collection(protocol=OPDSAPI.label())
+        opds2 = db.collection(protocol=OPDSAPI.label())
+        overdrive = db.collection(protocol=OverdriveAPI.label())
         providers = list(
             AlwaysSuccessfulCollectionCoverageProvider.all(db.session, batch_size=34)
         )
@@ -1777,10 +1778,10 @@ class TestCollectionCoverageProvider:
         # CIRCULATION_DATA are data for an Overdrive book.)
         class OverdriveProvider(AlwaysSuccessfulCollectionCoverageProvider):
             DATA_SOURCE_NAME = DataSource.OVERDRIVE
-            PROTOCOL = ExternalIntegration.OVERDRIVE
+            PROTOCOL = OverdriveAPI.label()
             IDENTIFIER_TYPES = Identifier.OVERDRIVE_ID
 
-        collection = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        collection = db.collection(protocol=OverdriveAPI.label())
         provider = OverdriveProvider(collection)
 
         # We get a CoverageFailure if we don't pass in any data at all.

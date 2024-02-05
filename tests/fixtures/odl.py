@@ -19,7 +19,6 @@ from core.model import (
     Representation,
     Work,
 )
-from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.api_odl import ODL2APIFilesFixture, ODLAPIFilesFixture
@@ -281,7 +280,7 @@ class ODL2TestFixture(ODLTestFixture):
     ) -> Collection:
         collection = super().collection(library, api_class)
         collection.integration_configuration.name = "Test ODL2 Collection"
-        collection.integration_configuration.protocol = ExternalIntegration.ODL2
+        collection.integration_configuration.protocol = ODL2API.label()
         return collection
 
     def api(self, collection) -> ODL2API:

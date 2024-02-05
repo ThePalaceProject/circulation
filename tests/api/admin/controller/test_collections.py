@@ -25,6 +25,7 @@ from api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from api.integration.registry.license_providers import LicenseProvidersRegistry
+from api.overdrive import OverdriveAPI
 from api.selftest import HasCollectionSelfTests
 from core.model import AdminRole, Collection, ExternalIntegration, get_one
 from core.selftest import HasSelfTests
@@ -105,7 +106,7 @@ class TestCollectionSettings:
 
         c2 = db.collection(
             name="Collection 2",
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             external_account_id="1234",
             settings=dict(
                 overdrive_client_secret="b",
@@ -116,7 +117,7 @@ class TestCollectionSettings:
 
         c3 = db.collection(
             name="Collection 3",
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             external_account_id="5678",
         )
         c3.parent = c2
@@ -311,9 +312,7 @@ class TestCollectionSettings:
         expected: ProblemDetail,
         detailed: bool,
     ):
-        collection = db.collection(
-            name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
-        )
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
 
         if "id" in post_data and post_data["id"] == "":
             post_data["id"] = str(collection.integration_configuration.id)
@@ -479,9 +478,7 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        collection = db.collection(
-            name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
-        )
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
 
         l1 = db.library(
             name="Library 1",
@@ -493,7 +490,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", ExternalIntegration.OVERDRIVE),
+                    ("protocol", OverdriveAPI.label()),
                     ("external_account_id", "1234"),
                     ("overdrive_client_key", "user2"),
                     ("overdrive_client_secret", "password"),
@@ -538,7 +535,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", ExternalIntegration.OVERDRIVE),
+                    ("protocol", OverdriveAPI.label()),
                     ("external_account_id", "1234"),
                     ("overdrive_client_key", "user2"),
                     ("overdrive_client_secret", "password"),
@@ -556,7 +553,7 @@ class TestCollectionSettings:
         assert "user2" == collection.integration_configuration.settings_dict.get(
             "overdrive_client_key"
         )
-        assert ExternalIntegration.OVERDRIVE == collection.protocol
+        assert OverdriveAPI.label() == collection.protocol
 
         # But the library has been removed.
         assert collection.libraries == []
@@ -565,14 +562,14 @@ class TestCollectionSettings:
         # have been deleted.
         assert collection.integration_configuration.library_configurations == []
 
-        parent = db.collection(name="Parent", protocol=ExternalIntegration.OVERDRIVE)
+        parent = db.collection(name="Parent", protocol=OverdriveAPI.label())
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", ExternalIntegration.OVERDRIVE),
+                    ("protocol", OverdriveAPI.label()),
                     ("parent_id", str(parent.integration_configuration.id)),
                     ("external_account_id", "1234"),
                     ("libraries", json.dumps([])),
@@ -733,8 +730,8 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
-        parent = db.collection(protocol=ExternalIntegration.OVERDRIVE)
-        child = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        parent = db.collection(protocol=OverdriveAPI.label())
+        child = db.collection(protocol=OverdriveAPI.label())
         child.parent = parent
 
         with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):

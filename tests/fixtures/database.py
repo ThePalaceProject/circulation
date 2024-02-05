@@ -57,6 +57,7 @@ from core.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
+from core.opds_import import OPDSAPI
 from core.util.datetime_helpers import utc_now
 from core.util.string_helpers import random_string
 
@@ -168,7 +169,7 @@ class DatabaseTransactionFixture:
         library = self.library("default", "default")
         collection = self.collection(
             "Default Collection",
-            protocol=ExternalIntegration.OPDS_IMPORT,
+            protocol=OPDSAPI.label(),
             data_source_name="OPDS",
             external_account_id="http://opds.example.com/feed",
         )
@@ -290,7 +291,7 @@ class DatabaseTransactionFixture:
     def collection(
         self,
         name=None,
-        protocol=ExternalIntegration.OPDS_IMPORT,
+        protocol=OPDSAPI.label(),
         external_account_id=None,
         url=None,
         username=None,

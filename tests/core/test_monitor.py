@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from api.bibliotheca import BibliothecaAPI
+from api.overdrive import OverdriveAPI
 from core.config import Configuration
 from core.metadata_layer import TimestampData
 from core.model import (
@@ -13,7 +15,6 @@ from core.model import (
     Credential,
     DataSource,
     Edition,
-    ExternalIntegration,
     Genre,
     Identifier,
     Measurement,
@@ -51,6 +52,7 @@ from core.monitor import (
     WorkReaper,
     WorkSweepMonitor,
 )
+from core.opds_import import OPDSAPI
 from core.service import container
 from core.util.datetime_helpers import datetime_utc, utc_now
 from tests.core.mock import (
@@ -292,11 +294,11 @@ class TestCollectionMonitor:
 
         class OverdriveMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor 2"
-            PROTOCOL = ExternalIntegration.OVERDRIVE
+            PROTOCOL = OverdriveAPI.label()
 
         # Two collections.
-        c1 = db.collection(protocol=ExternalIntegration.OVERDRIVE)
-        c2 = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        c1 = db.collection(protocol=OverdriveAPI.label())
+        c2 = db.collection(protocol=BibliothecaAPI.label())
 
         # The NoProtocolMonitor can be instantiated with either one,
         # or with no Collection at all.
@@ -320,7 +322,7 @@ class TestCollectionMonitor:
 
         class OPDSCollectionMonitor(CollectionMonitor):
             SERVICE_NAME = "Test Monitor"
-            PROTOCOL = ExternalIntegration.OPDS_IMPORT
+            PROTOCOL = OPDSAPI.label()
 
         # Here we have three OPDS import Collections...
         o1 = db.collection("o1")
@@ -328,7 +330,7 @@ class TestCollectionMonitor:
         o3 = db.collection("o3")
 
         # ...and a Bibliotheca collection.
-        b1 = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        b1 = db.collection(protocol=BibliothecaAPI.label())
 
         # o1 just had its Monitor run.
         Timestamp.stamp(

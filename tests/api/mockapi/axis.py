@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from api.axis import Axis360API
 from core.model import Library
 from core.model.collection import Collection
-from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 
 
@@ -13,9 +12,7 @@ class MockAxis360API(Axis360API):
         cls, _db: Session, library: Library, name: str = "Test Axis 360 Collection"
     ) -> Collection:
         """Create a mock Axis 360 collection for use in tests."""
-        collection, _ = Collection.by_name_and_protocol(
-            _db, name, ExternalIntegration.AXIS_360
-        )
+        collection, _ = Collection.by_name_and_protocol(_db, name, Axis360API.label())
         collection.integration_configuration.settings_dict = {
             "username": "a",
             "password": "b",

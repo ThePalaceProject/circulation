@@ -157,7 +157,10 @@ class IntegrationConfiguration(Base):
                 lines.append(
                     f"  {library_configuration.library.short_name} - {library_configuration.library.name}"
                 )
-                if len(library_configuration.settings_dict) > 0:
+                if (
+                    isinstance(library_configuration.settings_dict, dict)
+                    and len(library_configuration.settings_dict) > 0
+                ):
                     lines.append("    Settings:")
                     process_settings_dict(library_configuration.settings_dict, 6)
 

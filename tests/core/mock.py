@@ -7,7 +7,8 @@ from core.coverage import (
     IdentifierCoverageProvider,
     WorkCoverageProvider,
 )
-from core.model import DataSource, ExternalIntegration
+from core.model import DataSource
+from core.opds_import import OPDSAPI
 
 
 def _normalize_level(level):
@@ -82,7 +83,7 @@ class MockCoverageProvider:
 
     # This CoverageProvider can work with any Collection that supports
     # the OPDS import protocol (e.g. DatabaseTest._default_collection).
-    PROTOCOL: str | None = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL: str | None = OPDSAPI.label()
 
 
 class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvider):

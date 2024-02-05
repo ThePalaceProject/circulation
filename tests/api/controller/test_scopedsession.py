@@ -5,14 +5,7 @@ from sqlalchemy.orm import Session
 
 import api
 from core.flask_sqlalchemy_session import current_session
-from core.model import (
-    Collection,
-    DataSource,
-    ExternalIntegration,
-    Identifier,
-    Library,
-    create,
-)
+from core.model import Collection, DataSource, Identifier, Library, create
 from core.opds_import import OPDSAPI
 from tests.fixtures.api_controller import (
     ControllerFixture,
@@ -58,7 +51,7 @@ class ScopedHolder:
         collection, _ = Collection.by_name_and_protocol(
             session,
             self.fresh_id() + " (collection for scoped session)",
-            ExternalIntegration.OPDS_IMPORT,
+            OPDSAPI.label(),
         )
         settings = OPDSAPI.settings_class()(
             external_account_id="http://url.com", data_source="OPDS"
