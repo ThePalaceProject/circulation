@@ -15,6 +15,7 @@ from api.lanes import create_default_lanes
 from core.classifier import Classifier
 from core.config import Configuration, ConfigurationConstants
 from core.external_search import ExternalSearchIndex, Filter
+from core.integration.goals import Goals
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
 from core.model import (
@@ -1269,14 +1270,15 @@ class TestShowIntegrationsScript:
         assert "No integrations found.\n" == output.getvalue()
 
     def test_with_multiple_integrations(self, db: DatabaseTransactionFixture):
-        i1 = db.external_integration(
-            name="Integration 1", goal="Goal", protocol=ExternalIntegration.OVERDRIVE
+        i1 = db.integration_configuration(
+            name="Integration 1", goal=Goals.LICENSE_GOAL, protocol="Test Protocol 1"
         )
-        i1.password = "a"
-        i2 = db.external_integration(
-            name="Integration 2", goal="Goal", protocol=ExternalIntegration.BIBLIOTHECA
+        i1.settings_dict = {"url": "http://url1", "username": "user1"}
+
+        i2 = db.integration_configuration(
+            name="Integration 2", goal=Goals.LICENSE_GOAL, protocol="Test Protocol 2"
         )
-        i2.password = "b"
+        i2.settings_dict = {"url": "http://url2", "password": "password"}
 
         # The output of this script is the result of running explain()
         # on both integrations.
@@ -1285,14 +1287,14 @@ class TestShowIntegrationsScript:
         expect_1 = "\n".join(i1.explain(include_secrets=False))
         expect_2 = "\n".join(i2.explain(include_secrets=False))
 
-        assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
+        assert expect_1 + "\n\n" + expect_2 + "\n\n" == output.getvalue()
 
         # We can tell the script to only list a single integration.
         output = StringIO()
         ShowIntegrationsScript().do_run(
             db.session, cmd_args=["--name=Integration 2"], output=output
         )
-        assert expect_2 + "\n" == output.getvalue()
+        assert expect_2 + "\n\n" == output.getvalue()
 
         # We can tell the script to include the integration secrets
         output = StringIO()
@@ -1301,7 +1303,7 @@ class TestShowIntegrationsScript:
         )
         expect_1 = "\n".join(i1.explain(include_secrets=True))
         expect_2 = "\n".join(i2.explain(include_secrets=True))
-        assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
+        assert expect_1 + "\n\n" + expect_2 + "\n\n" == output.getvalue()
 
 
 class TestShowLanesScript:

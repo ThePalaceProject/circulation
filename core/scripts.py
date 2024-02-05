@@ -8,8 +8,9 @@ import sys
 import traceback
 import unicodedata
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from enum import Enum
+from typing import TextIO
 
 from sqlalchemy import and_, exists, or_, select, tuple_
 from sqlalchemy.orm import Query, Session, defer
@@ -31,7 +32,6 @@ from core.model import (
     CustomList,
     DataSource,
     Edition,
-    ExternalIntegration,
     Identifier,
     IntegrationConfiguration,
     Library,
@@ -53,7 +53,7 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
-from core.opds_import import OPDSImporter, OPDSImportMonitor
+from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor
 from core.query.customlist import CustomListQueries
 from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
@@ -1126,12 +1126,12 @@ class ShowCollectionsScript(Script):
 
 
 class ShowIntegrationsScript(Script):
-    """Show information about the external integrations on a server."""
+    """Show information about the integrations on a server."""
 
-    name = "List the external integrations on this server."
+    name = "List the integrations on this server."
 
     @classmethod
-    def arg_parser(cls):
+    def arg_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser()
         parser.add_argument(
             "--name",
@@ -1144,14 +1144,19 @@ class ShowIntegrationsScript(Script):
         )
         return parser
 
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
+    def do_run(
+        self,
+        _db: Session | None = None,
+        cmd_args: Sequence[str] | None = None,
+        output: TextIO = sys.stdout,
+    ) -> None:
         _db = _db or self._db
         args = self.parse_command_line(_db, cmd_args=cmd_args)
         if args.name:
             name = args.name
-            integration = get_one(_db, ExternalIntegration, name=name)
+            integration = get_one(_db, IntegrationConfiguration, name=name)
             if not integration:
-                integration = get_one(_db, ExternalIntegration, id=name)
+                integration = get_one(_db, IntegrationConfiguration, id=name)
             if integration:
                 integrations = [integration]
             else:
@@ -1159,8 +1164,8 @@ class ShowIntegrationsScript(Script):
                 integrations = []
         else:
             integrations = (
-                _db.query(ExternalIntegration)
-                .order_by(ExternalIntegration.name, ExternalIntegration.id)
+                _db.query(IntegrationConfiguration)
+                .order_by(IntegrationConfiguration.name)
                 .all()
             )
         if not integrations:
@@ -1169,7 +1174,7 @@ class ShowIntegrationsScript(Script):
             output.write(
                 "\n".join(integration.explain(include_secrets=args.show_secrets))
             )
-            output.write("\n")
+            output.write("\n\n")
 
 
 class ConfigureCollectionScript(ConfigurationSettingScript):
@@ -1184,12 +1189,15 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
 
     @classmethod
     def arg_parser(cls, _db):
+        registry = LicenseProvidersRegistry()
+        protocols = [protocol for protocol, _ in registry]
+
         parser = argparse.ArgumentParser()
         parser.add_argument("--name", help="Name of the collection", required=True)
         parser.add_argument(
             "--protocol",
             help='Protocol to use to get the licenses. Possible values: "%s"'
-            % ('", "'.join(ExternalIntegration.LICENSE_PROTOCOLS)),
+            % ('", "'.join(protocols)),
         )
         parser.add_argument(
             "--external-account-id",
@@ -1913,7 +1921,7 @@ class OPDSImportScript(CollectionInputScript):
 
     IMPORTER_CLASS = OPDSImporter
     MONITOR_CLASS: type[OPDSImportMonitor] = OPDSImportMonitor
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL = OPDSAPI.label()
 
     def __init__(
         self,
