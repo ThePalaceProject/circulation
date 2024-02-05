@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest import mock
 
 import feedparser
@@ -987,8 +988,9 @@ class TestCustomListsController:
         assert response["successes"] == 0
 
     def test_share_locally_with_entry_with_missing_work(
-        self, admin_librarian_fixture: AdminLibrarianFixture
+        self, admin_librarian_fixture: AdminLibrarianFixture, caplog
     ):
+        caplog.set_level(logging.WARN, "core.query.customlist.CustomListQueries")
         s = self._setup_share_locally(admin_librarian_fixture)
         s.collection1.libraries.append(s.shared_with)
 
@@ -1003,8 +1005,22 @@ class TestCustomListsController:
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
+
         assert response["failures"] == 1  # The default library
         assert response["successes"] == 1
+        messages = caplog.messages
+        assert (
+            len(
+                [
+                    x
+                    for x in messages
+                    if x.__contains__(
+                        "This list contains 1 entry without an associated work"
+                    )
+                ]
+            )
+            == 1
+        )
 
     def test_share_locally_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Does the GET method fetch shared lists"""

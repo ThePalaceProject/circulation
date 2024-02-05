@@ -74,7 +74,7 @@ class CustomListQueries(LoggerMixin):
 
         if missing_work_id_count > 0:
             log.warning(
-                f"This list contains {missing_work_id_count}  {'entries' if missing_work_id_count > 1 else 'entry'} "
+                f"This list contains {missing_work_id_count} {'entries' if missing_work_id_count > 1 else 'entry'} "
                 f"without an associated work. "
             )
         customlist.shared_locally_with_libraries.append(library)
