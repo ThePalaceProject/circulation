@@ -970,8 +970,9 @@ class TestCustomListsController:
         assert response["failures"] == 1  # The default library
 
     def test_share_locally_with_invalid_entries(
-        self, admin_librarian_fixture: AdminLibrarianFixture
+        self, admin_librarian_fixture: AdminLibrarianFixture, caplog
     ):
+        caplog.set_level(logging.INFO, "core.query.customlist.CustomListQueries")
         s = self._setup_share_locally(admin_librarian_fixture)
         s.collection1.libraries.append(s.shared_with)
 
@@ -987,10 +988,17 @@ class TestCustomListsController:
         assert response["failures"] == 2
         assert response["successes"] == 0
 
+        assert self.message_found_n_times(
+            caplog, "This list contains 1 entry without an associated work", 0
+        )
+        assert self.message_found_n_times(
+            caplog, "Unable to share customlist: No license for work", 1
+        )
+
     def test_share_locally_with_entry_with_missing_work(
         self, admin_librarian_fixture: AdminLibrarianFixture, caplog
     ):
-        caplog.set_level(logging.WARN, "core.query.customlist.CustomListQueries")
+        caplog.set_level(logging.INFO, "core.query.customlist.CustomListQueries")
         s = self._setup_share_locally(admin_librarian_fixture)
         s.collection1.libraries.append(s.shared_with)
 
@@ -1008,18 +1016,22 @@ class TestCustomListsController:
 
         assert response["failures"] == 1  # The default library
         assert response["successes"] == 1
-        messages = caplog.messages
-        assert (
+        assert self.message_found_n_times(
+            caplog, "This list contains 1 entry without an associated work", 1
+        )
+
+    def message_found_n_times(self, caplog, message: str, occurrences: int = 1):
+        return (
             len(
                 [
                     x
-                    for x in messages
+                    for x in caplog.messages
                     if x.__contains__(
-                        "This list contains 1 entry without an associated work"
+                        message,
                     )
                 ]
             )
-            == 1
+            == occurrences
         )
 
     def test_share_locally_get(self, admin_librarian_fixture: AdminLibrarianFixture):
