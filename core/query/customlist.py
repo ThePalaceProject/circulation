@@ -43,7 +43,20 @@ class CustomListQueries(LoggerMixin):
         # All entries must be valid for the library
         library_collection_ids = [c.id for c in library.collections]
         entry: CustomListEntry
+        missing_work_id_count = 0
         for entry in customlist.entries:
+            # It appears that many many lists have entries without works.
+            # see https://ebce-lyrasis.atlassian.net/browse/PP-708 for the full story.
+            # Because of this frequently occurring condition, lists are quietly not shared
+            # with the majority of libraries causing confusion for our users.  As it stands
+            # there is nothing that prevents lists with work-less entries that have already been
+            # shared from being unshared.  So for the time being the least intrusive intervention
+            # for enabling sharing to work again for many existing lists would be to relax the
+            # validation when an entry does not have an associated work.
+            if not entry.work:
+                missing_work_id_count += 1
+                continue
+
             valid_license = (
                 _db.query(LicensePool)
                 .filter(
@@ -53,17 +66,17 @@ class CustomListQueries(LoggerMixin):
                 .first()
             )
             if valid_license is None:
-                if entry.work:
-                    log.info(
-                        f"Unable to share customlist: No license for work '{entry.work.title}'."
-                    )
-                else:
-                    log.info(
-                        f"Unable to share customlist: No work associated with custom list entry where entry.id = {entry.id}"
-                    )
+                log.info(
+                    f"Unable to share customlist: No license for work '{entry.work.title}'."
+                )
 
                 return CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
 
+        if missing_work_id_count > 0:
+            log.warning(
+                f"This list contains {missing_work_id_count} {'entries' if missing_work_id_count > 1 else 'entry'} "
+                f"without an associated work. "
+            )
         customlist.shared_locally_with_libraries.append(library)
         log.info(
             f"Successfully shared customlist '{customlist.name}' with library '{library.name}'."
