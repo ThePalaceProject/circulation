@@ -45,7 +45,6 @@ from core.scripts import (
     CollectionArgumentsScript,
     CollectionInputScript,
     ConfigureCollectionScript,
-    ConfigureIntegrationScript,
     ConfigureLaneScript,
     ConfigureLibraryScript,
     ConfigureSiteScript,
@@ -1303,68 +1302,6 @@ class TestShowIntegrationsScript:
         expect_1 = "\n".join(i1.explain(include_secrets=True))
         expect_2 = "\n".join(i2.explain(include_secrets=True))
         assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
-
-
-class TestConfigureIntegrationScript:
-    def test_load_integration(self, db: DatabaseTransactionFixture):
-        m = ConfigureIntegrationScript._integration
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, None, None, "protocol", None)
-        assert (
-            "An integration must by identified by either ID, name, or the combination of protocol and goal."
-            in str(excinfo.value)
-        )
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, "notanid", None, None, None)
-        assert "No integration with ID notanid." in str(excinfo.value)
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, None, "Unknown integration", None, None)
-        assert (
-            'No integration with name "Unknown integration". To create it, you must also provide protocol and goal.'
-            in str(excinfo.value)
-        )
-
-        integration = db.external_integration(protocol="Protocol", goal="Goal")
-        integration.name = "An integration"
-        assert integration == m(db.session, integration.id, None, None, None)
-
-        assert integration == m(db.session, None, integration.name, None, None)
-
-        assert integration == m(db.session, None, None, "Protocol", "Goal")
-
-        # An integration may be created given a protocol and goal.
-        integration2 = m(db.session, None, "I exist now", "Protocol", "Goal2")
-        assert integration2 != integration
-        assert "Protocol" == integration2.protocol
-        assert "Goal2" == integration2.goal
-        assert "I exist now" == integration2.name
-
-    def test_add_settings(self, db: DatabaseTransactionFixture):
-        script = ConfigureIntegrationScript()
-        output = StringIO()
-
-        script.do_run(
-            db.session,
-            [
-                "--protocol=aprotocol",
-                "--goal=agoal",
-                "--setting=akey=avalue",
-            ],
-            output,
-        )
-
-        # An ExternalIntegration was created and configured.
-        integration = get_one(
-            db.session, ExternalIntegration, protocol="aprotocol", goal="agoal"
-        )
-
-        expect_output = (
-            "Configuration settings stored.\n" + "\n".join(integration.explain()) + "\n"
-        )
-        assert expect_output == output.getvalue()
 
 
 class TestShowLanesScript:

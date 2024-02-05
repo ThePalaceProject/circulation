@@ -896,16 +896,6 @@ class ConfigurationSettingScript(Script):
         """
         parser.add_argument("--setting", help=help, action="append")
 
-    def apply_settings(self, settings, obj):
-        """Treat `settings` as a list of command-line argument settings,
-        and apply each one to `obj`.
-        """
-        if not settings:
-            return None
-        for setting in settings:
-            key, value = self._parse_setting(setting)
-            obj.setting(key).value = value
-
 
 class RunSelfTestsScript(LibraryInputScript):
     """Run the self-tests for every collection in the given library
@@ -1277,7 +1267,7 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
             settings["password"] = args.password
         if args.setting:
             for setting in args.setting:
-                key, value = ConfigurationSettingScript._parse_setting(setting)
+                key, value = self._parse_setting(setting)
                 settings[key] = value
         config.settings_dict = settings
 
@@ -1296,89 +1286,6 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
         _db.commit()
         output.write("Configuration settings stored.\n")
         output.write("\n".join(collection.explain()))
-        output.write("\n")
-
-
-class ConfigureIntegrationScript(ConfigurationSettingScript):
-    """Create a integration or change its settings."""
-
-    name = "Create a site-wide integration or change an integration's settings"
-
-    @classmethod
-    def parse_command_line(cls, _db=None, cmd_args=None):
-        parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
-
-    @classmethod
-    def arg_parser(cls, _db):
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-            "--name",
-            help="Name of the integration",
-        )
-        parser.add_argument(
-            "--id",
-            help="ID of the integration, if it has no name",
-        )
-        parser.add_argument(
-            "--protocol",
-            help="Protocol used by the integration.",
-        )
-        parser.add_argument(
-            "--goal",
-            help="Goal of the integration",
-        )
-        cls.add_setting_argument(
-            parser,
-            'Set a configuration value on the integration. Format: --setting="key=value"',
-        )
-        return parser
-
-    @classmethod
-    def _integration(self, _db, id, name, protocol, goal):
-        """Find or create the ExternalIntegration referred to."""
-        if not id and not name and not (protocol and goal):
-            raise ValueError(
-                "An integration must by identified by either ID, name, or the combination of protocol and goal."
-            )
-        integration = None
-        if id:
-            integration = get_one(
-                _db, ExternalIntegration, ExternalIntegration.id == id
-            )
-            if not integration:
-                raise ValueError("No integration with ID %s." % id)
-        if name:
-            integration = get_one(_db, ExternalIntegration, name=name)
-            if not integration and not (protocol and goal):
-                raise ValueError(
-                    'No integration with name "%s". To create it, you must also provide protocol and goal.'
-                    % name
-                )
-        if not integration and (protocol and goal):
-            integration, is_new = get_one_or_create(
-                _db, ExternalIntegration, protocol=protocol, goal=goal
-            )
-        if name:
-            integration.name = name
-        return integration
-
-    def do_run(self, _db=None, cmd_args=None, output=sys.stdout):
-        _db = _db or self._db
-        args = self.parse_command_line(_db, cmd_args=cmd_args)
-
-        # Find or create the integration
-        protocol = None
-        id = args.id
-        name = args.name
-        protocol = args.protocol
-        goal = args.goal
-        integration = self._integration(_db, id, name, protocol, goal)
-        self.apply_settings(args.setting, integration)
-        site_configuration_has_changed(_db)
-        _db.commit()
-        output.write("Configuration settings stored.\n")
-        output.write("\n".join(integration.explain()))
         output.write("\n")
 
 
