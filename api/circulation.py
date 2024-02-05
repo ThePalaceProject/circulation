@@ -599,6 +599,11 @@ class BaseCirculationAPI(
         self._integration_configuration_id = collection.integration_configuration.id
         self.collection_id = collection.id
 
+        if collection.protocol != self.label():
+            raise ValueError(
+                f"Collection protocol {collection.protocol} pass into wrong API class {self.__class__.__name__}."
+            )
+
     @property
     def collection(self) -> Collection | None:
         if self.collection_id is None:

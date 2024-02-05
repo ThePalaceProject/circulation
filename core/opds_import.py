@@ -650,7 +650,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     from external content servers.
     """
 
-    NAME = ExternalIntegration.OPDS_IMPORT
+    NAME = OPDSAPI.label()
     DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
 
     # Subclasses of OPDSImporter may define a different parser class that's
@@ -1669,7 +1669,7 @@ class OPDSImportMonitor(CollectionMonitor):
 
     # The protocol this Monitor works with. Subclasses that
     # specialize OPDS import should override this.
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL = OPDSAPI.label()
 
     def __init__(
         self,

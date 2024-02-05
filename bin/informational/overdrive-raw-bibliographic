@@ -15,9 +15,7 @@ from core.scripts import IdentifierInputScript  # noqa: E402
 class OverdriveRawBibliographicScript(IdentifierInputScript):
     def run(self):
         args = self.parse_command_line(self._db)
-        for collection in Collection.by_protocol(
-            self._db, ExternalIntegration.OVERDRIVE
-        ):
+        for collection in Collection.by_protocol(self._db, OverdriveAPI.label()):
             overdrive = OverdriveAPI(self._db, collection)
             for identifier in args.identifiers:
                 data = overdrive.metadata_lookup(identifier)

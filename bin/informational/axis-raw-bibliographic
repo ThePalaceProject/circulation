@@ -14,9 +14,7 @@ from core.scripts import IdentifierInputScript  # noqa: E402
 
 class Axis360RawBibliographicScript(IdentifierInputScript):
     def run(self):
-        for collection in Collection.by_protocol(
-            self._db, ExternalIntegration.AXIS_360
-        ):
+        for collection in Collection.by_protocol(self._db, Axis360API.label()):
             api = Axis360API(self._db, collection)
             args = self.parse_command_line(self._db)
             for identifier in args.identifiers:

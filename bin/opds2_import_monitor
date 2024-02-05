@@ -8,7 +8,6 @@ package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
 
 
-from core.model import ExternalIntegration
 from core.opds2_import import (
     OPDS2Importer,
     OPDS2ImportMonitor,
@@ -20,7 +19,7 @@ from core.scripts import OPDSImportScript
 import_script = OPDSImportScript(
     importer_class=OPDS2Importer,
     monitor_class=OPDS2ImportMonitor,
-    protocol=ExternalIntegration.OPDS2_IMPORT,
+    protocol=OPDS2Importer.NAME,
     parser=RWPMManifestParser(PalaceOPDS2FeedParserFactory()),
 )
 

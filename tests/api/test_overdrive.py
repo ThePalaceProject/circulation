@@ -42,7 +42,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -465,7 +464,7 @@ class TestOverdriveAPI:
 
         # Here's a regular Overdrive collection.
         main = transaction.collection(
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             external_account_id="1",
         )
         DatabaseTransactionFixture.set_settings(
@@ -498,7 +497,7 @@ class TestOverdriveAPI:
         # Here's an Overdrive Advantage collection associated with the
         # main Overdrive collection.
         child = transaction.collection(
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             external_account_id="2",
         )
         child.parent = main
@@ -3746,7 +3745,7 @@ class TestOverdriveAdvantageAccount:
         # So, create a Collection to be the parent.
         parent = transaction.collection(
             name="Parent",
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             external_account_id="parent_id",
         )
 
@@ -3758,9 +3757,8 @@ class TestOverdriveAdvantageAccount:
             collection.integration_configuration.settings_dict["external_account_id"]
             == account.library_id
         )
-        assert ExternalIntegration.OVERDRIVE == collection.protocol
+        assert OverdriveAPI.label() == collection.protocol
         assert Goals.LICENSE_GOAL == collection.integration_configuration.goal
-        assert ExternalIntegration.OVERDRIVE == collection.protocol
 
         # To ensure uniqueness, the collection was named after its
         # parent.

@@ -70,9 +70,9 @@ from core.model import (
     Contributor,
     Credential,
     DataSource,
+    DataSourceConstants,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     IntegrationConfiguration,
@@ -348,7 +348,7 @@ class OverdriveAPI(
 
     @classmethod
     def label(cls):
-        return ExternalIntegration.OVERDRIVE
+        return DataSourceConstants.OVERDRIVE
 
     @classmethod
     def description(cls):
@@ -356,11 +356,6 @@ class OverdriveAPI(
 
     def __init__(self, _db, collection):
         super().__init__(_db, collection)
-        if collection.protocol != ExternalIntegration.OVERDRIVE:
-            raise ValueError(
-                "Collection protocol is %s, but passed into OverdriveAPI!"
-                % collection.protocol
-            )
 
         if collection.parent:
             # This is an Overdrive Advantage account.
@@ -1934,7 +1929,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     MAXIMUM_BOOK_RETRIES = 3
     SERVICE_NAME = "Overdrive Circulation Monitor"
-    PROTOCOL = ExternalIntegration.OVERDRIVE
+    PROTOCOL = OverdriveAPI.label()
     OVERLAP = datetime.timedelta(minutes=1)
 
     @inject
@@ -2052,7 +2047,7 @@ class OverdriveCollectionReaper(IdentifierSweepMonitor):
     """
 
     SERVICE_NAME = "Overdrive Collection Reaper"
-    PROTOCOL = ExternalIntegration.OVERDRIVE
+    PROTOCOL = OverdriveAPI.label()
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
         super().__init__(_db, collection)
@@ -2105,7 +2100,7 @@ class OverdriveFormatSweep(IdentifierSweepMonitor):
 
     SERVICE_NAME = "Overdrive Format Sweep"
     DEFAULT_BATCH_SIZE = 25
-    PROTOCOL = ExternalIntegration.OVERDRIVE
+    PROTOCOL = OverdriveAPI.label()
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
         super().__init__(_db, collection)
@@ -2816,7 +2811,7 @@ class OverdriveAdvantageAccount:
             select(Collection)
             .join(IntegrationConfiguration)
             .where(
-                IntegrationConfiguration.protocol == ExternalIntegration.OVERDRIVE,
+                IntegrationConfiguration.protocol == OverdriveAPI.label(),
                 IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
                 IntegrationConfiguration.settings_dict.contains(
                     {"external_account_id": self.parent_library_id}
@@ -2834,7 +2829,7 @@ class OverdriveAdvantageAccount:
             .join(IntegrationConfiguration)
             .where(
                 Collection.parent_id == parent.id,
-                IntegrationConfiguration.protocol == ExternalIntegration.OVERDRIVE,
+                IntegrationConfiguration.protocol == OverdriveAPI.label(),
                 IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
                 IntegrationConfiguration.settings_dict.contains(
                     {"external_account_id" == self.library_id}
@@ -2844,9 +2839,7 @@ class OverdriveAdvantageAccount:
 
         if child is None:
             # The child doesn't exist yet. Create it.
-            child, _ = Collection.by_name_and_protocol(
-                _db, name, ExternalIntegration.OVERDRIVE
-            )
+            child, _ = Collection.by_name_and_protocol(_db, name, OverdriveAPI.label())
             child.parent = parent
             child_settings = OverdriveChildSettings.construct(
                 external_account_id=self.library_id
@@ -2872,7 +2865,7 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
 
     SERVICE_NAME = "Overdrive Bibliographic Coverage Provider"
     DATA_SOURCE_NAME = DataSource.OVERDRIVE
-    PROTOCOL = ExternalIntegration.OVERDRIVE
+    PROTOCOL = OverdriveAPI.label()
     INPUT_IDENTIFIER_TYPES = Identifier.OVERDRIVE_ID
 
     def __init__(self, collection, api_class=OverdriveAPI, **kwargs):
@@ -2945,9 +2938,7 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
         parsed = GenerateOverdriveAdvantageAccountList.parse_command_line(
             _db=self._db, *args, **kwargs
         )
-        query: Query = Collection.by_protocol(
-            self._db, protocol=ExternalIntegration.OVERDRIVE
-        )
+        query: Query = Collection.by_protocol(self._db, protocol=OverdriveAPI.label())
         for collection in query.filter(Collection.parent_id == None):
             api = self._create_overdrive_api(collection=collection)
             client_key = api.client_key().decode()
@@ -3045,7 +3036,7 @@ class OverdriveAdvantageAccountListScript(Script):
         """Explain every Overdrive collection and, for each one, all of its
         Advantage collections.
         """
-        collections = Collection.by_protocol(self._db, ExternalIntegration.OVERDRIVE)
+        collections = Collection.by_protocol(self._db, OverdriveAPI.label())
         for collection in collections:
             self.explain_main_collection(collection)
             print()

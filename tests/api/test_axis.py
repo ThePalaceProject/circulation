@@ -52,14 +52,12 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LinkRelations,
     MediaTypes,
     Representation,
     Subject,
-    create,
 )
 from core.scripts import RunCollectionCoverageProviderScript
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -870,13 +868,6 @@ class TestCirculationMonitor:
         assert "Modified titles: 2." == progress.achievements
 
     def test_process_book(self, axis360: Axis360Fixture):
-        integration, ignore = create(
-            axis360.db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
-        )
-
         monitor = Axis360CirculationMonitor(
             axis360.db.session,
             axis360.collection,

@@ -56,7 +56,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -224,6 +223,8 @@ class OPDS2ImporterLibrarySettings(OPDSImporterLibrarySettings):
 
 
 class OPDS2API(BaseOPDSAPI):
+    TOKEN_AUTH_CONFIG_KEY = "token_auth_endpoint"
+
     @classmethod
     def settings_class(cls) -> type[OPDS2ImporterSettings]:
         return OPDS2ImporterSettings
@@ -243,9 +244,7 @@ class OPDS2API(BaseOPDSAPI):
     def __init__(self, _db: Session, collection: Collection):
         super().__init__(_db, collection)
         self.token_auth_configuration: str | None = (
-            collection.integration_configuration.context.get(
-                ExternalIntegration.TOKEN_AUTH
-            )
+            collection.integration_configuration.context.get(self.TOKEN_AUTH_CONFIG_KEY)
         )
 
     @classmethod
@@ -322,7 +321,7 @@ class OPDS2API(BaseOPDSAPI):
 class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
     """Imports editions and license pools from an OPDS 2.0 feed."""
 
-    NAME: str = ExternalIntegration.OPDS2_IMPORT
+    NAME: str = OPDS2API.label()
     DESCRIPTION: str = _("Import books from a publicly-accessible OPDS 2.0 feed.")
     NEXT_LINK_RELATION: str = "next"
 
@@ -1077,7 +1076,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
                 # Save the collection-wide token authentication endpoint
                 self.collection.integration_configuration.context_update(
-                    {ExternalIntegration.TOKEN_AUTH: link.href}
+                    {OPDS2API.TOKEN_AUTH_CONFIG_KEY: link.href}
                 )
 
     def extract_feed_data(
@@ -1137,7 +1136,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
 
 class OPDS2ImportMonitor(OPDSImportMonitor):
-    PROTOCOL = ExternalIntegration.OPDS2_IMPORT
+    PROTOCOL = OPDS2API.label()
     MEDIA_TYPE = OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
 
     def _verify_media_type(

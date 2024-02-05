@@ -463,7 +463,7 @@ class TestOPDS2Importer(OPDS2Test):
             content
         )
         token_endpoint = data.collection.integration_configuration.context.get(
-            ExternalIntegration.TOKEN_AUTH
+            OPDS2API.TOKEN_AUTH_CONFIG_KEY
         )
 
         # Did the token endpoint get stored correctly?
@@ -479,7 +479,7 @@ class Opds2ApiFixture:
             external_account_id="http://opds2.example.org/feed",
         )
         self.collection.integration_configuration.context = {
-            ExternalIntegration.TOKEN_AUTH: "http://example.org/token?userName={patron_id}"
+            OPDS2API.TOKEN_AUTH_CONFIG_KEY: "http://example.org/token?userName={patron_id}"
         }
 
         self.mock_response = MagicMock(spec=Response)

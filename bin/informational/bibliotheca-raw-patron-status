@@ -21,9 +21,7 @@ class BibliothecaRawPatronStatusScript(Script):
                 .one()
             )
 
-            for collection in Collection.by_protocol(
-                self._db, ExternalIntegration.BIBLIOTHECA
-            ):
+            for collection in Collection.by_protocol(self._db, BibliothecaAPI.label()):
                 api = BibliothecaAPI(self._db, collection)
                 response = api._patron_activity_request(patron)
                 xml = minidom.parseString(response.content)
