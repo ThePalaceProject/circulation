@@ -14,11 +14,12 @@ from api.admin.templates import (
 )
 from core.model import Admin, Key
 from core.model.key import KeyType
-from core.util.email import EmailManager
+from core.service.email.email import SendEmailCallable
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 
-class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
+class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMixin):
     NAME = "Password Auth"
 
     SIGN_IN_TEMPLATE = sign_in_template.format(
@@ -32,6 +33,9 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
     RESET_PASSWORD_TEMPLATE = reset_password_template.format(
         label=label_style, input=input_style, button=button_style
     )
+
+    def __init__(self, send_email: SendEmailCallable):
+        self.send_email = send_email
 
     @staticmethod
     def get_secret_key(db: Session) -> str:
@@ -98,6 +102,13 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
 
     def send_reset_password_email(self, admin: Admin, reset_password_url: str) -> None:
         subject = f"{AdminClientConfig.APP_NAME} - Reset password email"
+        if admin.email is None:
+            # This should never happen, but if it does, we should log it.
+            self.log.error(
+                "Admin has no email address, cannot send reset password email."
+            )
+            return
+
         receivers = [admin.email]
 
         mail_text = render_template_string(
@@ -111,7 +122,9 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
             reset_password_url=reset_password_url,
         )
 
-        EmailManager.send_email(subject, receivers, text=mail_text, html=mail_html)
+        self.send_email(
+            subject=subject, receivers=receivers, text=mail_text, html=mail_html
+        )
 
     def validate_token_and_extract_admin(
         self, reset_password_token: str, admin_id: int, _db: Session

@@ -15,6 +15,8 @@ from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchServiceOpensearch1
 from core.service.analytics.container import AnalyticsContainer
 from core.service.container import Services, wire_container
+from core.service.email.configuration import EmailConfiguration
+from core.service.email.container import Email
 from core.service.logging.container import Logging
 from core.service.logging.log import setup_logging
 from core.service.search.container import Search
@@ -109,6 +111,23 @@ def services_analytics_fixture() -> ServicesAnalyticsFixture:
     return ServicesAnalyticsFixture(analytics_container, analytics_mock)
 
 
+@dataclass
+class ServicesEmailFixture:
+    email_container: Email
+    mock_emailer: MagicMock
+    sender_email: str
+
+
+@pytest.fixture
+def services_email_fixture() -> ServicesEmailFixture:
+    email_container = Email()
+    sender_email = "test@email.com"
+    email_container.config.from_dict(EmailConfiguration(sender=sender_email).dict())
+    mock_emailer = MagicMock()
+    email_container.emailer.override(mock_emailer)
+    return ServicesEmailFixture(email_container, mock_emailer, sender_email)
+
+
 class ServicesFixture:
     """
     Provide a real services container, with all services mocked out.
@@ -120,17 +139,20 @@ class ServicesFixture:
         storage: ServicesStorageFixture,
         search: ServicesSearchFixture,
         analytics: ServicesAnalyticsFixture,
+        email: ServicesEmailFixture,
     ) -> None:
         self.logging_fixture = logging
         self.storage_fixture = storage
         self.search_fixture = search
         self.analytics_fixture = analytics
+        self.email_fixture = email
 
         self.services = Services()
         self.services.logging.override(logging.logging_container)
         self.services.storage.override(storage.storage_container)
         self.services.search.override(search.search_container)
         self.services.analytics.override(analytics.analytics_container)
+        self.services.email.override(email.email_container)
 
         # setup basic configuration from default settings
         self.services.config.from_dict({"sitewide": SitewideConfiguration().dict()})
@@ -166,12 +188,14 @@ def services_fixture(
     services_storage_fixture: ServicesStorageFixture,
     services_search_fixture: ServicesSearchFixture,
     services_analytics_fixture: ServicesAnalyticsFixture,
+    services_email_fixture: ServicesEmailFixture,
 ) -> Generator[ServicesFixture, None, None]:
     fixture = ServicesFixture(
         logging=services_logging_fixture,
         storage=services_storage_fixture,
         search=services_search_fixture,
         analytics=services_analytics_fixture,
+        email=services_email_fixture,
     )
     with mock_services_container(fixture.services):
         yield fixture

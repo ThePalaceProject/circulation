@@ -1,14 +1,36 @@
+from unittest.mock import create_autospec
+
+import pytest
+
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
 from api.admin.problem_details import *
 from core.model import Admin, create
+from core.service.email.email import send_email
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
+class PasswordAdminAuthenticationProviderFixture:
+    def __init__(self):
+        self.mock_send_email = create_autospec(send_email)
+        self.password_auth = PasswordAdminAuthenticationProvider(
+            send_email=self.mock_send_email
+        )
+
+
+@pytest.fixture
+def password_auth_provider() -> PasswordAdminAuthenticationProviderFixture:
+    return PasswordAdminAuthenticationProviderFixture()
+
+
 class TestPasswordAdminAuthenticationProvider:
-    def test_sign_in(self, db: DatabaseTransactionFixture):
-        password_auth = PasswordAdminAuthenticationProvider()
+    def test_sign_in(
+        self,
+        db: DatabaseTransactionFixture,
+        password_auth_provider: PasswordAdminAuthenticationProviderFixture,
+    ):
+        password_auth = password_auth_provider.password_auth
 
         # There are two admins with passwords.
         admin1, ignore = create(db.session, Admin, email="admin1@example.org")
@@ -77,8 +99,12 @@ class TestPasswordAdminAuthenticationProvider:
             )
             assert redirect == "/admin/web"
 
-    def test_sign_in_case_insensitive(self, db: DatabaseTransactionFixture):
-        password_auth = PasswordAdminAuthenticationProvider()
+    def test_sign_in_case_insensitive(
+        self,
+        db: DatabaseTransactionFixture,
+        password_auth_provider: PasswordAdminAuthenticationProviderFixture,
+    ):
+        password_auth = password_auth_provider.password_auth
 
         # There are two admins with passwords.
         admin1, ignore = create(db.session, Admin, email="admin1@example.org")

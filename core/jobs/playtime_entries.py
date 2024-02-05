@@ -19,7 +19,6 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier, RecursiveEquivalencyCache
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import previous_months, utc_now
-from core.util.email import EmailManager
 from scripts import Script
 
 if TYPE_CHECKING:
@@ -207,8 +206,8 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE
             )
             if recipient:
-                EmailManager.send_email(
-                    email_subject,
+                self.services.email.send_email(
+                    subject=email_subject,
                     receivers=[recipient],
                     text="",
                     attachments={attachment_name: temp.read()},
