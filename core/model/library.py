@@ -491,15 +491,7 @@ class Library(Base, HasSessionCache):
         for key, value in self.settings.dict(exclude_defaults=False).items():
             if value is not None:
                 lines.append(f"{key}='{value}'")
-
-        integrations = list(self.integrations)
-        if integrations:
-            lines.append("")
-            lines.append("External integrations:")
-            lines.append("----------------------")
-        for integration in integrations:
-            lines.extend(integration.explain(self, include_secrets=include_secrets))
-            lines.append("")
+        lines.append("")
         return lines
 
     @property

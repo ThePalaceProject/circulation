@@ -1,7 +1,6 @@
 import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
-from core.model.configuration import ConfigurationSetting
 from core.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -150,26 +149,7 @@ class TestLibrary:
         library.library_registry_short_name = "SHORT"
         library.library_registry_shared_secret = "secret"
 
-        integration = db.external_integration("protocol", "goal")
-        integration.url = "http://url/"
-        integration.username = "someuser"
-        integration.password = "somepass"
-        integration.setting("somesetting").value = "somevalue"
-
-        # Different libraries specialize this integration differently.
-        ConfigurationSetting.for_library_and_externalintegration(
-            session, "library-specific", library, integration
-        ).value = "value for library1"
-
-        library2 = db.library()
-        ConfigurationSetting.for_library_and_externalintegration(
-            session, "library-specific", library2, integration
-        ).value = "value for library2"
-
-        library.integrations.append(integration)
-
-        expect = (
-            """Library UUID: "uuid"
+        expect = """Library UUID: "uuid"
 Name: "The Library"
 Short name: "Short"
 Short name (for library registry): "SHORT"
@@ -195,24 +175,12 @@ web_secondary_color='#D53F34'
 web_header_links='[]'
 web_header_labels='[]'
 hidden_content_types='[]'
-
-External integrations:
-----------------------
-ID: %s
-Protocol/Goal: protocol/goal
-library-specific='value for library1' (applies only to The Library)
-somesetting='somevalue'
-url='http://url/'
-username='someuser'
 """
-            % integration.id
-        )
         actual = library.explain()
         assert expect == "\n".join(actual)
 
         with_secrets = library.explain(True)
         assert 'Shared secret (for library registry): "secret"' in with_secrets
-        assert "password='somepass'" in with_secrets
 
     def test_generate_keypair(self, db: DatabaseTransactionFixture):
         # Test the ability to create a public/private key pair
