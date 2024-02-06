@@ -350,17 +350,21 @@ class TestCollection:
 
         data = test_collection.explain()
         assert [
-            'Name: "test collection"',
-            'Protocol: "Overdrive"',
-            'Used by library: "only one"',
-            'Setting "external_account_id": "id"',
-            'Setting "setting": "value"',
-            'Setting "url": "url"',
-            'Setting "username": "username"',
+            f"ID: {test_collection.id}",
+            "Name: test collection",
+            "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
+            "Settings:",
+            "  external_account_id: id",
+            "  password: ********",
+            "  setting: value",
+            "  url: url",
+            "  username: username",
+            "Configured libraries:",
+            "  only one - The only library",
         ] == data
 
         with_password = test_collection.explain(include_secrets=True)
-        assert 'Setting "password": "password"' in with_password
+        assert "  password: password" in with_password
 
         # If the collection is the child of another collection,
         # its parent is mentioned.
@@ -372,10 +376,12 @@ class TestCollection:
         child.parent = test_collection
         data = child.explain()
         assert [
-            'Name: "Child"',
+            f"ID: {child.id}",
+            "Name: Child",
+            "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
             "Parent: test collection",
-            'Protocol: "Overdrive"',
-            'Setting "external_account_id": "id2"',
+            "Settings:",
+            "  external_account_id: id2",
         ] == data
 
     def test_disassociate_libraries(

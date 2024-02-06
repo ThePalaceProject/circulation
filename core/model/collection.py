@@ -21,7 +21,6 @@ from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
 from core.model import Base, create
-from core.model.configuration import ConfigurationSetting
 from core.model.constants import DataSourceConstants, EditionConstants
 from core.model.coverage import CoverageRecord
 from core.model.datasource import DataSource
@@ -476,22 +475,11 @@ class Collection(Base, HasSessionCache):
 
         :return: A list of explanatory strings.
         """
-        lines = []
-        if self.name:
-            lines.append('Name: "%s"' % self.name)
-        if self.parent:
-            lines.append("Parent: %s" % self.parent.name)
         integration = self.integration_configuration
-        if integration.protocol:
-            lines.append('Protocol: "%s"' % integration.protocol)
-        for library in self.libraries:
-            lines.append('Used by library: "%s"' % library.short_name)
-        for name in sorted(integration.settings_dict):
-            value = integration.settings_dict[name]
-            if (
-                include_secrets or not ConfigurationSetting._is_secret(name)
-            ) and value is not None:
-                lines.append(f'Setting "{name}": "{value}"')
+        lines = integration.explain(include_secrets=include_secrets)
+        if self.parent:
+            # Insert the parents name after the integration info but before the rest of the settings.
+            lines.insert(3, f"Parent: {self.parent.name}")
         return lines
 
     @classmethod
