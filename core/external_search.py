@@ -2187,9 +2187,11 @@ class Filter(SearchBase):
     # Below that point, we prefer higher-quality works to
     # lower-quality works, such that a work's score is proportional to
     # the square of its quality.
-    FEATURABLE_SCRIPT = (
-        "Math.pow(Math.min(%(cutoff).5f, doc['quality'].value), %(exponent).5f) * 5"
-    )
+    #
+    # We need work quality to perform the calculation, so we provide
+    # a default, in case the work doesn't have one.
+    FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY = 0.001
+    FEATURABLE_SCRIPT = "Math.pow(Math.min({cutoff:0.5f}, doc['quality'].size() != 0 ? doc['quality'].value : {default_quality}), {exponent:0.5f}) * 5"
 
     # Used in tests to deactivate the random component of
     # featurability_scoring_functions.
@@ -2202,7 +2204,11 @@ class Filter(SearchBase):
 
         exponent = 2
         cutoff = self.minimum_featured_quality**exponent
-        script = self.FEATURABLE_SCRIPT % dict(cutoff=cutoff, exponent=exponent)
+        script = self.FEATURABLE_SCRIPT.format(
+            cutoff=cutoff,
+            exponent=exponent,
+            default_quality=self.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY,
+        )
         quality_field = SF("script_score", script=dict(source=script))
 
         # Currently available works are more featurable.
