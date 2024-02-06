@@ -2581,6 +2581,7 @@ class TestWorkList:
         settings = BibliothecaAPI.library_settings_class()(
             dont_display_reserves=ConfigurationAttributeValue.NOVALUE
         )
+        assert integration1_library_config is not None
         BibliothecaAPI.library_settings_update(integration1_library_config, settings)
         db.session.commit()
 
@@ -2634,6 +2635,7 @@ class TestWorkList:
                 db.default_library()
             )
         )
+        assert alternate_collection_library_config is not None
         BibliothecaAPI.library_settings_update(
             alternate_collection_library_config, settings
         )

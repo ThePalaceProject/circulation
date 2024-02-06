@@ -21,6 +21,7 @@ from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
 from core.model import Base, create
+from core.model.configuration import ConfigurationSetting
 from core.model.constants import DataSourceConstants, EditionConstants
 from core.model.coverage import CoverageRecord
 from core.model.datasource import DataSource

@@ -350,7 +350,7 @@ class TestCollection:
 
         data = test_collection.explain()
         assert [
-            f"ID: {test_collection.id}",
+            f"ID: {test_collection.integration_configuration.id}",
             "Name: test collection",
             "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
             "Settings:",
@@ -376,7 +376,7 @@ class TestCollection:
         child.parent = test_collection
         data = child.explain()
         assert [
-            f"ID: {child.id}",
+            f"ID: {child.integration_configuration.id}",
             "Name: Child",
             "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
             "Parent: test collection",
