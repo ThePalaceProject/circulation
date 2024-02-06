@@ -2058,7 +2058,6 @@ class TestFeaturedFacets:
             search_engine=fixture.external_search_index,
             debug=True,
         )
-        print(only_availability_matters)
         assert 6 == len(only_availability_matters)
         last_two = only_availability_matters[-2:]
         assert data.hq_not_available in last_two
