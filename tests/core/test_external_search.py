@@ -1856,6 +1856,7 @@ class TestFeaturedFacetsData:
     not_featured_on_list: Work
     featured_on_list: Work
     best_seller_list: Work
+    default_quality: Work
 
 
 class TestFeaturedFacets:
@@ -1891,6 +1892,9 @@ class TestFeaturedFacets:
         result.featured_on_list.quality = 0.18
         result.featured_on_list.license_pools[0].licenses_available = 0
 
+        result.default_quality = _work(title="Of default featurability quality")
+        result.default_quality.quality = Filter.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY
+
         result.best_seller_list, ignore = transaction.customlist(num_entries=0)
         result.best_seller_list.add_entry(result.featured_on_list, featured=True)
         result.best_seller_list.add_entry(result.not_featured_on_list)
@@ -1912,8 +1916,10 @@ class TestFeaturedFacets:
 
         # It can be high-quality enough to be featured.
         assert isinstance(featurable, ScriptScore)
-        source = filter.FEATURABLE_SCRIPT % dict(
-            cutoff=f.minimum_featured_quality**2, exponent=2
+        source = filter.FEATURABLE_SCRIPT.format(
+            cutoff=f.minimum_featured_quality**2,
+            exponent=2,
+            default_quality=Filter.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY,
         )
         assert source == featurable.script["source"]
 
@@ -1970,13 +1976,22 @@ class TestFeaturedFacets:
         )
         assert 11 == featured_on_list["weight"]
 
-    def test_run(self, end_to_end_search_fixture: EndToEndSearchFixture):
+    @pytest.mark.parametrize(
+        "default_or_no_quality", [Filter.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY, None]
+    )
+    def test_run(
+        self, end_to_end_search_fixture: EndToEndSearchFixture, default_or_no_quality
+    ):
         fixture = end_to_end_search_fixture
         transaction, session = (
             fixture.external_search.db,
             fixture.external_search.db.session,
         )
         data = self._populate_works(fixture)
+        # Search involving the `default_quality` work should behave identically,
+        # whether it has the default quality or no (i.e., missing) quality.
+        # The missing quality case should not cause an exception during search.
+        data.default_quality.quality = default_or_no_quality
         fixture.populate_search_index()
 
         def works(worklist, facets):
@@ -2043,7 +2058,8 @@ class TestFeaturedFacets:
             search_engine=fixture.external_search_index,
             debug=True,
         )
-        assert 5 == len(only_availability_matters)
+        print(only_availability_matters)
+        assert 6 == len(only_availability_matters)
         last_two = only_availability_matters[-2:]
         assert data.hq_not_available in last_two
         assert data.featured_on_list in last_two
@@ -2072,6 +2088,7 @@ class TestFeaturedFacets:
             [
                 data.hq_available_2,
                 data.hq_available,
+                data.default_quality,
                 data.hq_not_available,
                 data.not_featured_on_list,
                 data.featured_on_list,
