@@ -50,6 +50,7 @@ from core.model import (
     Edition,
     Genre,
     IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     Work,
@@ -2302,12 +2303,15 @@ class DatabaseBackedWorkList(WorkList):
             select(Collection.id)
             .join(
                 IntegrationConfiguration,
-                Collection.integration_configuration_id == IntegrationConfiguration.id,
+            )
+            .join(
+                IntegrationLibraryConfiguration,
             )
             .where(
-                IntegrationConfiguration.settings_dict.contains(
+                IntegrationLibraryConfiguration.library_id == self.library_id,
+                IntegrationLibraryConfiguration.settings_dict.contains(
                     {"dont_display_reserves": ConfigurationAttributeValue.NOVALUE.value}
-                )
+                ),
             )
         ).all()
         restricted_collection_ids = (r.id for r in restricted_collections)

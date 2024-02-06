@@ -21,8 +21,8 @@ from sqlalchemy.sql.expression import and_, or_
 
 from core.integration.goals import Goals
 from core.model import Base, create
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
-from core.model.constants import EditionConstants
+from core.model.configuration import ConfigurationSetting
+from core.model.constants import DataSourceConstants, EditionConstants
 from core.model.coverage import CoverageRecord
 from core.model.datasource import DataSource
 from core.model.edition import Edition
@@ -50,6 +50,13 @@ class Collection(Base, HasSessionCache):
     id = Column(Integer, primary_key=True, nullable=False)
 
     DATA_SOURCE_NAME_SETTING = "data_source"
+    DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
+        DataSourceConstants.OVERDRIVE,
+        DataSourceConstants.BIBLIOTHECA,
+        DataSourceConstants.AXIS_360,
+        DataSourceConstants.ENKI,
+        DataSourceConstants.FEEDBOOKS,
+    ]
 
     # How do we connect to the provider of this collection? Any url,
     # authentication information, or additional configuration goes
@@ -391,7 +398,7 @@ class Collection(Base, HasSessionCache):
         """
         self._set_settings(**{self.DEFAULT_AUDIENCE_KEY: str(new_value)})
 
-    @hybrid_property
+    @property
     def data_source(self) -> DataSource | None:
         """Find the data source associated with this Collection.
 
@@ -407,10 +414,8 @@ class Collection(Base, HasSessionCache):
         """
         data_source = None
         name = None
-        if self.protocol is not None:
-            name = ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL.get(
-                self.protocol
-            )
+        if self.protocol in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
+            name = self.protocol
         if not name:
             name = self.integration_configuration.settings_dict.get(
                 Collection.DATA_SOURCE_NAME_SETTING
@@ -431,7 +436,7 @@ class Collection(Base, HasSessionCache):
 
         # Only set a DataSource for Collections that don't have an
         # implied source.
-        if self.protocol not in ExternalIntegration.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
+        if self.protocol not in self.DATA_SOURCE_FOR_LICENSE_PROTOCOL:
             if new_datasource_name is not None:
                 new_datasource_name = str(new_datasource_name)
             self._set_settings(

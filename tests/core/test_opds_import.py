@@ -29,7 +29,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -43,7 +42,13 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.opds_import import (
+    OPDSAPI,
+    IdentifierSource,
+    OPDSImporter,
+    OPDSImportMonitor,
+    OPDSXMLParser,
+)
 from core.saml.wayfless import SAMLWAYFlessFulfillmentError
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
@@ -248,7 +253,7 @@ class TestOPDSImporter:
 
         collection_to_test = db.collection(
             settings={
-                "primary_identifier_source": ExternalIntegration.DCTERMS_IDENTIFIER,
+                "primary_identifier_source": IdentifierSource.DCTERMS_IDENTIFIER,
             },
             data_source_name="OPDS",
             external_account_id="http://root.uri",

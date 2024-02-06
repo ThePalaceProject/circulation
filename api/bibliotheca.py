@@ -105,7 +105,8 @@ class BibliothecaSettings(BaseCirculationApiSettings):
 
 
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
-    dont_display_reserves: str | None = FormField(
+    dont_display_reserves: ConfigurationAttributeValue = FormField(
+        ConfigurationAttributeValue.YESVALUE,
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
@@ -114,10 +115,10 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                ConfigurationAttributeValue.YESVALUE.value: "Show",
-                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+                ConfigurationAttributeValue.YESVALUE: "Show",
+                ConfigurationAttributeValue.NOVALUE: "Hide",
             },
-        )
+        ),
     )
 
 

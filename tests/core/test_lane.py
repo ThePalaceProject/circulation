@@ -8,6 +8,7 @@ import pytest
 from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
+from api.bibliotheca import BibliothecaAPI
 from core.classifier import Classifier
 from core.config import Configuration
 from core.entrypoint import (
@@ -44,7 +45,7 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationAttributeValue, ExternalIntegration
+from core.model.configuration import ConfigurationAttributeValue
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed
@@ -2576,9 +2577,12 @@ class TestWorkList:
         w1.license_pools[0].licenses_available = 0
         collection1: Collection = w1.license_pools[0].collection
         integration1 = collection1.integration_configuration
-        integration1.settings_dict = {
-            ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
-        }
+        integration1_library_config = integration1.for_library(db.default_library())
+        settings = BibliothecaAPI.library_settings_class()(
+            dont_display_reserves=ConfigurationAttributeValue.NOVALUE
+        )
+        BibliothecaAPI.library_settings_update(integration1_library_config, settings)
+        db.session.commit()
 
         class MockHit:
             def __init__(self, work_id, has_last_update=False):
@@ -2625,9 +2629,14 @@ class TestWorkList:
         assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Now both collections are restricted and have no availability
-        alternate_collection.integration_configuration.settings_dict = {
-            ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
-        }
+        alternate_collection_library_config = (
+            alternate_collection.integration_configuration.for_library(
+                db.default_library()
+            )
+        )
+        BibliothecaAPI.library_settings_update(
+            alternate_collection_library_config, settings
+        )
         assert [[w2], []] == m(db.session, [[hit2], [hit1]])
 
         # Both restricted but one has availability

@@ -24,10 +24,12 @@ from api.admin.problem_details import (
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
     UNKNOWN_PROTOCOL,
 )
+from api.axis import Axis360API
 from api.integration.registry.license_providers import LicenseProvidersRegistry
+from api.odl import ODLAPI
 from api.overdrive import OverdriveAPI
 from api.selftest import HasCollectionSelfTests
-from core.model import AdminRole, Collection, ExternalIntegration, get_one
+from core.model import AdminRole, Collection, get_one
 from core.selftest import HasSelfTests
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.axis import MockAxis360API
@@ -585,15 +587,13 @@ class TestCollectionSettings:
         assert parent == collection.parent
 
         library = db.default_library()
-        collection2 = db.collection(
-            name="Collection 2", protocol=ExternalIntegration.ODL
-        )
+        collection2 = db.collection(name="Collection 2", protocol=ODLAPI.label())
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection2.integration_configuration.id)),
                     ("name", "Collection 2"),
-                    ("protocol", ExternalIntegration.ODL),
+                    ("protocol", ODLAPI.label()),
                     ("external_account_id", "http://test.com/feed"),
                     ("username", "user"),
                     ("password", "password"),
@@ -633,9 +633,7 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        collection = db.collection(
-            name="Collection 1", protocol=ExternalIntegration.AXIS_360
-        )
+        collection = db.collection(name="Collection 1", protocol=Axis360API.label())
 
         l1 = db.library(
             name="Library 1",
@@ -647,7 +645,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", ExternalIntegration.AXIS_360),
+                    ("protocol", Axis360API.label()),
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
@@ -673,7 +671,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", ExternalIntegration.AXIS_360),
+                    ("protocol", Axis360API.label()),
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
