@@ -148,9 +148,9 @@ class Key(Base):
             delete_query = delete_query.where(cls.id.notin_(ids_to_keep))
 
         result = db.execute(delete_query)
-        #     # mypy doesn't recognize the rowcount attribute on the CursorResult
-        #     # since db.execute doesn't always return a CursorResult.
-        #     # The sqlalchemy docs say that the rowcount attribute is always present
-        #     # when doing a DELETE statement, so we can safely ignore this error.
-        #     # https://docs.sqlalchemy.org/en/20/tutorial/data_update.html#getting-affected-row-count-from-update-delete
+        # mypy doesn't recognize the rowcount attribute on the CursorResult
+        # since db.execute doesn't always return a CursorResult.
+        # The sqlalchemy docs say that the rowcount attribute is always present
+        # when doing a DELETE statement, so we can safely ignore this error.
+        # https://docs.sqlalchemy.org/en/20/tutorial/data_update.html#getting-affected-row-count-from-update-delete
         return result.rowcount  # type: ignore[attr-defined]
