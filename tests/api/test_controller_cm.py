@@ -2,7 +2,6 @@ from unittest.mock import MagicMock
 
 from api.authenticator import LibraryAuthenticator
 from api.config import Configuration
-from api.custom_index import CustomIndexView
 from api.problem_details import *
 from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
@@ -51,17 +50,6 @@ class TestCirculationManager:
         library = circulation_fixture.db.library()
         circulation_fixture.library_setup(library)
 
-        # We also register a CustomIndexView for this new library.
-        mock_custom_view = object()
-
-        def mock_for_library(incoming_library):
-            if incoming_library == library:
-                return mock_custom_view
-            return None
-
-        old_for_library = CustomIndexView.for_library
-        CustomIndexView.for_library = mock_for_library
-
         # We also set up some configuration settings that will
         # be loaded.
         ConfigurationSetting.sitewide(
@@ -91,13 +79,6 @@ class TestCirculationManager:
 
         # And a circulation API.
         assert library.id in manager.circulation_apis
-
-        # And a CustomIndexView.
-        assert mock_custom_view == manager.custom_index_views[library.id]
-        assert (
-            None
-            == manager.custom_index_views[circulation_fixture.db.default_library().id]
-        )
 
         # The Authenticator has been reloaded with information about
         # how to authenticate patrons of the new library.
@@ -136,9 +117,6 @@ class TestCirculationManager:
             "http://subdomain.3.com",
             "http://registration",
         } == manager.patron_web_domains
-
-        # Restore the CustomIndexView.for_library implementation
-        CustomIndexView.for_library = old_for_library
 
     def test_annotator(self, circulation_fixture: CirculationControllerFixture):
         # Test our ability to find an appropriate OPDSAnnotator for

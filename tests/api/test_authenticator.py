@@ -40,7 +40,6 @@ from api.authenticator import (
     LibraryAuthenticator,
 )
 from api.config import CannotLoadConfiguration, Configuration
-from api.custom_patron_catalog import CustomPatronCatalog
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
 from api.problem_details import *
@@ -629,34 +628,6 @@ class TestLibraryAuthenticator:
         assert auth.basic_auth_provider is not None
         assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
 
-    def test_with_custom_patron_catalog(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Instantiation of a LibraryAuthenticator may
-        include instantiation of a CustomPatronCatalog.
-        """
-        mock_catalog = object()
-
-        class MockCustomPatronCatalog:
-            @classmethod
-            def for_library(self, library):
-                self.called_with = library
-                return mock_catalog
-
-        authenticator = LibraryAuthenticator.from_config(
-            db.session,
-            db.default_library(),
-            custom_catalog_source=MockCustomPatronCatalog,  # type:ignore
-        )
-        assert (
-            db.default_library() == MockCustomPatronCatalog.called_with  # type:ignore
-        )
-
-        # The custom patron catalog is stored as
-        # authentication_document_annotator.
-        assert mock_catalog == authenticator.authentication_document_annotator
-
     def test_config_succeeds_when_no_providers_configured(
         self,
         db: DatabaseTransactionFixture,
@@ -1048,16 +1019,6 @@ class TestLibraryAuthenticator:
                 basic_auth_provider=basic,
             )
 
-        def annotate_authentication_document(library, doc, url_for):
-            doc["modified"] = "Kilroy was here"
-            return doc
-
-        annotator = MagicMock(spec=CustomPatronCatalog)
-        annotator.annotate_authentication_document = MagicMock(
-            side_effect=annotate_authentication_document
-        )
-        authenticator.authentication_document_annotator = annotator
-
         # We're about to call url_for, so we must create an
         # application context.
         os.environ["AUTOINITIALIZE"] = "False"
@@ -1290,14 +1251,6 @@ class TestLibraryAuthenticator:
             db.session.delete(a4_db)
             doc = json.loads(authenticator.create_authentication_document())
             assert [] == doc["announcements"]
-
-            # The annotator's annotate_authentication_document method
-            # was called and successfully modified the authentication
-            # document.
-            annotator.annotate_authentication_document.assert_called_with(
-                library, doc, url_for
-            )
-            assert "Kilroy was here" == doc["modified"]
 
             # While we're in this context, let's also test
             # create_authentication_headers.
