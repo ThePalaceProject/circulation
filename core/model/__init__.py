@@ -34,10 +34,6 @@ from core.model.constants import (
 # initializes or migrates the database at a time.
 LOCK_ID_DB_INIT = 1000000001
 
-# This is the lock ID used to ensure that only one circulation manager
-# initializes an application instance at a time.
-LOCK_ID_APP_INIT = 1000000002
-
 
 @contextmanager
 def pg_advisory_lock(
