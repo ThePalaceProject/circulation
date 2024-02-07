@@ -524,9 +524,6 @@ class InstanceInitializationScript:
             # Initialize the database with default data
             SessionManager.initialize_data(session)
 
-            # Create a secret key if one doesn't already exist.
-            ConfigurationSetting.sitewide_secret(session, Configuration.SECRET_KEY)
-
         # Stamp the most recent migration as the current state of the DB
         alembic_conf = self._get_alembic_config(connection)
         command.stamp(alembic_conf, "head")

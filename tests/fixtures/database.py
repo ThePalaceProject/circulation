@@ -59,7 +59,6 @@ from core.model.integration import (
 from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
 from core.opds_import import OPDSAPI
 from core.util.datetime_helpers import utc_now
-from core.util.string_helpers import random_string
 
 
 class ApplicationFixture:
@@ -722,7 +721,7 @@ class DatabaseTransactionFixture:
             IntegrationConfiguration,
             protocol=protocol,
             goal=goal,
-            name=(name or random_string(16)),
+            name=(name or self.fresh_str()),
         )
 
         if libraries is None:

@@ -2,7 +2,10 @@ from unittest.mock import Mock, patch
 
 from werkzeug.datastructures import Authorization
 
-from api.authentication.access_token import AccessTokenProvider
+from api.authentication.access_token import (
+    PatronJWEAccessTokenProvider,
+    TokenPatronInfo,
+)
 from api.authentication.basic import BasicAuthenticationProvider
 from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_INVALID
@@ -18,32 +21,22 @@ class TestBasicTokenAuthenticationProvider:
             db.session, db.default_library(), Mock()
         )
         with patch(
-            "api.authentication.basic_token.AccessTokenProvider"
+            "api.authentication.basic_token.PatronJWEAccessTokenProvider"
         ) as token_provider:
-            token_provider.decode_token.return_value = dict(
+            assert isinstance(patron.id, int)
+            token_provider.decrypt_token.return_value = TokenPatronInfo(
                 id=patron.id, pwd="password"
             )
             got_patron = provider.authenticated_patron(db.session, "token-string")
 
-            assert type(got_patron) is Patron
+            assert isinstance(got_patron, Patron)
             assert got_patron.id == patron.id
 
-            # Any incorrect data would mean an invalid token
-            token_provider.decode_token.return_value = dict(id=patron.id, typ="patron")
-            assert PATRON_AUTH_ACCESS_TOKEN_INVALID == provider.authenticated_patron(
-                db.session, "token-string"
-            )
-
-            token_provider.decode_token.return_value = dict(pwd="password")
-            assert PATRON_AUTH_ACCESS_TOKEN_INVALID == provider.authenticated_patron(
-                db.session, "token-string"
-            )
-
             # Nonexistent patron
-            token_provider.decode_token.return_value = dict(
+            token_provider.decrypt_token.return_value = TokenPatronInfo(
                 id=999999999, pwd="password"
             )
-            assert None == provider.authenticated_patron(db.session, "token-string")
+            assert provider.authenticated_patron(db.session, "token-string") is None
 
     def test_authenticated_patron_errors(self, db: DatabaseTransactionFixture):
         provider = BasicTokenAuthenticationProvider(
@@ -62,7 +55,9 @@ class TestBasicTokenAuthenticationProvider:
             db.session, db.default_library(), Mock()
         )
         patron = db.patron()
-        token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
+        token = PatronJWEAccessTokenProvider.generate_token(
+            db.session, patron, "passworx"
+        )
 
         pwd = provider.get_credential_from_header(
             Authorization(auth_type="Bearer", token=token)

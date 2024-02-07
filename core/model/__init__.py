@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from collections.abc import Generator
-from typing import Any, List, Literal, Tuple, Type, TypeVar, Union
+from typing import Any, Literal, TypeVar
 
 from contextlib2 import contextmanager
 from psycopg2.extensions import adapt as sqlescape
@@ -12,7 +12,7 @@ from psycopg2.extras import NumericRange
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import DatabaseError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -438,6 +438,13 @@ class SessionManager:
             )
             mechanism.default_client_can_fulfill = True
 
+        from api.authentication.access_token import PatronJWEAccessTokenProvider
+
+        # Create our secret keys
+        Key.create_admin_secret_key(session)
+        Key.create_bearer_token_signing_key(session)
+        PatronJWEAccessTokenProvider.create_key(session)
+
         # If there is currently no 'site configuration change'
         # Timestamp in the database, create one.
         timestamp, is_new = get_one_or_create(
@@ -539,6 +546,7 @@ from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
+from core.model.key import Key
 from core.model.library import Library
 from core.model.licensing import (
     DeliveryMechanism,

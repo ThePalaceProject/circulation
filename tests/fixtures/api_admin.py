@@ -8,7 +8,6 @@ from api.admin.controller import setup_admin_controllers
 from api.admin.controller.settings import SettingsController
 from api.app import initialize_admin
 from api.circulation_manager import CirculationManager
-from api.config import Configuration
 from core.integration.goals import Goals
 from core.model import create
 from core.model.admin import Admin, AdminRole
@@ -28,11 +27,6 @@ class AdminControllerFixture:
     def __init__(self, controller_fixture: ControllerFixture):
         self.ctrl = controller_fixture
         self.manager = self.ctrl.manager
-
-        ConfigurationSetting.sitewide(
-            controller_fixture.db.session, Configuration.SECRET_KEY
-        ).value = "a secret"
-
         initialize_admin(controller_fixture.db.session)
         setup_admin_controllers(controller_fixture.manager)
         self.admin, ignore = create(

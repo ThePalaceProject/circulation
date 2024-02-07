@@ -16,7 +16,7 @@ from werkzeug.datastructures import Authorization, Headers
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
-from api.authentication.access_token import AccessTokenProvider
+from api.authentication.access_token import PatronJWEAccessTokenProvider
 from api.authentication.base import (
     AuthenticationProvider,
     LibrarySettingsType,
@@ -30,9 +30,10 @@ from api.problem_details import *
 from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
-from core.model import ConfigurationSetting, Library, Patron, PatronProfileStorage
+from core.model import Key, Library, Patron, PatronProfileStorage
 from core.model.announcements import Announcement
 from core.model.integration import IntegrationLibraryConfiguration
+from core.model.key import KeyType
 from core.user_profile import ProfileController
 from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
@@ -188,17 +189,6 @@ class LibraryAuthenticator(LoggerMixin):
                     (integration.parent.id, library.id)
                 ] = e
 
-        if authenticator.saml_providers_by_name:
-            # NOTE: this will immediately commit the database session,
-            # which may not be what you want during a test. To avoid
-            # this, you can create the bearer token signing secret as
-            # a regular site-wide ConfigurationSetting.
-            authenticator.bearer_token_signing_secret = (
-                BearerTokenSigner.bearer_token_signing_secret(_db)
-            )
-
-        authenticator.assert_ready_for_token_signing()
-
         return authenticator
 
     def __init__(
@@ -241,7 +231,12 @@ class LibraryAuthenticator(LoggerMixin):
         )
 
         self.saml_providers_by_name = {}
-        self.bearer_token_signing_secret = bearer_token_signing_secret
+        self.bearer_token_signing_secret = (
+            bearer_token_signing_secret
+            or Key.get_key(
+                _db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True
+            ).value
+        )
         self.initialization_exceptions: dict[
             tuple[int | None, int | None], Exception
         ] = {}
@@ -256,8 +251,6 @@ class LibraryAuthenticator(LoggerMixin):
         if saml_providers:
             for provider in saml_providers:
                 self.saml_providers_by_name[provider.label()] = provider
-
-        self.assert_ready_for_token_signing()
 
     @property
     def supports_patron_authentication(self) -> bool:
@@ -288,17 +281,6 @@ class LibraryAuthenticator(LoggerMixin):
         if self.library_id is None:
             return None
         return Library.by_id(self._db, self.library_id)
-
-    def assert_ready_for_token_signing(self):
-        """If this LibraryAuthenticator has SAML providers, ensure that it
-        also has a secret it can use to sign bearer tokens.
-        """
-        if self.saml_providers_by_name and not self.bearer_token_signing_secret:
-            raise CannotLoadConfiguration(
-                _(
-                    "SAML providers are configured, but secret for signing bearer tokens is not."
-                )
-            )
 
     def register_provider(
         self,
@@ -453,7 +435,7 @@ class LibraryAuthenticator(LoggerMixin):
 
             if (
                 self.access_token_authentication_provider
-                and AccessTokenProvider.is_access_token(auth.token)
+                and PatronJWEAccessTokenProvider.is_access_token(auth.token)
             ):
                 provider = self.access_token_authentication_provider
                 provider_token = auth.token
@@ -795,28 +777,8 @@ class LibraryAuthenticator(LoggerMixin):
         return headers
 
 
-class BearerTokenSigner:
-    """Mixin class used for storing a secret used for signing Bearer tokens"""
-
-    # Name of the site-wide ConfigurationSetting containing the secret
-    # used to sign bearer tokens.
-    BEARER_TOKEN_SIGNING_SECRET = Configuration.BEARER_TOKEN_SIGNING_SECRET
-
-    @classmethod
-    def bearer_token_signing_secret(cls, db):
-        """Find or generate the site-wide bearer token signing secret.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
-
-        :return: ConfigurationSetting object containing the signing secret
-        :rtype: ConfigurationSetting
-        """
-        return ConfigurationSetting.sitewide_secret(db, cls.BEARER_TOKEN_SIGNING_SECRET)
-
-
 class BaseSAMLAuthenticationProvider(
-    AuthenticationProvider[SettingsType, LibrarySettingsType], BearerTokenSigner, ABC
+    AuthenticationProvider[SettingsType, LibrarySettingsType], ABC
 ):
     """
     Base class for SAML authentication providers

@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from api.annotations import AnnotationWriter
-from api.authentication.access_token import AccessTokenProvider
+from api.authentication.access_token import PatronJWEAccessTokenProvider
 from api.authentication.base import PatronData
 from api.authentication.basic import (
     BarcodeFormats,
@@ -924,7 +924,7 @@ class TestLibraryAuthenticator:
         assert patron_lookup_provider == basic_auth_provider
 
         patron = db.patron()
-        token = AccessTokenProvider.generate_token(db.session, patron, "pass")
+        token = PatronJWEAccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
 
         auth_patron = authenticator.authenticated_patron(db.session, auth)
@@ -975,7 +975,9 @@ class TestLibraryAuthenticator:
 
         authenticator = get_library_authenticator(basic_auth_provider=basic)
         patron = db.patron()
-        token = AccessTokenProvider.generate_token(db.session, patron, "passworx")
+        token = PatronJWEAccessTokenProvider.generate_token(
+            db.session, patron, "passworx"
+        )
         credential = Authorization(auth_type="bearer", token=token)
         assert authenticator.get_credential_from_header(credential) == "passworx"
 

@@ -12,8 +12,8 @@ from api.admin.templates import (
     reset_password_template,
     sign_in_template,
 )
-from api.config import Configuration
-from core.model import Admin, ConfigurationSetting
+from core.model import Admin, Key
+from core.model.key import KeyType
 from core.util.email import EmailManager
 from core.util.problem_detail import ProblemDetail
 
@@ -32,6 +32,13 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
     RESET_PASSWORD_TEMPLATE = reset_password_template.format(
         label=label_style, input=input_style, button=button_style
     )
+
+    @staticmethod
+    def get_secret_key(db: Session) -> str:
+        key = Key.get_key(db, KeyType.ADMIN_SECRET_KEY, raise_exception=True).value
+        # We know .value is a str because its a non-null column in the DB, so
+        # we use an ignore to tell mypy to trust us.
+        return key  # type: ignore[return-value]
 
     def sign_in_template(self, redirect):
         password_sign_in_url = url_for("password_auth")
@@ -83,7 +90,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
         return True
 
     def generate_reset_password_token(self, admin: Admin, _db: Session) -> str:
-        secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+        secret_key = self.get_secret_key(_db)
 
         reset_password_token = admin.generate_reset_password_token(secret_key)
 
@@ -109,7 +116,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider):
     def validate_token_and_extract_admin(
         self, reset_password_token: str, admin_id: int, _db: Session
     ) -> Admin | ProblemDetail:
-        secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+        secret_key = self.get_secret_key(_db)
 
         return Admin.validate_reset_password_token_and_fetch_admin(
             reset_password_token, admin_id, _db, secret_key

@@ -18,8 +18,16 @@ def uuid_decode(encoded: str) -> UUID:
     """
     Decode a URL-safe base64 string to a UUID. Reverse of uuid_encode.
     """
-    if len(encoded) != 22:
-        raise ValueError("Invalid base64 string for UUID")
-    padding = "=="
-    decoded_bytes = urlsafe_b64decode(encoded + padding)
-    return UUID(bytes=decoded_bytes)
+    if len(encoded) == 22:
+        # This looks like an encoded UUID, so add padding and try to decode it
+        padding = "=="
+        decoded_bytes = urlsafe_b64decode(encoded + padding)
+        return UUID(bytes=decoded_bytes)
+
+    # See if this is a normal UUID hex string
+    encoded = encoded.replace("urn:", "").replace("uuid:", "")
+    encoded = encoded.strip("{}").replace("-", "")
+    if len(encoded) == 32:
+        return UUID(hex=encoded)
+
+    raise ValueError("Invalid string for UUID")
