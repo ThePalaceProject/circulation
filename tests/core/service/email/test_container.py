@@ -3,6 +3,7 @@ from unittest.mock import create_autospec
 import pytest
 from redmail import EmailSender
 
+from core.config import CannotLoadConfiguration
 from core.service.email.container import Email
 
 
@@ -28,6 +29,17 @@ def test_emailer(container: Email):
     assert emailer.port == 587
     assert emailer.username == "username"
     assert emailer.password == "password"
+
+
+def test_emailer_error(container: Email):
+    # If the server is None, we get an exception when trying to create the emailer
+    container.config.set("server", None)
+
+    with pytest.raises(CannotLoadConfiguration) as exc_info:
+        container.emailer()
+    assert "Mail server must be provided. Please set PALACE_MAIL_SERVER." in str(
+        exc_info.value
+    )
 
 
 def test_send_email(container: Email):
