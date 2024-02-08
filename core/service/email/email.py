@@ -8,15 +8,15 @@ from core.config import CannotLoadConfiguration
 
 
 def emailer_factory(
-    server: str | None, port: int, username: str | None, password: str | None
+    host: str | None, port: int, username: str | None, password: str | None
 ) -> EmailSender:
-    if server is None:
+    if host is None:
         raise CannotLoadConfiguration(
             "Mail server must be provided. Please set PALACE_MAIL_SERVER."
         )
 
     return EmailSender(
-        host=server,
+        host=host,
         port=port,
         # Username and password are ignored here because the emailer library has them
         # as required, but defaults them to None. So their types are not correct.
