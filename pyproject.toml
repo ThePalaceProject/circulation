@@ -93,6 +93,7 @@ module = [
     "api.opds_for_distributors",
     "core.feed.*",
     "core.integration.*",
+    "core.jobs.rotate_jwe_key",
     "core.marc",
     "core.migration.*",
     "core.model.announcements",

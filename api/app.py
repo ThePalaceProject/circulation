@@ -18,7 +18,8 @@ from api.util.profilers import (
 )
 from core.app_server import ErrorHandler
 from core.flask_sqlalchemy_session import flask_scoped_session
-from core.model import ConfigurationSetting, SessionManager
+from core.model import Key, SessionManager
+from core.model.key import KeyType
 from core.service.container import Services, container_instance
 from core.util import LanguageCodes
 from core.util.cache import CachedData
@@ -61,7 +62,9 @@ def initialize_admin(_db=None):
         setup_admin_controllers(app.manager)
     _db = _db or app._db
     # The secret key is used for signing cookies for admin login
-    app.secret_key = ConfigurationSetting.sitewide_secret(_db, Configuration.SECRET_KEY)
+    app.secret_key = Key.get_key(
+        _db, KeyType.ADMIN_SECRET_KEY, raise_exception=True
+    ).value
 
 
 def initialize_circulation_manager(container: Services):

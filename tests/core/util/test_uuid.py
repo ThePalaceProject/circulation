@@ -29,6 +29,12 @@ def test_uuid_encode_decode(uuid: str, expected: str):
     assert str(decoded) == uuid
     assert decoded == uuid_obj
 
+    # Test that uuid_decode can also handle a normal UUID hex string
+    decoded = uuid_decode(uuid)
+    assert isinstance(decoded, UUID)
+    assert str(decoded) == uuid
+    assert decoded == uuid_obj
+
 
 def test_uuid_decode_error():
     # Invalid length
@@ -38,3 +44,11 @@ def test_uuid_decode_error():
     # Invalid characters
     with pytest.raises(ValueError):
         uuid_decode("/~")
+
+    # Valid length but not valid
+    with pytest.raises(ValueError):
+        uuid_decode("~" * 22)
+
+    # Valid length for a UUID hex string but not valid
+    with pytest.raises(ValueError):
+        uuid_decode("~" * 32)

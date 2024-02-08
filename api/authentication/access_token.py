@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import logging
-import time
-from abc import ABC, abstractmethod
+import uuid
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from jwcrypto import jwe, jwk
 
@@ -12,166 +11,181 @@ from api.problem_details import (
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
     PATRON_AUTH_ACCESS_TOKEN_INVALID,
 )
-from core.model.configuration import ConfigurationSetting
+from core.model import Key
+from core.model.key import KeyType
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import ProblemDetail, ProblemError
-from core.util.string_helpers import random_string
+from core.util.log import LoggerMixin
+from core.util.problem_detail import ProblemError
+from core.util.uuid import uuid_encode
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-class PatronAccessTokenProvider(ABC):
-    """Provides access tokens for patron auth"""
-
-    @classmethod
-    @abstractmethod
-    def generate_token(
-        cls, _db, patron: Patron, password: str, expires_in: int = 3600
-    ) -> str:
-        ...
-
-    @classmethod
-    @abstractmethod
-    def decode_token(cls, _db, token: str) -> dict | ProblemDetail:
-        ...
-
-    @classmethod
-    @abstractmethod
-    def is_access_token(cls, token: str | None) -> bool:
-        ...
+@dataclass
+class TokenPatronInfo:
+    id: int
+    pwd: str
 
 
-class PatronJWEAccessTokenProvider(PatronAccessTokenProvider):
+class PatronJWEAccessTokenProvider(LoggerMixin):
     """Provide JWE based access tokens for patron auth"""
 
-    NAME = "Patron Access Token Provider"
-    KEY_NAME = "PATRON_JWE_KEY"
+    CTY = "pv1"
 
     @classmethod
-    def generate_key(cls) -> jwk.JWK:
+    def generate_jwk(cls, key_id: uuid.UUID) -> str:
         """Generate a new key compatible with the token encyption type"""
-        kid = random_string(16)
-        return jwk.JWK.generate(kty="oct", size=256, kid=kid)
+        kid = uuid_encode(key_id)
+        generated_key = jwk.JWK.generate(kty="oct", size=256, kid=kid)
+        return generated_key.export()
 
     @classmethod
-    def rotate_key(cls, _db: Session) -> jwk.JWK:
-        """Rotate the current JWK key in the DB"""
-        key = cls.generate_key()
-        setting = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
-        setting.value = key.export()
+    def create_key(cls, _db: Session) -> Key:
+        """Create a new key in the DB"""
+        key = Key.create_key(_db, KeyType.AUTH_TOKEN_JWE, cls.generate_jwk)
         return key
 
     @classmethod
-    def get_current_key(
-        cls, _db: Session, kid: str | None = None, create: bool = True
-    ) -> jwk.JWK | None:
-        """Get the current JWK key for the CM
-        :param kid: (Optional) If present, compare this value to the currently active kid,
-                    raise a ValueError if found to be different
-        :param create: (Optional) Create a key of no key exists in the system
-        """
-        stored_key = ConfigurationSetting.sitewide(_db, cls.KEY_NAME)
-        key: str | None = stored_key.value
+    def get_jwk(cls, key: Key) -> jwk.JWK:
+        """Get a JWK key from the DB"""
+        jwk_obj = jwk.JWK.from_json(key.value)
+        return jwk_obj
 
-        # First time run, we don't have a value yet
-        if key is None:
-            if create:
-                jwk_key = cls.rotate_key(_db)
-            else:
-                return None
-        else:
-            jwk_key = jwk.JWK.from_json(key)
-
-        if kid is not None and kid != jwk_key.get("kid"):
-            raise ValueError(
-                "Current KID has changed, the key has probably been rotated"
+    @classmethod
+    def get_key(cls, _db: Session, key_id: str | uuid.UUID | None = None) -> Key:
+        """Get the most recently created AUTH_TOKEN_JWE key from the DB"""
+        key = Key.get_key(
+            _db, KeyType.AUTH_TOKEN_JWE, key_id=key_id, raise_exception=True
+        )
+        if (
+            key_id is None
+            and key.created is not None
+            and key.created < utc_now() - timedelta(days=2)
+        ):
+            cls.logger().warning(
+                "The most recently created AUTH_TOKEN_JWE key is more then two days old. "
+                "This may indicate a problem with the key rotation."
             )
-
-        return jwk_key
+        return key
 
     @classmethod
     def generate_token(
         cls, _db: Session, patron: Patron, password: str, expires_in: int = 3600
     ) -> str:
-        """Generate a JWE token for a patron
-        :param patron: Generate a token for this patron
-        :param password: Encrypt this password within the token
-        :param expires_in: Seconds after which this token will expire
-        :return: A compacted JWE token
-        """
-        key = cls.get_current_key(_db)
-        if not key:
-            raise RuntimeError("Could fetch the JWE key from the DB")
-
-        payload = dict(id=patron.id, pwd=password, typ="patron")
-
+        """Generate a JWE token for a patron"""
+        key = cls.get_key(_db)
+        jwk_obj = cls.get_jwk(key)
         token = jwe.JWE(
-            jwe.json_encode(payload),
-            dict(
+            plaintext=jwe.json_encode(dict(id=patron.id, pwd=password)),
+            protected=dict(
                 alg="dir",
-                kid=key.get("kid"),
+                kid=uuid_encode(cast(uuid.UUID, key.id)),
                 typ="JWE",
                 enc="A128CBC-HS256",
+                cty=cls.CTY,
                 exp=(utc_now() + timedelta(seconds=expires_in)).timestamp(),
             ),
-            recipient=key,
+            recipient=jwk_obj,
         )
         return token.serialize(compact=True)
 
     @classmethod
-    def decode_token(cls, _db: Session, token: str) -> dict | ProblemDetail:
+    def decode_token(cls, token: str) -> jwe.JWE:
         """Decode the given token
         :param token: A serialized JWE token
         :return: The decrypted data dictionary from the token
         """
-        jwe_token = cls._decode(token)
+        jwe_token = jwe.JWE()
+
+        # Set the allowed algorithms
+        jwe_token.allowed_algs = ["dir", "A128CBC-HS256"]
+
+        try:
+            jwe_token.deserialize(token)
+        except jwe.InvalidJWEData as ex:
+            cls.logger().exception(f"Invalid JWE data was encountered: {ex}")
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
 
         # Check expiry
-        exp = jwe.json_decode(jwe_token.objects["protected"])["exp"]
-        if time.time() > exp:
-            return PATRON_AUTH_ACCESS_TOKEN_EXPIRED
+        exp = jwe_token.jose_header.get("exp")
+        if exp is None or utc_now().timestamp() > exp:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
 
-        try:
-            key = cls.get_current_key(_db, jwe_token.jose_header.get("kid"))
-        except ValueError:
-            # The kid was incorrect, the key has probably rotated
-            return PATRON_AUTH_ACCESS_TOKEN_EXPIRED
+        # Make sure there is a kid
+        kid = jwe_token.jose_header.get("kid")
+        if kid is None:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
 
-        try:
-            jwe_token.decrypt(key)
-        except jwe.InvalidJWEData:
-            return PATRON_AUTH_ACCESS_TOKEN_INVALID
+        # Make sure we have the token type
+        typ = jwe_token.jose_header.get("typ")
+        if typ != "JWE":
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
 
-        return jwe.json_decode(jwe_token.payload)
+        # Make sure we have the payload type
+        cty = jwe_token.jose_header.get("cty")
+        if cty != cls.CTY:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        return jwe_token
 
     @classmethod
-    def _decode(cls, token: str) -> jwe.JWE:
-        """Decode a JWE token without decryption"""
+    def decrypt_token(cls, _db: Session, token: jwe.JWE | str) -> TokenPatronInfo:
+        if isinstance(token, str):
+            token = cls.decode_token(token)
+
+        kid = token.jose_header.get("kid")
         try:
-            jwe_token = jwe.JWE.from_jose_token(token)
-        except jwe.InvalidJWEData as ex:
-            logging.getLogger(cls.__name__).error(
-                f"Invalid JWE data was encountered: {ex}"
-            )
-            raise ProblemError(PATRON_AUTH_ACCESS_TOKEN_INVALID)
-        return jwe_token
+            key = cls.get_key(_db, kid)
+        except ValueError:
+            key = None
+
+        if key is None:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        try:
+            token.decrypt(cls.get_jwk(key))
+        except jwe.InvalidJWEData:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        try:
+            payload = jwe.json_decode(token.payload)
+        except ValueError:
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        # Validate the payload
+        if (
+            not isinstance(payload, dict)
+            or "id" not in payload
+            or "pwd" not in payload
+            or len(payload) != 2
+        ):
+            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+
+        return TokenPatronInfo(**payload)
 
     @classmethod
     def is_access_token(cls, token: str | None) -> bool:
         """Test if the given token is a valid JWE token"""
-        try:
-            jwe_token = cls._decode(token) if token else None
-        except Exception:
+        if token is None:
             return False
 
-        if jwe_token is None:
-            return False
-        if jwe.json_decode(jwe_token.objects["protected"])["typ"] != "JWE":
+        try:
+            cls.decode_token(token)
+        except Exception:
             return False
 
         return True
 
+    @classmethod
+    def delete_old_keys(cls, _db: Session) -> int:
+        """Delete old keys from the DB
 
-AccessTokenProvider: type[PatronAccessTokenProvider] = PatronJWEAccessTokenProvider
+        We keep the two most recent keys in the DB. And delete any keys with a created date older than
+        two days.
+        """
+        two_days_ago = utc_now() - timedelta(days=2)
+        return Key.delete_old_keys(
+            _db, KeyType.AUTH_TOKEN_JWE, keep=2, older_than=two_days_ago
+        )

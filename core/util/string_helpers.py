@@ -3,6 +3,8 @@
 # bytestrings.
 import binascii
 import os
+import secrets
+import string
 
 
 def random_string(size: int) -> str:
@@ -12,3 +14,12 @@ def random_string(size: int) -> str:
     :return: A Unicode string.
     """
     return binascii.hexlify(os.urandom(size)).decode("utf8")
+
+
+def random_key(size: int) -> str:
+    """Generate a random string suitable for use as a key.
+
+    :param: Size of the key to generate.
+    :return: A Unicode string.
+    """
+    return "".join(secrets.choice(string.printable) for i in range(size))
