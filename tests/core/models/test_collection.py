@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,13 +5,11 @@ from sqlalchemy import select
 
 from api.bibliotheca import BibliothecaAPI
 from api.overdrive import OverdriveAPI
-from core.config import Configuration
 from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
 from core.model import get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting
 from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
@@ -484,79 +481,6 @@ class TestCollection:
         pool.work = new_work
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
-
-    def test_restrict_to_ready_deliverable_works(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        """A partial test of restrict_to_ready_deliverable_works.
-
-        This test covers the bit that excludes audiobooks from certain data sources.
-
-        The other cases are tested indirectly in lane.py, but could use a more explicit test here.
-        """
-        db = example_collection_fixture.database_fixture
-        # Create two audiobooks and one ebook.
-        overdrive_audiobook = db.work(
-            data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True,
-            title="Overdrive Audiobook",
-        )
-        overdrive_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
-        overdrive_ebook = db.work(
-            data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True,
-            title="Overdrive Ebook",
-        )
-        feedbooks_audiobook = db.work(
-            data_source_name=DataSource.FEEDBOOKS,
-            with_license_pool=True,
-            title="Feedbooks Audiobook",
-        )
-        feedbooks_audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
-
-        def expect(qu, works):
-            """Modify the query `qu` by calling
-            restrict_to_ready_deliverable_works(), then verify that
-            the query returns the works expected by `works`.
-            """
-            restricted_query = Collection.restrict_to_ready_deliverable_works(qu)
-            expect_ids = [x.id for x in works]
-            actual_ids = [x.id for x in restricted_query]
-            assert set(expect_ids) == set(actual_ids)
-
-        # Here's the setting which controls which data sources should
-        # have their audiobooks excluded.
-        setting = ConfigurationSetting.sitewide(
-            db.session, Configuration.EXCLUDED_AUDIO_DATA_SOURCES
-        )
-        qu = (
-            db.session.query(Work)
-            .join(Work.license_pools)
-            .join(Work.presentation_edition)
-        )
-        # When its value is set to the empty list, every work shows
-        # up.
-        setting.value = json.dumps([])
-        expect(
-            qu,
-            [
-                overdrive_ebook,
-                overdrive_audiobook,
-                feedbooks_audiobook,
-            ],
-        )
-        # Putting a data source in the list excludes its audiobooks, but
-        # not its ebooks.
-        setting.value = json.dumps([DataSource.OVERDRIVE])
-        expect(
-            qu,
-            [
-                overdrive_ebook,
-                feedbooks_audiobook,
-            ],
-        )
-        setting.value = json.dumps([DataSource.OVERDRIVE, DataSource.FEEDBOOKS])
-        expect(qu, [overdrive_ebook])
 
     def test_delete(
         self,

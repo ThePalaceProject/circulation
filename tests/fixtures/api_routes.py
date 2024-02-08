@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -12,6 +11,7 @@ from api.controller.circulation_manager import CirculationManagerController
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class MockApp:
@@ -123,13 +123,17 @@ class RouteTestFixture:
     REAL_CIRCULATION_MANAGER = None
 
     def __init__(
-        self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
+        controller_fixture: ControllerFixture,
+        services_fixture: ServicesFixture,
     ):
         self.db = db
         self.controller_fixture = controller_fixture
+        self.services_fixture = services_fixture
         self.setup_circulation_manager = False
         if not RouteTestFixture.REAL_CIRCULATION_MANAGER:
-            manager = MockCirculationManager(self.db.session, MagicMock())
+            manager = MockCirculationManager(self.db.session, services_fixture.services)
             RouteTestFixture.REAL_CIRCULATION_MANAGER = manager
 
         app = MockApp()
@@ -266,8 +270,10 @@ class RouteTestFixture:
 
 @pytest.fixture(scope="function")
 def route_test(
-    db: DatabaseTransactionFixture, controller_fixture: ControllerFixture
+    db: DatabaseTransactionFixture,
+    controller_fixture: ControllerFixture,
+    services_fixture: ServicesFixture,
 ) -> Generator[RouteTestFixture, Any, None]:
-    fix = RouteTestFixture(db, controller_fixture)
+    fix = RouteTestFixture(db, controller_fixture, services_fixture)
     yield fix
     fix.close()

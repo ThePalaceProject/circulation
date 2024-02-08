@@ -4,7 +4,7 @@ import datetime
 import json
 import random
 from io import StringIO
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 from freezegun import freeze_time
@@ -16,14 +16,13 @@ from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
 from api.overdrive import OverdriveAPI
 from core.classifier import Classifier
-from core.config import Configuration, ConfigurationConstants
+from core.config import CannotLoadConfiguration
 from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
 from core.model import (
     Collection,
-    ConfigurationSetting,
     Contributor,
     CoverageRecord,
     DataSource,
@@ -50,7 +49,6 @@ from core.scripts import (
     ConfigureCollectionScript,
     ConfigureLaneScript,
     ConfigureLibraryScript,
-    ConfigureSiteScript,
     CustomListUpdateEntriesScript,
     DeleteInvisibleLanesScript,
     Explain,
@@ -949,73 +947,6 @@ class TestShowLibrariesScript:
         expect_1 = "\n".join(l1.explain(include_secrets=True))
         expect_2 = "\n".join(l2.explain(include_secrets=True))
         assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
-
-
-class TestConfigureSiteScript:
-    def test_unknown_setting(self, db: DatabaseTransactionFixture):
-        script = ConfigureSiteScript()
-        with pytest.raises(ValueError) as excinfo:
-            script.do_run(db.session, ["--setting=setting1=value1"])
-        assert (
-            "'setting1' is not a known site-wide setting. Use --force to set it anyway."
-            in str(excinfo.value)
-        )
-
-        assert None == ConfigurationSetting.sitewide(db.session, "setting1").value
-
-        # Running with --force sets the setting.
-        script.do_run(
-            db.session,
-            [
-                "--setting=setting1=value1",
-                "--force",
-            ],
-        )
-
-        assert "value1" == ConfigurationSetting.sitewide(db.session, "setting1").value
-
-    def test_settings(self, db: DatabaseTransactionFixture):
-        class TestConfig:
-            SITEWIDE_SETTINGS = [
-                {"key": "setting1"},
-                {"key": "setting2"},
-                {"key": "setting_secret"},
-            ]
-
-        script = ConfigureSiteScript(config=TestConfig)
-        output = StringIO()
-        script.do_run(
-            db.session,
-            [
-                "--setting=setting1=value1",
-                '--setting=setting2=[1,2,"3"]',
-                "--setting=setting_secret=secretvalue",
-            ],
-            output,
-        )
-        # The secret was set, but is not shown.
-        expect = "\n".join(
-            ConfigurationSetting.explain(db.session, include_secrets=False)
-        )
-        assert expect == output.getvalue()
-        assert "setting_secret" not in expect
-        assert "value1" == ConfigurationSetting.sitewide(db.session, "setting1").value
-        assert (
-            '[1,2,"3"]' == ConfigurationSetting.sitewide(db.session, "setting2").value
-        )
-        assert (
-            "secretvalue"
-            == ConfigurationSetting.sitewide(db.session, "setting_secret").value
-        )
-
-        # If we run again with --show-secrets, the secret is shown.
-        output = StringIO()
-        script.do_run(db.session, ["--show-secrets"], output)
-        expect = "\n".join(
-            ConfigurationSetting.explain(db.session, include_secrets=True)
-        )
-        assert expect == output.getvalue()
-        assert "setting_secret" in expect
 
 
 class TestConfigureLibraryScript:
@@ -2334,7 +2265,10 @@ class TestCustomListUpdateEntriesScript:
 
 class TestLoanNotificationsScript:
     def _setup_method(self, db: DatabaseTransactionFixture):
-        self.script = LoanNotificationsScript(_db=db.session)
+        self.mock_notifications = create_autospec(PushNotifications)
+        self.script = LoanNotificationsScript(
+            _db=db.session, notifications=self.mock_notifications
+        )
         self.patron: Patron = db.patron()
         self.work: Work = db.work(with_license_pool=True)
         self.device_token, _ = get_one_or_create(
@@ -2344,17 +2278,15 @@ class TestLoanNotificationsScript:
             token_type=DeviceTokenTypes.FCM_ANDROID,
             device_token="atesttoken",
         )
-        PushNotifications.TESTING_MODE = True
 
     def test_loan_notification(self, db: DatabaseTransactionFixture):
         self._setup_method(db)
         p = self.work.active_license_pool()
-        if p:  # mypy complains if we don't do this
-            loan, _ = p.loan_to(
-                self.patron,
-                utc_now(),
-                utc_now() + datetime.timedelta(days=1, hours=1),
-            )
+        loan, _ = p.loan_to(
+            self.patron,
+            utc_now(),
+            utc_now() + datetime.timedelta(days=1, hours=1),
+        )
 
         work2 = db.work(with_license_pool=True)
         loan2, _ = work2.active_license_pool().loan_to(
@@ -2363,12 +2295,11 @@ class TestLoanNotificationsScript:
             utc_now() + datetime.timedelta(days=2, hours=1),
         )  # Should not get notified
 
-        with patch("core.scripts.PushNotifications") as mock_notf:
-            self.script.process_loan(loan)
-            self.script.process_loan(loan2)
+        self.script.process_loan(loan)
+        self.script.process_loan(loan2)
 
-        assert mock_notf.send_loan_expiry_message.call_count == 1
-        assert mock_notf.send_loan_expiry_message.call_args[0] == (
+        assert self.mock_notifications.send_loan_expiry_message.call_count == 1
+        assert self.mock_notifications.send_loan_expiry_message.call_args[0] == (
             loan,
             1,
             [self.device_token],
@@ -2421,13 +2352,29 @@ class TestLoanNotificationsScript:
             call(loan4),
         ]
 
-        # Sitewide notifications are turned off
-        self.script.process_loan.reset_mock()
-        ConfigurationSetting.sitewide(
-            db.session, Configuration.PUSH_NOTIFICATIONS_STATUS
-        ).value = ConfigurationConstants.FALSE
-        self.script.do_run()
-        assert self.script.process_loan.call_count == 0
+    def test_constructor(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        """Test that the constructor sets up the script correctly."""
+        services_fixture.set_base_url("http://test-circulation-manager")
+        with patch(
+            "core.scripts.PushNotifications", autospec=True
+        ) as mock_notifications:
+            script = LoanNotificationsScript(
+                db.session, services=services_fixture.services
+            )
+        assert script.BATCH_SIZE == 100
+        assert script.notifications == mock_notifications.return_value
+        mock_notifications.assert_called_once_with("http://test-circulation-manager")
+
+        # Make sure we get an exception if the base_url is not set.
+        services_fixture.set_base_url(None)
+        with pytest.raises(CannotLoadConfiguration) as excinfo:
+            LoanNotificationsScript(db.session, services=services_fixture.services)
+
+        assert "Missing required environment variable: PALACE_BASE_URL" in str(
+            excinfo.value
+        )
 
 
 class TestWorkConsolidationScript:

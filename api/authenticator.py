@@ -231,11 +231,9 @@ class LibraryAuthenticator(LoggerMixin):
         )
 
         self.saml_providers_by_name = {}
-        self.bearer_token_signing_secret = (
-            bearer_token_signing_secret
-            or Key.get_key(
-                _db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True
-            ).value
+        self.bearer_token_signing_secret = bearer_token_signing_secret or cast(
+            str,
+            Key.get_key(_db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True).value,
         )
         self.initialization_exceptions: dict[
             tuple[int | None, int | None], Exception
@@ -522,14 +520,12 @@ class LibraryAuthenticator(LoggerMixin):
             # Maybe we should use something custom instead.
             iss=provider_name,
         )
-        return jwt.encode(
-            payload, cast(str, self.bearer_token_signing_secret), algorithm="HS256"
-        )
+        return jwt.encode(payload, self.bearer_token_signing_secret, algorithm="HS256")
 
     def decode_bearer_token(self, token: str) -> tuple[str, str]:
         """Extract auth provider name and access token from JSON web token."""
         decoded = jwt.decode(
-            token, cast(str, self.bearer_token_signing_secret), algorithms=["HS256"]
+            token, self.bearer_token_signing_secret, algorithms=["HS256"]
         )
         provider_name = decoded["iss"]
         token = decoded["token"]

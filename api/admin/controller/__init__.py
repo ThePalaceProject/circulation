@@ -31,9 +31,6 @@ def setup_admin_controllers(manager: CirculationManager):
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.reset_password import ResetPasswordController
     from api.admin.controller.sign_in import SignInController
-    from api.admin.controller.sitewide_settings import (
-        SitewideConfigurationSettingsController,
-    )
     from api.admin.controller.timestamps import TimestampsController
     from api.admin.controller.view import ViewController
     from api.admin.controller.work_editor import WorkController
@@ -58,9 +55,6 @@ def setup_admin_controllers(manager: CirculationManager):
     )
 
     manager.admin_collection_settings_controller = CollectionSettingsController(manager)
-    manager.admin_sitewide_configuration_settings_controller = (
-        SitewideConfigurationSettingsController(manager)
-    )
     manager.admin_library_settings_controller = LibrarySettingsController(manager)
     manager.admin_individual_admin_settings_controller = (
         IndividualAdminSettingsController(manager._db)

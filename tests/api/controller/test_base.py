@@ -7,13 +7,11 @@ import flask
 from werkzeug.datastructures import Authorization
 
 from api.circulation_exceptions import RemoteInitiatedServerError
-from api.config import Configuration
 from api.problem_details import *
 from core import model
 from core.classifier import Classifier
 from core.lane import Lane
 from core.model import (
-    ConfigurationSetting,
     DataSource,
     Library,
     LicensePoolDeliveryMechanism,
@@ -180,11 +178,6 @@ class TestBaseController:
     ):
         # Make sure the realm header has quotes around the realm name.
         # Without quotes, some iOS versions don't recognize the header value.
-
-        base_url = ConfigurationSetting.sitewide(
-            circulation_fixture.db.session, Configuration.BASE_URL_KEY
-        )
-        base_url.value = "http://url"
 
         with circulation_fixture.request_context_with_library("/"):
             response = circulation_fixture.controller.authenticate()

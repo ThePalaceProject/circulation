@@ -177,6 +177,16 @@ To let the application know which Opensearch instance to use, you can set the fo
 export PALACE_SEARCH_URL="http://localhost:9200"
 ```
 
+#### General
+
+- `PALACE_BASE_URL`: The base URL of the application. Used to create absolute links. (optional)
+- `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can access this circulation manager. This can
+   be a single hostname (`http://catalog.library.org`) or a pipe-separated list of hostnames
+   (`http://catalog.library.org|https://beta.library.org`). You can also set this to `*` to allow access from any host,
+   but you must not do this in a production environment -- only during development. (optional)
+- `PALACE_AUTHENTICATION_DOCUMENT_CACHE_TIME`: Cache time for authentication documents (in seconds). The default is
+   3600 (optional).
+
 #### Storage Service
 
 The application optionally uses a s3 compatible storage service to store files. To configure the application to use

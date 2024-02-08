@@ -51,7 +51,7 @@ from core.analytics import Analytics
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.mock_analytics_provider import MockAnalyticsProvider
-from core.model import CirculationEvent, ConfigurationSetting, Library, Patron
+from core.model import CirculationEvent, Library, Patron
 from core.model.constants import LinkRelations
 from core.model.integration import (
     IntegrationConfiguration,
@@ -1056,9 +1056,6 @@ class TestLibraryAuthenticator:
         # Configure the various ways a patron can get help.
         library_settings.help_email = "help@library.org"  # type: ignore[assignment]
         library_settings.help_web = "http://library.help/"  # type: ignore[assignment]
-
-        base_url = ConfigurationSetting.sitewide(db.session, Configuration.BASE_URL_KEY)
-        base_url.value = "http://circulation-manager/"
 
         # Configure three library announcements: two active and one inactive.
         a1_db = announcement_fixture.create_announcement(

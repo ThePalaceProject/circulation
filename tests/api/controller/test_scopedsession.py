@@ -96,7 +96,6 @@ class TestScopedSession:
 
     def test_scoped_session(self, controller_fixture_without_cm: ControllerFixture):
         fixture = controller_fixture_without_cm
-        fixture.set_base_url()
         api.app.initialize_database()
 
         # Create a holder that carries some state for the purposes of testing

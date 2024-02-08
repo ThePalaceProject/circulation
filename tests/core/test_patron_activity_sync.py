@@ -1,6 +1,6 @@
 from datetime import timedelta
 from typing import cast
-from unittest.mock import call, patch
+from unittest.mock import call, create_autospec, patch
 
 import pytest
 
@@ -11,14 +11,17 @@ from core.model.licensing import LicensePool
 from core.model.patron import Patron
 from core.model.work import Work
 from core.util.datetime_helpers import utc_now
+from core.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class PatronSyncFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
+        self.mock_notifications = create_autospec(PushNotifications)
         self.monitor = PatronActivitySyncNotificationScript(
-            self.db.session, batch_size=100
+            self.db.session, batch_size=100, notifications=self.mock_notifications
         )
 
 
@@ -91,7 +94,22 @@ class TestPatronActivitySync:
             device_token=f"test-token-{patron.id}",
         )
 
-        with patch("core.jobs.patron_activity_sync.PushNotifications") as mock_notf:
-            sync_fixture.monitor.run()
-        assert mock_notf.send_activity_sync_message.call_count == 1
-        assert mock_notf.send_activity_sync_message.call_args == call([patron])
+        sync_fixture.monitor.run()
+        assert (
+            sync_fixture.mock_notifications.send_activity_sync_message.call_count == 1
+        )
+        assert (
+            sync_fixture.mock_notifications.send_activity_sync_message.call_args
+            == call([patron])
+        )
+
+    def test_constructor(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        services_fixture.set_base_url("http://test-circulation-manager")
+        with patch(
+            "core.jobs.patron_activity_sync.PushNotifications", autospec=True
+        ) as mock_notifications:
+            monitor = PatronActivitySyncNotificationScript(db.session)
+        assert monitor.notifications == mock_notifications.return_value
+        mock_notifications.assert_called_once_with("http://test-circulation-manager")

@@ -13,11 +13,11 @@ from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from requests_mock import Mocker
 
-from api.config import Configuration
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.discovery.registration_script import LibraryRegistrationScript
 from api.problem_details import *
-from core.model import ConfigurationSetting, Library, create, get_one
+from core.config import CannotLoadConfiguration
+from core.model import Library, create, get_one
 from core.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -32,6 +32,7 @@ from tests.fixtures.database import (
     IntegrationConfigurationFixture,
 )
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class RemoteRegistryFixture:
@@ -706,11 +707,21 @@ class TestOpdsRegistrationService:
 
 
 class TestLibraryRegistrationScript:
+    def test_constructor(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        with pytest.raises(CannotLoadConfiguration) as excinfo:
+            LibraryRegistrationScript(db.session, services=services_fixture.services)
+        assert "Missing required environment variable: PALACE_BASE_URL" in str(
+            excinfo.value
+        )
+
     def test_do_run(
         self,
         db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
         remote_registry_fixture: RemoteRegistryFixture,
+        services_fixture: ServicesFixture,
     ):
         @dataclass
         class Processed:
@@ -731,12 +742,10 @@ class TestLibraryRegistrationScript:
             ):
                 self.processed.append(Processed(registry, library, stage, url_for))
 
-        script = Mock(db.session)
+        services_fixture.set_base_url("http://test-circulation-manager")
+        script = Mock(db.session, services=services_fixture.services)
 
-        base_url_setting = ConfigurationSetting.sitewide(
-            db.session, Configuration.BASE_URL_KEY
-        )
-        base_url_setting.value = "http://test-circulation-manager/"
+        assert script.base_url == "http://test-circulation-manager"
 
         library = library_fixture.library()
         library2 = library_fixture.library()
@@ -746,7 +755,7 @@ class TestLibraryRegistrationScript:
             "--stage=testing",
             "--registry-url=http://registry.com/",
         ]
-        manager = MockCirculationManager(db.session, MagicMock())
+        manager = MockCirculationManager(db.session, services_fixture.services)
         script.do_run(cmd_args=cmd_args, manager=manager)
 
         # One library was processed.
@@ -784,7 +793,7 @@ class TestLibraryRegistrationScript:
         library_fixture: LibraryFixture,
     ):
         """Test the things that might happen when process_library is called."""
-        script = LibraryRegistrationScript(db.session)
+        script = LibraryRegistrationScript(db.session, services=MagicMock())
         library = library_fixture.library()
         registry = remote_registry_fixture.registry
 
