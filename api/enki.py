@@ -24,6 +24,7 @@ from api.circulation import (
 from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
+from core.config import ConfigurationAttributeValue
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -56,7 +57,6 @@ from core.model import (
     Representation,
     Subject,
 )
-from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.service.container import Services
 from core.util.datetime_helpers import from_timestamp, strptime_utc, utc_now

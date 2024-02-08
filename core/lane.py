@@ -38,7 +38,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 
 from core.classifier import Classifier
-from core.config import Configuration
+from core.config import Configuration, ConfigurationAttributeValue
 from core.entrypoint import EntryPoint, EverythingEntryPoint
 from core.facets import FacetConstants
 from core.model import (
@@ -60,7 +60,6 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.before_flush_decorator import Listener
-from core.model.configuration import ConfigurationAttributeValue
 from core.model.constants import EditionConstants
 from core.model.hybrid import hybrid_property
 from core.model.listeners import site_configuration_has_changed

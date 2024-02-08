@@ -22,11 +22,7 @@ class IntegrationConfiguration(Base):
     """
     Integration Configuration
 
-    This is used to store the configuration of integrations. It is
-    a combination of the now deprecated ExternalIntegration and
-    ConfigurationSetting classes.
-
-    It stores the configuration settings for each external integration in
+    It stores the configuration settings for each integration in
     a single json row in the database. These settings are then serialized
     using Pydantic to a python object.
     """
@@ -43,8 +39,8 @@ class IntegrationConfiguration(Base):
     # would be used for an authentication provider.
     goal = Column(SQLAlchemyEnum(Goals), nullable=False, index=True)
 
-    # A unique name for this ExternalIntegration. This is primarily
-    # used to identify ExternalIntegrations from command-line scripts.
+    # A unique name for this integration. This is primarily
+    # used to identify integrations from command-line scripts.
     name = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.

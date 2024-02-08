@@ -160,12 +160,12 @@ class LibraryAuthenticator(LoggerMixin):
         analytics: Analytics | None = None,
     ) -> Self:
         """Initialize an Authenticator for the given Library based on its
-        configured ExternalIntegrations.
+        configured Integration Configuration.
         """
         # Start with an empty list of authenticators.
         authenticator = cls(_db=_db, library=library)
 
-        # Find all of this library's ExternalIntegrations set up with
+        # Find all of this library's integrations with
         # the goal of authenticating patrons.
         integrations: list[
             IntegrationLibraryConfiguration
@@ -173,8 +173,7 @@ class LibraryAuthenticator(LoggerMixin):
             _db, library, Goals.PATRON_AUTH_GOAL
         ).all()
 
-        # Turn each such ExternalIntegration into an
-        # AuthenticationProvider.
+        # Turn each such integration into an AuthenticationProvider.
         for integration in integrations:
             try:
                 authenticator.register_provider(integration, analytics)
@@ -285,10 +284,10 @@ class LibraryAuthenticator(LoggerMixin):
         integration: IntegrationLibraryConfiguration,
         analytics: Analytics | None = None,
     ):
-        """Turn an ExternalIntegration object into an AuthenticationProvider
+        """Turn an IntegrationLibraryConfiguration object into an AuthenticationProvider
         object, and register it.
 
-        :param integration: An ExternalIntegration that configures
+        :param integration: An IntegrationLibraryConfiguration that configures
             a way of authenticating patrons.
         """
         if integration.parent.goal != Goals.PATRON_AUTH_GOAL:

@@ -72,7 +72,7 @@ class TestNYTBestSellerAPI:
     """Test the API calls."""
 
     def test_from_config(self, nyt_fixture: NYTBestSellerAPIFixture):
-        # You have to have an ExternalIntegration for the NYT.
+        # You have to have an integration for the NYT.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             NYTBestSellerAPI.from_config(nyt_fixture.db.session)
         assert "No Integration found for the NYT." in str(excinfo.value)

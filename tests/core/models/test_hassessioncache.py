@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from core.model import ConfigurationSetting
+from core.model import Genre
 from core.model.hassessioncache import CacheTuple, HasSessionCache
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -212,84 +212,77 @@ class TestHasSessionCache:
 
 class TestHasFullTableCacheDatabase:
     def test_cached_values_are_properly_updated(self, db: DatabaseTransactionFixture):
-        setting_key = "key"
-        setting_old_value = "old value"
-        setting_new_value = "new value"
-
-        # First, let's create a ConfigurationSetting instance and save it in the database.
-        setting = ConfigurationSetting(key=setting_key, _value=setting_old_value)
-        db.session.add(setting)
+        # First, let's create a Genre instance and save it in the database.
+        genre = Genre(name="test")
+        db.session.add(genre)
         db.session.commit()
 
-        # Let's save ConfigurationSetting's ID to find it later.
-        setting_id = setting.id
+        # Let's save Genre's ID to find it later.
+        genre_id = genre.id
 
-        # Now let's fetch the configuration setting from the database and add it to the cache.
-        db_setting1 = (
-            db.session.query(ConfigurationSetting)
-            .filter(ConfigurationSetting.key == setting_key)
-            .one()
-        )
-        ConfigurationSetting.cache_warm(db.session, lambda: [db_setting1])
+        # Now let's fetch from the database and add it to the cache.
+        db_genre1 = db.session.query(Genre).filter(Genre.name == "test").one()
+        Genre.cache_warm(db.session, lambda: [db_genre1])
 
         # After, let's fetch it again and change its value.
-        db_setting2 = (
-            db.session.query(ConfigurationSetting)
-            .filter(ConfigurationSetting.key == setting_key)
-            .one()
-        )
-        db_setting2.value = setting_new_value
+        db_genre2 = db.session.query(Genre).filter(Genre.name == "test").one()
+        db_genre2.name = "changed"
 
         # Now let's make sure that the cached value has also been updated.
-        assert isinstance(setting_id, int)
-        config_setting_by_id = ConfigurationSetting.by_id(db.session, setting_id)
-        assert isinstance(config_setting_by_id, HasSessionCache)
-        assert config_setting_by_id._value == setting_new_value
+        assert isinstance(genre_id, int)
+        genre_by_id = Genre.by_id(db.session, genre_id)
+        assert isinstance(genre_by_id, HasSessionCache)
+        assert genre_by_id.name == "changed"
 
     def test_cached_value_deleted(self, db: DatabaseTransactionFixture):
-        # Get setting
-        setting = ConfigurationSetting.sitewide(db.session, "test")
-        setting.value = "testing"
+        # Get genre
+        genre = Genre(name="test")
+        db.session.add(genre)
+        db.session.commit()
 
-        # Delete setting
-        db.session.delete(setting)
+        # Delete genre
+        db.session.delete(genre)
 
-        # we should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(db.session, setting.id)
-        cache = ConfigurationSetting._cache_from_session(db.session)
+        # we should no longer be able to get genre from cache
+        assert isinstance(genre.id, int)
+        cached = Genre.by_id(db.session, genre.id)
+        cache = Genre._cache_from_session(db.session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
     def test_cached_value_deleted_flushed(self, db: DatabaseTransactionFixture):
-        # Get setting
-        setting = ConfigurationSetting.sitewide(db.session, "test")
-        setting.value = "testing"
+        # Get genre
+        genre = Genre(name="test")
+        db.session.add(genre)
+        db.session.commit()
 
-        # Delete setting and flush
-        db.session.delete(setting)
+        # Delete genre and flush
+        db.session.delete(genre)
         db.session.flush()
 
-        # we should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(db.session, setting.id)
-        cache = ConfigurationSetting._cache_from_session(db.session)
+        # we should no longer be able to get genre from cache
+        assert isinstance(genre.id, int)
+        cached = Genre.by_id(db.session, genre.id)
+        cache = Genre._cache_from_session(db.session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0
 
     def test_cached_value_deleted_committed(self, db: DatabaseTransactionFixture):
-        # Get setting
-        setting = ConfigurationSetting.sitewide(db.session, "test")
-        setting.value = "testing"
+        # Get genre
+        genre = Genre(name="test")
+        db.session.add(genre)
         db.session.commit()
 
-        # Delete setting and commit
-        db.session.delete(setting)
+        # Delete genre and commit
+        db.session.delete(genre)
         db.session.commit()
 
-        # We should no longer be able to get setting from cache
-        cached = ConfigurationSetting.by_id(db.session, setting.id)
-        cache = ConfigurationSetting._cache_from_session(db.session)
+        # we should no longer be able to get genre from cache
+        assert isinstance(genre.id, int)
+        cached = Genre.by_id(db.session, genre.id)
+        cache = Genre._cache_from_session(db.session)
         assert cached is None
         assert len(cache.id) == 0
         assert len(cache.key) == 0

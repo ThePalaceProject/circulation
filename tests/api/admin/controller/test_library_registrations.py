@@ -235,8 +235,7 @@ class TestLibraryRegistration:
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
 
-        # The integration ID might not correspond to a valid
-        # ExternalIntegration.
+        # The integration ID might not correspond to a valid integration.
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [

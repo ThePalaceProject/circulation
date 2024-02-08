@@ -7,7 +7,7 @@ class MockAnalyticsProvider:
         with the integration or services. It just needs to keep track of how
         many times it's called.
 
-        :param integration: The ExternalIntegration that configures this analytics service.
+        :param integration: The IntegrationConfiguration that configures this analytics service.
         :param services: The Service object that provides services to this provider.
         :param library: The library this analytics provider is associated with.
         """

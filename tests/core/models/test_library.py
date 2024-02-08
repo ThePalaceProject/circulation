@@ -184,10 +184,6 @@ hidden_content_types='[]'
 
     def test_generate_keypair(self, db: DatabaseTransactionFixture):
         # Test the ability to create a public/private key pair
-
-        # If you pass in a ConfigurationSetting that is missing its
-        # value, or whose value is not a public key pair, a new key
-        # pair is created.
         public_key, private_key = Library.generate_keypair()
         assert "BEGIN PUBLIC KEY" in public_key
         key = import_key(private_key)

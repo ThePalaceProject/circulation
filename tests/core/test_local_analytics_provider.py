@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.local_analytics_provider import LocalAnalyticsProvider
-from core.model import CirculationEvent, ExternalIntegration
+from core.model import CirculationEvent
 from core.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 class LocalAnalyticsProviderFixture:
     transaction: DatabaseTransactionFixture
-    integration: ExternalIntegration
     la: LocalAnalyticsProvider
 
     def __init__(

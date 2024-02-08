@@ -14,9 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     LargeBinary,
-    Table,
     Unicode,
-    UniqueConstraint,
     select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -41,15 +39,7 @@ from core.model.work import Work
 
 if TYPE_CHECKING:
     from core.lane import Lane
-    from core.model import (
-        AdminRole,
-        CirculationEvent,
-        Collection,
-        ConfigurationSetting,
-        CustomList,
-        ExternalIntegration,
-        Patron,
-    )
+    from core.model import AdminRole, CirculationEvent, Collection, CustomList, Patron
 
 
 class CollectionInfoTuple(NamedTuple):
@@ -120,22 +110,6 @@ class Library(Base, HasSessionCache):
         secondary=lambda: customlist_sharedlibrary,
         back_populates="shared_locally_with_libraries",
         uselist=True,
-    )
-
-    # A Library may have many ExternalIntegrations.
-    integrations: Mapped[list[ExternalIntegration]] = relationship(
-        "ExternalIntegration",
-        secondary=lambda: externalintegrations_libraries,
-        back_populates="libraries",
-    )
-
-    # This parameter is deprecated, and will be removed once all of our integrations
-    # are updated to use IntegrationSettings. New code shouldn't use it.
-    # TODO: Remove this column.
-    external_integration_settings: Mapped[list[ConfigurationSetting]] = relationship(
-        "ConfigurationSetting",
-        back_populates="library",
-        cascade="all, delete",
     )
 
     # Any additional configuration information is stored as JSON on this column.
@@ -538,20 +512,3 @@ class LibraryLogo(Base):
         if self.content is None:
             raise RuntimeError("Logo content is None")
         return f"data:image/png;base64,{self.content.decode('utf8')}"
-
-
-externalintegrations_libraries: Table = Table(
-    "externalintegrations_libraries",
-    Base.metadata,
-    Column(
-        "externalintegration_id",
-        Integer,
-        ForeignKey("externalintegrations.id"),
-        index=True,
-        nullable=False,
-    ),
-    Column(
-        "library_id", Integer, ForeignKey("libraries.id"), index=True, nullable=False
-    ),
-    UniqueConstraint("externalintegration_id", "library_id"),
-)
