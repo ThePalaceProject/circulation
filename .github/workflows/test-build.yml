@@ -61,6 +61,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           flags: ${{ matrix.module }}
+          name: ${{ matrix.module }}-${{ matrix.python-version }}
+          verbose: true
 
   test-migrations:
     name: Migration Tests
@@ -109,6 +111,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           flags: migration
+          name: "migration-3.10"
+          verbose: true
 
   docker-test-migrations:
     name: Docker migration test
