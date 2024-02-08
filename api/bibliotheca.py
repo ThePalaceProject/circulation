@@ -58,9 +58,9 @@ from core.model import (
     Collection,
     Contributor,
     DataSource,
+    DataSourceConstants,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -105,7 +105,8 @@ class BibliothecaSettings(BaseCirculationApiSettings):
 
 
 class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
-    dont_display_reserves: str | None = FormField(
+    dont_display_reserves: ConfigurationAttributeValue = FormField(
+        ConfigurationAttributeValue.YESVALUE,
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
@@ -114,10 +115,10 @@ class BibliothecaLibrarySettings(BaseCirculationLoanSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                ConfigurationAttributeValue.YESVALUE.value: "Show",
-                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+                ConfigurationAttributeValue.YESVALUE: "Show",
+                ConfigurationAttributeValue.NOVALUE: "Hide",
             },
-        )
+        ),
     )
 
 
@@ -152,19 +153,13 @@ class BibliothecaAPI(
 
     @classmethod
     def label(cls):
-        return ExternalIntegration.BIBLIOTHECA
+        return DataSourceConstants.BIBLIOTHECA
 
     @classmethod
     def description(cls):
         return ""
 
     def __init__(self, _db, collection):
-        if collection.protocol != ExternalIntegration.BIBLIOTHECA:
-            raise ValueError(
-                "Collection protocol is %s, but passed into BibliothecaAPI!"
-                % collection.protocol
-            )
-
         super().__init__(_db, collection)
 
         self._db = _db
@@ -1219,7 +1214,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
 
     SERVICE_NAME = "Bibliotheca Circulation Sweep"
     DEFAULT_BATCH_SIZE = 25
-    PROTOCOL = ExternalIntegration.BIBLIOTHECA
+    PROTOCOL = BibliothecaAPI.label()
 
     def __init__(self, _db, collection, api_class=BibliothecaAPI, **kwargs):
         _db = Session.object_session(collection)
@@ -1292,7 +1287,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
 class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
     """Common superclass for our two TimelineMonitors."""
 
-    PROTOCOL = ExternalIntegration.BIBLIOTHECA
+    PROTOCOL = BibliothecaAPI.label()
     LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
     @inject
@@ -1771,7 +1766,7 @@ class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):
 
     SERVICE_NAME = "Bibliotheca Bibliographic Coverage Provider"
     DATA_SOURCE_NAME = DataSource.BIBLIOTHECA
-    PROTOCOL = ExternalIntegration.BIBLIOTHECA
+    PROTOCOL = BibliothecaAPI.label()
     INPUT_IDENTIFIER_TYPES = Identifier.BIBLIOTHECA_ID
 
     # 25 is the maximum batch size for the Bibliotheca API.

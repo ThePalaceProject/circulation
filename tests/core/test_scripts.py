@@ -11,10 +11,14 @@ from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
+from api.bibliotheca import BibliothecaAPI
+from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
+from api.overdrive import OverdriveAPI
 from core.classifier import Classifier
 from core.config import Configuration, ConfigurationConstants
 from core.external_search import ExternalSearchIndex, Filter
+from core.integration.goals import Goals
 from core.lane import Lane, WorkList
 from core.metadata_layer import TimestampData
 from core.model import (
@@ -23,7 +27,6 @@ from core.model import (
     Contributor,
     CoverageRecord,
     DataSource,
-    ExternalIntegration,
     Identifier,
     Library,
     LicensePool,
@@ -38,14 +41,13 @@ from core.model.customlist import CustomList
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
-from core.opds_import import OPDSImportMonitor
+from core.opds_import import OPDSAPI, OPDSImportMonitor
 from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
     CollectionArgumentsScript,
     CollectionInputScript,
     ConfigureCollectionScript,
-    ConfigureIntegrationScript,
     ConfigureLaneScript,
     ConfigureLibraryScript,
     ConfigureSiteScript,
@@ -358,7 +360,7 @@ class OPDSCollectionMonitor(CollectionMonitor):
     """Mock Monitor for use in tests of Run*MonitorScript."""
 
     SERVICE_NAME = "Test Monitor"
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL = OPDSAPI.label()
 
     def __init__(self, _db, test_argument=None, **kwargs):
         self.test_argument = test_argument
@@ -372,7 +374,7 @@ class DoomedCollectionMonitor(CollectionMonitor):
     """Mock CollectionMonitor that always raises an exception."""
 
     SERVICE_NAME = "Doomed Monitor"
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL = OPDSAPI.label()
 
     def run(self, *args, **kwargs):
         self.ran = True
@@ -490,7 +492,7 @@ class TestRunCollectionMonitorScript:
         o3 = db.collection()
 
         # ...and a Bibliotheca collection.
-        b1 = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        b1 = db.collection(protocol=BibliothecaAPI.label())
 
         script = RunCollectionMonitorScript(
             OPDSCollectionMonitor, db.session, cmd_args=[]
@@ -726,7 +728,7 @@ class TestRunThreadedCollectionCoverageProviderScript:
         # If there are no collections for the provider, run does nothing.
         # Pass a mock pool that will raise an error if it's used.
         pool = object()
-        collection = db.collection(protocol=ExternalIntegration.ENKI)
+        collection = db.collection(protocol=EnkiAPI.label())
 
         # Run exits without a problem because the pool is never touched.
         script.run(pool=pool)
@@ -1099,11 +1101,9 @@ class TestShowCollectionsScript:
         assert "No collections found.\n" == output.getvalue()
 
     def test_with_multiple_collections(self, db: DatabaseTransactionFixture):
-        c1 = db.collection(name="Collection 1", protocol=ExternalIntegration.OVERDRIVE)
+        c1 = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
         c1.collection_password = "a"
-        c2 = db.collection(
-            name="Collection 2", protocol=ExternalIntegration.BIBLIOTHECA
-        )
+        c2 = db.collection(name="Collection 2", protocol=BibliothecaAPI.label())
         c2.collection_password = "b"
 
         # The output of this script is the result of running explain()
@@ -1234,9 +1234,7 @@ class TestConfigureCollectionScript:
 
     def test_reconfigure_collection(self, db: DatabaseTransactionFixture):
         # The collection exists.
-        collection = db.collection(
-            name="Collection 1", protocol=ExternalIntegration.OVERDRIVE
-        )
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
         script = ConfigureCollectionScript()
         output = StringIO()
 
@@ -1246,7 +1244,7 @@ class TestConfigureCollectionScript:
             [
                 "--name=Collection 1",
                 "--url=foo",
-                "--protocol=%s" % ExternalIntegration.BIBLIOTHECA,
+                "--protocol=%s" % BibliothecaAPI.label(),
             ],
             output,
         )
@@ -1254,7 +1252,7 @@ class TestConfigureCollectionScript:
         # The collection has been changed.
         db.session.refresh(collection.integration_configuration)
         assert "foo" == collection.integration_configuration.settings_dict.get("url")
-        assert ExternalIntegration.BIBLIOTHECA == collection.protocol
+        assert BibliothecaAPI.label() == collection.protocol
 
         expect = (
             "Configuration settings stored.\n" + "\n".join(collection.explain()) + "\n"
@@ -1270,14 +1268,15 @@ class TestShowIntegrationsScript:
         assert "No integrations found.\n" == output.getvalue()
 
     def test_with_multiple_integrations(self, db: DatabaseTransactionFixture):
-        i1 = db.external_integration(
-            name="Integration 1", goal="Goal", protocol=ExternalIntegration.OVERDRIVE
+        i1 = db.integration_configuration(
+            name="Integration 1", goal=Goals.LICENSE_GOAL, protocol="Test Protocol 1"
         )
-        i1.password = "a"
-        i2 = db.external_integration(
-            name="Integration 2", goal="Goal", protocol=ExternalIntegration.BIBLIOTHECA
+        i1.settings_dict = {"url": "http://url1", "username": "user1"}
+
+        i2 = db.integration_configuration(
+            name="Integration 2", goal=Goals.LICENSE_GOAL, protocol="Test Protocol 2"
         )
-        i2.password = "b"
+        i2.settings_dict = {"url": "http://url2", "password": "password"}
 
         # The output of this script is the result of running explain()
         # on both integrations.
@@ -1286,14 +1285,14 @@ class TestShowIntegrationsScript:
         expect_1 = "\n".join(i1.explain(include_secrets=False))
         expect_2 = "\n".join(i2.explain(include_secrets=False))
 
-        assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
+        assert expect_1 + "\n\n" + expect_2 + "\n\n" == output.getvalue()
 
         # We can tell the script to only list a single integration.
         output = StringIO()
         ShowIntegrationsScript().do_run(
             db.session, cmd_args=["--name=Integration 2"], output=output
         )
-        assert expect_2 + "\n" == output.getvalue()
+        assert expect_2 + "\n\n" == output.getvalue()
 
         # We can tell the script to include the integration secrets
         output = StringIO()
@@ -1302,69 +1301,7 @@ class TestShowIntegrationsScript:
         )
         expect_1 = "\n".join(i1.explain(include_secrets=True))
         expect_2 = "\n".join(i2.explain(include_secrets=True))
-        assert expect_1 + "\n" + expect_2 + "\n" == output.getvalue()
-
-
-class TestConfigureIntegrationScript:
-    def test_load_integration(self, db: DatabaseTransactionFixture):
-        m = ConfigureIntegrationScript._integration
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, None, None, "protocol", None)
-        assert (
-            "An integration must by identified by either ID, name, or the combination of protocol and goal."
-            in str(excinfo.value)
-        )
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, "notanid", None, None, None)
-        assert "No integration with ID notanid." in str(excinfo.value)
-
-        with pytest.raises(ValueError) as excinfo:
-            m(db.session, None, "Unknown integration", None, None)
-        assert (
-            'No integration with name "Unknown integration". To create it, you must also provide protocol and goal.'
-            in str(excinfo.value)
-        )
-
-        integration = db.external_integration(protocol="Protocol", goal="Goal")
-        integration.name = "An integration"
-        assert integration == m(db.session, integration.id, None, None, None)
-
-        assert integration == m(db.session, None, integration.name, None, None)
-
-        assert integration == m(db.session, None, None, "Protocol", "Goal")
-
-        # An integration may be created given a protocol and goal.
-        integration2 = m(db.session, None, "I exist now", "Protocol", "Goal2")
-        assert integration2 != integration
-        assert "Protocol" == integration2.protocol
-        assert "Goal2" == integration2.goal
-        assert "I exist now" == integration2.name
-
-    def test_add_settings(self, db: DatabaseTransactionFixture):
-        script = ConfigureIntegrationScript()
-        output = StringIO()
-
-        script.do_run(
-            db.session,
-            [
-                "--protocol=aprotocol",
-                "--goal=agoal",
-                "--setting=akey=avalue",
-            ],
-            output,
-        )
-
-        # An ExternalIntegration was created and configured.
-        integration = get_one(
-            db.session, ExternalIntegration, protocol="aprotocol", goal="agoal"
-        )
-
-        expect_output = (
-            "Configuration settings stored.\n" + "\n".join(integration.explain()) + "\n"
-        )
-        assert expect_output == output.getvalue()
+        assert expect_1 + "\n\n" + expect_2 + "\n\n" == output.getvalue()
 
 
 class TestShowLanesScript:

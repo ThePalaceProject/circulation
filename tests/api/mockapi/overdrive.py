@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from api.overdrive import OverdriveAPI, OverdriveLibrarySettings, OverdriveSettings
 from core.model import Library
 from core.model.collection import Collection
-from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
 
@@ -51,7 +50,7 @@ class MockOverdriveAPI(OverdriveAPI):
     ):
         """Create a mock Overdrive collection for use in tests."""
         collection, _ = Collection.by_name_and_protocol(
-            _db, name=name, protocol=ExternalIntegration.OVERDRIVE
+            _db, name=name, protocol=OverdriveAPI.label()
         )
         settings = OverdriveSettings(
             external_account_id=library_id,

@@ -62,7 +62,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -192,19 +191,13 @@ class Axis360API(
 
     @classmethod
     def label(cls) -> str:
-        return ExternalIntegration.AXIS_360
+        return "Axis 360"
 
     @classmethod
     def description(cls) -> str:
         return ""
 
     def __init__(self, _db: Session, collection: Collection) -> None:
-        if collection.protocol != ExternalIntegration.AXIS_360:
-            raise ValueError(
-                "Collection protocol is %s, but passed into Axis360API!"
-                % collection.protocol
-            )
-
         super().__init__(_db, collection)
         settings = self.settings
         self.library_id = settings.external_account_id
@@ -713,7 +706,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     INTERVAL_SECONDS = 60
     DEFAULT_BATCH_SIZE = 50
 
-    PROTOCOL = ExternalIntegration.AXIS_360
+    PROTOCOL = Axis360API.label()
 
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 
@@ -785,7 +778,7 @@ class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
 
     SERVICE_NAME = "Axis 360 Bibliographic Coverage Provider"
     DATA_SOURCE_NAME = DataSource.AXIS_360
-    PROTOCOL = ExternalIntegration.AXIS_360
+    PROTOCOL = Axis360API.label()
     INPUT_IDENTIFIER_TYPES = Identifier.AXIS_360_ID
     DEFAULT_BATCH_SIZE = 25
 
@@ -863,7 +856,7 @@ class AxisCollectionReaper(IdentifierSweepMonitor):
 
     SERVICE_NAME = "Axis Collection Reaper"
     INTERVAL_SECONDS = 3600 * 12
-    PROTOCOL = ExternalIntegration.AXIS_360
+    PROTOCOL = Axis360API.label()
 
     def __init__(
         self,

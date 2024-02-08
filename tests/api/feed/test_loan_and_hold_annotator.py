@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from api.app import app
+from api.opds_for_distributors import OPDSForDistributorsAPI
 from api.problem_details import NOT_FOUND_ON_REMOTE
 from core.classifier import (  # type: ignore[attr-defined]
     Classifier,
@@ -11,7 +12,7 @@ from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from core.feed.types import WorkEntry, WorkEntryData
 from core.lane import WorkList
-from core.model import ExternalIntegration, get_one
+from core.model import get_one
 from core.model.constants import EditionConstants, LinkRelations
 from core.model.licensing import LicensePool
 from core.model.patron import Loan
@@ -212,9 +213,7 @@ class TestLibraryLoanAndHoldAnnotator:
         feed = OPDSAcquisitionFeed("title", "url", [], annotator)
 
         # Annotate time tracking
-        opds_for_distributors = db.collection(
-            protocol=ExternalIntegration.OPDS_FOR_DISTRIBUTORS
-        )
+        opds_for_distributors = db.collection(protocol=OPDSForDistributorsAPI.label())
         work = db.work(with_license_pool=True, collection=opds_for_distributors)
         work.active_license_pool().should_track_playtime = True
         edition = work.presentation_edition

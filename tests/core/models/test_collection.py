@@ -4,13 +4,15 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy import select
 
+from api.bibliotheca import BibliothecaAPI
+from api.overdrive import OverdriveAPI
 from core.config import Configuration
 from core.external_search import ExternalSearchIndex
 from core.integration.goals import Goals
 from core.model import get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
+from core.model.configuration import ConfigurationSetting
 from core.model.coverage import CoverageRecord
 from core.model.customlist import CustomList
 from core.model.datasource import DataSource
@@ -45,14 +47,14 @@ class ExampleCollectionFixture:
 def example_collection_fixture(
     db: DatabaseTransactionFixture,
 ) -> ExampleCollectionFixture:
-    c = db.collection(name="test collection", protocol=ExternalIntegration.OVERDRIVE)
+    c = db.collection(name="test collection", protocol=OverdriveAPI.label())
     return ExampleCollectionFixture(c, db)
 
 
 class TestCollection:
     def test_by_name_and_protocol(self, db: DatabaseTransactionFixture):
         name = "A name"
-        protocol = ExternalIntegration.OVERDRIVE
+        protocol = OverdriveAPI.label()
         key = (name, protocol)
 
         # Cache is empty.
@@ -61,7 +63,7 @@ class TestCollection:
         assert len(cache.key) == 0
 
         collection1, is_new = Collection.by_name_and_protocol(
-            db.session, name, ExternalIntegration.OVERDRIVE
+            db.session, name, OverdriveAPI.label()
         )
         assert True == is_new
 
@@ -72,7 +74,7 @@ class TestCollection:
         assert cache.stats.misses == 1
 
         collection2, is_new = Collection.by_name_and_protocol(
-            db.session, name, ExternalIntegration.OVERDRIVE
+            db.session, name, OverdriveAPI.label()
         )
         assert collection1 == collection2
         assert False == is_new
@@ -87,9 +89,7 @@ class TestCollection:
         # You'll get an exception if you look up an existing name
         # but the protocol doesn't match.
         with pytest.raises(ValueError) as excinfo:
-            Collection.by_name_and_protocol(
-                db.session, name, ExternalIntegration.BIBLIOTHECA
-            )
+            Collection.by_name_and_protocol(db.session, name, BibliothecaAPI.label())
         assert 'Integration "A name" does not use protocol "Bibliotheca".' in str(
             excinfo.value
         )
@@ -102,7 +102,7 @@ class TestCollection:
 
         with pytest.raises(ValueError) as excinfo:
             Collection.by_name_and_protocol(
-                db.session, "another name", ExternalIntegration.OVERDRIVE
+                db.session, "another name", OverdriveAPI.label()
             )
 
         assert 'Integration "another name" does not have goal "LICENSE_GOAL".' in str(
@@ -116,8 +116,8 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
-        overdrive = ExternalIntegration.OVERDRIVE
-        bibliotheca = ExternalIntegration.BIBLIOTHECA
+        overdrive = OverdriveAPI.label()
+        bibliotheca = BibliothecaAPI.label()
         c1 = db.collection(db.fresh_str(), protocol=overdrive)
         c1.parent = test_collection
         c2 = db.collection(db.fresh_str(), protocol=bibliotheca)
@@ -180,8 +180,8 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
-        overdrive = ExternalIntegration.OVERDRIVE
-        bibliotheca = ExternalIntegration.BIBLIOTHECA
+        overdrive = OverdriveAPI.label()
+        bibliotheca = BibliothecaAPI.label()
 
         # Create a parent and a child collection, both with
         # protocol=Overdrive.
@@ -211,7 +211,7 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
 
         opds = db.collection()
-        bibliotheca = db.collection(protocol=ExternalIntegration.BIBLIOTHECA)
+        bibliotheca = db.collection(protocol=BibliothecaAPI.label())
 
         # The rote data_source is returned for the obvious collection.
         assert bibliotheca.data_source is not None
@@ -350,32 +350,38 @@ class TestCollection:
 
         data = test_collection.explain()
         assert [
-            'Name: "test collection"',
-            'Protocol: "Overdrive"',
-            'Used by library: "only one"',
-            'Setting "external_account_id": "id"',
-            'Setting "setting": "value"',
-            'Setting "url": "url"',
-            'Setting "username": "username"',
+            f"ID: {test_collection.integration_configuration.id}",
+            "Name: test collection",
+            "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
+            "Settings:",
+            "  external_account_id: id",
+            "  password: ********",
+            "  setting: value",
+            "  url: url",
+            "  username: username",
+            "Configured libraries:",
+            "  only one - The only library",
         ] == data
 
         with_password = test_collection.explain(include_secrets=True)
-        assert 'Setting "password": "password"' in with_password
+        assert "  password: password" in with_password
 
         # If the collection is the child of another collection,
         # its parent is mentioned.
         child = db.collection(
             name="Child",
             external_account_id="id2",
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
         )
         child.parent = test_collection
         data = child.explain()
         assert [
-            'Name: "Child"',
+            f"ID: {child.integration_configuration.id}",
+            "Name: Child",
+            "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
             "Parent: test collection",
-            'Protocol: "Overdrive"',
-            'Setting "external_account_id": "id2"',
+            "Settings:",
+            "  external_account_id: id2",
         ] == data
 
     def test_disassociate_libraries(

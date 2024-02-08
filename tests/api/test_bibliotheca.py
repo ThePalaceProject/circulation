@@ -50,7 +50,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -61,7 +60,6 @@ from core.model import (
     Timestamp,
     Work,
     WorkCoverageRecord,
-    create,
 )
 from core.scripts import RunCollectionCoverageProviderScript
 from core.util.datetime_helpers import datetime_utc, utc_now
@@ -335,15 +333,6 @@ class TestBibliothecaAPI:
         db = bibliotheca_fixture.db
         # Test the Bibliotheca implementation of the update_availability
         # method defined by the CirculationAPI interface.
-
-        # Create an analytics integration so we can make sure
-        # events are tracked.
-        integration, ignore = create(
-            db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
-        )
 
         # Create a LicensePool that needs updating.
         edition, pool = db.edition(
@@ -720,15 +709,6 @@ class TestBibliothecaCirculationSweep:
         db = bibliotheca_fixture.db
         # Test what happens when BibliothecaCirculationSweep discovers a new
         # work.
-
-        # Create an analytics integration so we can make sure
-        # events are tracked.
-        integration, ignore = create(
-            db.session,
-            ExternalIntegration,
-            goal=ExternalIntegration.ANALYTICS_GOAL,
-            protocol="core.local_analytics_provider",
-        )
 
         # We know about an identifier, but nothing else.
         identifier = db.identifier(

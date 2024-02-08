@@ -50,6 +50,7 @@ from core.model import (
     Edition,
     Genre,
     IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     Work,
@@ -59,7 +60,7 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.before_flush_decorator import Listener
-from core.model.configuration import ConfigurationAttributeValue, ExternalIntegration
+from core.model.configuration import ConfigurationAttributeValue
 from core.model.constants import EditionConstants
 from core.model.hybrid import hybrid_property
 from core.model.listeners import site_configuration_has_changed
@@ -2302,14 +2303,15 @@ class DatabaseBackedWorkList(WorkList):
             select(Collection.id)
             .join(
                 IntegrationConfiguration,
-                Collection.integration_configuration_id == IntegrationConfiguration.id,
+            )
+            .join(
+                IntegrationLibraryConfiguration,
             )
             .where(
-                IntegrationConfiguration.settings_dict.contains(
-                    {
-                        ExternalIntegration.DISPLAY_RESERVES: ConfigurationAttributeValue.NOVALUE.value
-                    }
-                )
+                IntegrationLibraryConfiguration.library_id == self.library_id,
+                IntegrationLibraryConfiguration.settings_dict.contains(
+                    {"dont_display_reserves": ConfigurationAttributeValue.NOVALUE.value}
+                ),
             )
         ).all()
         restricted_collection_ids = (r.id for r in restricted_collections)

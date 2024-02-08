@@ -3,10 +3,9 @@ import json
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from api.odl2 import ODL2Importer
-from core.model.configuration import ExternalIntegration
+from api.odl2 import ODL2API, ODL2Importer
 from core.model.datasource import DataSource
-from core.opds2_import import OPDS2Importer, RWPMManifestParser
+from core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
 from core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
 from tests.core.test_opds2_import import OPDS2Test
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -20,7 +19,7 @@ class TestOPDS2Validation(OPDS2Test):
         opds_files_fixture: OPDSFilesFixture,
     ):
         collection = db.collection(
-            protocol=ExternalIntegration.OPDS2_IMPORT,
+            protocol=OPDS2API.label(),
             data_source_name=DataSource.FEEDBOOKS,
             settings={
                 "external_account_id": "http://example.com/feed",
@@ -44,7 +43,7 @@ class TestODL2Validation(OPDS2Test):
         opds_files_fixture: OPDSFilesFixture,
     ):
         collection = db.collection(
-            protocol=ExternalIntegration.ODL2,
+            protocol=ODL2API.label(),
             data_source_name=DataSource.FEEDBOOKS,
             settings={
                 "username": "username",

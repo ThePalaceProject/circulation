@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from api.bibliotheca import BibliothecaAPI
 from api.integration.registry.metadata import MetadataRegistry
 from api.lanes import (
     ContributorFacets,
@@ -28,13 +29,14 @@ from api.lanes import (
 )
 from api.metadata.novelist import NoveListAPI
 from api.metadata.nyt import NYTBestSellerAPI
+from api.overdrive import OverdriveAPI
 from core.classifier import Classifier
 from core.entrypoint import AudiobooksEntryPoint
 from core.external_search import Filter
 from core.integration.goals import Goals
 from core.lane import DefaultSortOrderFacets, Facets, FeaturedFacets, Lane, WorkList
 from core.metadata_layer import ContributorData, Metadata
-from core.model import Contributor, DataSource, Edition, ExternalIntegration, Library
+from core.model import Contributor, DataSource, Edition, Library
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
@@ -1164,7 +1166,7 @@ class TestJackpotWorkList:
         library = db.default_library()
         overdrive_collection = db.collection(
             "Test Overdrive Collection",
-            protocol=ExternalIntegration.OVERDRIVE,
+            protocol=OverdriveAPI.label(),
             data_source_name=DataSource.OVERDRIVE,
         )
         overdrive_collection.libraries.append(library)
@@ -1173,7 +1175,7 @@ class TestJackpotWorkList:
         # library. It will not be used at all.
         ignored_collection = db.collection(
             "Ignored Collection",
-            protocol=ExternalIntegration.BIBLIOTHECA,
+            protocol=BibliothecaAPI.label(),
             data_source_name=DataSource.BIBLIOTHECA,
         )
 

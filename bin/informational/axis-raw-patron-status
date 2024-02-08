@@ -19,9 +19,7 @@ class Axis360RawPatronActivityScript(Script):
 
     def run(self):
         for patron_identifier in sys.argv[1:]:
-            for collection in Collection.by_protocol(
-                self._db, ExternalIntegration.AXIS_360
-            ):
+            for collection in Collection.by_protocol(self._db, Axis360API.label()):
                 api = Axis360API(self._db, collection)
                 response = api.availability(patron_id=patron_identifier)
                 xml = minidom.parseString(response.content)

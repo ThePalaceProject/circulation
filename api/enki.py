@@ -80,7 +80,8 @@ class EnkiLibrarySettings(BaseSettings):
     enki_library_id: str = FormField(
         form=ConfigurationFormItem(label=_("Library ID"), required=True)
     )
-    dont_display_reserves: str | None = FormField(
+    dont_display_reserves: ConfigurationAttributeValue = FormField(
+        ConfigurationAttributeValue.YESVALUE,
         form=ConfigurationFormItem(
             label=_("Show/Hide Titles with No Available Loans"),
             required=False,
@@ -89,10 +90,10 @@ class EnkiLibrarySettings(BaseSettings):
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
-                ConfigurationAttributeValue.YESVALUE.value: "Show",
-                ConfigurationAttributeValue.NOVALUE.value: "Hide",
+                ConfigurationAttributeValue.YESVALUE: "Show",
+                ConfigurationAttributeValue.NOVALUE: "Hide",
             },
-        )
+        ),
     )
 
 

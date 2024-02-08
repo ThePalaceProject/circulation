@@ -45,7 +45,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hold,
     Hyperlink,
     Library,
@@ -95,7 +94,6 @@ class ODLSettings(OPDSImporterSettings):
     )
 
     password: str = FormField(
-        key=ExternalIntegration.PASSWORD,
         form=ConfigurationFormItem(
             label=_("Library's API password"),
             required=True,
@@ -963,7 +961,7 @@ class ODLAPI(
 
     @classmethod
     def label(cls) -> str:
-        return ExternalIntegration.ODL
+        return "ODL"
 
     @classmethod
     def description(cls) -> str:

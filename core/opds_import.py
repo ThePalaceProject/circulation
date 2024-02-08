@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from datetime import datetime
+from enum import Enum
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 from urllib.parse import urljoin, urlparse
@@ -55,7 +56,6 @@ from core.model import (
     CoverageRecord,
     DataSource,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -97,6 +97,11 @@ class OPDSXMLParser(XMLParser):
         "drm": "http://librarysimplified.org/terms/drm",
         "palace": "http://palaceproject.io/terms",
     }
+
+
+class IdentifierSource(Enum):
+    ID = "id"
+    DCTERMS_IDENTIFIER = "first_dcterms_identifier"
 
 
 class OPDSImporterSettings(
@@ -172,19 +177,18 @@ class OPDSImporterSettings(
         ),
     )
 
-    primary_identifier_source: str | None = FormField(
+    primary_identifier_source: IdentifierSource = FormField(
+        IdentifierSource.ID,
         form=ConfigurationFormItem(
             label=_("Identifer"),
             required=False,
             description=_("Which book identifier to use as ID."),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "": _("(Default) Use <id>"),
-                ExternalIntegration.DCTERMS_IDENTIFIER: _(
-                    "Use <dcterms:identifier> first, if not exist use <id>"
-                ),
+                IdentifierSource.ID: "(Default) Use <id>",
+                IdentifierSource.DCTERMS_IDENTIFIER: "Use <dcterms:identifier> first, if not exist use <id>",
             },
-        )
+        ),
     )
 
 
@@ -650,7 +654,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     from external content servers.
     """
 
-    NAME = ExternalIntegration.OPDS_IMPORT
+    NAME = OPDSAPI.label()
     DESCRIPTION = _("Import books from a publicly-accessible OPDS feed.")
 
     # Subclasses of OPDSImporter may define a different parser class that's
@@ -747,7 +751,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
             xml_data_dict = xml_data_meta.get(_id, {})
 
             external_identifier = None
-            if self.primary_identifier_source == ExternalIntegration.DCTERMS_IDENTIFIER:
+            if self.primary_identifier_source == IdentifierSource.DCTERMS_IDENTIFIER:
                 # If it should use <dcterms:identifier> as the primary identifier, it must use the
                 # first value from the dcterms identifier, that came from the metadata as an
                 # IdentifierData object and it must be validated as a foreign_id before be used
@@ -1669,7 +1673,7 @@ class OPDSImportMonitor(CollectionMonitor):
 
     # The protocol this Monitor works with. Subclasses that
     # specialize OPDS import should override this.
-    PROTOCOL = ExternalIntegration.OPDS_IMPORT
+    PROTOCOL = OPDSAPI.label()
 
     def __init__(
         self,

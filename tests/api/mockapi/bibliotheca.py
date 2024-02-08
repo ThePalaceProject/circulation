@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from api.bibliotheca import BibliothecaAPI
 from core.model import Library
 from core.model.collection import Collection
-from core.model.configuration import ExternalIntegration
 from core.util.http import HTTP
 from tests.core.mock import MockRequestsResponse
 
@@ -17,7 +16,7 @@ class MockBibliothecaAPI(BibliothecaAPI):
     ) -> Collection:
         """Create a mock Bibliotheca collection for use in tests."""
         collection, _ = Collection.by_name_and_protocol(
-            _db, name=name, protocol=ExternalIntegration.BIBLIOTHECA
+            _db, name=name, protocol=BibliothecaAPI.label()
         )
         collection.integration_configuration.settings_dict = {
             "username": "a",

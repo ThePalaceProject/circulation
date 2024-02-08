@@ -12,13 +12,13 @@ from api.opds_for_distributors import (
     OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
 )
+from api.overdrive import OverdriveAPI
 from core.metadata_layer import CirculationData, LinkData
 from core.model import (
     Collection,
     Credential,
     DataSource,
     DeliveryMechanism,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -357,7 +357,7 @@ class TestOPDSForDistributorsAPI:
         pool.loan_to(patron)
 
         other_collection = opds_dist_api_fixture.db.collection(
-            protocol=ExternalIntegration.OVERDRIVE
+            protocol=OverdriveAPI.label()
         )
         other_edition, other_pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
@@ -520,7 +520,7 @@ class TestOPDSForDistributorsAPI:
         p2.loan_to(patron)
 
         other_collection = opds_dist_api_fixture.db.collection(
-            protocol=ExternalIntegration.OVERDRIVE
+            protocol=OverdriveAPI.label()
         )
         e3, p3 = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,

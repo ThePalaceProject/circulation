@@ -19,7 +19,6 @@ from core.integration.settings import (
 )
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
-from core.model.configuration import ExternalIntegration
 from core.opds2_import import (
     OPDS2Importer,
     OPDS2ImporterSettings,
@@ -90,7 +89,7 @@ class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
 
     @classmethod
     def label(cls) -> str:
-        return ExternalIntegration.ODL2
+        return "ODL 2.0"
 
     @classmethod
     def description(cls) -> str:

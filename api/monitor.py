@@ -1,10 +1,10 @@
 from sqlalchemy import and_, or_
 
 from api.odl import ODLAPI
+from api.opds_for_distributors import OPDSForDistributorsAPI
 from core.model import (
     Annotation,
     Collection,
-    ExternalIntegration,
     Hold,
     IntegrationConfiguration,
     LicensePool,
@@ -17,7 +17,7 @@ from core.util.datetime_helpers import utc_now
 class LoanlikeReaperMonitor(ReaperMonitor):
     SOURCE_OF_TRUTH_PROTOCOLS = [
         ODLAPI.label(),
-        ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
+        OPDSForDistributorsAPI.label(),
     ]
 
     @property

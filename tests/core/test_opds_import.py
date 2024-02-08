@@ -12,6 +12,7 @@ from psycopg2.extras import NumericRange
 
 from api.circulation import CirculationAPI, FulfillmentInfo, LoanInfo
 from api.circulation_exceptions import CurrentlyAvailable, FormatNotAvailable, NotOnHold
+from api.overdrive import OverdriveAPI
 from api.saml.credential import SAMLCredentialManager
 from api.saml.metadata.model import (
     SAMLAttributeStatement,
@@ -28,7 +29,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -42,7 +42,13 @@ from core.model import (
     Work,
     WorkCoverageRecord,
 )
-from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor, OPDSXMLParser
+from core.opds_import import (
+    OPDSAPI,
+    IdentifierSource,
+    OPDSImporter,
+    OPDSImportMonitor,
+    OPDSXMLParser,
+)
 from core.saml.wayfless import SAMLWAYFlessFulfillmentError
 from core.util import first_or_default
 from core.util.datetime_helpers import datetime_utc
@@ -247,7 +253,7 @@ class TestOPDSImporter:
 
         collection_to_test = db.collection(
             settings={
-                "primary_identifier_source": ExternalIntegration.DCTERMS_IDENTIFIER,
+                "primary_identifier_source": IdentifierSource.DCTERMS_IDENTIFIER,
             },
             data_source_name="OPDS",
             external_account_id="http://root.uri",
@@ -1448,7 +1454,7 @@ class TestOPDSImporter:
 
             collection = db.collection(
                 "OPDS collection with a WAYFless acquisition link",
-                ExternalIntegration.OPDS_IMPORT,
+                OPDSAPI.label(),
                 data_source_name="test",
                 external_account_id="http://wayfless.example.com/feed",
             )
@@ -1614,9 +1620,7 @@ class OPDSImportMonitorFixture:
     def collection(self, feed_url: str | None = None) -> Collection:
         feed_url = feed_url or "http://fake.opds/"
         settings = {"external_account_id": feed_url, "data_source": "OPDS"}
-        return self.db.collection(
-            protocol=ExternalIntegration.OPDS_IMPORT, settings=settings
-        )
+        return self.db.collection(protocol=OPDSAPI.label(), settings=settings)
 
     def __init__(self, db: DatabaseTransactionFixture):
         self.db = db
@@ -1639,7 +1643,7 @@ class TestOPDSImportMonitor:
             "OPDSImportMonitor can only be run in the context of a Collection."
             in str(excinfo.value)
         )
-        c1 = db.collection(protocol=ExternalIntegration.OVERDRIVE)
+        c1 = db.collection(protocol=OverdriveAPI.label())
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, c1, OPDSImporter)
         assert (
@@ -1647,9 +1651,7 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        c2 = db.collection(
-            protocol=ExternalIntegration.OPDS_IMPORT, settings={"data_source": None}
-        )
+        c2 = db.collection(protocol=OPDSAPI.label(), settings={"data_source": None})
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, c2, OPDSImporter)
         assert f"Collection {c2.name} has no associated data source." in str(
@@ -1657,7 +1659,7 @@ class TestOPDSImportMonitor:
         )
 
         c3 = db.collection(
-            protocol=ExternalIntegration.OPDS_IMPORT,
+            protocol=OPDSAPI.label(),
             settings={
                 "data_source": "OPDS",
                 "external_account_id": "https://opds.import.com/feed?size=100",

@@ -21,7 +21,7 @@ from api.admin.problem_details import (
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.integration.registry.discovery import DiscoveryRegistry
 from core.integration.goals import Goals
-from core.model import ExternalIntegration, IntegrationConfiguration, get_one
+from core.model import IntegrationConfiguration, get_one
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
 
@@ -67,7 +67,7 @@ class TestDiscoveryServices:
             assert self.protocol == service.get("protocol")
             assert OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL == service.get(
                 "settings"
-            ).get(ExternalIntegration.URL)
+            ).get("url")
             assert OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_NAME == service.get(
                 "name"
             )
@@ -100,7 +100,7 @@ class TestDiscoveryServices:
             assert discovery_service.protocol == service.get("protocol")
             assert discovery_service.settings_dict["url"] == service.get(
                 "settings"
-            ).get(ExternalIntegration.URL)
+            ).get("url")
 
     def test_discovery_services_post_errors(
         self,
@@ -183,7 +183,7 @@ class TestDiscoveryServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("protocol", self.protocol),
-                    (ExternalIntegration.URL, "registry url"),
+                    ("url", "registry url"),
                 ]
             )
             pytest.raises(AdminNotAuthorized, controller.process_discovery_services)
@@ -199,7 +199,7 @@ class TestDiscoveryServices:
                 [
                     ("name", "Name"),
                     ("protocol", self.protocol),
-                    (ExternalIntegration.URL, "http://registry.url"),
+                    ("url", "http://registry.url"),
                 ]
             )
             response = controller.process_discovery_services()
@@ -234,7 +234,7 @@ class TestDiscoveryServices:
                     ("name", "Name"),
                     ("id", str(discovery_service.id)),
                     ("protocol", self.protocol),
-                    (ExternalIntegration.URL, "http://new_registry_url.com"),
+                    ("url", "http://new_registry_url.com"),
                 ]
             )
             response = controller.process_discovery_services()

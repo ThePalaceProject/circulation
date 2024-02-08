@@ -8,7 +8,8 @@ from api.monitor import (
     LoanReaper,
 )
 from api.odl import ODLAPI
-from core.model import Annotation, DataSource, ExternalIntegration
+from api.opds_for_distributors import OPDSForDistributorsAPI
+from core.model import Annotation, DataSource
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -22,7 +23,7 @@ class TestLoanlikeReaperMonitor:
         """
         for i in (
             ODLAPI.label(),
-            ExternalIntegration.OPDS_FOR_DISTRIBUTORS,
+            OPDSForDistributorsAPI.label(),
         ):
             assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS
 

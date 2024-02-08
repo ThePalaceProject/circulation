@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pprint import pformat
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Column
@@ -119,6 +120,51 @@ class IntegrationConfiguration(Base):
 
     def __repr__(self) -> str:
         return f"<IntegrationConfiguration: {self.name} {self.protocol} {self.goal}>"
+
+    def explain(self, include_secrets: bool = False) -> list[str]:
+        """Create a series of human-readable strings to explain an
+        Integrations's settings.
+        """
+        lines = []
+        lines.append(f"ID: {self.id}")
+        lines.append(f"Name: {self.name}")
+        lines.append(f"Protocol/Goal: {self.protocol}/{self.goal}")
+
+        def process_settings_dict(
+            settings_dict: dict[str, Any], indent: int = 0
+        ) -> None:
+            secret_keys = ["key", "password", "token"]
+            for setting_key, setting_value in sorted(settings_dict.items()):
+                if setting_key in secret_keys and not include_secrets:
+                    setting_value = "********"
+                lines.append(" " * indent + f"{setting_key}: {setting_value}")
+
+        if len(self.settings_dict) > 0:
+            lines.append("Settings:")
+            process_settings_dict(self.settings_dict, 2)
+
+        if len(self.context) > 0:
+            lines.append("Context:")
+            process_settings_dict(self.context, 2)
+
+        if isinstance(self.self_test_results, dict) and len(self.self_test_results) > 0:
+            lines.append("Self Test Results:")
+            lines.append(pformat(self.self_test_results, indent=2))
+
+        if len(self.library_configurations) > 0:
+            lines.append("Configured libraries:")
+            for library_configuration in self.library_configurations:
+                lines.append(
+                    f"  {library_configuration.library.short_name} - {library_configuration.library.name}"
+                )
+                if (
+                    isinstance(library_configuration.settings_dict, dict)
+                    and len(library_configuration.settings_dict) > 0
+                ):
+                    lines.append("    Settings:")
+                    process_settings_dict(library_configuration.settings_dict, 6)
+
+        return lines
 
 
 class IntegrationLibraryConfiguration(Base):

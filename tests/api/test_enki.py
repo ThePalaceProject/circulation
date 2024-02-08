@@ -17,7 +17,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Hyperlink,
     Identifier,
     LicensePool,
@@ -57,16 +56,14 @@ class TestEnkiAPI:
     def test_constructor(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         # The constructor must be given an Enki collection.
-        collection = db.collection(
-            protocol=ExternalIntegration.OVERDRIVE, url="http://test.enki.url"
-        )
+        collection = db.collection(protocol="Overdrive", url="http://test.enki.url")
         with pytest.raises(ValueError) as excinfo:
             EnkiAPI(db.session, collection)
         assert "Collection protocol is Overdrive, but passed into EnkiAPI!" in str(
             excinfo.value
         )
 
-        collection.protocol = ExternalIntegration.ENKI
+        collection.protocol = EnkiAPI.label()
         EnkiAPI(db.session, collection)
 
     def test_enki_library_id(self, enki_test_fixture: EnkiTestFixure):
