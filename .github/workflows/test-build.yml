@@ -56,11 +56,13 @@ jobs:
           MODULE: ${{ matrix.module }}
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           flags: ${{ matrix.module }}
+          name: ${{ matrix.module }}-${{ matrix.python-version }}
+          verbose: true
 
   test-migrations:
     name: Migration Tests
@@ -104,11 +106,13 @@ jobs:
         run: tox -e "migration-docker"
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           flags: migration
+          name: "migration-3.10"
+          verbose: true
 
   docker-test-migrations:
     name: Docker migration test
