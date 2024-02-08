@@ -133,9 +133,7 @@ class ServicesFixture:
         self.services.analytics.override(analytics.analytics_container)
 
         # setup basic configuration from default settings
-        secret_key = "012345678901234567890123"
-        sitewide_config = SitewideConfiguration(secret_key=secret_key)
-        self.services.config.from_dict({"sitewide": sitewide_config.dict()})
+        self.services.config.from_dict({"sitewide": SitewideConfiguration().dict()})
 
     def build_config_mapping(self, path: list[str], value: Any) -> dict[str, Any]:
         path_segment = path.pop()

@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import create_autospec, patch
+from unittest.mock import call, create_autospec, patch
 
 import pytest
 
@@ -43,6 +43,21 @@ class TestHoldsNotifications:
 
         # Only position 0 holds, that haven't bene notified today, should be queried for
         assert holds_fixture.monitor.item_query().all() == [hold2, hold3]
+
+    def test_script_run(self, holds_fixture: HoldsNotificationFixture):
+        db = holds_fixture.db
+        patron1 = db.patron()
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=0)
+        hold2, _ = work2.active_license_pool().on_hold_to(patron1, position=0)
+
+        holds_fixture.monitor.run()
+        assert holds_fixture.mock_notifications.send_holds_notifications.call_count == 1
+        assert (
+            holds_fixture.mock_notifications.send_holds_notifications.call_args_list
+            == [call([hold1, hold2])]
+        )
 
     def test_constructor(
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
