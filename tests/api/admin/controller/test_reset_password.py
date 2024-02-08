@@ -1,5 +1,4 @@
 import re
-from unittest import mock
 
 import flask
 from werkzeug import Response as WerkzeugResponse
@@ -12,6 +11,7 @@ from api.admin.problem_details import (
 )
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.services import ServicesEmailFixture
 
 
 class TestResetPasswordController:
@@ -65,7 +65,11 @@ class TestResetPasswordController:
 
             assert "admin/web" in location
 
-    def test_forgot_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
+    def test_forgot_password_post(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        services_email_fixture: ServicesEmailFixture,
+    ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
         # If there is no admin sent in the request we should get error response
@@ -97,35 +101,33 @@ class TestResetPasswordController:
             )
 
         # When the real admin is used the email is sent and we get success message in the response
-        with mock.patch(
-            "api.admin.password_admin_authentication_provider.EmailManager"
-        ) as mock_email_manager:
-            with admin_ctrl_fixture.ctrl.app.test_request_context(
-                "/admin/forgot_password", method="POST"
-            ):
-                admin_email = admin_ctrl_fixture.admin.email
-                assert isinstance(admin_email, str)
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin/forgot_password", method="POST"
+        ):
+            admin_email = admin_ctrl_fixture.admin.email
+            assert isinstance(admin_email, str)
 
-                flask.request.form = ImmutableMultiDict([("email", admin_email)])
+            flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
-                response = reset_password_ctrl.forgot_password()
-                assert isinstance(response, WerkzeugResponse)
+            response = reset_password_ctrl.forgot_password()
+            assert isinstance(response, WerkzeugResponse)
 
-                assert response.status_code == 200
-                assert "Email successfully sent" in response.get_data(as_text=True)
+            assert response.status_code == 200
+            assert "Email successfully sent" in response.get_data(as_text=True)
 
-                # Check the email is sent
-                assert mock_email_manager.send_email.call_count == 1
+            # Check the email is sent
+            assert services_email_fixture.mock_emailer.send.call_count == 1
 
-                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
+            # Check that the email is sent to the right admin
+            assert services_email_fixture.mock_emailer.send.call_args.kwargs[
+                "receivers"
+            ] == [admin_email]
 
-                # Check that the email is sent to the right admin
-                _, receivers = call_args
-
-                assert len(receivers) == 1
-                assert receivers[0] == admin_email
-
-    def test_reset_password_get(self, admin_ctrl_fixture: AdminControllerFixture):
+    def test_reset_password_get(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        services_email_fixture: ServicesEmailFixture,
+    ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
         token = "token"
 
@@ -199,28 +201,24 @@ class TestResetPasswordController:
 
         # Finally, if we use good token we get back view with the form for the new password
         # Let's get valid token first
-        with mock.patch(
-            "api.admin.password_admin_authentication_provider.EmailManager"
-        ) as mock_email_manager:
-            with admin_ctrl_fixture.ctrl.app.test_request_context(
-                "/admin/forgot_password", method="POST"
-            ):
-                flask.request.form = ImmutableMultiDict([("email", admin_email)])
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin/forgot_password", method="POST"
+        ):
+            flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
-                forgot_password_response = reset_password_ctrl.forgot_password()
-                assert isinstance(forgot_password_response, WerkzeugResponse)
+            forgot_password_response = reset_password_ctrl.forgot_password()
+            assert isinstance(forgot_password_response, WerkzeugResponse)
 
-                assert forgot_password_response.status_code == 200
+            assert forgot_password_response.status_code == 200
 
-                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-                mail_text = call_kwargs["text"]
+            mail_text = services_email_fixture.mock_emailer.send.call_args.kwargs[
+                "text"
+            ]
 
-                (
-                    token,
-                    admin_id,
-                ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(
-                    mail_text
-                )
+            (
+                token,
+                admin_id,
+            ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(mail_text)
 
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):
             assert isinstance(admin_id, int)
@@ -243,33 +241,33 @@ class TestResetPasswordController:
 
         return token, admin_id
 
-    def test_reset_password_post(self, admin_ctrl_fixture: AdminControllerFixture):
+    def test_reset_password_post(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        services_email_fixture: ServicesEmailFixture,
+    ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
         admin_email = admin_ctrl_fixture.admin.email
         assert isinstance(admin_email, str)
 
         # Let's get valid token first
-        with mock.patch(
-            "api.admin.password_admin_authentication_provider.EmailManager"
-        ) as mock_email_manager:
-            with admin_ctrl_fixture.ctrl.app.test_request_context(
-                "/admin/forgot_password", method="POST"
-            ):
-                flask.request.form = ImmutableMultiDict([("email", admin_email)])
+        with admin_ctrl_fixture.ctrl.app.test_request_context(
+            "/admin/forgot_password", method="POST"
+        ):
+            flask.request.form = ImmutableMultiDict([("email", admin_email)])
 
-                response = reset_password_ctrl.forgot_password()
-                assert response.status_code == 200
+            response = reset_password_ctrl.forgot_password()
+            assert response.status_code == 200
 
-                call_args, call_kwargs = mock_email_manager.send_email.call_args_list[0]
-                mail_text = call_kwargs["text"]
+            mail_text = services_email_fixture.mock_emailer.send.call_args.kwargs[
+                "text"
+            ]
 
-                (
-                    token,
-                    admin_id,
-                ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(
-                    mail_text
-                )
+            (
+                token,
+                admin_id,
+            ) = self._extract_reset_pass_token_and_admin_id_from_mail_text(mail_text)
 
         # If we use bad token we get an error response with "Try again" button
         with admin_ctrl_fixture.ctrl.app.test_request_context(

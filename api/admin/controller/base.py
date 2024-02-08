@@ -22,11 +22,12 @@ class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
+        self.send_email = self.manager.services.email.send_email
 
     @property
     def admin_auth_providers(self):
         if Admin.with_password(self._db).count() != 0:
-            return [PasswordAdminAuthenticationProvider()]
+            return [PasswordAdminAuthenticationProvider(self.send_email)]
 
         return []
 

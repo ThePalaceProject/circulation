@@ -22,6 +22,7 @@ from core.model.library import Library
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import datetime_utc, previous_months, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesEmailFixture
 
 
 def create_playtime_entries(
@@ -220,7 +221,11 @@ def playtime(session, identifier, collection, library, timestamp, total_seconds)
 
 
 class TestPlaytimeEntriesEmailReportsScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
+    def test_do_run(
+        self,
+        db: DatabaseTransactionFixture,
+        services_email_fixture: ServicesEmailFixture,
+    ):
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
@@ -270,10 +275,8 @@ class TestPlaytimeEntriesEmailReportsScript:
         playtime(db.session, identifier, collection2, library2, date1m(3), 300)
 
         reporting_name = "test cm"
-
         with (
             patch("core.jobs.playtime_entries.csv.writer") as writer,
-            patch("core.jobs.playtime_entries.EmailManager") as email,
             patch(
                 "core.jobs.playtime_entries.os.environ",
                 new={
@@ -363,11 +366,13 @@ class TestPlaytimeEntriesEmailReportsScript:
             ),  # Identifier with edition
         ]
 
-        assert email.send_email.call_count == 1
-        assert email.send_email.call_args == call(
-            f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
+        assert services_email_fixture.mock_emailer.send.call_count == 1
+        assert services_email_fixture.mock_emailer.send.call_args == call(
+            subject=f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
+            sender=services_email_fixture.sender_email,
             receivers=["reporting@test.email"],
             text="",
+            html=None,
             attachments={
                 f"playtime-summary-{reporting_name.replace(' ', '_')}-{cutoff}-{until}.csv": ""
             },  # Mock objects do not write data

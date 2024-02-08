@@ -286,18 +286,14 @@ Local analytics are enabled by default. S3 analytics can be enabled via the foll
 
 #### Email
 
-### Email sending
-
 To use the features that require sending emails, for example to reset the password for logged-out users, you will need
 to have a working SMTP server and set some environment variables:
 
-```sh
-export SIMPLIFIED_MAIL_SERVER=example.smtp.com
-export SIMPLIFIED_MAIL_PORT=465
-export SIMPLIFIED_MAIL_USERNAME=username
-export SIMPLIFIED_MAIL_PASSWORD=password
-export SIMPLIFIED_MAIL_SENDER=sender@example.com
-```
+- `PALACE_MAIL_SERVER` - The SMTP server to use. Required if you want to send emails.
+- `PALACE_MAIL_PORT` - The port of the SMTP server. Default: 25. (optional)
+- `PALACE_MAIL_USERNAME` - The username to use when connecting to the SMTP server. (optional)
+- `PALACE_MAIL_PASSWORD` - The password to use when connecting to the SMTP server. (optional)
+- `PALACE_MAIL_SENDER` - The email address to use as the sender of the emails. (optional)
 
 ## Running the Application
 

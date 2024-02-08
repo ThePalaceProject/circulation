@@ -4,6 +4,8 @@ from dependency_injector.providers import Container
 
 from core.service.analytics.configuration import AnalyticsConfiguration
 from core.service.analytics.container import AnalyticsContainer
+from core.service.email.configuration import EmailConfiguration
+from core.service.email.container import Email
 from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
 from core.service.search.configuration import SearchConfiguration
@@ -37,6 +39,11 @@ class Services(DeclarativeContainer):
         config=config.search,
     )
 
+    email = Container(
+        Email,
+        config=config.email,
+    )
+
 
 def wire_container(container: Services) -> None:
     container.wire(
@@ -67,6 +74,7 @@ def create_container() -> Services:
             "logging": LoggingConfiguration().dict(),
             "analytics": AnalyticsConfiguration().dict(),
             "search": SearchConfiguration().dict(),
+            "email": EmailConfiguration().dict(),
         }
     )
     wire_container(container)
