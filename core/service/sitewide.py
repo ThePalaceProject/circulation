@@ -2,18 +2,13 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
-from pydantic import AnyHttpUrl, ConstrainedStr, NonNegativeInt, validator
+from pydantic import AnyHttpUrl, NonNegativeInt, validator
 
 from core.service.configuration import ServiceConfiguration
 
 
-class KeyStr(ConstrainedStr):
-    min_length = 24
-
-
 class SitewideConfiguration(ServiceConfiguration):
     base_url: AnyHttpUrl | None = None
-    secret_key: KeyStr
     patron_web_hostnames: list[AnyHttpUrl] | Literal["*"] = []
     authentication_document_cache_time: NonNegativeInt = 3600
 

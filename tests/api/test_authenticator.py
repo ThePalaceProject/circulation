@@ -66,7 +66,6 @@ from core.util.opds_writer import OPDSFeed
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.api_controller import ControllerFixture
@@ -617,16 +616,6 @@ class TestAuthenticator:
 
 
 class TestLibraryAuthenticator:
-    def test_gets_bearer_token_in_init(
-        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-    ):
-        """The bearer token is injected from services container during initialization."""
-        # Otherwise it is injected with the config
-        services_fixture.set_sitewide_config_option("secret_key", "xyz")
-        with services_fixture.wired():
-            auth = LibraryAuthenticator(_db=db.session, library=db.default_library())
-        assert auth.bearer_token_signing_secret == "xyz"
-
     def test_from_config_basic_auth_only(
         self,
         db: DatabaseTransactionFixture,

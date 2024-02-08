@@ -89,27 +89,6 @@ class TestSitewideConfiguration:
             assert config.base_url == expected
 
     @pytest.mark.parametrize(
-        "secret_key, expected",
-        [
-            ("012345678901234567890123", "012345678901234567890123"),
-            ("too short", CannotLoadConfiguration),
-            (None, CannotLoadConfiguration),
-        ],
-    )
-    def test_secret_key(
-        self,
-        sitewide_configuration_fixture: SitewideConfigurationFixture,
-        secret_key: str | None,
-        expected: str | type[Exception],
-    ):
-        sitewide_configuration_fixture.set("PALACE_SECRET_KEY", secret_key)
-
-        context = sitewide_configuration_fixture.get_context_manager(expected)
-        with context:
-            config = SitewideConfiguration()
-            assert config.secret_key == expected
-
-    @pytest.mark.parametrize(
         "patron_web_hostnames, expected",
         [
             (None, []),

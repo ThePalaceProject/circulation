@@ -174,18 +174,20 @@ class CirculationManager(LoggerMixin):
         sitewide_patron_web_domains = (
             self.services.config.sitewide.patron_web_hostnames()
         )
-        if isinstance(sitewide_patron_web_domains, list):
-            patron_web_domains.update(sitewide_patron_web_domains)
-        else:
-            patron_web_domains.add(sitewide_patron_web_domains)
+        if not isinstance(sitewide_patron_web_domains, list):
+            sitewide_patron_web_domains = [sitewide_patron_web_domains]
 
-        domains = self._db.execute(
-            select(DiscoveryServiceRegistration.web_client).where(
-                DiscoveryServiceRegistration.web_client != None
+        patron_web_domains.update(sitewide_patron_web_domains)
+
+        registry_patron_web_domains = [
+            row.web_client
+            for row in self._db.execute(
+                select(DiscoveryServiceRegistration.web_client).where(
+                    DiscoveryServiceRegistration.web_client != None
+                )
             )
-        ).all()
-        for row in domains:
-            patron_web_domains.add(row.web_client)
+        ]
+        patron_web_domains.update(registry_patron_web_domains)
 
         return patron_web_domains
 

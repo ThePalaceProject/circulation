@@ -8,7 +8,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 class TestPasswordAdminAuthenticationProvider:
     def test_sign_in(self, db: DatabaseTransactionFixture):
-        password_auth = PasswordAdminAuthenticationProvider(secret_key="secret_key")
+        password_auth = PasswordAdminAuthenticationProvider()
 
         # There are two admins with passwords.
         admin1, ignore = create(db.session, Admin, email="admin1@example.org")
@@ -78,7 +78,7 @@ class TestPasswordAdminAuthenticationProvider:
             assert redirect == "/admin/web"
 
     def test_sign_in_case_insensitive(self, db: DatabaseTransactionFixture):
-        password_auth = PasswordAdminAuthenticationProvider(secret_key="secret_key")
+        password_auth = PasswordAdminAuthenticationProvider()
 
         # There are two admins with passwords.
         admin1, ignore = create(db.session, Admin, email="admin1@example.org")

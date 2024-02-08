@@ -132,9 +132,6 @@ class TestResetPasswordController:
         admin_id = admin_ctrl_fixture.admin.id
         assert isinstance(admin_id, int)
 
-        # make sure secret key is set
-        assert reset_password_ctrl.secret_key == "a secret"
-
         # If there is no admin with password then there is no auth providers and we should get error response
         admin_ctrl_fixture.admin.password_hashed = None
         with admin_ctrl_fixture.ctrl.app.test_request_context("/admin/reset_password"):

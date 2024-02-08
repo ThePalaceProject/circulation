@@ -180,8 +180,6 @@ export PALACE_SEARCH_URL="http://localhost:9200"
 #### General
 
 - `PALACE_BASE_URL`: The base URL of the application. Used to create absolute links. (optional)
-- `PALACE_SECRET_KEY`: A secret key used for used to provide cryptographic signing, and should be set to a unique,
-   unpredictable value, at least 24 characters long. (**required**)
 - `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can access this circulation manager. This can
    be a single hostname (`http://catalog.library.org`) or a pipe-separated list of hostnames
    (`http://catalog.library.org|https://beta.library.org`). You can also set this to `*` to allow access from any host,

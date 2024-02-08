@@ -5,6 +5,7 @@ import logging
 import sys
 from abc import ABC
 from collections.abc import Iterable
+from typing import cast
 
 import flask
 import jwt
@@ -190,7 +191,6 @@ class LibraryAuthenticator(LoggerMixin):
 
         return authenticator
 
-    @inject
     def __init__(
         self,
         _db: Session,
@@ -231,11 +231,9 @@ class LibraryAuthenticator(LoggerMixin):
         )
 
         self.saml_providers_by_name = {}
-        self.bearer_token_signing_secret = (
-            bearer_token_signing_secret
-            or Key.get_key(
-                _db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True
-            ).value
+        self.bearer_token_signing_secret = bearer_token_signing_secret or cast(
+            str,
+            Key.get_key(_db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True).value,
         )
         self.initialization_exceptions: dict[
             tuple[int | None, int | None], Exception

@@ -22,12 +22,11 @@ class AdminController:
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
-        self.secret_key = self.manager.services.config.sitewide.secret_key()
 
     @property
     def admin_auth_providers(self):
         if Admin.with_password(self._db).count() != 0:
-            return [PasswordAdminAuthenticationProvider(self.secret_key)]
+            return [PasswordAdminAuthenticationProvider()]
 
         return []
 

@@ -41,7 +41,6 @@ class Services(DeclarativeContainer):
 def wire_container(container: Services) -> None:
     container.wire(
         modules=[
-            "api.authenticator",
             "api.axis",
             "api.bibliotheca",
             "api.circulation_manager",
