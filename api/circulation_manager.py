@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import urllib.parse
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import flask
@@ -8,9 +9,10 @@ from dependency_injector.wiring import Provide, inject
 from expiringdict import ExpiringDict
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from api.authenticator import Authenticator
-from api.circulation import CirculationAPI
+from api.circulation import CirculationAPI, CirculationApiType
 from api.config import Configuration
 from api.controller.analytics import AnalyticsController
 from api.controller.annotation import AnnotationController
@@ -25,16 +27,19 @@ from api.controller.playtime_entries import PlaytimeEntriesController
 from api.controller.profile import ProfileController
 from api.controller.urn_lookup import URNLookupController
 from api.controller.work import WorkController
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.lanes import load_lanes
 from api.problem_details import *
 from api.saml.controller import SAMLController
+from core.analytics import Analytics
 from core.app_server import ApplicationVersionController, load_facets_from_request
+from core.config import CannotLoadConfiguration
 from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
 from core.lane import Lane, WorkList
-from core.model import ConfigurationSetting, Library
+from core.model import Collection, ConfigurationSetting, Library
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.service.container import Services
 from core.service.logging.configuration import LogLevel
@@ -184,6 +189,40 @@ class CirculationManager(LoggerMixin):
             # Populate caches
             Library.cache_warm(self._db, lambda: libraries)
 
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - populate collection info",
+        ):
+            collections: set[Collection] = set()
+            libraries_collections: dict[int | None, list[Collection]] = {}
+            for library in libraries:
+                library_collections = library.collections
+                collections.update(library_collections)
+                libraries_collections[library.id] = library_collections
+
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            skip_start=True,
+            message_prefix="load_settings - create collection apis",
+        ):
+            collection_apis = {}
+            registry = LicenseProvidersRegistry()
+            for collection in collections:
+                try:
+                    api = registry[collection.protocol](self._db, collection)
+                    collection_apis[collection.id] = api
+                except CannotLoadConfiguration as exception:
+                    self.log.exception(
+                        "Error loading configuration for {}: {}".format(
+                            collection.name, str(exception)
+                        )
+                    )
+                except KeyError:
+                    self.log.exception(
+                        f"Unable to load protocol {collection.protocol} for collection {collection.name}"
+                    )
+
         self.auth = Authenticator(self._db, libraries, self.analytics)
 
         # Track the Lane configuration for each library by mapping its
@@ -194,12 +233,24 @@ class CirculationManager(LoggerMixin):
 
         with elapsed_time_logging(
             log_method=self.log.debug,
-            message_prefix="load_settings - per-library lanes, api",
+            message_prefix="load_settings - per-library lanes",
         ):
             for library in libraries:
-                new_top_level_lanes[library.id] = load_lanes(self._db, library)
-                new_circulation_apis[library.id] = self.setup_circulation(
-                    library, self.analytics
+                new_top_level_lanes[library.id] = load_lanes(
+                    self._db, library, [c.id for c in libraries_collections[library.id]]
+                )
+
+        with elapsed_time_logging(
+            log_method=self.log.debug,
+            message_prefix="load_settings - api",
+        ):
+            for library in libraries:
+                library_collection_apis = {
+                    collection.id: collection_apis[collection.id]
+                    for collection in libraries_collections[library.id]
+                }
+                new_circulation_apis[library.id] = self.setup_circulation_api(
+                    self._db, library, library_collection_apis, self.analytics
                 )
 
         self.top_level_lanes = new_top_level_lanes
@@ -257,9 +308,15 @@ class CirculationManager(LoggerMixin):
             if lane.sublanes:
                 self.log_lanes(lane.sublanes, level + 1)
 
-    def setup_circulation(self, library, analytics):
-        """Set up the Circulation object."""
-        return CirculationAPI(self._db, library, analytics=analytics)
+    def setup_circulation_api(
+        self,
+        db: Session,
+        library: Library,
+        library_collection_apis: Mapping[int | None, CirculationApiType],
+        analytics: Analytics | None = None,
+    ) -> CirculationAPI:
+        """Set up the Circulation API object."""
+        return CirculationAPI(db, library, library_collection_apis, analytics=analytics)
 
     def setup_one_time_controllers(self):
         """Set up all the controllers that will be used by the web app.

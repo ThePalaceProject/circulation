@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from api.authentication.basic import BasicAuthenticationProvider
-from api.circulation import CirculationAPI
+from api.integration.registry.license_providers import LicenseProvidersRegistry
 from api.selftest import HasCollectionSelfTests, HasPatronSelfTests, SelfTestResult
 from core.exceptions import IntegrationException
 from core.model import Patron
@@ -193,11 +193,8 @@ class TestRunSelfTestsScript:
         [(collection, api_map)] = script.tested
         assert [collection] == library1.collections
 
-        # The API lookup map passed into test_collection() is based on
-        # CirculationAPI's default API map.
-        registry = CirculationAPI(db.session, db.default_library()).registry
-        for k, v in registry:
-            assert api_map[k] == v
+        # The API lookup map passed into test_collection() is a LicenseProvidersRegistry.
+        assert isinstance(api_map, LicenseProvidersRegistry)
 
         # If test_collection raises an exception, the exception is recorded,
         # and we move on.

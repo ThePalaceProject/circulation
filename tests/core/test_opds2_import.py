@@ -532,7 +532,15 @@ class TestOpds2Api:
 
         work = works[0]
 
-        api = CirculationAPI(db.session, opds2_importer_fixture.library)
+        api = CirculationAPI(
+            db.session,
+            opds2_importer_fixture.library,
+            {
+                opds2_importer_fixture.collection.id: OPDS2API(
+                    db.session, opds2_importer_fixture.collection
+                )
+            },
+        )
         patron = db.patron()
 
         # Borrow the book from the library

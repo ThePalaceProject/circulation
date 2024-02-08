@@ -17,7 +17,7 @@ from core.model import Contributor, DataSource, Edition, Library, Session, creat
 from core.util import LanguageCodes
 
 
-def load_lanes(_db, library):
+def load_lanes(_db, library, collection_ids):
     """Return a WorkList that reflects the current lane structure of the
     Library.
 
@@ -30,7 +30,9 @@ def load_lanes(_db, library):
     Otherwise, a WorkList containing the visible top-level lanes is
     returned.
     """
-    top_level = WorkList.top_level_for_library(_db, library)
+    top_level = WorkList.top_level_for_library(
+        _db, library, collection_ids=collection_ids
+    )
 
     # It's likely this WorkList will be used across sessions, so
     # expunge any data model objects from the database session.

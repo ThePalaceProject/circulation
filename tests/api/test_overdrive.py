@@ -35,7 +35,6 @@ from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import CoverageFailure
 from core.integration.goals import Goals
-from core.integration.registry import IntegrationRegistry
 from core.metadata_layer import LinkData, TimestampData
 from core.model import (
     Collection,
@@ -90,14 +89,12 @@ class OverdriveAPIFixture:
         self.collection = MockOverdriveAPI.mock_collection(
             db.session, db.default_library()
         )
+        self.api = MockOverdriveAPI(db.session, self.collection)
         self.circulation = CirculationAPI(
             db.session,
             library,
-            registry=IntegrationRegistry(
-                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockOverdriveAPI}
-            ),
+            {self.collection.id: self.api},
         )
-        self.api: MockOverdriveAPI = self.circulation.api_for_collection[self.collection.id]  # type: ignore[assignment]
         os.environ[
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
         ] = "TestingKey"
@@ -2296,16 +2293,9 @@ class TestOverdriveAPICredentials:
             for props in library_collection_properties
         ]
 
-        circulation = CirculationAPI(
-            db.session,
-            library,
-            registry=IntegrationRegistry(
-                Goals.LICENSE_GOAL, {ExternalIntegration.OVERDRIVE: MockAPI}
-            ),
-        )
-        od_apis: dict[str, OverdriveAPI] = {
-            api.collection.name: api  # type: ignore[union-attr,misc]
-            for api in list(circulation.api_for_collection.values())
+        od_apis = {
+            collection.name: MockAPI(db.session, collection)
+            for collection in collections
         }
 
         # Ensure that we have the correct number of OverDrive collections.

@@ -1021,14 +1021,7 @@ class TestLoanController:
             library=loan_fixture.db.default_library(),
             headers=dict(Authorization=loan_fixture.valid_auth),
         ):
-            loan_fixture.manager.circulation_apis[
-                loan_fixture.db.default_library().id
-            ] = CirculationAPI(
-                loan_fixture.db.session, loan_fixture.db.default_library()
-            )
-            controller.circulation.api_for_collection[
-                loan_fixture.db.default_collection().id
-            ] = api
+            controller.circulation.api_for_license_pool = MagicMock(return_value=api)
             assert isinstance(pool.id, int)
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
@@ -1058,9 +1051,7 @@ class TestLoanController:
             library=loan_fixture.db.default_library(),
             headers=dict(Authorization=loan_fixture.valid_auth),
         ):
-            controller.circulation.api_for_collection[
-                loan_fixture.db.default_collection().id
-            ] = api
+            controller.circulation.api_for_license_pool = MagicMock(return_value=api)
             response = controller.fulfill(pool.id, lpdm.delivery_mechanism.id)
 
         assert isinstance(response, wkResponse)

@@ -1,18 +1,21 @@
 from abc import ABC
 from collections import defaultdict
+from collections.abc import Mapping
 
 from sqlalchemy.orm import Session
 
 from api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
+    CirculationApiType,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
 )
 from api.circulation_manager import CirculationManager
+from core.analytics import Analytics
 from core.integration.settings import BaseSettings
-from core.model import DataSource, Hold, Loan
+from core.model import DataSource, Hold, Library, Loan
 from core.service.container import Services
 
 
@@ -174,6 +177,13 @@ class MockCirculationManager(CirculationManager):
     def __init__(self, db: Session, services: Services):
         super().__init__(db, services)
 
-    def setup_circulation(self, library, analytics):
-        """Set up the Circulation object."""
-        return MockCirculationAPI(self._db, library, analytics=analytics)
+    def setup_circulation_api(
+        self,
+        db: Session,
+        library: Library,
+        library_collection_apis: Mapping[int | None, CirculationApiType],
+        analytics: Analytics | None = None,
+    ) -> MockCirculationAPI:
+        return MockCirculationAPI(
+            db, library, library_collection_apis, analytics=analytics
+        )
