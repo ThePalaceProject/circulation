@@ -1,6 +1,7 @@
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from _pytest.logging import LogCaptureFixture
 
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
@@ -128,3 +129,20 @@ class TestPasswordAdminAuthenticationProvider:
         assert "ADMIN2@example.org" == admin_details.get("email")
         assert PasswordAdminAuthenticationProvider.NAME == admin_details.get("type")
         assert "foo" == redirect
+
+    def test_send_reset_password_email(
+        self,
+        password_auth_provider: PasswordAdminAuthenticationProviderFixture,
+        caplog: LogCaptureFixture,
+    ):
+        password_auth = password_auth_provider.password_auth
+        mock_admin = MagicMock()
+        mock_admin.email = None
+        assert (
+            password_auth.send_reset_password_email(mock_admin, "reset_password_url")
+            is None
+        )
+        assert (
+            "Admin has no email address, cannot send reset password email"
+            in caplog.text
+        )
