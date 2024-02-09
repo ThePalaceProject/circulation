@@ -17,7 +17,7 @@ class TestAdminUI:
         elif key in os.environ:
             monkeypatch.delenv(key)
 
-    def test_package_version_cached(self, monkeypatch):
+    def test_package_version_cached(self):
         with patch(
             "api.admin.config.Configuration.env_package_version"
         ) as env_package_version:
