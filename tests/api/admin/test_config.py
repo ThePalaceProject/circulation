@@ -3,24 +3,33 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from requests import RequestException
 
 from api.admin.config import Configuration as AdminConfig
 from api.admin.config import OperationalMode
 
 
-class TestAdminUI:
-    @staticmethod
-    def _set_env(monkeypatch, key: str, value: str | None):
-        if value:
-            monkeypatch.setenv(key, value)
-        elif key in os.environ:
-            monkeypatch.delenv(key)
+class MonkeyPatchEnvFixture:
+    def __init__(self, monkeypatch: MonkeyPatch):
+        self.monkeypatch = monkeypatch
 
+    def __call__(self, key: str, value: str | None) -> None:
+        if value:
+            self.monkeypatch.setenv(key, value)
+        elif key in os.environ:
+            self.monkeypatch.delenv(key)
+
+
+@pytest.fixture
+def monkeypatch_env(monkeypatch: MonkeyPatch) -> MonkeyPatchEnvFixture:
+    return MonkeyPatchEnvFixture(monkeypatch)
+
+
+class TestAdminUI:
     def test_package_version_cached(self):
-        with patch(
-            "api.admin.config.Configuration.env_package_version"
-        ) as env_package_version:
+        with patch.object(AdminConfig, "env_package_version") as env_package_version:
+            AdminConfig._version = None
             env_package_version.return_value = None
 
             # The first call to package_version() should call env_package_version()
@@ -45,18 +54,16 @@ class TestAdminUI:
     )
     def test_env_package_version(
         self,
-        monkeypatch,
+        monkeypatch_env: MonkeyPatchEnvFixture,
         package_version: str | None,
         resolves: bool,
         expected_result: str | None,
     ):
-        with patch(
-            "api.admin.config.Configuration.resolve_package_version"
+        with patch.object(
+            AdminConfig, "resolve_package_version"
         ) as resolve_package_version:
             resolve_package_version.return_value = "x.x.x"
-            self._set_env(
-                monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version
-            )
+            monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version)
             assert AdminConfig.env_package_version() == expected_result
             assert resolve_package_version.call_count == (1 if resolves else 0)
 
@@ -110,16 +117,14 @@ class TestAdminUI:
     )
     def test_package_url(
         self,
-        monkeypatch,
+        monkeypatch_env: MonkeyPatchEnvFixture,
         package_name: str | None,
         package_version: str | None,
         mode: OperationalMode,
         expected_result_startswith: str,
     ):
-        self._set_env(monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_NAME", package_name)
-        self._set_env(
-            monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version
-        )
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_NAME", package_name)
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version)
         result = AdminConfig.package_url(_operational_mode=mode)
         assert result.startswith(expected_result_startswith)
         # Reset the cached version
@@ -143,15 +148,13 @@ class TestAdminUI:
     )
     def test_package_development_directory(
         self,
-        monkeypatch,
+        monkeypatch_env: MonkeyPatchEnvFixture,
         package_name: str | None,
         package_version: str | None,
         expected_result: str,
     ):
-        self._set_env(monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_NAME", package_name)
-        self._set_env(
-            monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version
-        )
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_NAME", package_name)
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", package_version)
         result = AdminConfig.package_development_directory(_base_dir="/my-base-dir")
         assert result == expected_result
 
@@ -192,15 +195,13 @@ class TestAdminUI:
     )
     def test_lookup_asset_url(
         self,
-        monkeypatch,
+        monkeypatch_env: MonkeyPatchEnvFixture,
         asset_key: str,
         operational_mode: OperationalMode,
         expected_result: str,
     ):
-        self._set_env(
-            monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_NAME", "known-package-name"
-        )
-        self._set_env(monkeypatch, "TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", "1.0.0")
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_NAME", "known-package-name")
+        monkeypatch_env("TPP_CIRCULATION_ADMIN_PACKAGE_VERSION", "1.0.0")
         result = AdminConfig.lookup_asset_url(
             key=asset_key, _operational_mode=operational_mode
         )
