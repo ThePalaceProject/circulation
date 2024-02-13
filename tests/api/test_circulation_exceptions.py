@@ -30,7 +30,7 @@ class TestCirculationExceptions:
 
 
 class TestLimitReached:
-    """Test LimitReached, which may send different messages depending the limit."""
+    """Test LimitReached, which may send different messages depending on the limit."""
 
     def test_as_problem_detail_document(self, db: DatabaseTransactionFixture):
         generic_message = _(
