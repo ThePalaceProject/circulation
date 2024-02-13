@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
+from enum import Enum
 
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
@@ -26,6 +29,13 @@ class CannotLoadConfiguration(IntegrationException):
 class ConfigurationConstants:
     TRUE = "true"
     FALSE = "false"
+
+
+class ConfigurationAttributeValue(Enum):
+    """Enumeration of common configuration attribute values"""
+
+    YESVALUE = "yes"
+    NOVALUE = "no"
 
 
 class Configuration(ConfigurationConstants):

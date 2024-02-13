@@ -1,4 +1,4 @@
-"""Define the interfaces used by ExternalIntegration self-tests.
+"""Define the interfaces used by integration self-tests.
 """
 from __future__ import annotations
 

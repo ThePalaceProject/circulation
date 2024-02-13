@@ -182,7 +182,7 @@ class Collection(Base, HasSessionCache):
         protocol.
 
         We can't use get_one_or_create because the protocol is kept in
-        a separate database object, (an ExternalIntegration).
+        a separate database object, (an IntegrationConfiguration).
 
         :return: A 2-tuple (collection, is_new)
         """

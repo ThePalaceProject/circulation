@@ -136,9 +136,7 @@ class OpdsRegistrationService(
     def for_protocol_goal_and_url(
         cls, _db: Session, protocol: str, goal: Goals, url: str
     ) -> Self | None:
-        """Get a LibraryRegistry for the given protocol, goal, and
-        URL. Create the corresponding ExternalIntegration if necessary.
-        """
+        """Get a LibraryRegistry for the given protocol, goal, and URL."""
         settings = cls.settings_class().construct(url=url)  # type: ignore[arg-type]
         query = select(IntegrationConfiguration).where(
             IntegrationConfiguration.goal == goal,
@@ -499,7 +497,7 @@ class OpdsRegistrationService(
             registration.short_name = short_name
         if encrypted_shared_secret:
             # NOTE: we can only store Unicode data in the
-            # ConfigurationSetting.value, so this requires that the
+            # shared_secret column, so this requires that the
             # shared secret encoded as UTF-8. This works for the
             # library registry product, which uses a long string of
             # hex digits as its shared secret.
@@ -514,7 +512,7 @@ class OpdsRegistrationService(
         # communicated to the registry.
         registration.stage = desired_stage
 
-        # Store the web client URL as a ConfigurationSetting.
+        # Store the web client URL
         registration.web_client = web_client_url
 
         return True

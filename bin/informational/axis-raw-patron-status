@@ -7,9 +7,9 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from api.axis import Axis360API  # noqa: E402
-from core.model import Collection, ExternalIntegration  # noqa: E402
-from core.scripts import Script  # noqa: E402
+from api.axis import Axis360API
+from core.model import Collection
+from core.scripts import Script
 
 
 class Axis360RawPatronActivityScript(Script):

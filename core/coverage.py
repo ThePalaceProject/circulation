@@ -1103,10 +1103,8 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
     In addition to defining the class variables defined by
     CoverageProvider, you must define the class variable PROTOCOL when
     subclassing this class. This is the entity that provides the
-    licenses for this Collection. It should be one of the
-    collection-type provider constants defined in the
-    `ExternalIntegration` class, such as
-    ExternalIntegration.OPDS_IMPORT or ExternalIntegration.OVERDRIVE.
+    licenses for this Collection. It should be a valid protocol
+    in the LICENSE_GOAL registry.
     """
 
     # By default, this type of CoverageProvider will provide coverage to

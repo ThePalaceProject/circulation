@@ -42,7 +42,7 @@ class RemoteRegistryFixture:
         integration_configuration: IntegrationConfigurationFixture,
     ):
         self.db = db
-        # Create an ExternalIntegration that can be used as the basis for
+        # Create an integration that can be used as the basis for
         # a OpdsRegistrationService.
         self.registry_url = "http://registry.com/"
         self.integration = integration_configuration.discovery_service(
@@ -86,7 +86,7 @@ class TestOpdsRegistrationService:
         assert settings == registry.settings
 
     def test_for_integration(self, remote_registry_fixture: RemoteRegistryFixture):
-        """Test the ability to build a Registry for an ExternalIntegration
+        """Test the ability to build a Registry for an integration
         given its ID.
         """
         db = remote_registry_fixture.db
@@ -122,7 +122,7 @@ class TestOpdsRegistrationService:
         assert isinstance(registry, OpdsRegistrationService)
         assert remote_registry_fixture.integration == registry.integration
 
-        # If the ExternalIntegration doesn't exist, we get None.
+        # If the integration doesn't exist, we get None.
         registry = m(
             db.session,
             remote_registry_fixture.protocol,

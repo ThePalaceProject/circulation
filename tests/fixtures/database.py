@@ -35,7 +35,6 @@ from core.model import (
     DataSource,
     DeliveryMechanism,
     Edition,
-    ExternalIntegration,
     Genre,
     Hyperlink,
     Identifier,
@@ -672,46 +671,6 @@ class DatabaseTransactionFixture:
 
     def isbn_take(self) -> str:
         return self._isbns.pop()
-
-    def external_integration(
-        self, protocol, goal=None, settings=None, libraries=None, **kwargs
-    ) -> ExternalIntegration:
-        integration = None
-        if not libraries:
-            integration, ignore = get_one_or_create(
-                self.session, ExternalIntegration, protocol=protocol, goal=goal
-            )
-        else:
-            if not isinstance(libraries, list):
-                libraries = [libraries]
-
-            # Try to find an existing integration for one of the given
-            # libraries.
-            for library in libraries:
-                integration = ExternalIntegration.lookup(
-                    self.session, protocol, goal, library=libraries[0]
-                )
-                if integration:
-                    break
-
-            if not integration:
-                # Otherwise, create a brand new integration specifically
-                # for the library.
-                integration = ExternalIntegration(
-                    protocol=protocol,
-                    goal=goal,
-                )
-                integration.libraries.extend(libraries)
-                self.session.add(integration)
-
-        for attr, value in list(kwargs.items()):
-            setattr(integration, attr, value)
-
-        settings = settings or dict()
-        for key, value in list(settings.items()):
-            integration.set_setting(key, value)
-
-        return integration
 
     def integration_configuration(
         self, protocol: str, goal=None, libraries=None, name=None, **kwargs

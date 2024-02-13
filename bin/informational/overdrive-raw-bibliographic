@@ -7,9 +7,9 @@ bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..", "..")
 sys.path.append(os.path.abspath(package_dir))
 
-from api.overdrive import OverdriveAPI  # noqa: E402
-from core.model import Collection, ExternalIntegration  # noqa: E402
-from core.scripts import IdentifierInputScript  # noqa: E402
+from api.overdrive import OverdriveAPI
+from core.model import Collection
+from core.scripts import IdentifierInputScript
 
 
 class OverdriveRawBibliographicScript(IdentifierInputScript):

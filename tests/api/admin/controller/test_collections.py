@@ -560,8 +560,7 @@ class TestCollectionSettings:
         # But the library has been removed.
         assert collection.libraries == []
 
-        # All ConfigurationSettings for that library and collection
-        # have been deleted.
+        # All settings for that library and collection have been deleted.
         assert collection.integration_configuration.library_configurations == []
 
         parent = db.collection(name="Parent", protocol=OverdriveAPI.label())

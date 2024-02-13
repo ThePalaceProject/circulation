@@ -10,7 +10,7 @@ from sqlalchemy import and_, text
 
 from api.bibliotheca import BibliothecaAPI
 from core.classifier import Classifier
-from core.config import Configuration
+from core.config import Configuration, ConfigurationAttributeValue
 from core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,
@@ -45,7 +45,6 @@ from core.model import (
     tuple_to_numericrange,
 )
 from core.model.collection import Collection
-from core.model.configuration import ConfigurationAttributeValue
 from core.problem_details import INVALID_INPUT
 from core.util.datetime_helpers import utc_now
 from core.util.opds_writer import OPDSFeed

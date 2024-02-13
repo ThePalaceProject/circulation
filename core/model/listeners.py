@@ -9,10 +9,7 @@ from sqlalchemy.orm import Session
 from core.config import Configuration
 from core.model import Base
 from core.model.before_flush_decorator import Listener, ListenerState
-from core.model.collection import Collection
-from core.model.configuration import ConfigurationSetting, ExternalIntegration
 from core.model.identifier import Equivalency, Identifier, RecursiveEquivalencyCache
-from core.model.library import Library
 from core.model.licensing import LicensePool
 from core.model.work import Work, add_work_to_customlists_for_collection
 from core.query.coverage import EquivalencyCoverageQueries
@@ -94,32 +91,6 @@ def _site_configuration_has_changed(_db, cooldown=1):
         # was updated. This will update our local record immediately
         # without requiring a trip to the database.
         Configuration.site_configuration_last_update(_db, known_value=now)
-
-
-# Most of the time, we can know whether a change to the database is
-# likely to require that the application reload the portion of the
-# configuration it gets from the database. These hooks will call
-# site_configuration_has_changed() whenever such a change happens.
-#
-# This is not supposed to be a comprehensive list of changes that
-# should trigger a ConfigurationSetting reload -- that needs to be
-# handled on the application level -- but it should be good enough to
-# catch most that slip through the cracks.
-@event.listens_for(Collection.children, "append")
-@event.listens_for(Collection.children, "remove")
-@event.listens_for(ExternalIntegration.settings, "append")
-@event.listens_for(ExternalIntegration.settings, "remove")
-@event.listens_for(Library.integrations, "append")
-@event.listens_for(Library.integrations, "remove")
-def configuration_relevant_collection_change(target, value, initiator):
-    site_configuration_has_changed(target)
-
-
-@Listener.before_flush(
-    (Library, ExternalIntegration, Collection, ConfigurationSetting), one_shot=True
-)
-def configuration_relevant_lifecycle_event(session: Session):
-    site_configuration_has_changed(session)
 
 
 # Certain ORM events, however they occur, indicate that a work's

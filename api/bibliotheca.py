@@ -34,7 +34,7 @@ from api.circulation_exceptions import *
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
-from core.config import CannotLoadConfiguration
+from core.config import CannotLoadConfiguration, ConfigurationAttributeValue
 from core.coverage import BibliographicCoverageProvider
 from core.integration.settings import (
     ConfigurationFormItem,
@@ -73,7 +73,6 @@ from core.model import (
     Timestamp,
     get_one,
 )
-from core.model.configuration import ConfigurationAttributeValue
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
 from core.scripts import RunCollectionMonitorScript
 from core.service.container import Services

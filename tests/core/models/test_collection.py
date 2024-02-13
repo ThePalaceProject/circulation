@@ -150,7 +150,7 @@ class TestCollection:
         integration = test_collection.integration_configuration
         test_collection.integration_configuration = None
 
-        # A collection with no associated ExternalIntegration has no protocol.
+        # A collection with no associated IntegrationConfiguration has no protocol.
         with pytest.raises(ValueError) as excinfo:
             getattr(test_collection, "protocol")
 
@@ -287,7 +287,7 @@ class TestCollection:
         test_collection.default_reservation_period = 601
         assert 601 == test_collection.default_reservation_period
 
-        # The underlying value is controlled by a ConfigurationSetting.
+        # The underlying value is controlled by a integration setting.
         DatabaseTransactionFixture.set_settings(
             test_collection.integration_configuration,
             Collection.DEFAULT_RESERVATION_PERIOD_KEY,

@@ -6,7 +6,7 @@ import pytest
 
 from core import lane, model
 from core.config import Configuration
-from core.model import ConfigurationSetting, Timestamp, WorkCoverageRecord
+from core.model import Timestamp, WorkCoverageRecord
 from core.model.listeners import site_configuration_has_changed
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -155,24 +155,6 @@ class TestSiteConfigurationHasChanged:
         # Verify that the Timestamp has not changed (how could it,
         # with no database connection to modify the Timestamp?)
         assert newer_update == Configuration.site_configuration_last_update(session)
-
-    # We don't test every event listener, but we do test one of each type.
-    def test_configuration_relevant_lifecycle_event_updates_configuration(
-        self,
-        example_site_configuration_changed_fixture: ExampleSiteConfigurationHasChangedFixture,
-    ):
-        """When you create or modify a relevant item such as a
-        ConfigurationSetting, site_configuration_has_changed is called.
-        """
-        data = example_site_configuration_changed_fixture
-        session = data.transaction.session
-
-        ConfigurationSetting.sitewide(session, "setting").value = "value"
-        data.mock.assert_was_called()
-
-        ConfigurationSetting.sitewide(session, "setting").value = "value2"
-        session.flush()
-        data.mock.assert_was_called()
 
     def test_lane_change_updates_configuration(
         self,

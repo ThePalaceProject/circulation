@@ -67,7 +67,7 @@ class TestNoveListAPI:
         # If a IntegrationLibraryConfiguration exists, the API is_configured
         assert NoveListAPI.is_configured(novelist_fixture.db.default_library()) is True
 
-        # If an ExternalIntegration doesn't exist for the library, it is not.
+        # If an integration doesn't exist for the library, it is not.
         library = novelist_fixture.db.library()
         assert NoveListAPI.is_configured(library) is False
 
