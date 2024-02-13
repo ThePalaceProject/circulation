@@ -2264,10 +2264,29 @@ class TestCustomListUpdateEntriesScript:
 
 
 class TestLoanNotificationsScript:
+    TEST_NOTIFICATION_DAYS = [5, 3]
+    PER_DAY_NOTIFICATION_EXPECTATIONS = (
+        # These days should NOT trigger a notification.
+        (7, False),
+        (6, False),
+        (4, False),
+        (2, False),
+        (1, False),
+        # These days SHOULD trigger a notification.
+        (5, True),
+        (3, True),
+    )
+    PARAMETRIZED_POSSIBLE_NOTIFICATION_DAYS = (
+        "days_remaining, is_notification_expected",
+        PER_DAY_NOTIFICATION_EXPECTATIONS,
+    )
+
     def _setup_method(self, db: DatabaseTransactionFixture):
         self.mock_notifications = create_autospec(PushNotifications)
         self.script = LoanNotificationsScript(
-            _db=db.session, notifications=self.mock_notifications
+            _db=db.session,
+            notifications=self.mock_notifications,
+            loan_expiration_days=self.TEST_NOTIFICATION_DAYS,
         )
         self.patron: Patron = db.patron()
         self.work: Work = db.work(with_license_pool=True)
@@ -2279,31 +2298,77 @@ class TestLoanNotificationsScript:
             device_token="atesttoken",
         )
 
-    def test_loan_notification(self, db: DatabaseTransactionFixture):
+    @pytest.mark.parametrize(*PARAMETRIZED_POSSIBLE_NOTIFICATION_DAYS)
+    def test_loan_notification(
+        self,
+        db: DatabaseTransactionFixture,
+        days_remaining: int,
+        is_notification_expected: bool,
+    ):
         self._setup_method(db)
         p = self.work.active_license_pool()
+
+        # `mypy` thinks `p` is an `Optional[LicensePool]`, so let's clear that up.
+        assert isinstance(p, LicensePool)
+
         loan, _ = p.loan_to(
             self.patron,
             utc_now(),
-            utc_now() + datetime.timedelta(days=1, hours=1),
+            utc_now() + datetime.timedelta(days=days_remaining, hours=1),
         )
-
-        work2 = db.work(with_license_pool=True)
-        loan2, _ = work2.active_license_pool().loan_to(
-            self.patron,
-            utc_now(),
-            utc_now() + datetime.timedelta(days=2, hours=1),
-        )  # Should not get notified
-
         self.script.process_loan(loan)
-        self.script.process_loan(loan2)
 
-        assert self.mock_notifications.send_loan_expiry_message.call_count == 1
-        assert self.mock_notifications.send_loan_expiry_message.call_args[0] == (
-            loan,
-            1,
-            [self.device_token],
+        expected_call_count = 1 if is_notification_expected else 0
+        expected_call_args = (
+            [(loan, days_remaining, [self.device_token])]
+            if is_notification_expected
+            else None
         )
+
+        assert (
+            self.mock_notifications.send_loan_expiry_message.call_count
+            == expected_call_count
+        ), f"Unexpected call count for {days_remaining} day(s) remaining."
+        assert (
+            self.mock_notifications.send_loan_expiry_message.call_args
+            == expected_call_args
+        ), f"Unexpected call args for {days_remaining} day(s) remaining."
+
+    def test_send_all_notifications(self, db: DatabaseTransactionFixture):
+        self._setup_method(db)
+        p = self.work.active_license_pool()
+
+        # `mypy` thinks `p` is an `Optional[LicensePool]`, so let's clear that up.
+        assert isinstance(p, LicensePool)
+
+        loan_start_time = utc_now()
+        loan_end_time = loan_start_time + datetime.timedelta(days=21)
+        loan, _ = p.loan_to(self.patron, loan_start_time, loan_end_time)
+
+        # Simulate multiple days of notification checks on a single loan, counting down to loan expiration.
+        # This needs to happen within the same test, so that we use the same loan each time.
+        for days_remaining, expect_notification in sorted(
+            self.PER_DAY_NOTIFICATION_EXPECTATIONS, reverse=True
+        ):
+            with freeze_time(loan_end_time - datetime.timedelta(days=days_remaining)):
+                self.mock_notifications.send_loan_expiry_message.reset_mock()
+                self.script.process_loan(loan)
+
+                expected_call_count = 1 if expect_notification else 0
+                expected_call_args = (
+                    [(loan, days_remaining, [self.device_token])]
+                    if expect_notification
+                    else None
+                )
+
+                assert (
+                    self.mock_notifications.send_loan_expiry_message.call_count
+                    == expected_call_count
+                ), f"Unexpected call count for {days_remaining} day(s) remaining."
+                assert (
+                    self.mock_notifications.send_loan_expiry_message.call_args
+                    == expected_call_args
+                ), f"Unexpected call args for {days_remaining} day(s) remaining."
 
     def test_do_run(self, db: DatabaseTransactionFixture):
         now = utc_now()
