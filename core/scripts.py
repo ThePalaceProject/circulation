@@ -2587,8 +2587,8 @@ class LoanNotificationsScript(Script):
     """Notifications must be sent to Patrons based on when their current loans
     are expiring"""
 
-    # Days before on which to send out a notification
-    LOAN_EXPIRATION_DAYS = [5, 1]
+    # List of days before expiration on which we will send out notifications.
+    DEFAULT_LOAN_EXPIRATION_DAYS = [3]
     BATCH_SIZE = 100
 
     def __init__(
@@ -2597,9 +2597,13 @@ class LoanNotificationsScript(Script):
         services: Services | None = None,
         notifications: PushNotifications | None = None,
         *args,
+        loan_expiration_days: list[int] | None = None,
         **kwargs,
     ):
         super().__init__(_db, services, *args, **kwargs)
+        self.loan_expiration_days = (
+            loan_expiration_days or self.DEFAULT_LOAN_EXPIRATION_DAYS
+        )
         self.notifications = notifications or PushNotifications(
             self.services.config.sitewide.base_url()
         )
@@ -2657,7 +2661,7 @@ class LoanNotificationsScript(Script):
             self.log.warning(f"Loan: {loan.id} has no end date, skipping")
             return
         delta: datetime.timedelta = loan.end - now
-        if delta.days in self.LOAN_EXPIRATION_DAYS:
+        if delta.days in self.loan_expiration_days:
             self.log.info(
                 f"Patron {patron.authorization_identifier} has an expiring loan on ({loan.license_pool.identifier.urn})"
             )
