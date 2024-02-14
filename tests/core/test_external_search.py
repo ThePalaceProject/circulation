@@ -4,6 +4,7 @@ import time
 import uuid
 from collections.abc import Callable, Collection
 from datetime import datetime
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -48,6 +49,7 @@ from core.model import (
     LicensePool,
     WorkCoverageRecord,
     get_one_or_create,
+    numericrange_to_tuple,
 )
 from core.model.classification import Subject
 from core.model.work import Work
@@ -4727,9 +4729,7 @@ class TestSearchIndexCoverageProvider:
         assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
 
     def test_to_search_document(self, db: DatabaseTransactionFixture):
-        """Compare the new and old to_search_document functions
-        TODO: classifications
-        """
+        """Test the output of the to_search_document method."""
         customlist, editions = db.customlist()
         works = [
             db.work(
@@ -4752,44 +4752,113 @@ class TestSearchIndexCoverageProvider:
         subject1.genre = genre1
         subject2 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject2")
         subject2.genre = genre2
-        source = DataSource.lookup(db.session, DataSource.AXIS_360)
 
-        # works.extend([transaction.work() for i in range(500)])
+        db.session.flush()
 
-        result = Work.to_search_documents__DONOTUSE(works)
-        inapp = Work.to_search_documents(works)
+        search_docs = Work.to_search_documents(works)
 
-        # Top level keys should be the same
-        assert len(result) == len(inapp)
+        search_doc_work1 = list(
+            filter(lambda x: x["work_id"] == work1.id, search_docs)
+        )[0]
+        search_doc_work2 = list(
+            filter(lambda x: x["work_id"] == work2.id, search_docs)
+        )[0]
 
-        inapp_work1 = list(filter(lambda x: x["work_id"] == work1.id, inapp))[0]
-        inapp_work2 = list(filter(lambda x: x["work_id"] == work2.id, inapp))[0]
+        def compare(doc: dict[str, Any], work: Work) -> None:
+            assert doc["_id"] == work.id
+            assert doc["work_id"] == work.id
+            assert doc["title"] == work.title
+            assert doc["sort_title"] == work.sort_title
+            assert doc["subtitle"] == work.subtitle
+            assert doc["series"] == work.series
+            assert doc["series_position"] == work.series_position
+            assert doc["language"] == work.language
+            assert doc["author"] == work.author
+            assert doc["sort_author"] == work.sort_author
+            assert doc["medium"] == work.presentation_edition.medium
+            assert doc["publisher"] == work.publisher
+            assert doc["imprint"] == work.imprint
+            assert (
+                doc["permanent_work_id"] == work.presentation_edition.permanent_work_id
+            )
+            assert doc["presentation_ready"] == work.presentation_ready
+            assert doc["last_update_time"] == work.last_update_time
+            assert doc["fiction"] == "Fiction" if work.fiction else "Nonfiction"
+            assert doc["audience"] == work.audience
+            assert doc["summary"] == work.summary_text
+            assert doc["quality"] == work.quality
+            assert doc["rating"] == work.rating
+            assert doc["popularity"] == work.popularity
 
-        # target ages
-        assert inapp_work1["target_age"]["lower"] == 19
-        assert inapp_work1["target_age"]["upper"] == 21
-        assert inapp_work2["target_age"]["lower"] == 18
-        assert inapp_work2["target_age"]["upper"] == 99
+            if work.license_pools:
+                assert len(doc["licensepools"]) == len(work.license_pools)
+                for idx, pool in enumerate(work.license_pools):
+                    actual = doc["licensepools"][idx]
+                    assert actual["licensepool_id"] == pool.id
+                    assert actual["data_source_id"] == pool.data_source_id
+                    assert actual["collection_id"] == pool.collection_id
+                    assert actual["open_access"] == pool.open_access
+                    assert actual["suppressed"] == pool.suppressed
+            else:
+                assert doc["licensepools"] is None
 
-        assert len(inapp_work1["genres"]) == 1
-        assert inapp_work2["genres"] == None
+            if work.custom_list_entries:
+                assert len(doc["customlists"]) == len(work.custom_list_entries)
+                for idx, custom_list in enumerate(work.custom_list_entries):
+                    actual = doc["customlists"][idx]
+                    assert actual["list_id"] == custom_list.id
+                    assert actual["featured"] == custom_list.featured
+            else:
+                assert doc["customlists"] is None
 
-        assert len(inapp_work1["licensepools"]) == 1
-        assert len(inapp_work2["licensepools"]) == 1  # customlist adds a pool
+            if work.presentation_edition.contributions:
+                assert len(doc["contributors"]) is len(
+                    work.presentation_edition.contributions
+                )
+                for idx, contribution in enumerate(
+                    work.presentation_edition.contributions
+                ):
+                    actual = doc["contributors"][idx]
+                    assert actual["sort_name"] == contribution.contributor.sort_name
+                    assert (
+                        actual["display_name"] == contribution.contributor.display_name
+                    )
+                    assert actual["lc"] == contribution.contributor.lc
+                    assert actual["viaf"] == contribution.contributor.viaf
+                    assert actual["role"] == contribution.role
+            else:
+                assert doc["contributors"] is None
 
-        assert len(inapp_work2["customlists"]) == 1
-        assert inapp_work1["customlists"] == None
+            if work.identifiers:
+                assert len(doc["identifiers"]) == len(work.identifiers)
+                for idx, identifier in enumerate(work.identifiers):
+                    actual = doc["identifiers"][idx]
+                    assert actual["type"] == identifier.type
+                    assert actual["identifier"] == identifier.identifier
+            else:
+                assert doc["identifiers"] is None
 
-        result_work1 = list(filter(lambda x: x["work_id"] == work1.id, result))[0]
-        result_work2 = list(filter(lambda x: x["work_id"] == work2.id, result))[0]
+            if work.classifications:
+                assert len(doc["classifications"]) == len(work.classifications)
+            else:
+                assert doc["classifications"] is None
 
-        # Every item must be equivalent
-        for result_item, inapp_item in [
-            (result_work1, inapp_work1),
-            (result_work2, inapp_work2),
-        ]:
-            for key in result_item.keys():
-                assert result_item[key] == inapp_item[key]
+            if work.work_genres:
+                assert len(doc["genres"]) == len(work.work_genres)
+                for idx, genre in enumerate(work.work_genres):
+                    actual = doc["genres"][idx]
+                    assert actual["name"] == genre.genre.name
+                    assert actual["term"] == genre.genre.id
+                    assert actual["weight"] == genre.affinity
+            else:
+                assert doc["genres"] is None
+
+            lower, upper = numericrange_to_tuple(work.target_age)
+            assert doc["target_age"]["lower"] == lower
+            assert doc["target_age"]["upper"] == upper
+
+        compare(search_doc_work1, work1)
+        compare(search_doc_work2, work2)
 
     def test_to_search_documents_performance(self, db: DatabaseTransactionFixture):
         works = [db.work(with_license_pool=True, genre="history") for i in range(20)]
