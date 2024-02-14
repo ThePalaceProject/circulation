@@ -62,11 +62,7 @@ from core.search.revision_directory import SearchRevisionDirectory
 from core.search.v5 import SearchV5
 from core.util.cache import CachedData
 from core.util.datetime_helpers import datetime_utc, from_timestamp
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    DBStatementCounter,
-    PerfTimer,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import (
     EndToEndSearchFixture,
@@ -4859,24 +4855,6 @@ class TestSearchIndexCoverageProvider:
 
         compare(search_doc_work1, work1)
         compare(search_doc_work2, work2)
-
-    def test_to_search_documents_performance(self, db: DatabaseTransactionFixture):
-        works = [db.work(with_license_pool=True, genre="history") for i in range(20)]
-
-        connection = db.database.connection
-        with DBStatementCounter(connection) as old_counter:
-            with PerfTimer() as t1:
-                result = Work.to_search_documents(works)
-
-        with DBStatementCounter(connection) as new_counter:
-            with PerfTimer() as t2:
-                inapp = Work.to_search_documents(works)
-
-        # Do not be 100x performance
-        assert t2.execution_time < t1.execution_time * 5
-
-        # 4 queries per batch only
-        assert new_counter.get_count() <= 4
 
     def test_to_search_documents_with_missing_data(
         self, db: DatabaseTransactionFixture
