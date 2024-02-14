@@ -2429,6 +2429,23 @@ class TestLoanNotificationsScript:
                 db.session, services=services_fixture.services
             )
         assert script.BATCH_SIZE == 100
+        assert (
+            script.loan_expiration_days
+            == LoanNotificationsScript.DEFAULT_LOAN_EXPIRATION_DAYS
+        )
+        assert script.notifications == mock_notifications.return_value
+        mock_notifications.assert_called_once_with("http://test-circulation-manager")
+
+        with patch(
+            "core.scripts.PushNotifications", autospec=True
+        ) as mock_notifications:
+            script = LoanNotificationsScript(
+                db.session,
+                services=services_fixture.services,
+                loan_expiration_days=[-2, 0, 220],
+            )
+        assert script.BATCH_SIZE == 100
+        assert script.loan_expiration_days == [-2, 0, 220]
         assert script.notifications == mock_notifications.return_value
         mock_notifications.assert_called_once_with("http://test-circulation-manager")
 
