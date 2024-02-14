@@ -4802,7 +4802,7 @@ class TestSearchIndexCoverageProvider:
                 assert len(doc["customlists"]) == len(work.custom_list_entries)
                 for idx, custom_list in enumerate(work.custom_list_entries):
                     actual = doc["customlists"][idx]
-                    assert actual["list_id"] == custom_list.id
+                    assert actual["list_id"] == custom_list.list_id
                     assert actual["featured"] == custom_list.featured
             else:
                 assert doc["customlists"] is None
