@@ -14,6 +14,7 @@ from api.authentication.base import (
     AuthProviderSettings,
 )
 from api.authentication.basic import BasicAuthenticationProvider
+from api.authenticator import BearerTokenType
 from core.integration.base import LibrarySettingsType, SettingsType
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
@@ -80,10 +81,13 @@ class BasicTokenAuthenticationProvider(
             auth
             and auth.type.lower() == "bearer"
             and auth.token
-            and PatronJWEAccessTokenProvider.is_access_token(auth.token)
+            and BearerTokenType.from_token(auth.token) == BearerTokenType.JWE
         ):
-            token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
-            return token.pwd
+            try:
+                token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
+                return token.pwd
+            except ProblemError:
+                ...
 
         return None
 

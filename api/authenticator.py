@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import json
 import logging
 import sys
@@ -16,7 +17,6 @@ from werkzeug.datastructures import Authorization, Headers
 
 from api.adobe_vendor_id import AuthdataUtility
 from api.annotations import AnnotationWriter
-from api.authentication.access_token import PatronJWEAccessTokenProvider
 from api.authentication.base import (
     AuthenticationProvider,
     LibrarySettingsType,
@@ -85,6 +85,28 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
             doc["drm"] = drm
 
         return doc
+
+
+class BearerTokenType(enum.Enum):
+    """The type of token being used for authentication."""
+
+    JWE = enum.auto()
+    JWT = enum.auto()
+    UNKNOWN = enum.auto()
+
+    @classmethod
+    def from_token(cls, token: str | None) -> BearerTokenType:
+        """Determine the type of token from its string representation."""
+        if token is None:
+            return cls.UNKNOWN
+
+        split_token = token.split(".")
+        if len(split_token) == 5:
+            return cls.JWE
+        elif len(split_token) == 3:
+            return cls.JWT
+        else:
+            return cls.UNKNOWN
 
 
 class Authenticator(LoggerMixin):
@@ -417,30 +439,29 @@ class LibraryAuthenticator(LoggerMixin):
             credentials do not authenticate any particular patron. A
             ProblemDetail if an error occurs.
         """
-        provider: AuthenticationProvider | None = None
-        provider_token: dict[str, str | None] | str | None = None
         if self.basic_auth_provider and auth.type.lower() == "basic":
             # The patron wants to authenticate with the
             # BasicAuthenticationProvider.
-            provider = self.basic_auth_provider
-            provider_token = auth.parameters
+            return self.basic_auth_provider.authenticated_patron(_db, auth.parameters)
         elif auth.type.lower() == "bearer":
-            # The patron wants to use an
-            # SAMLAuthenticationProvider. Figure out which one.
-            if auth.token is None:
+            # The patron wants to use a bearer token. Figure out which type
+            # of token it is and which provider to use.
+            token_str = auth.token
+            if token_str is None:
                 return INVALID_SAML_BEARER_TOKEN
 
+            token_type = BearerTokenType.from_token(token_str)
             if (
-                self.access_token_authentication_provider
-                and PatronJWEAccessTokenProvider.is_access_token(auth.token)
+                token_type == BearerTokenType.JWE
+                and self.access_token_authentication_provider
             ):
-                provider = self.access_token_authentication_provider
-                provider_token = auth.token
-            elif self.saml_providers_by_name:
-                # The patron wants to use an
-                # SAMLAuthenticationProvider. Figure out which one.
+                return self.access_token_authentication_provider.authenticated_patron(
+                    _db, token_str
+                )
+            elif token_type == BearerTokenType.JWT:
+                # The patron wants to use an SAMLAuthenticationProvider. Figure out which one.
                 try:
-                    provider_name, provider_token = self.decode_bearer_token(auth.token)
+                    provider_name, provider_token = self.decode_bearer_token(token_str)
                 except jwt.exceptions.InvalidTokenError as e:
                     return INVALID_SAML_BEARER_TOKEN
                 saml_provider = self.saml_provider_lookup(provider_name)
@@ -448,14 +469,8 @@ class LibraryAuthenticator(LoggerMixin):
                     # There was a problem turning the provider name into
                     # a registered SAMLAuthenticationProvider.
                     return saml_provider
-                provider = saml_provider
+                return saml_provider.authenticated_patron(_db, provider_token)
 
-        if provider and provider_token:
-            # Turn the token/header into a patron
-            return provider.authenticated_patron(_db, provider_token)
-
-        # We were unable to determine what was going on with the
-        # Authenticate header.
         return UNSUPPORTED_AUTHENTICATION_MECHANISM
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:

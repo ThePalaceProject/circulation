@@ -272,19 +272,6 @@ class TestJWEProvider:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
-    def test_is_access_token(self, jwe_provider: JWEProviderFixture):
-        # Happy path
-        token = jwe_provider.generate_token()
-        assert PatronJWEAccessTokenProvider.is_access_token(token) is True
-
-        with patch.object(PatronJWEAccessTokenProvider, "decode_token") as decode:
-            # An incorrect type
-            decode.side_effect = Exception("Bang!")
-            assert PatronJWEAccessTokenProvider.is_access_token(token) is False
-
-        # The token is not the right format
-        assert PatronJWEAccessTokenProvider.is_access_token("not-a-token") is False
-
     @freeze_time()
     def test_delete_old_keys(self):
         mock_session = MagicMock()
