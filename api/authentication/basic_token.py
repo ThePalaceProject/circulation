@@ -14,7 +14,6 @@ from api.authentication.base import (
     AuthProviderSettings,
 )
 from api.authentication.basic import BasicAuthenticationProvider
-from api.authenticator import BearerTokenType
 from core.integration.base import LibrarySettingsType, SettingsType
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
@@ -77,12 +76,7 @@ class BasicTokenAuthenticationProvider(
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
         """If we are the right type of token, then decode the password from the token"""
-        if (
-            auth
-            and auth.type.lower() == "bearer"
-            and auth.token
-            and BearerTokenType.from_token(auth.token) == BearerTokenType.JWE
-        ):
+        if auth and auth.type.lower() == "bearer" and auth.token:
             try:
                 token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
                 return token.pwd
