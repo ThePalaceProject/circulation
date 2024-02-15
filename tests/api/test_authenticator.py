@@ -36,6 +36,7 @@ from api.authentication.basic_token import BasicTokenAuthenticationProvider
 from api.authenticator import (
     Authenticator,
     BaseSAMLAuthenticationProvider,
+    BearerTokenType,
     CirculationPatronProfileStorage,
     LibraryAuthenticator,
 )
@@ -891,12 +892,13 @@ class TestLibraryAuthenticator:
         # Mock the sign verification
         with patch.object(authenticator, "decode_bearer_token") as decode:
             decode.return_value = ("Mock", "decoded-token")
+            bearer_token = authenticator.create_bearer_token("test", "test")
             response = authenticator.authenticated_patron(
-                db.session, Authorization(auth_type="Bearer", token="some-bearer-token")
+                db.session, Authorization(auth_type="Bearer", token=bearer_token)
             )
             # The token was decoded
             assert decode.call_count == 1
-            decode.assert_called_with("some-bearer-token")
+            decode.assert_called_with(bearer_token)
             # The right saml provider was used
             assert response == "foo"
             assert saml.authenticated_patron.call_count == 1
@@ -906,6 +908,9 @@ class TestLibraryAuthenticator:
         db: DatabaseTransactionFixture,
         mock_basic: MockBasicFixture,
     ):
+        now = utc_now()
+        two_hours_in_the_future = now + datetime.timedelta(hours=2)
+
         basic = mock_basic()
         # TODO: We can remove this patch once basic token authentication is fully deployed.
         with patch.object(
@@ -927,9 +932,16 @@ class TestLibraryAuthenticator:
         token = PatronJWEAccessTokenProvider.generate_token(db.session, patron, "pass")
         auth = Authorization(auth_type="bearer", token=token)
 
-        auth_patron = authenticator.authenticated_patron(db.session, auth)
-        assert type(auth_patron) == Patron
-        assert auth_patron.id == patron.id
+        # Token is valid
+        with freeze_time(now):
+            auth_patron = authenticator.authenticated_patron(db.session, auth)
+            assert type(auth_patron) == Patron
+            assert auth_patron.id == patron.id
+
+        # The token is expired
+        with freeze_time(two_hours_in_the_future):
+            problem = authenticator.authenticated_patron(db.session, auth)
+            assert PATRON_AUTH_ACCESS_TOKEN_EXPIRED == problem
 
     def test_authenticated_patron_unsupported_mechanism(
         self, db: DatabaseTransactionFixture
@@ -2537,3 +2549,23 @@ class TestBasicAuthenticationProviderAuthenticate:
     # then we have no way of locating them in our database. They will
     # appear no different to us than a patron who has never used the
     # circulation manager before.
+
+
+class TestBearerTokenType:
+    def test_from_token(self, db: DatabaseTransactionFixture) -> None:
+        PatronJWEAccessTokenProvider.create_key(db.session)
+        patron = db.patron()
+        jwe_token = PatronJWEAccessTokenProvider.generate_token(
+            db.session, patron, "password"
+        )
+
+        authenticator = LibraryAuthenticator(
+            _db=db.session,
+            library=db.default_library(),
+            bearer_token_signing_secret="secret",
+        )
+        jwt_token = authenticator.create_bearer_token("test", "test")
+
+        assert BearerTokenType.from_token(jwt_token) == BearerTokenType.JWT
+        assert BearerTokenType.from_token(jwe_token) == BearerTokenType.JWE
+        assert BearerTokenType.from_token("test") == BearerTokenType.UNKNOWN

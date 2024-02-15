@@ -59,13 +59,23 @@ class TestBasicTokenAuthenticationProvider:
             db.session, patron, "passworx"
         )
 
-        pwd = provider.get_credential_from_header(
-            Authorization(auth_type="Bearer", token=token)
+        assert (
+            provider.get_credential_from_header(
+                Authorization(auth_type="Bearer", token=token)
+            )
+            == "passworx"
         )
-        assert pwd == "passworx"
 
-        pwd = provider.get_credential_from_header(Authorization(auth_type="Basic"))
-        assert pwd == None
+        assert (
+            provider.get_credential_from_header(Authorization(auth_type="Basic"))
+            is None
+        )
+        assert (
+            provider.get_credential_from_header(
+                Authorization(auth_type="Bearer", token="junk")
+            )
+            is None
+        )
 
     def test_authentication_flow_document(
         self, db: DatabaseTransactionFixture, controller_fixture: ControllerFixture

@@ -166,19 +166,6 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
         return TokenPatronInfo(**payload)
 
     @classmethod
-    def is_access_token(cls, token: str | None) -> bool:
-        """Test if the given token is a valid JWE token"""
-        if token is None:
-            return False
-
-        try:
-            cls.decode_token(token)
-        except Exception:
-            return False
-
-        return True
-
-    @classmethod
     def delete_old_keys(cls, _db: Session) -> int:
         """Delete old keys from the DB
 

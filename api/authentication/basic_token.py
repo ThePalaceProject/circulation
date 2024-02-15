@@ -76,14 +76,12 @@ class BasicTokenAuthenticationProvider(
 
     def get_credential_from_header(self, auth: Authorization) -> str | None:
         """If we are the right type of token, then decode the password from the token"""
-        if (
-            auth
-            and auth.type.lower() == "bearer"
-            and auth.token
-            and PatronJWEAccessTokenProvider.is_access_token(auth.token)
-        ):
-            token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
-            return token.pwd
+        if auth and auth.type.lower() == "bearer" and auth.token:
+            try:
+                token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
+                return token.pwd
+            except ProblemError:
+                ...
 
         return None
 
