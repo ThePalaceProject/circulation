@@ -1,6 +1,7 @@
 import datetime
 import logging
 import random
+from dataclasses import dataclass, fields
 from typing import cast
 from unittest.mock import MagicMock, call
 
@@ -4127,7 +4128,7 @@ class TestLane:
         assert facets == lane.called_with
         Lane._groups_for_lanes = old_value
 
-    def test_suppress(self, db: DatabaseTransactionFixture):
+    def test_suppress_before_flush_listeners(self, db: DatabaseTransactionFixture):
         lane1 = db.lane()
         lane2 = db.lane()
 
@@ -4137,114 +4138,149 @@ class TestLane:
         assert lane2._suppress_before_flush_listeners is False
 
 
-class TestWorkListGroupsEndToEndData:
-    best_seller_list: CustomList
-    hq_litfic: Work
-    hq_ro: Work
-    hq_sf: Work
-    lq_litfic: Work
-    lq_ro: Work
-    lq_sf: Work
-    mq_ro: Work
-    mq_sf: Work
-    nonfiction: Work
-    children_with_age: Work
-    children_without_age: Work
-    staff_picks_list: CustomList
+class WorkListGroupsEndToEndFixture:
+    @dataclass
+    class WorkData:
+        best_seller_list: CustomList
+        hq_litfic: Work
+        hq_ro: Work
+        hq_sf: Work
+        lq_litfic: Work
+        lq_ro: Work
+        lq_sf: Work
+        mq_ro: Work
+        mq_sf: Work
+        nonfiction: Work
+        children_with_age: Work
+        children_without_age: Work
+        staff_picks_list: CustomList
 
+    @dataclass
+    class LaneData:
+        fiction: Lane
+        best_sellers: Lane
+        staff_picks: Lane
+        sf_lane: Lane
+        romance_lane: Lane
+        discredited_nonfiction: Lane
+        children: Lane
 
-class TestWorkListGroupsEndToEnd:
-    # A comprehensive end-to-end test of WorkList.groups()
-    # using a real Opensearch index.
-    #
-    # Helper methods are tested in a different class, TestWorkListGroups
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        external_search_fixture: EndToEndSearchFixture,
+        library_fixture: LibraryFixture,
+    ):
+        self.db = db
+        self.external_search_fixture = external_search_fixture
+        self.library_fixture = library_fixture
 
-    @staticmethod
-    def populate_works(
-        end_to_end_search_fixture: EndToEndSearchFixture,
-    ) -> TestWorkListGroupsEndToEndData:
-        fixture = end_to_end_search_fixture
-        data, session = (
-            fixture.external_search.db,
-            fixture.external_search.db.session,
-        )
+        # In this library, the groups feed includes at most two books
+        # for each lane.
+        self.library = db.default_library()
+        self.library_settings = library_fixture.settings(self.library)
+        self.library_settings.featured_lane_size = 2
 
-        def _w(**kwargs):
-            """Helper method to create a work with license pool."""
-            return data.work(with_license_pool=True, **kwargs)
-
-        result = TestWorkListGroupsEndToEndData()
+    def populate_works(self) -> WorkData:
+        db = self.db
+        session = self.db.session
 
         # Create eight works.
-        result.hq_litfic = _w(title="HQ LitFic", fiction=True, genre="Literary Fiction")
-        result.hq_litfic.quality = 0.8
-        result.lq_litfic = _w(title="LQ LitFic", fiction=True, genre="Literary Fiction")
-        result.lq_litfic.quality = 0
-        result.hq_sf = _w(title="HQ SF", genre="Science Fiction", fiction=True)
+        hq_litfic = db.work(
+            title="HQ LitFic",
+            fiction=True,
+            genre="Literary Fiction",
+            with_license_pool=True,
+        )
+        hq_litfic.quality = 0.8
+        lq_litfic = db.work(
+            title="LQ LitFic",
+            fiction=True,
+            genre="Literary Fiction",
+            with_license_pool=True,
+        )
+        lq_litfic.quality = 0
+        hq_sf = db.work(
+            title="HQ SF", genre="Science Fiction", fiction=True, with_license_pool=True
+        )
 
         # Create children works.
-        result.children_with_age = _w(
+        children_with_age = db.work(
             title="Children work with target age",
             audience=Classifier.AUDIENCE_CHILDREN,
+            with_license_pool=True,
         )
-        result.children_with_age.target_age = tuple_to_numericrange((0, 3))
+        children_with_age.target_age = tuple_to_numericrange((0, 3))
 
-        result.children_without_age = _w(
+        children_without_age = db.work(
             title="Children work with out target age",
             audience=Classifier.AUDIENCE_CHILDREN,
+            with_license_pool=True,
         )
 
         # Add a lot of irrelevant genres to one of the works. This
         # won't affect the results.
         for genre in ["Westerns", "Horror", "Erotica"]:
             genre_obj, is_new = Genre.lookup(session, genre)
-            get_one_or_create(session, WorkGenre, work=result.hq_sf, genre=genre_obj)
+            get_one_or_create(session, WorkGenre, work=hq_sf, genre=genre_obj)
 
-        result.hq_sf.quality = 0.8
-        result.mq_sf = _w(title="MQ SF", genre="Science Fiction", fiction=True)
-        result.mq_sf.quality = 0.6
-        result.lq_sf = _w(title="LQ SF", genre="Science Fiction", fiction=True)
-        result.lq_sf.quality = 0.1
-        result.hq_ro = _w(title="HQ Romance", genre="Romance", fiction=True)
-        result.hq_ro.quality = 0.79
-        result.mq_ro = _w(title="MQ Romance", genre="Romance", fiction=True)
-        result.mq_ro.quality = 0.6
+        hq_sf.quality = 0.8
+        mq_sf = db.work(
+            title="MQ SF", genre="Science Fiction", fiction=True, with_license_pool=True
+        )
+        mq_sf.quality = 0.6
+        lq_sf = db.work(
+            title="LQ SF", genre="Science Fiction", fiction=True, with_license_pool=True
+        )
+        lq_sf.quality = 0.1
+        hq_ro = db.work(
+            title="HQ Romance", genre="Romance", fiction=True, with_license_pool=True
+        )
+        hq_ro.quality = 0.79
+        mq_ro = db.work(
+            title="MQ Romance", genre="Romance", fiction=True, with_license_pool=True
+        )
+        mq_ro.quality = 0.6
         # This work is in a different language -- necessary to run the
         # LQRomanceEntryPoint test below.
-        result.lq_ro = _w(
-            title="LQ Romance", genre="Romance", fiction=True, language="lan"
+        lq_ro = db.work(
+            title="LQ Romance",
+            genre="Romance",
+            fiction=True,
+            language="lan",
+            with_license_pool=True,
         )
-        result.lq_ro.quality = 0.1
-        result.nonfiction = _w(title="Nonfiction", fiction=False)
+        lq_ro.quality = 0.1
+        nonfiction = db.work(title="Nonfiction", fiction=False, with_license_pool=True)
 
         # One of these works (mq_sf) is a best-seller and also a staff
         # pick.
-        result.best_seller_list, ignore = data.customlist(num_entries=0)
-        result.best_seller_list.add_entry(result.mq_sf)
+        best_seller_list, ignore = db.customlist(num_entries=0)
+        best_seller_list.add_entry(mq_sf)
 
-        result.staff_picks_list, ignore = data.customlist(num_entries=0)
-        result.staff_picks_list.add_entry(result.mq_sf)
-        return result
-
-    def test_groups(
-        self,
-        end_to_end_search_fixture: EndToEndSearchFixture,
-        library_fixture: LibraryFixture,
-    ):
-        fixture = end_to_end_search_fixture
-        db, session = (
-            fixture.external_search.db,
-            fixture.external_search.db.session,
+        staff_picks_list, ignore = db.customlist(num_entries=0)
+        staff_picks_list.add_entry(mq_sf)
+        return self.WorkData(
+            best_seller_list=best_seller_list,
+            hq_litfic=hq_litfic,
+            hq_ro=hq_ro,
+            hq_sf=hq_sf,
+            lq_litfic=lq_litfic,
+            lq_ro=lq_ro,
+            lq_sf=lq_sf,
+            mq_ro=mq_ro,
+            mq_sf=mq_sf,
+            nonfiction=nonfiction,
+            children_with_age=children_with_age,
+            children_without_age=children_without_age,
+            staff_picks_list=staff_picks_list,
         )
 
-        # Tell the fixture to call our populate_works method.
-        # In this library, the groups feed includes at most two books
-        # for each lane.
-        library = db.default_library()
-        library_settings = library_fixture.settings(library)
-        library_settings.featured_lane_size = 2
-        data = self.populate_works(fixture)
-        fixture.populate_search_index()
+    def populate_search_index(self):
+        self.external_search_fixture.populate_search_index()
+
+    def create_lanes(self, data: WorkData) -> LaneData:
+        db = self.db
 
         # Create a 'Fiction' lane with five sublanes.
         fiction = db.lane("Fiction")
@@ -4277,39 +4313,73 @@ class TestWorkListGroupsEndToEnd:
         children.audiences = Classifier.AUDIENCE_CHILDREN
         children.target_age = (0, 4)
 
-        # Since we have a bunch of lanes and works, plus an
-        # Opensearch index, let's take this opportunity to verify that
-        # WorkList.works and DatabaseBackedWorkList.works_from_database
-        # give the same results.
-        facets = DatabaseBackedFacets(
-            db.default_library(),
+        return self.LaneData(
+            fiction=fiction,
+            best_sellers=best_sellers,
+            staff_picks=staff_picks,
+            sf_lane=sf_lane,
+            romance_lane=romance_lane,
+            discredited_nonfiction=discredited_nonfiction,
+            children=children,
+        )
+
+    def database_facets(self, library: Library | None = None) -> DatabaseBackedFacets:
+        library = library or self.db.default_library()
+        return DatabaseBackedFacets(
+            library,
             collection=Facets.COLLECTION_FULL,
             availability=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
             distributor=None,
             collection_name=None,
         )
-        for lane in [
-            fiction,
-            best_sellers,
-            staff_picks,
-            sf_lane,
-            romance_lane,
-            discredited_nonfiction,
-            children,
-        ]:
-            t1 = [
-                x.id
-                for x in lane.works(
-                    session,
-                    facets,
-                    search_engine=end_to_end_search_fixture.external_search_index,
-                )
-            ]
-            t2 = [x.id for x in lane.works_from_database(session, facets)]
-            print(f"t1: {t1}")
-            print(f"t2: {t2}")
-            assert t1 == t2
+
+    def work_ids_from_search(self, lane: Lane) -> list[int]:
+        session = self.db.session
+        facets = self.database_facets()
+        index = self.external_search_fixture.external_search_index
+        return [
+            work.id
+            for work in lane.works(
+                session,
+                facets,
+                search_engine=index,
+            )
+        ]
+
+    def work_ids_from_db(self, lane: Lane) -> list[int]:
+        session = self.db.session
+        facets = self.database_facets()
+        return [work.id for work in lane.works_from_database(session, facets)]
+
+
+@pytest.fixture
+def work_list_groups_end_to_end_fixture(
+    db: DatabaseTransactionFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+    library_fixture: LibraryFixture,
+) -> WorkListGroupsEndToEndFixture:
+    return WorkListGroupsEndToEndFixture(db, end_to_end_search_fixture, library_fixture)
+
+
+class TestWorkListGroupsEndToEnd:
+    # A comprehensive end-to-end test of WorkList.groups()
+    # using a real Opensearch index.
+    #
+    # Helper methods are tested in a different class, TestWorkListGroups
+    def test_groups(
+        self,
+        work_list_groups_end_to_end_fixture: WorkListGroupsEndToEndFixture,
+    ):
+        fixture = work_list_groups_end_to_end_fixture
+        db = work_list_groups_end_to_end_fixture.db
+        search_fixture = fixture.external_search_fixture
+        index = search_fixture.external_search_index
+        session = db.session
+
+        work_data = fixture.populate_works()
+        fixture.populate_search_index()
+        lane_data = fixture.create_lanes(work_data)
 
         def assert_contents(g, expect):
             """Assert that a generator yields the expected
@@ -4342,36 +4412,36 @@ class TestWorkListGroupsEndToEnd:
             return lane.groups(
                 session,
                 facets=facets,
-                search_engine=fixture.external_search_index,
+                search_engine=index,
                 debug=True,
                 **kwargs,
             )
 
         assert_contents(
-            make_groups(fiction),
+            make_groups(lane_data.fiction),
             [
                 # The lanes based on lists feature every title on the
                 # list.  This isn't enough to pad out the lane to
                 # FEATURED_LANE_SIZE, but nothing else belongs in the
                 # lane.
-                (data.mq_sf, best_sellers),
+                (work_data.mq_sf, lane_data.best_sellers),
                 # In fact, both lanes feature the same title -- this
                 # generally won't happen but it can happen when
                 # multiple lanes are based on lists that feature the
                 # same title.
-                (data.mq_sf, staff_picks),
+                (work_data.mq_sf, lane_data.staff_picks),
                 # The genre-based lanes contain FEATURED_LANE_SIZE
                 # (two) titles each. The 'Science Fiction' lane
                 # features a low-quality work because the
                 # medium-quality work was already used above.
-                (data.hq_sf, sf_lane),
-                (data.lq_sf, sf_lane),
-                (data.hq_ro, romance_lane),
-                (data.mq_ro, romance_lane),
+                (work_data.hq_sf, lane_data.sf_lane),
+                (work_data.lq_sf, lane_data.sf_lane),
+                (work_data.hq_ro, lane_data.romance_lane),
+                (work_data.mq_ro, lane_data.romance_lane),
                 # The 'Discredited Nonfiction' lane contains a single
                 # book. There just weren't enough matching books to fill
                 # out the lane to FEATURED_LANE_SIZE.
-                (data.nonfiction, discredited_nonfiction),
+                (work_data.nonfiction, lane_data.discredited_nonfiction),
                 # The 'Fiction' lane contains a title that fits in the
                 # fiction lane but was not classified under any other
                 # lane. It also contains a title that was previously
@@ -4383,8 +4453,8 @@ class TestWorkListGroupsEndToEnd:
                 # Each lane gets a separate query, and there were too
                 # many high-quality works in 'fiction' for the
                 # low-quality one to show up.
-                (data.hq_litfic, fiction),
-                (data.hq_sf, fiction),
+                (work_data.hq_litfic, lane_data.fiction),
+                (work_data.hq_sf, lane_data.fiction),
             ],
         )
 
@@ -4392,73 +4462,73 @@ class TestWorkListGroupsEndToEnd:
         # we get only the subset of the books previously returned for
         # 'fiction'.
         assert_contents(
-            make_groups(fiction, include_sublanes=False),
+            make_groups(lane_data.fiction, include_sublanes=False),
             [
-                (data.hq_litfic, fiction),
-                (data.hq_sf, fiction),
+                (work_data.hq_litfic, lane_data.fiction),
+                (work_data.hq_sf, lane_data.fiction),
             ],
         )
 
         # If we exclude 'Fiction' from its own grouped feed, we get
         # all the other books/lane combinations *except for* the books
         # associated directly with 'Fiction'.
-        fiction.include_self_in_grouped_feed = False
+        lane_data.fiction.include_self_in_grouped_feed = False
         assert_contents(
-            make_groups(fiction),
+            make_groups(lane_data.fiction),
             [
-                (data.mq_sf, best_sellers),
-                (data.mq_sf, staff_picks),
-                (data.hq_sf, sf_lane),
-                (data.lq_sf, sf_lane),
-                (data.hq_ro, romance_lane),
-                (data.mq_ro, romance_lane),
-                (data.nonfiction, discredited_nonfiction),
+                (work_data.mq_sf, lane_data.best_sellers),
+                (work_data.mq_sf, lane_data.staff_picks),
+                (work_data.hq_sf, lane_data.sf_lane),
+                (work_data.lq_sf, lane_data.sf_lane),
+                (work_data.hq_ro, lane_data.romance_lane),
+                (work_data.mq_ro, lane_data.romance_lane),
+                (work_data.nonfiction, lane_data.discredited_nonfiction),
             ],
         )
-        fiction.include_self_in_grouped_feed = True
+        lane_data.fiction.include_self_in_grouped_feed = True
 
         # When a lane has no sublanes, its behavior is the same whether
         # it is called with include_sublanes true or false.
         for include_sublanes in (True, False):
             assert_contents(
-                discredited_nonfiction.groups(
+                lane_data.discredited_nonfiction.groups(
                     session, include_sublanes=include_sublanes
                 ),
-                [(data.nonfiction, discredited_nonfiction)],
+                [(work_data.nonfiction, lane_data.discredited_nonfiction)],
             )
 
         # When a lane's audience is "Children" we need work to have explicit target_age to be included in the lane
         assert_contents(
-            make_groups(children),
-            [(data.children_with_age, children)],
+            make_groups(lane_data.children),
+            [(work_data.children_with_age, lane_data.children)],
         )
 
         # If we make the lanes thirstier for content, we see slightly
         # different behavior.
-        library_settings.featured_lane_size = 3
+        fixture.library_settings.featured_lane_size = 3
         assert_contents(
-            make_groups(fiction),
+            make_groups(lane_data.fiction),
             [
                 # The list-based lanes are the same as before.
-                (data.mq_sf, best_sellers),
-                (data.mq_sf, staff_picks),
+                (work_data.mq_sf, lane_data.best_sellers),
+                (work_data.mq_sf, lane_data.staff_picks),
                 # After using every single science fiction work that
                 # wasn't previously used, we reuse self.mq_sf to pad the
                 # "Science Fiction" lane up to three items. It's
                 # better to have self.lq_sf show up before self.mq_sf, even
                 # though it's lower quality, because self.lq_sf hasn't been
                 # used before.
-                (data.hq_sf, sf_lane),
-                (data.lq_sf, sf_lane),
-                (data.mq_sf, sf_lane),
+                (work_data.hq_sf, lane_data.sf_lane),
+                (work_data.lq_sf, lane_data.sf_lane),
+                (work_data.mq_sf, lane_data.sf_lane),
                 # The 'Romance' lane now contains all three Romance
                 # titles, with the higher-quality titles first.
-                (data.hq_ro, romance_lane),
-                (data.mq_ro, romance_lane),
-                (data.lq_ro, romance_lane),
+                (work_data.hq_ro, lane_data.romance_lane),
+                (work_data.mq_ro, lane_data.romance_lane),
+                (work_data.lq_ro, lane_data.romance_lane),
                 # The 'Discredited Nonfiction' lane is the same as
                 # before.
-                (data.nonfiction, discredited_nonfiction),
+                (work_data.nonfiction, lane_data.discredited_nonfiction),
                 # After using every single fiction work that wasn't
                 # previously used, we reuse high-quality works to pad
                 # the "Fiction" lane to three items. The
@@ -4466,9 +4536,9 @@ class TestWorkListGroupsEndToEnd:
                 # anymore, because the 'Romance' lane claimed it. If
                 # we have to reuse titles, we'll reuse the
                 # high-quality ones.
-                (data.hq_litfic, fiction),
-                (data.hq_sf, fiction),
-                (data.hq_ro, fiction),
+                (work_data.hq_litfic, lane_data.fiction),
+                (work_data.hq_sf, lane_data.fiction),
+                (work_data.hq_ro, lane_data.fiction),
             ],
         )
 
@@ -4479,7 +4549,7 @@ class TestWorkListGroupsEndToEnd:
         # FeaturedFacets scoped to the AudiobooksEntryPoint excludes everything.
         fetured_facets = FeaturedFacets(0, entrypoint=AudiobooksEntryPoint)
         _db = session
-        assert [] == list(fiction.groups(session, facets=fetured_facets))
+        assert [] == list(lane_data.fiction.groups(session, facets=fetured_facets))
 
         # Here's an entry point that applies a language filter
         # that only finds one book.
@@ -4494,12 +4564,12 @@ class TestWorkListGroupsEndToEnd:
             1, entrypoint=LQRomanceEntryPoint, random_seed=Filter.DETERMINISTIC
         )
         assert_contents(
-            make_groups(fiction, facets=fetured_facets),
+            make_groups(lane_data.fiction, facets=fetured_facets),
             [
                 # The single recognized book shows up in both lanes
                 # that can show it.
-                (data.lq_ro, romance_lane),
-                (data.lq_ro, fiction),
+                (work_data.lq_ro, lane_data.romance_lane),
+                (work_data.lq_ro, lane_data.fiction),
             ],
         )
 
@@ -4513,12 +4583,15 @@ class TestWorkListGroupsEndToEnd:
             priority = 2
 
             def groups(slf, _db, include_sublanes, pagination=None, facets=None):
-                yield data.lq_litfic, slf
+                yield work_data.lq_litfic, slf
 
         mock = MockWorkList()
 
         wl = WorkList()
-        wl.initialize(db.default_library(), children=[best_sellers, staff_picks, mock])
+        wl.initialize(
+            db.default_library(),
+            children=[lane_data.best_sellers, lane_data.staff_picks, mock],
+        )
 
         # We get results from the two lanes and from the MockWorkList.
         # Since the MockWorkList wasn't a lane, its results were obtained
@@ -4526,11 +4599,33 @@ class TestWorkListGroupsEndToEnd:
         assert_contents(
             wl.groups(session),
             [
-                (data.mq_sf, best_sellers),
-                (data.mq_sf, staff_picks),
-                (data.lq_litfic, mock),
+                (work_data.mq_sf, lane_data.best_sellers),
+                (work_data.mq_sf, lane_data.staff_picks),
+                (work_data.lq_litfic, mock),
             ],
         )
+
+    def test_works_and_works_from_database(
+        self,
+        work_list_groups_end_to_end_fixture: WorkListGroupsEndToEndFixture,
+    ):
+        fixture = work_list_groups_end_to_end_fixture
+        search_fixture = fixture.external_search_fixture
+
+        # Create a bunch of lanes and works.
+        data = fixture.populate_works()
+        lane_data = fixture.create_lanes(data)
+        fixture.populate_search_index()
+
+        # Since we have a bunch of lanes and works, plus an
+        # Opensearch index, let's take this opportunity to verify that
+        # WorkList.works and DatabaseBackedWorkList.works_from_database
+        # give the same results.
+        for lane_name in fields(lane_data):
+            lane = getattr(lane_data, lane_name.name)
+            from_search = fixture.work_ids_from_search(lane)
+            from_db = fixture.work_ids_from_db(lane)
+            assert from_search == from_db
 
 
 class RandomSeedFixture:
