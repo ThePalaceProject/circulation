@@ -216,3 +216,22 @@ class TestListeners:
             == work.coverage_records[0].operation
         )
         assert WorkCoverageRecord.REGISTERED == work.coverage_records[0].status
+
+    def test_work_suppressed_for_library(self, db: DatabaseTransactionFixture):
+        work = db.work(with_license_pool=True)
+        library = db.library()
+
+        # Clear out any WorkCoverageRecords created as the work was initialized.
+        work.coverage_records = []
+
+        # Act
+        work.suppressed_for.append(library)
+
+        # Assert
+        assert 1 == len(work.coverage_records)
+        assert work.id == work.coverage_records[0].work_id
+        assert (
+            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
+            == work.coverage_records[0].operation
+        )
+        assert WorkCoverageRecord.REGISTERED == work.coverage_records[0].status

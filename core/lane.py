@@ -2387,9 +2387,16 @@ class DatabaseBackedWorkList(WorkList):
         Note that this assumes the query has an active join against
         LicensePool.
         """
-        return Collection.restrict_to_ready_deliverable_works(
+        query = Collection.restrict_to_ready_deliverable_works(
             query, show_suppressed=show_suppressed, collection_ids=self.collection_ids
         )
+
+        if not show_suppressed and self.library_id is not None:
+            query = query.filter(
+                not_(Work.suppressed_for.contains(self.get_library(_db)))
+            )
+
+        return query
 
     def bibliographic_filter_clauses(self, _db, qu):
         """Create a SQLAlchemy filter that excludes books whose bibliographic

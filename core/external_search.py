@@ -1575,6 +1575,7 @@ class Filter(SearchBase):
             allow_holds=allow_holds,
             license_datasource=license_datasource_id,
             lane_building=True,
+            library=library,
         )
 
     def __init__(
@@ -1723,6 +1724,9 @@ class Filter(SearchBase):
 
         self.lane_building = kwargs.pop("lane_building", False)
 
+        library = kwargs.pop("library", None)
+        self.library_id = library.id if library else None
+
         # At this point there should be no keyword arguments -- you can't pass
         # whatever you want into this method.
         if kwargs:
@@ -1846,6 +1850,11 @@ class Filter(SearchBase):
 
         if self.author is not None:
             nested_filters["contributors"].append(self.author_filter)
+
+        if self.library_id:
+            f = chain(
+                f, Bool(must_not=[Terms(**{"suppressed_for": [self.library_id]})])
+            )
 
         if self.media:
             f = chain(f, Terms(medium=scrub_list(self.media)))

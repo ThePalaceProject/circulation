@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    Table,
     Unicode,
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
@@ -208,6 +209,11 @@ class Work(Base):
     # presentation ready. Until this is cleared, no further attempt
     # will be made to make the Work presentation ready.
     presentation_ready_exception = Column(Unicode, default=None, index=True)
+
+    # Supress this work from appearing in any feeds for a specific library.
+    suppressed_for: Mapped[Library] = relationship(
+        "Library", secondary="work_library_suppressions", passive_deletes=True
+    )
 
     # These fields are potentially large and can be deferred if you
     # don't need all the data in a Work.
@@ -1601,6 +1607,7 @@ class Work(Base):
         result["_id"] = getattr(doc, "id")
         result["work_id"] = getattr(doc, "id")
         result["summary"] = getattr(doc, "summary_text")
+        result["suppressed_for"] = [int(l.id) for l in getattr(doc, "suppressed_for")]
         result["fiction"] = (
             "Fiction" if getattr(doc, "fiction") is True else "Nonfiction"
         )
@@ -1804,6 +1811,16 @@ class Work(Base):
         _db = Session.object_session(self)
         search_index.remove_work(self)
         _db.delete(self)
+
+
+work_library_suppressions = Table(
+    "work_library_suppressions",
+    Base.metadata,
+    Column("work_id", ForeignKey("works.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "library_id", ForeignKey("libraries.id", ondelete="CASCADE"), primary_key=True
+    ),
+)
 
 
 def add_work_to_customlists_for_collection(pool_or_work: LicensePool | Work) -> None:
