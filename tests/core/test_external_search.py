@@ -3611,6 +3611,10 @@ class TestFilter:
         """
         final_query = {"bool": {"must_not": [RESEARCH.to_dict()]}}
 
+        if filter.library_id:
+            suppressed_for = Terms(**{"suppressed_for": [filter.library_id]})
+            final_query["bool"]["must_not"].insert(0, suppressed_for.to_dict())
+
         if expect:
             final_query["bool"]["must"] = expect
         main, nested = filter.build(_chain_filters)
@@ -3718,6 +3722,7 @@ class TestFilter:
 
         chain = self._mock_chain
 
+        filter.library_id = transaction.default_library().id
         filter.collection_ids = [transaction.default_collection()]
         filter.fiction = True
         filter._audiences = "CHILDREN"
@@ -3834,7 +3839,15 @@ class TestFilter:
 
         # Every other restriction imposed on the Filter object becomes an
         # Opensearch filter object in this list.
-        (medium, language, fiction, audience, target_age, updated_after) = built
+        (
+            library_suppression,
+            medium,
+            language,
+            fiction,
+            audience,
+            target_age,
+            updated_after,
+        ) = built
 
         # Test them one at a time.
         #
@@ -3851,6 +3864,14 @@ class TestFilter:
         # documents are put into the full filter.
         assert medium_built == medium.to_dict()
         assert language_built == language.to_dict()
+
+        assert {
+            "bool": {
+                "must_not": [
+                    {"terms": {"suppressed_for": [transaction.default_library().id]}}
+                ]
+            }
+        } == library_suppression.to_dict()
 
         assert {"term": {"fiction": "fiction"}} == fiction.to_dict()
         assert {"terms": {"audience": ["children"]}} == audience.to_dict()
@@ -4727,6 +4748,8 @@ class TestSearchIndexCoverageProvider:
     def test_to_search_document(self, db: DatabaseTransactionFixture):
         """Test the output of the to_search_document method."""
         customlist, editions = db.customlist()
+        library = db.library()
+
         works = [
             db.work(
                 authors=[db.contributor()],
@@ -4738,6 +4761,7 @@ class TestSearchIndexCoverageProvider:
 
         work1: Work = works[0]
         work2: Work = works[1]
+        work2.suppressed_for.append(library)
 
         work1.target_age = NumericRange(lower=18, upper=22, bounds="()")
         work2.target_age = NumericRange(lower=18, upper=99, bounds="[]")
@@ -4785,6 +4809,11 @@ class TestSearchIndexCoverageProvider:
             assert doc["quality"] == work.quality
             assert doc["rating"] == work.rating
             assert doc["popularity"] == work.popularity
+
+            if work.suppressed_for:
+                assert doc["suppressed_for"] == [l.id for l in work.suppressed_for]
+            else:
+                assert doc["suppressed_for"] is None
 
             if work.license_pools:
                 assert len(doc["licensepools"]) == len(work.license_pools)

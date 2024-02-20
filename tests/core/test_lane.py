@@ -4627,6 +4627,87 @@ class TestWorkListGroupsEndToEnd:
             from_db = fixture.work_ids_from_db(lane)
             assert from_search == from_db
 
+    def test_works_and_works_from_database_with_suppressed(
+        self,
+        work_list_groups_end_to_end_fixture: WorkListGroupsEndToEndFixture,
+    ):
+        db = work_list_groups_end_to_end_fixture.db
+        fixture = work_list_groups_end_to_end_fixture
+        index = fixture.external_search_fixture.external_search_index
+
+        # Create a bunch of lanes and works.
+        data = fixture.populate_works()
+        lane_data = fixture.create_lanes(data)
+
+        decoy_library = db.library()
+        another_library = db.library()
+
+        db.default_collection().libraries += [decoy_library, another_library]
+
+        # Add a couple suppressed works, to make sure they don't show up in the results.
+        globally_suppressed_work = db.work(
+            title="Suppressed LP",
+            fiction=True,
+            genre="Literary Fiction",
+            with_license_pool=True,
+        )
+        globally_suppressed_work.quality = 0.95
+        for license_pool in globally_suppressed_work.license_pools:
+            license_pool.suppressed = True
+
+        # This work is only suppressed for a specific library.
+        library_suppressed_work = db.work(
+            title="Suppressed 2",
+            fiction=True,
+            genre="Literary Fiction",
+            with_license_pool=True,
+        )
+        library_suppressed_work.quality = 0.95
+        library_suppressed_work.suppressed_for = [fixture.library, decoy_library]
+
+        fixture.populate_search_index()
+
+        for lane_name in fields(lane_data):
+            lane = getattr(lane_data, lane_name.name)
+            from_search = fixture.work_ids_from_search(lane)
+            from_db = fixture.work_ids_from_db(lane)
+
+            # The suppressed work is not included in the results.
+            assert globally_suppressed_work.id not in from_search
+            assert globally_suppressed_work.id not in from_db
+            assert library_suppressed_work.id not in from_search
+            assert library_suppressed_work.id not in from_db
+
+        # Test the decoy libraries lane as well
+        decoy_library_lane = db.lane("Fiction", fiction=True, library=decoy_library)
+        from_search = fixture.work_ids_from_search(decoy_library_lane)
+        from_db = fixture.work_ids_from_db(decoy_library_lane)
+        assert globally_suppressed_work.id not in from_search
+        assert globally_suppressed_work.id not in from_db
+        assert library_suppressed_work.id not in from_search
+        assert library_suppressed_work.id not in from_db
+
+        # Test a lane for a different library, this time the globally suppressed work should
+        # still be absent, but the work suppressed for the other library should be present.
+        another_library_lane = db.lane("Fiction", fiction=True, library=another_library)
+        from_search = fixture.work_ids_from_search(another_library_lane)
+        from_db = fixture.work_ids_from_db(another_library_lane)
+        assert globally_suppressed_work.id not in from_search
+        assert globally_suppressed_work.id not in from_db
+        assert library_suppressed_work.id in from_search
+        assert library_suppressed_work.id in from_db
+
+        # Make sure that the suppressed works are handled correctly when searching in a lane as well
+        assert library_suppressed_work in another_library_lane.search(
+            db.session, "suppressed", index
+        )
+        assert library_suppressed_work not in lane_data.fiction.search(
+            db.session, "suppressed", index
+        )
+        assert library_suppressed_work not in decoy_library_lane.search(
+            db.session, "suppressed", index
+        )
+
 
 class RandomSeedFixture:
     def __init__(self):

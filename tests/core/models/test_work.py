@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 import pytz
 from psycopg2.extras import NumericRange
+from sqlalchemy import select
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
 from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
@@ -16,7 +17,7 @@ from core.model.edition import Edition
 from core.model.identifier import Identifier
 from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink, Representation, Resource
-from core.model.work import Work, WorkGenre
+from core.model.work import Work, WorkGenre, work_library_suppressions
 from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
@@ -805,6 +806,53 @@ class TestWork:
         # The author of the Work is still the author of its last viable presentation edition.
         assert "Alice Adder, Bob Bitshifter" == work.author
         assert "Adder, Alice ; Bitshifter, Bob" == work.sort_author
+
+    def test_suppressed_for_delete_work(self, db: DatabaseTransactionFixture):
+        work = db.work()
+        library1 = db.library()
+        library2 = db.library()
+
+        work.suppressed_for.append(library1)
+        work.suppressed_for.append(library2)
+        db.session.flush()
+
+        assert len(db.session.execute(select(work_library_suppressions)).all()) == 2
+
+        db.session.delete(work)
+        db.session.flush()
+
+        # The libraries are not deleted.
+        assert library1 in db.session
+        assert library2 in db.session
+
+        # The work is deleted.
+        assert work not in db.session
+
+        # The references in the work_library_suppressions table to the work are deleted.
+        assert len(db.session.execute(select(work_library_suppressions)).all()) == 0
+
+    def test_suppressed_for_delete_library(self, db: DatabaseTransactionFixture):
+        work = db.work()
+        library1 = db.library()
+        library2 = db.library()
+
+        work.suppressed_for.append(library1)
+        work.suppressed_for.append(library2)
+        db.session.flush()
+
+        assert len(db.session.execute(select(work_library_suppressions)).all()) == 2
+
+        db.session.delete(library1)
+        db.session.flush()
+        db.session.expire_all()
+
+        assert library1 not in db.session
+
+        assert library2 in db.session
+        assert work in db.session
+
+        assert len(db.session.execute(select(work_library_suppressions)).all()) == 1
+        assert work.suppressed_for == [library2]
 
     def test_different_language_means_different_work(
         self, db: DatabaseTransactionFixture

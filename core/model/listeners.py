@@ -105,6 +105,13 @@ def licensepool_removed_from_work(target, value, initiator):
         target.external_index_needs_updating()
 
 
+@event.listens_for(Work.suppressed_for, "append")
+@event.listens_for(Work.suppressed_for, "remove")
+def work_suppressed_for_library(target, value, initiator):
+    if target:
+        target.external_index_needs_updating()
+
+
 @Listener.before_flush(LicensePool, ListenerState.deleted)
 def licensepool_deleted(session: Session, instance: LicensePool) -> None:
     """A LicensePool is deleted only when its collection is deleted.
