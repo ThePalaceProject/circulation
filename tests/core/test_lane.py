@@ -4645,25 +4645,25 @@ class TestWorkListGroupsEndToEnd:
         db.default_collection().libraries += [decoy_library, another_library]
 
         # Add a couple suppressed works, to make sure they don't show up in the results.
-        suppressed_work1 = db.work(
+        globally_suppressed_work = db.work(
             title="Suppressed LP",
             fiction=True,
             genre="Literary Fiction",
             with_license_pool=True,
         )
-        suppressed_work1.quality = 0.95
-        for license_pool in suppressed_work1.license_pools:
+        globally_suppressed_work.quality = 0.95
+        for license_pool in globally_suppressed_work.license_pools:
             license_pool.suppressed = True
 
         # This work is only suppressed for a specific library.
-        suppressed_work2 = db.work(
+        library_suppressed_work = db.work(
             title="Suppressed 2",
             fiction=True,
             genre="Literary Fiction",
             with_license_pool=True,
         )
-        suppressed_work2.quality = 0.95
-        suppressed_work2.suppressed_for = [fixture.library, decoy_library]
+        library_suppressed_work.quality = 0.95
+        library_suppressed_work.suppressed_for = [fixture.library, decoy_library]
 
         fixture.populate_search_index()
 
@@ -4673,38 +4673,38 @@ class TestWorkListGroupsEndToEnd:
             from_db = fixture.work_ids_from_db(lane)
 
             # The suppressed work is not included in the results.
-            assert suppressed_work1.id not in from_search
-            assert suppressed_work1.id not in from_db
-            assert suppressed_work2.id not in from_search
-            assert suppressed_work2.id not in from_db
+            assert globally_suppressed_work.id not in from_search
+            assert globally_suppressed_work.id not in from_db
+            assert library_suppressed_work.id not in from_search
+            assert library_suppressed_work.id not in from_db
 
         # Test the decoy libraries lane as well
         decoy_library_lane = db.lane("Fiction", fiction=True, library=decoy_library)
         from_search = fixture.work_ids_from_search(decoy_library_lane)
         from_db = fixture.work_ids_from_db(decoy_library_lane)
-        assert suppressed_work1.id not in from_search
-        assert suppressed_work1.id not in from_db
-        assert suppressed_work2.id not in from_search
-        assert suppressed_work2.id not in from_db
+        assert globally_suppressed_work.id not in from_search
+        assert globally_suppressed_work.id not in from_db
+        assert library_suppressed_work.id not in from_search
+        assert library_suppressed_work.id not in from_db
 
         # Test a lane for a different library, this time the globally suppressed work should
         # still be absent, but the work suppressed for the other library should be present.
         another_library_lane = db.lane("Fiction", fiction=True, library=another_library)
         from_search = fixture.work_ids_from_search(another_library_lane)
         from_db = fixture.work_ids_from_db(another_library_lane)
-        assert suppressed_work1.id not in from_search
-        assert suppressed_work1.id not in from_db
-        assert suppressed_work2.id in from_search
-        assert suppressed_work2.id in from_db
+        assert globally_suppressed_work.id not in from_search
+        assert globally_suppressed_work.id not in from_db
+        assert library_suppressed_work.id in from_search
+        assert library_suppressed_work.id in from_db
 
         # Make sure that the suppressed works are handled correctly when searching in a lane as well
-        assert suppressed_work2 in another_library_lane.search(
+        assert library_suppressed_work in another_library_lane.search(
             db.session, "suppressed", index
         )
-        assert suppressed_work2 not in lane_data.fiction.search(
+        assert library_suppressed_work not in lane_data.fiction.search(
             db.session, "suppressed", index
         )
-        assert suppressed_work2 not in decoy_library_lane.search(
+        assert library_suppressed_work not in decoy_library_lane.search(
             db.session, "suppressed", index
         )
 
