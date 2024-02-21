@@ -1,5 +1,4 @@
 import gzip
-import json
 from collections.abc import Callable, Iterable
 from functools import partial
 from io import BytesIO
@@ -7,9 +6,11 @@ from unittest.mock import MagicMock, PropertyMock
 
 import flask
 import pytest
+from _pytest.logging import LogCaptureFixture
 from flask import Flask, Response, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
+from psycopg2 import OperationalError
 
 import core
 from api.admin.config import Configuration as AdminUiConfig
@@ -27,9 +28,10 @@ from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from core.feed.annotator.base import Annotator
 from core.lane import Facets, Pagination, SearchFacets, WorkList
 from core.model import Identifier
-from core.problem_details import INVALID_INPUT, INVALID_URN
+from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT, INVALID_URN
 from core.service.logging.configuration import LogLevel
 from core.util.opds_writer import OPDSFeed, OPDSMessage
+from core.util.problem_detail import ProblemError
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -503,14 +505,17 @@ def error_handler_fixture(
     data.app = PalaceFlask(ErrorHandlerFixture.__name__)
     Babel(data.app)
     data.app.manager = mock_manager
-    data.handler = partial(ErrorHandler, app=data.app, log_level=LogLevel.error)
+    data.handler = partial(ErrorHandler, app=data.app)
     return data
 
 
 class TestErrorHandler:
-    def raise_exception(self, cls=Exception):
+    def raise_exception(self, exc: type[Exception] | Exception = Exception) -> None:
         """Simulate an exception that happens deep within the stack."""
-        raise cls()
+        if callable(exc):
+            raise exc()
+        else:
+            raise exc
 
     def test_unhandled_error(self, error_handler_fixture: ErrorHandlerFixture):
         handler = error_handler_fixture.handler()
@@ -522,25 +527,10 @@ class TestErrorHandler:
                 response = handler.handle(exception)
             assert isinstance(response, Response)
             assert 500 == response.status_code
-            assert "An internal error occurred" == response.data.decode("utf8")
-
-    def test_unhandled_error_debug(self, error_handler_fixture: ErrorHandlerFixture):
-        # Set the sitewide log level to DEBUG to get a stack trace
-        # instead of a generic error message.
-        handler = error_handler_fixture.handler(log_level=LogLevel.debug)
-
-        with error_handler_fixture.app.test_request_context("/"):
-            response = None
-            try:
-                self.raise_exception()
-            except Exception as exception:
-                response = handler.handle(exception)
-            assert isinstance(response, Response)
-            assert 500 == response.status_code
-            assert response.data.startswith(b"Traceback (most recent call last)")
+            assert "An internal error occurred" == response.get_data(as_text=True)
 
     def test_handle_error_as_problem_detail_document(
-        self, error_handler_fixture: ErrorHandlerFixture
+        self, error_handler_fixture: ErrorHandlerFixture, caplog: LogCaptureFixture
     ):
         handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
@@ -550,34 +540,59 @@ class TestErrorHandler:
                 response = handler.handle(exception)
 
             assert isinstance(response, Response)
-            assert 400 == response.status_code
-            data = json.loads(response.data.decode("utf8"))
-            assert INVALID_URN.title == data["title"]
+            response_json = response.json
+            assert isinstance(response_json, dict)
+            assert INVALID_URN.status_code == response.status_code
+            assert INVALID_URN.title == response_json["title"]
 
-            # Since we are not in debug mode, the debug_message is
-            # destroyed.
-            assert "debug_message" not in data
+            # The debug_message is destroyed.
+            assert "debug_message" not in response_json
 
-    def test_handle_error_as_problem_detail_document_debug(
-        self, error_handler_fixture: ErrorHandlerFixture
+        # The exception was logged at the error level
+        assert len(caplog.records) == 1
+        log_record = caplog.records[0]
+        assert log_record.levelname == LogLevel.error.value
+        assert "Exception in web app" in log_record.message
+
+    def test_handle_error_problem_error(
+        self, error_handler_fixture: ErrorHandlerFixture, caplog: LogCaptureFixture
     ):
-        # When in debug mode, the debug_message is preserved and a
-        # stack trace is appended to it.
-        handler = error_handler_fixture.handler(log_level=LogLevel.debug)
+        handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             try:
-                self.raise_exception(CanBeProblemDetailDocument)
+                self.raise_exception(ProblemError(problem_detail=INTEGRATION_ERROR))
             except Exception as exception:
                 response = handler.handle(exception)
 
             assert isinstance(response, Response)
-            assert 400 == response.status_code
-            data = json.loads(response.data.decode("utf8"))
-            assert INVALID_URN.title == data["title"]
-            assert data["debug_message"].startswith(
-                "A debug_message which should only appear in debug mode.\n\n"
-                "Traceback (most recent call last)"
-            )
+            response_json = response.json
+            assert isinstance(response_json, dict)
+            assert INTEGRATION_ERROR.status_code == response.status_code
+            assert INTEGRATION_ERROR.title == response_json["title"]
+
+        # The exception was logged at the warn level, because the problem
+        # detail document had a status code of 502.
+        assert len(caplog.records) == 1
+        log_record = caplog.records[0]
+        assert log_record.levelname == LogLevel.warning.value
+        assert "Exception in web app" in log_record.message
+
+    def test_handle_operational_error(
+        self, error_handler_fixture, caplog: LogCaptureFixture
+    ):
+        handler = error_handler_fixture.handler()
+        with error_handler_fixture.app.test_request_context("/"):
+            try:
+                self.raise_exception(OperationalError("An operational error occurred"))
+            except Exception as exception:
+                response = handler.handle(exception)
+
+            assert isinstance(response, Response)
+            assert 503 == response.status_code
+
+        assert len(caplog.records) == 1
+        log_record = caplog.records[0]
+        assert log_record.levelname == LogLevel.warning.value
 
 
 class TestCompressibleAnnotator:
