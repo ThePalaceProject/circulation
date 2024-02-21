@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import gzip
-import sys
-import traceback
 from functools import wraps
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -11,7 +9,7 @@ from typing import TYPE_CHECKING
 import flask
 from flask import Response, make_response, url_for
 from flask_pydantic_spec import FlaskPydanticSpec
-from psycopg2 import DatabaseError
+from psycopg2 import OperationalError
 from werkzeug.exceptions import HTTPException
 
 import core
@@ -20,10 +18,9 @@ from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from core.lane import Facets, Pagination
 from core.model import Identifier
 from core.problem_details import *
-from core.service.logging.configuration import LogLevel
 from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSMessage
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemError
 
 if TYPE_CHECKING:
     from api.util.flask import PalaceFlask
@@ -170,14 +167,13 @@ def compressible(f):
 
 
 class ErrorHandler(LoggerMixin):
-    def __init__(self, app: PalaceFlask, log_level: LogLevel):
+    def __init__(self, app: PalaceFlask) -> None:
         """Constructor.
 
         :param app: The Flask application object.
         :param log_level: The log level set for this application.
         """
         self.app = app
-        self.debug = log_level == LogLevel.debug
 
     def handle(self, exception: Exception) -> Response | HTTPException:
         """Something very bad has happened. Notify the client."""
@@ -191,42 +187,19 @@ class ErrorHandler(LoggerMixin):
             # If there is an active database session, then roll the session back.
             self.app.manager._db.rollback()
 
-        # By default, when reporting errors, we err on the side of
-        # terseness, to avoid leaking sensitive information. We only
-        # log a stack trace in the case we have debugging turned on.
-        # Otherwise, we just display a generic error message.
-        tb = traceback.format_exc()
-        if isinstance(exception, DatabaseError):
-            # The database session may have become tainted. For now
-            # the simplest thing to do is to kill the entire process
-            # and let uwsgi restart it.
-            self.log.error(
-                "Database error: %s Treating as fatal to avoid holding on to a tainted session!",
-                exception,
-                exc_info=exception,
-            )
-            shutdown = flask.request.environ.get("werkzeug.server.shutdown")
-            if shutdown:
-                shutdown()
-            else:
-                sys.exit()
-
         # By default, the error will be logged at log level ERROR.
         log_method = self.log.error
+        document = None
+        response = None
 
-        # Okay, it's not a database error. Turn it into a useful HTTP error
-        # response.
+        # If we can, we will turn the exception into a problem detail
         if hasattr(exception, "as_problem_detail_document"):
-            # This exception can be turned directly into a problem
-            # detail document.
-            document = exception.as_problem_detail_document(self.debug)
-            if not self.debug:
-                document.debug_message = None
-            else:
-                if document.debug_message:
-                    document.debug_message += "\n\n" + tb
-                else:
-                    document.debug_message = tb
+            document = exception.as_problem_detail_document(debug=False)
+        elif isinstance(exception, ProblemError):
+            document = exception.problem_detail
+
+        if document:
+            document.debug_message = None
             if document.status_code == 502:
                 # This is an error in integrating with some upstream
                 # service. It's a serious problem, but probably not
@@ -234,11 +207,20 @@ class ErrorHandler(LoggerMixin):
                 # WARN.
                 log_method = self.log.warning
             response = make_response(document.response)
-        else:
+
+        if isinstance(exception, OperationalError):
+            # This is an error, but it is probably unavoidable. Likely it was caused by
+            # the database dropping our connection which can happen then the database is
+            # restarted for maintenance. We'll log it at log level WARN.
+            log_method = self.log.warning
+            body = "Service temporarily unavailable. Please try again later."
+            response = make_response(body, 503, {"Content-Type": "text/plain"})
+
+        if response is None:
             # There's no way to turn this exception into a problem
             # document. This is probably indicative of a bug in our
             # software.
-            body = tb if self.debug else "An internal error occurred"
+            body = "An internal error occurred"
             response = make_response(body, 500, {"Content-Type": "text/plain"})
 
         log_method("Exception in web app: %s", exception, exc_info=exception)

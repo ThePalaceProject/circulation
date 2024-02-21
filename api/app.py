@@ -111,7 +111,7 @@ def initialize_application() -> PalaceFlask:
         container.init_resources()
 
         # Initialize the applications error handler.
-        error_handler = ErrorHandler(app, container.config.logging.level())
+        error_handler = ErrorHandler(app)
         app.register_error_handler(Exception, error_handler.handle)
 
         # Initialize the circulation manager
