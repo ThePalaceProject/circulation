@@ -338,7 +338,9 @@ class SessionManager:
     @classmethod
     def engine(cls, url=None):
         url = url or Configuration.database_url()
-        return create_engine(url, echo=DEBUG, json_serializer=json_serializer)
+        return create_engine(
+            url, echo=DEBUG, json_serializer=json_serializer, pool_pre_ping=True
+        )
 
     @classmethod
     def setup_event_listener(
