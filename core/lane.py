@@ -2923,10 +2923,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             return True
         return False
 
-    @inject
-    def update_size(
-        self, _db, search_engine: ExternalSearchIndex = Provide["search.index"]
-    ):
+    def update_size(self, _db, search_engine: ExternalSearchIndex):
         """Update the stored estimate of the number of Works in this Lane."""
         library = self.get_library(_db)
 

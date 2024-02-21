@@ -160,7 +160,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             for list in lane.customlists:
                 if list.id not in custom_list_ids:
                     lane.customlists.remove(list)
-            lane.update_size(self._db, self.search_engine)
+            lane.update_size(self._db, search_engine=self.search_engine)
 
             if is_new:
                 return Response(str(lane.id), 201)
