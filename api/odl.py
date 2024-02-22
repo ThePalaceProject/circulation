@@ -59,6 +59,7 @@ from core.model import (
 )
 from core.model.licensing import LicenseStatus
 from core.model.patron import Patron
+from core.model.resource import HttpResponseTuple
 from core.monitor import CollectionMonitor
 from core.opds_import import (
     BaseOPDSImporter,
@@ -990,7 +991,7 @@ class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
 
     @classmethod
     def fetch_license_info(
-        cls, document_link: str, do_get: Callable[..., tuple[int, Any, bytes]]
+        cls, document_link: str, do_get: Callable[..., HttpResponseTuple]
     ) -> dict[str, Any] | None:
         status_code, _, response = do_get(document_link, headers={})
         if status_code in (200, 201):
@@ -1098,7 +1099,7 @@ class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
         feed_license_identifier: str | None,
         feed_license_expires: datetime.datetime | None,
         feed_concurrency: int | None,
-        do_get: Callable[..., tuple[int, Any, bytes]],
+        do_get: Callable[..., HttpResponseTuple],
     ) -> LicenseData | None:
         license_info_document = cls.fetch_license_info(license_info_link, do_get)
 
@@ -1169,7 +1170,7 @@ class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
         parser: OPDSXMLParser,
         entry_tag: Element,
         feed_url: str | None = None,
-        do_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> dict[str, Any]:
         do_get = do_get or Representation.cautious_http_get
 

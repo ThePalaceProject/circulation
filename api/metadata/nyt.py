@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.model.resource import HttpResponseTuple
 from core.selftest import HasSelfTests, SelfTestResult
 
 """Interface to the New York Times APIs."""
@@ -133,7 +134,7 @@ class NYTBestSellerAPI(
     @classmethod
     def do_get(
         cls, url: str, headers: dict[str, str], **kwargs: Any
-    ) -> tuple[int, dict[str, str], bytes]:
+    ) -> HttpResponseTuple:
         return Representation.simple_http_get(url, headers, **kwargs)
 
     @classmethod

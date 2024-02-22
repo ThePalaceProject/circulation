@@ -449,10 +449,10 @@ class LoanController(CirculationManagerController):
                 # of redirecting to it, since it may be downloaded through an
                 # indirect acquisition link.
                 try:
-                    status_code, headers, content = do_get(
+                    status_code, resp_headers, content = do_get(
                         fulfillment.content_link, headers=encoding_header
                     )
-                    headers = dict(headers)
+                    headers = dict(resp_headers)
                 except RemoteIntegrationException as e:
                     return e.as_problem_detail_document(debug=False)
             else:

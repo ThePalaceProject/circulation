@@ -19,6 +19,7 @@ from core.integration.settings import (
 )
 from core.metadata_layer import FormatData
 from core.model import Edition, RightsStatus
+from core.model.resource import HttpResponseTuple
 from core.opds2_import import (
     OPDS2Importer,
     OPDS2ImporterSettings,
@@ -148,7 +149,7 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
         collection: Collection,
         parser: RWPMManifestParser | None = None,
         data_source_name: str | None = None,
-        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         """Initialize a new instance of ODL2Importer class.
 

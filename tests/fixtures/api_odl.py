@@ -12,6 +12,7 @@ from api.odl import BaseODLImporter, ODLImporter
 from api.odl2 import ODL2API, ODL2Importer
 from core.coverage import CoverageFailure
 from core.model import Edition, LicensePool, Work
+from core.model.resource import HttpResponseTuple
 from tests.fixtures.files import APIFilesFixture
 
 if TYPE_CHECKING:
@@ -110,7 +111,7 @@ class MockGet:
     def __init__(self):
         self.responses = []
 
-    def get(self, *args: Any, **kwargs: Any) -> tuple[int, dict[str, str], bytes]:
+    def get(self, *args: Any, **kwargs: Any) -> HttpResponseTuple:
         return 200, {}, self.responses.pop(0)
 
     def add(self, item: LicenseInfoHelper | str | bytes) -> None:

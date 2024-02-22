@@ -43,6 +43,7 @@ from core.model import (
     Session,
     Subject,
 )
+from core.model.resource import HttpResponseTuple
 from core.util import TitleProcessor
 from core.util.http import HTTP
 from core.util.log import LoggerMixin
@@ -322,7 +323,7 @@ class NoveListAPI(
         return self.lookup_info_to_metadata(representation)
 
     @classmethod
-    def review_response(cls, response: tuple[int, dict[str, str], bytes]) -> None:
+    def review_response(cls, response: HttpResponseTuple) -> None:
         """Performs NoveList-specific error review of the request response"""
         status_code, headers, content = response
         if status_code == 403:

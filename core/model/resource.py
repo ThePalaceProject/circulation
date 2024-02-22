@@ -8,6 +8,7 @@ import os
 import re
 import time
 import traceback
+from collections.abc import Mapping
 from hashlib import md5
 from io import BytesIO
 from urllib.parse import quote, urlparse, urlsplit
@@ -1007,14 +1008,12 @@ class Representation(Base, MediaTypes):
         return json.dumps(dict(d))
 
     @classmethod
-    def simple_http_get(
-        cls, url, headers, **kwargs
-    ) -> tuple[int, dict[str, str], bytes]:
+    def simple_http_get(cls, url, headers, **kwargs) -> HttpResponseTuple:
         """The most simple HTTP-based GET."""
         if not "allow_redirects" in kwargs:
             kwargs["allow_redirects"] = True
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
-        return response.status_code, response.headers, response.content  # type: ignore[return-value]
+        return response.status_code, response.headers, response.content
 
     @classmethod
     def simple_http_post(cls, url, headers, **kwargs):
@@ -1491,3 +1490,6 @@ class Representation(Base, MediaTypes):
             elif not champion:
                 champion = thumbnail
         return champion
+
+
+HttpResponseTuple = tuple[int, Mapping[str, str], bytes]
