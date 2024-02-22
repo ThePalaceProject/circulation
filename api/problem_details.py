@@ -57,7 +57,7 @@ NO_AVAILABLE_LICENSE = pd(
 
 NO_ACCEPTABLE_FORMAT = pd(
     "http://librarysimplified.org/terms/problem/no-acceptable-format",
-    400,
+    502,
     _("No acceptable format."),
     _("Could not deliver this book in an acceptable format."),
 )
@@ -167,8 +167,8 @@ HOLD_NOT_FOUND = pd(
 
 COULD_NOT_MIRROR_TO_REMOTE = pd(
     "http://librarysimplified.org/terms/problem/cannot-mirror-to-remote",
-    502,
-    _("Could not mirror local state to remote."),
+    503,
+    _("Loan deleted locally but remote failed."),
     _(
         "Could not convince a third party to accept the change you made. It's likely to show up again soon."
     ),
@@ -216,7 +216,7 @@ NOT_AGE_APPROPRIATE = FORBIDDEN_BY_POLICY.detailed(
 
 CANNOT_FULFILL = pd(
     "http://librarysimplified.org/terms/problem/cannot-fulfill-loan",
-    400,
+    500,
     _("Could not fulfill loan."),
     _("Could not fulfill loan."),
 )
@@ -237,8 +237,8 @@ BAD_DELIVERY_MECHANISM = pd(
 
 CANNOT_RELEASE_HOLD = pd(
     "http://librarysimplified.org/terms/problem/cannot-release-hold",
-    400,
-    _("Could not release hold."),
+    503,
+    _("Hold released locally but remote failed."),
     _("Could not release hold."),
 )
 

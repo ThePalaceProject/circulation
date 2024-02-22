@@ -1151,9 +1151,7 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
                 self.MEDIA_TYPE, media_type
             )
 
-            raise BadResponseException(
-                url, message=message, debug_message=feed, status_code=status_code
-            )
+            raise BadResponseException(url, message=message, status_code=status_code)
 
     def _get_accept_header(self) -> str:
         return "{}, {};q=0.9, */*;q=0.1".format(

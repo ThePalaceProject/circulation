@@ -34,13 +34,27 @@ from api.circulation import (
     LoanInfo,
     PatronActivityCirculationAPI,
 )
-from api.circulation_exceptions import *
-from api.circulation_exceptions import CannotFulfill
+from api.circulation_exceptions import (
+    CannotFulfill,
+    CannotHold,
+    CannotLoan,
+    CannotReleaseHold,
+    CannotRenew,
+    FormatNotAvailable,
+    FulfilledOnIncompatiblePlatform,
+    NoAcceptableFormat,
+    NoActiveLoan,
+    NoAvailableCopies,
+    PatronAuthorizationFailedException,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+)
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration, Configuration
 from core.connection_config import ConnectionSetting
 from core.coverage import BibliographicCoverageProvider
+from core.exceptions import IntegrationException
 from core.integration.base import (
     HasChildIntegrationConfiguration,
     integration_settings_update,
@@ -533,9 +547,9 @@ class OverdriveAPI(
         response: Response = self._do_get(
             url, request_headers, allowed_response_codes=["2xx", "3xx", "401", "404"]
         )
-        status_code: int = response.status_code
-        headers: CaseInsensitiveDict = response.headers
-        content: bytes = response.content
+        status_code = response.status_code
+        headers = response.headers
+        content = response.content
 
         if status_code == 401:
             if exception_on_401:
@@ -569,7 +583,7 @@ class OverdriveAPI(
                 testing=is_test_mode
             )
         except CannotLoadConfiguration as e:
-            raise CannotFulfill(*e.args)
+            raise CannotFulfill() from e
 
         s = b"%s:%s" % (
             client_credentials["key"].encode(),
@@ -963,7 +977,6 @@ class OverdriveAPI(
             error = response.get("error_description")
             if error:
                 message += "/" + error
-            diagnostic = None
             debug = message
             if error == "Requested record not found":
                 debug = "The patron failed Overdrive's cross-check against the library's ILS."
@@ -1684,7 +1697,7 @@ class OverdriveAPI(
         if data["errorCode"] == "PatronDoesntHaveTitleOnHold":
             # There was never a hold to begin with, so we're fine.
             return True
-        raise CannotReleaseHold(response.content)
+        raise CannotReleaseHold(debug_info=response.text)
 
     def circulation_lookup(self, book):
         if isinstance(book, str):
@@ -1854,7 +1867,6 @@ class OverdriveAPI(
             else:
                 # We don't know what happened -- most likely our
                 # format data is bad.
-                format_list = ", ".join(available_formats)
                 msg = "Could not find specified format %s. Available formats: %s"
                 raise NoAcceptableFormat(
                     msg % (use_format_type, ", ".join(available_formats))

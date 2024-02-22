@@ -33,12 +33,31 @@ from api.circulation import (
     LoanInfo,
     PatronActivityCirculationAPI,
 )
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotFulfill,
+    CannotHold,
+    CannotLoan,
+    CurrentlyAvailable,
+    InvalidInputException,
+    LibraryAuthorizationFailedException,
+    LibraryInvalidInputException,
+    NoAcceptableFormat,
+    NoActiveLoan,
+    NoAvailableCopies,
+    NotFoundOnRemote,
+    NotOnHold,
+    PatronAuthorizationFailedException,
+    PatronLoanLimitReached,
+    RemoteInitiatedServerError,
+)
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
 from core.config import CannotLoadConfiguration
 from core.coverage import BibliographicCoverageProvider, CoverageFailure
+from core.exceptions import IntegrationException
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -74,6 +93,7 @@ from core.model import (
     Subject,
 )
 from core.monitor import CollectionMonitor, IdentifierSweepMonitor, TimelineMonitor
+from core.problem_details import INTEGRATION_ERROR
 from core.service.container import Services
 from core.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from core.util.flask_util import Response
@@ -382,8 +402,8 @@ class Axis360API(
             CheckinResponseParser(licensepool.collection).process_first(
                 response.content
             )
-        except etree.XMLSyntaxError as e:
-            raise RemoteInitiatedServerError(response.content, self.label())
+        except etree.XMLSyntaxError:
+            raise RemoteInitiatedServerError(response.text, self.label())
 
     def _checkin(self, title_id: str | None, patron_id: str | None) -> RequestsResponse:
         """Make a request to the EarlyCheckInTitle endpoint."""
@@ -424,8 +444,8 @@ class Axis360API(
             if loan_info is None:
                 raise CannotLoan()
             return loan_info
-        except etree.XMLSyntaxError as e:
-            raise RemoteInitiatedServerError(response.content, self.label())
+        except etree.XMLSyntaxError:
+            raise RemoteInitiatedServerError(response.text, self.label())
 
     def _checkout(
         self, title_id: str | None, patron_id: str | None, internal_format: str

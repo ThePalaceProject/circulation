@@ -3,7 +3,12 @@ import datetime
 import dateutil
 from money import Money
 
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    AuthorizationBlocked,
+    AuthorizationExpired,
+    CannotLoan,
+    OutstandingFines,
+)
 from api.config import Configuration
 from core.model.patron import Patron
 from core.util import MoneyUtility
@@ -69,7 +74,7 @@ class PatronUtility:
             raise AuthorizationExpired()
 
         if cls.has_excess_fines(patron):
-            raise OutstandingFines()
+            raise OutstandingFines(fines=patron.fines)
 
         from api.authentication.base import PatronData
 
@@ -83,7 +88,7 @@ class PatronUtility:
             # The authentication mechanism itself may know that
             # the patron has outstanding fines, even if the circulation
             # manager is not configured to make that deduction.
-            raise OutstandingFines()
+            raise OutstandingFines(fines=patron.fines)
 
         raise AuthorizationBlocked()
 

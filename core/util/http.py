@@ -1,14 +1,17 @@
+from __future__ import annotations
+
 import logging
 import time
 from collections.abc import Callable
 from json import JSONDecodeError
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
 from requests import sessions
 from requests.adapters import HTTPAdapter, Response
+from typing_extensions import Self
 from urllib3 import Retry
 
 import core
@@ -16,10 +19,17 @@ from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
 from core.util.log import LoggerMixin
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemDetailException
+from core.util.problem_detail import (
+    BaseProblemDetailException,
+    ProblemDetail,
+    ProblemDetailException,
+)
+
+if TYPE_CHECKING:
+    from core.model.resource import HttpResponseTuple
 
 
-class RemoteIntegrationException(IntegrationException):
+class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
     """An exception that happens when we try and fail to communicate
     with a third-party service over HTTP.
     """
@@ -30,7 +40,9 @@ class RemoteIntegrationException(IntegrationException):
     )
     internal_message = "Error accessing %s: %s"
 
-    def __init__(self, url_or_service, message, debug_message=None):
+    def __init__(
+        self, url_or_service: str, message: str, debug_message: str | None = None
+    ) -> None:
         """Indicate that a remote integration has failed.
 
         `param url_or_service` The name of the service that failed
@@ -43,30 +55,28 @@ class RemoteIntegrationException(IntegrationException):
             self.service = urlparse(url_or_service).netloc
         else:
             self.url = self.service = url_or_service
-        if not debug_message:
-            debug_message = self.internal_message % (self.url, message)
+
         super().__init__(message, debug_message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         message = super().__str__()
+        if self.debug_message:
+            message += "\n\n" + self.debug_message
         return self.internal_message % (self.url, message)
 
-    def document_detail(self, debug=True):
-        if debug:
-            return _(str(self.detail), service=self.url)
+    @property
+    def problem_detail(self) -> ProblemDetail:
+        return INTEGRATION_ERROR.detailed(
+            detail=self.document_detail(),
+            title=self.title,
+            debug_message=self.document_debug_message(),
+        )
+
+    def document_detail(self) -> str:
         return _(str(self.detail), service=self.service)
 
-    def document_debug_message(self, debug=True):
-        if debug:
-            return _(str(self.detail), service=self.url)
-        return None
-
-    def as_problem_detail_document(self, debug):
-        return INTEGRATION_ERROR.detailed(
-            detail=self.document_detail(debug),
-            title=self.title,
-            debug_message=self.document_debug_message(debug),
-        )
+    def document_debug_message(self) -> str:
+        return str(self)
 
 
 class BadResponseException(RemoteIntegrationException):
@@ -82,7 +92,13 @@ class BadResponseException(RemoteIntegrationException):
         "Got status code %s from external server, cannot continue."
     )
 
-    def __init__(self, url_or_service, message, debug_message=None, status_code=None):
+    def __init__(
+        self,
+        url_or_service: str,
+        message: str,
+        debug_message: str | None = None,
+        status_code: int | None = None,
+    ):
         """Indicate that a remote integration has failed.
 
         `param url_or_service` The name of the service that failed
@@ -92,31 +108,28 @@ class BadResponseException(RemoteIntegrationException):
         # to be set to 500, etc.
         self.status_code = status_code
 
-    def document_debug_message(self, debug=True):
-        if debug:
-            msg = str(self)
-            if self.debug_message:
-                msg += "\n\n" + self.debug_message
-            return msg
-        return None
-
     @classmethod
-    def from_response(cls, url, message, response):
+    def from_response(
+        cls, url: str, message: str, response: HttpResponseTuple | Response
+    ) -> Self:
         """Helper method to turn a `requests` Response object into
         a BadResponseException.
         """
         if isinstance(response, tuple):
             # The response has been unrolled into a (status_code,
             # headers, body) 3-tuple.
-            status_code, headers, content = response
+            status_code, _, content_bytes = response
+            # The HTTP content response is a bytestring that we want to
+            # convert to unicode for the debug message.
+            if content_bytes:
+                content = content_bytes.decode("utf-8")
+            else:
+                content = ""
         else:
             status_code = response.status_code
-            content = response.content
-        # The HTTP content response is a bytestring that we want to
-        # convert to unicode for the debug message.
-        if content and isinstance(content, bytes):
-            content = content.decode("utf-8")
-        return BadResponseException(
+            content = response.text
+
+        return cls(
             url,
             message,
             status_code=status_code,
@@ -128,7 +141,7 @@ class BadResponseException(RemoteIntegrationException):
         )
 
     @classmethod
-    def bad_status_code(cls, url, response):
+    def bad_status_code(cls, url: str, response: Response) -> Self:
         """The response is bad because the status code is wrong."""
         message = cls.BAD_STATUS_CODE_MESSAGE % response.status_code
         return cls.from_response(
@@ -303,11 +316,11 @@ class HTTP(LoggerMixin):
         except requests.exceptions.Timeout as e:
             # Wrap the requests-specific Timeout exception
             # in a generic RequestTimedOut exception.
-            raise RequestTimedOut(url, e)
+            raise RequestTimedOut(url, str(e)) from e
         except requests.exceptions.RequestException as e:
             # Wrap all other requests-specific exceptions in
             # a generic RequestNetworkException.
-            raise RequestNetworkException(url, e)
+            raise RequestNetworkException(url, str(e)) from e
 
         return process_response_with(
             url,
@@ -391,7 +404,7 @@ class HTTP(LoggerMixin):
             try:
                 response_content = response_content.decode(expected_encoding)
             except Exception as e:
-                raise RequestNetworkException(url, e)
+                raise RequestNetworkException(url, str(e)) from e
         return response_content
 
     @classmethod

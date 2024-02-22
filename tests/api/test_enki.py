@@ -8,7 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from api.circulation import FulfillmentInfo, LoanInfo
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    NoAvailableCopies,
+    PatronAuthorizationFailedException,
+    RemoteInitiatedServerError,
+)
 from api.enki import BibliographicParser, EnkiAPI, EnkiCollectionReaper, EnkiImport
 from core.analytics import Analytics
 from core.metadata_layer import CirculationData, Metadata, TimestampData
@@ -442,7 +446,7 @@ class TestEnkiAPI:
     def test_checkout_bad_authorization(self, enki_test_fixture: EnkiTestFixure):
         """Test that the correct exception is thrown upon an unsuccessful login."""
         db = enki_test_fixture.db
-        with pytest.raises(AuthorizationFailedException):
+        with pytest.raises(PatronAuthorizationFailedException):
             data = enki_test_fixture.files.sample_data("login_unsuccessful.json")
             enki_test_fixture.api.queue_response(200, content=data)
             result = json.loads(data)
@@ -580,15 +584,15 @@ class TestEnkiAPI:
         patron = db.patron()
         enki_test_fixture.api.queue_response(404, "No such patron")
         collect = lambda: list(enki_test_fixture.api.patron_activity(patron, "pin"))
-        pytest.raises(PatronNotFoundOnRemote, collect)
+        pytest.raises(PatronAuthorizationFailedException, collect)
 
         msg = dict(result=dict(message="Login unsuccessful."))
         enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
-        pytest.raises(AuthorizationFailedException, collect)
+        pytest.raises(PatronAuthorizationFailedException, collect)
 
         msg = dict(result=dict(message="Some other error."))
         enki_test_fixture.api.queue_response(200, content=json.dumps(msg))
-        pytest.raises(CirculationException, collect)
+        pytest.raises(RemoteInitiatedServerError, collect)
 
 
 class TestBibliographicParser:

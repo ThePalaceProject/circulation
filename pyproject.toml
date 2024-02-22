@@ -81,6 +81,7 @@ module = [
     "api.adobe_vendor_id",
     "api.axis",
     "api.circulation",
+    "api.circulation_exceptions",
     "api.controller.marc",
     "api.discovery.*",
     "api.enki",

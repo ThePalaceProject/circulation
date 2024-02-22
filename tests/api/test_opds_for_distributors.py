@@ -5,7 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    CannotFulfill,
+    LibraryAuthorizationFailedException,
+)
 from api.opds_for_distributors import (
     OPDSForDistributorsAPI,
     OPDSForDistributorsImporter,

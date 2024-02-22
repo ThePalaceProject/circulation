@@ -20,7 +20,7 @@ from core.model import Identifier
 from core.problem_details import INVALID_URN
 from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSMessage
-from core.util.problem_detail import ProblemDetail, ProblemDetailException
+from core.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 if TYPE_CHECKING:
     from api.util.flask import PalaceFlask
@@ -189,16 +189,10 @@ class ErrorHandler(LoggerMixin):
 
         # By default, the error will be logged at log level ERROR.
         log_method = self.log.error
-        document = None
-        response = None
 
         # If we can, we will turn the exception into a problem detail
-        if hasattr(exception, "as_problem_detail_document"):
-            document = exception.as_problem_detail_document(debug=False)
-        elif isinstance(exception, ProblemDetailException):
+        if isinstance(exception, BaseProblemDetailException):
             document = exception.problem_detail
-
-        if document:
             document.debug_message = None
             if document.status_code == 502:
                 # This is an error in integrating with some upstream
@@ -207,16 +201,14 @@ class ErrorHandler(LoggerMixin):
                 # WARN.
                 log_method = self.log.warning
             response = make_response(document.response)
-
-        if isinstance(exception, OperationalError):
+        elif isinstance(exception, OperationalError):
             # This is an error, but it is probably unavoidable. Likely it was caused by
             # the database dropping our connection which can happen then the database is
             # restarted for maintenance. We'll log it at log level WARN.
             log_method = self.log.warning
             body = "Service temporarily unavailable. Please try again later."
             response = make_response(body, 503, {"Content-Type": "text/plain"})
-
-        if response is None:
+        else:
             # There's no way to turn this exception into a problem
             # document. This is probably indicative of a bug in our
             # software.

@@ -21,6 +21,8 @@ from api.circulation import (
 )
 from api.circulation_exceptions import (
     AlreadyOnHold,
+    CannotReleaseHold,
+    CannotReturn,
     NoAvailableCopies,
     NoLicenses,
     NotFoundOnRemote,
@@ -29,8 +31,10 @@ from api.circulation_exceptions import (
 from api.problem_details import (
     BAD_DELIVERY_MECHANISM,
     CANNOT_RELEASE_HOLD,
+    COULD_NOT_MIRROR_TO_REMOTE,
     HOLD_LIMIT_REACHED,
     NO_ACTIVE_LOAN,
+    NO_LICENSES,
     NOT_FOUND_ON_REMOTE,
     OUTSTANDING_FINES,
 )
@@ -679,7 +683,7 @@ class TestLoanController:
                 pool.identifier.type, pool.identifier.identifier
             )
             assert 404 == response.status_code
-            assert NOT_FOUND_ON_REMOTE == response
+            assert NO_LICENSES == response
 
     def test_borrow_creates_local_hold_if_remote_hold_exists(
         self, loan_fixture: LoanFixture
@@ -1092,6 +1096,24 @@ class TestLoanController:
             assert 200 == response.status_code
             _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
 
+    def test_revoke_loan_exception(
+        self,
+        loan_fixture: LoanFixture,
+    ):
+        # Revoke loan where an exception is raised from the circulation api
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            loan_fixture.manager.d_circulation.revoke_loan = MagicMock(
+                side_effect=CannotReturn()
+            )
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            loan_fixture.pool.loan_to(patron)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+
+        assert isinstance(response, ProblemDetail)
+        assert response == COULD_NOT_MIRROR_TO_REMOTE
+
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
     )
@@ -1120,6 +1142,24 @@ class TestLoanController:
 
             assert 200 == response.status_code
             _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
+
+    def test_revoke_hold_exception(
+        self,
+        loan_fixture: LoanFixture,
+    ):
+        # Revoke hold where an exception is raised from the circulation api
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            loan_fixture.manager.d_circulation.release_hold = MagicMock(
+                side_effect=CannotReleaseHold()
+            )
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            loan_fixture.pool.on_hold_to(patron, position=0)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+
+        assert isinstance(response, ProblemDetail)
+        assert response == CANNOT_RELEASE_HOLD
 
     def test_revoke_hold_nonexistent_licensepool(self, loan_fixture: LoanFixture):
         with loan_fixture.request_context_with_library(
