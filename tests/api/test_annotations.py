@@ -6,7 +6,11 @@ import pytest
 from pyld import jsonld
 
 from api.annotations import AnnotationParser, AnnotationWriter
-from api.problem_details import *
+from api.problem_details import (
+    INVALID_ANNOTATION_FORMAT,
+    INVALID_ANNOTATION_MOTIVATION,
+    INVALID_ANNOTATION_TARGET,
+)
 from core.model import Annotation, create
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import ControllerFixture

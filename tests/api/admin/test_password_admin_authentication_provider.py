@@ -6,7 +6,7 @@ from _pytest.logging import LogCaptureFixture
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
-from api.admin.problem_details import *
+from api.admin.problem_details import INVALID_ADMIN_CREDENTIALS
 from core.model import Admin, create
 from core.service.email.email import send_email
 from tests.fixtures.database import DatabaseTransactionFixture

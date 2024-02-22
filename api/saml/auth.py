@@ -12,9 +12,9 @@ from onelogin.saml2.errors import OneLogin_Saml2_Error
 from api.saml.configuration.model import SAMLOneLoginConfiguration
 from api.saml.metadata.filter import SAMLSubjectFilter, SAMLSubjectFilterError
 from api.saml.metadata.parser import SAMLSubjectParser
-from core.problem_details import *
 from core.python_expression_dsl.evaluator import DSLEvaluationVisitor, DSLEvaluator
 from core.python_expression_dsl.parser import DSLParser
+from core.util.problem_detail import ProblemDetail as pd
 
 if TYPE_CHECKING:
     from api.saml.provider import SAMLWebSSOAuthSettings

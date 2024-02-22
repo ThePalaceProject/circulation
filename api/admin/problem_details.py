@@ -1,6 +1,5 @@
 from flask_babel import lazy_gettext as _
 
-from api.problem_details import *  # noqa: autoflake
 from core.util.problem_detail import ProblemDetail as pd
 
 ADMIN_AUTH_NOT_CONFIGURED = pd(

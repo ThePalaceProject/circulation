@@ -10,7 +10,7 @@ from werkzeug.exceptions import MethodNotAllowed
 from api import routes as api_routes
 from api.admin import routes
 from api.admin.controller import setup_admin_controllers
-from api.admin.problem_details import *
+from api.admin.problem_details import INVALID_ADMIN_CREDENTIALS, INVALID_CSRF_TOKEN
 from api.controller.circulation_manager import CirculationManagerController
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager

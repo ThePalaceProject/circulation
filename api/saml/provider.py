@@ -4,7 +4,6 @@ from werkzeug.datastructures import Authorization
 
 from api.authentication.base import PatronData
 from api.authenticator import BaseSAMLAuthenticationProvider
-from api.problem_details import *
 from api.saml.auth import SAMLAuthenticationManagerFactory
 from api.saml.configuration.model import (
     SAMLWebSSOAuthLibrarySettings,
@@ -18,6 +17,7 @@ from api.saml.metadata.model import (
 )
 from core.analytics import Analytics
 from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail as pd
 
 SAML_INVALID_SUBJECT = pd(
     "http://librarysimplified.org/terms/problem/saml/invalid-subject",

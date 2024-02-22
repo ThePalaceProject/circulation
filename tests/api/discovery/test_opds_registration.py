@@ -15,7 +15,11 @@ from requests_mock import Mocker
 
 from api.discovery.opds_registration import OpdsRegistrationService
 from api.discovery.registration_script import LibraryRegistrationScript
-from api.problem_details import *
+from api.problem_details import (
+    INVALID_REGISTRATION,
+    REMOTE_INTEGRATION_FAILED,
+    SHARED_SECRET_DECRYPTION_ERROR,
+)
 from core.config import CannotLoadConfiguration
 from core.model import Library, create, get_one
 from core.model.discovery_service_registration import (
@@ -23,6 +27,7 @@ from core.model.discovery_service_registration import (
     RegistrationStage,
     RegistrationStatus,
 )
+from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
 from core.util.problem_detail import ProblemDetail, ProblemError
 from tests.api.mockapi.circulation import MockCirculationManager

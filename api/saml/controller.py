@@ -12,8 +12,8 @@ from urllib.parse import (
 from flask import redirect
 from flask_babel import lazy_gettext as _
 
-from api.problem_details import *
 from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail as pd
 from core.util.problem_detail import json as pd_json
 
 SAML_INVALID_REQUEST = pd(

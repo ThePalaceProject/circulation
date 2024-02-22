@@ -15,7 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.orm.session import Session
 
 from api.config import Configuration
-from api.problem_details import *
+from api.problem_details import (
+    REMOTE_INTEGRATION_FAILED,
+    SHARED_SECRET_DECRYPTION_ERROR,
+)
 from core.integration.base import HasIntegrationConfiguration
 from core.integration.goals import Goals
 from core.integration.settings import BaseSettings, ConfigurationFormItem, FormField
@@ -25,6 +28,7 @@ from core.model.discovery_service_registration import (
     RegistrationStage,
     RegistrationStatus,
 )
+from core.problem_details import INTEGRATION_ERROR
 from core.util.http import HTTP
 from core.util.problem_detail import ProblemError
 
