@@ -20,7 +20,7 @@ from api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
 )
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if TYPE_CHECKING:
     from pydantic.typing import AbstractSetIntStr, MappingIntStrAny
@@ -383,18 +383,20 @@ class BaseSettings(BaseModel, LoggerMixin):
             ):
                 # We have a ProblemDetail, so we return that instead of a
                 # generic validation error.
-                raise ProblemError(problem_detail=error["ctx"]["problem_detail"])
+                raise ProblemDetailException(
+                    problem_detail=error["ctx"]["problem_detail"]
+                )
             elif (
                 error["type"] == "value_error.missing"
                 or error["type"] == "type_error.none.not_allowed"
             ):
-                raise ProblemError(
+                raise ProblemDetailException(
                     problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                         f"Required field '{item_label}' is missing."
                     )
                 )
             else:
-                raise ProblemError(
+                raise ProblemDetailException(
                     problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
                         f"'{item_label}' validation error: {error['msg']}."
                     )

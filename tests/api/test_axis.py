@@ -63,7 +63,7 @@ from core.scripts import RunCollectionCoverageProviderScript
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.flask_util import Response
 from core.util.http import RemoteIntegrationException
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.api.mockapi.axis import MockAxis360API
 from tests.fixtures.library import LibraryFixture
 
@@ -800,7 +800,7 @@ class TestAxis360API:
             assert api.base_url == expected
         else:
             pytest.raises(
-                ProblemError,
+                ProblemDetailException,
                 integration_settings_update,
                 Axis360Settings,
                 config,

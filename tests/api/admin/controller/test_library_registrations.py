@@ -20,7 +20,7 @@ from core.model.discovery_service_registration import (
     RegistrationStatus,
 )
 from core.problem_details import INVALID_INPUT
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     IntegrationConfigurationFixture,
@@ -311,7 +311,7 @@ class TestLibraryRegistration:
 
         # The registration may fail for some reason.
         mock_registry = MagicMock(spec=OpdsRegistrationService)
-        mock_registry.register_library.side_effect = ProblemError(
+        mock_registry.register_library.side_effect = ProblemDetailException(
             problem_detail=REMOTE_INTEGRATION_FAILED
         )
         controller.look_up_registry = MagicMock(return_value=mock_registry)

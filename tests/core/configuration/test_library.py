@@ -4,7 +4,7 @@ from functools import partial
 import pytest
 
 from core.configuration.library import LibrarySettings
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 LibrarySettingsFixture = Callable[..., LibrarySettings]
 
@@ -48,7 +48,7 @@ def test_validate_language_codes(
 def test_validate_language_codes_error(
     library_settings: LibrarySettingsFixture,
 ) -> None:
-    with pytest.raises(ProblemError) as excinfo:
+    with pytest.raises(ProblemDetailException) as excinfo:
         library_settings(large_collection_languages=["eng", "xyz"])
 
     assert excinfo.value.problem_detail.detail is not None

@@ -13,7 +13,7 @@ from core.model import (
     json_serializer,
     site_configuration_has_changed,
 )
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class DiscoveryServicesController(
@@ -74,7 +74,7 @@ class DiscoveryServicesController(
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -84,7 +84,7 @@ class DiscoveryServicesController(
         self.require_system_admin()
         try:
             return self.delete_service(service_id)
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -105,4 +105,4 @@ class DiscoveryServicesController(
             )
         ).one_or_none()
         if existing_service:
-            raise ProblemError(problem_detail=INTEGRATION_URL_ALREADY_IN_USE)
+            raise ProblemDetailException(problem_detail=INTEGRATION_URL_ALREADY_IN_USE)

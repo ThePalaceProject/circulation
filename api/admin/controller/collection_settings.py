@@ -31,7 +31,7 @@ from core.model import (
     site_configuration_has_changed,
 )
 from core.selftest import HasSelfTests
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class CollectionSettingsController(
@@ -119,10 +119,10 @@ class CollectionSettingsController(
                         parent_integration is None
                         or parent_integration.collection is None
                     ):
-                        raise ProblemError(MISSING_PARENT)
+                        raise ProblemDetailException(MISSING_PARENT)
                     integration.collection.parent = parent_integration.collection
                 else:
-                    raise ProblemError(PROTOCOL_DOES_NOT_SUPPORT_PARENTS)
+                    raise ProblemDetailException(PROTOCOL_DOES_NOT_SUPPORT_PARENTS)
             else:
                 settings_class = impl_cls.settings_class()
 
@@ -142,7 +142,7 @@ class CollectionSettingsController(
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 

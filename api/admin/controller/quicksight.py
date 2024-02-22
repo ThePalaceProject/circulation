@@ -15,7 +15,7 @@ from core.config import Configuration
 from core.model.admin import Admin
 from core.model.library import Library
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 
 class QuickSightController(CirculationManagerController):
@@ -27,7 +27,7 @@ class QuickSightController(CirculationManagerController):
         all_authorized_arns = Configuration.quicksight_authorized_arns()
         if not all_authorized_arns:
             log.error("No Quicksight ARNs were configured for this server.")
-            raise ProblemError(
+            raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Quicksight has not been configured for this server."
                 )
@@ -35,7 +35,7 @@ class QuickSightController(CirculationManagerController):
 
         authorized_arns = all_authorized_arns.get(dashboard_name)
         if not authorized_arns:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     "The requested Dashboard ARN is not recognized by this server."
                 )
@@ -65,7 +65,7 @@ class QuickSightController(CirculationManagerController):
             allowed_library_uuids = [l.uuid for l in allowed_libraries]
 
         if not allowed_library_uuids:
-            raise ProblemError(
+            raise ProblemDetailException(
                 NOT_FOUND_ON_REMOTE.detailed(
                     "No library was found for this Admin that matched the request."
                 )
@@ -93,7 +93,7 @@ class QuickSightController(CirculationManagerController):
             )
         except Exception as ex:
             log.error(f"Error while fetching the Quicksight Embed url: {ex}")
-            raise ProblemError(
+            raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Error while fetching the Quicksight Embed url."
                 )
@@ -102,7 +102,7 @@ class QuickSightController(CirculationManagerController):
         embed_url = response.get("EmbedUrl")
         if response.get("Status") // 100 != 2 or embed_url is None:
             log.error(f"Quicksight Embed url error response {response}")
-            raise ProblemError(
+            raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Error while fetching the Quicksight Embed url."
                 )

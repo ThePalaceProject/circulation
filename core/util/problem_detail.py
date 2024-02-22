@@ -132,7 +132,7 @@ class ProblemDetail:
         )
 
 
-class ProblemError(BaseError):
+class ProblemDetailException(BaseError):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
     def __init__(self, problem_detail: ProblemDetail) -> None:

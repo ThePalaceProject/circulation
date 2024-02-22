@@ -12,7 +12,7 @@ from api.admin import routes
 from api.admin.controller import setup_admin_controllers
 from api.admin.problem_details import INVALID_ADMIN_CREDENTIALS, INVALID_CSRF_TOKEN
 from api.controller.circulation_manager import CirculationManagerController
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
@@ -788,7 +788,7 @@ class TestAdminView:
 def test_returns_json_or_response_or_problem_detail():
     @routes.returns_json_or_response_or_problem_detail
     def mock_responses(response):
-        if isinstance(response, ProblemError):
+        if isinstance(response, ProblemDetailException):
             raise response
         return response
 
@@ -797,7 +797,7 @@ def test_returns_json_or_response_or_problem_detail():
     )
 
     # Both raising an error and responding with a problem detail are equivalent
-    assert mock_responses(ProblemError(problem)) == problem.response
+    assert mock_responses(ProblemDetailException(problem)) == problem.response
     assert mock_responses(problem) == problem.response
 
     # A json provides a response object

@@ -16,7 +16,7 @@ from core.exceptions import IntegrationException
 from core.problem_details import INTEGRATION_ERROR
 from core.util.log import LoggerMixin
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 
 class RemoteIntegrationException(IntegrationException):
@@ -490,7 +490,7 @@ class HTTP(LoggerMixin):
                     f"Remote service returned a problem detail document: '{response.text}'"
                 )
                 problem_detail.debug_message = response.text
-                raise ProblemError(problem_detail=problem_detail)
+                raise ProblemDetailException(problem_detail=problem_detail)
             except JSONDecodeError:
                 # Failed to decode the problem detail document, we just fall through
                 # and raise the generic integration error.
@@ -498,7 +498,7 @@ class HTTP(LoggerMixin):
 
         # There's been a problem. Return the message we got from the
         # server, verbatim.
-        raise ProblemError(
+        raise ProblemDetailException(
             problem_detail=INTEGRATION_ERROR.detailed(
                 f'{response.status_code} response from integration server: "{response.text}"'
             )

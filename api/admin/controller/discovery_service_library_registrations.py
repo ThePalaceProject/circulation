@@ -21,7 +21,7 @@ from core.model.discovery_service_registration import (
     RegistrationStage,
 )
 from core.problem_details import INVALID_INPUT
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerMixin):
@@ -45,7 +45,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
                 return self.process_get()
             else:
                 return self.process_post()
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -69,7 +69,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
                     terms_of_service_link,
                     terms_of_service_html,
                 ) = registry.fetch_registration_document()
-            except ProblemError as e:
+            except ProblemDetailException as e:
                 # Unlike most cases like this, a ProblemError doesn't
                 # mean the whole request is ruined -- just that one of
                 # the discovery services isn't working. Turn the
@@ -114,7 +114,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
 
         registry = OpdsRegistrationService.for_integration(self._db, integration_id)
         if not registry:
-            raise ProblemError(problem_detail=MISSING_SERVICE)
+            raise ProblemDetailException(problem_detail=MISSING_SERVICE)
         return registry
 
     def look_up_library(self, library_short_name: str) -> Library:
@@ -122,7 +122,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
 
         library = get_one(self._db, Library, short_name=library_short_name)
         if not library:
-            raise ProblemError(problem_detail=NO_SUCH_LIBRARY)
+            raise ProblemDetailException(problem_detail=NO_SUCH_LIBRARY)
         return library
 
     def process_post(self) -> Response:
@@ -133,7 +133,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
         stage_string = flask.request.form.get("registration_stage")
 
         if integration_id is None:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INVALID_INPUT.detailed(
                     "Missing required parameter 'integration_id'"
                 )
@@ -141,7 +141,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
         registry = self.look_up_registry(integration_id)
 
         if library_short_name is None:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INVALID_INPUT.detailed(
                     "Missing required parameter 'library_short_name'"
                 )
@@ -149,7 +149,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
         library = self.look_up_library(library_short_name)
 
         if stage_string is None:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INVALID_INPUT.detailed(
                     "Missing required parameter 'registration_stage'"
                 )
@@ -157,7 +157,7 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
         try:
             stage = RegistrationStage(stage_string)
         except ValueError:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INVALID_INPUT.detailed(
                     f"'{stage_string}' is not a valid registration stage"
                 )

@@ -20,7 +20,7 @@ from core.model import Identifier
 from core.problem_details import INVALID_URN
 from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSMessage
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if TYPE_CHECKING:
     from api.util.flask import PalaceFlask
@@ -195,7 +195,7 @@ class ErrorHandler(LoggerMixin):
         # If we can, we will turn the exception into a problem detail
         if hasattr(exception, "as_problem_detail_document"):
             document = exception.as_problem_detail_document(debug=False)
-        elif isinstance(exception, ProblemError):
+        elif isinstance(exception, ProblemDetailException):
             document = exception.problem_detail
 
         if document:

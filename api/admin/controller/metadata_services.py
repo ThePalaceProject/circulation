@@ -20,7 +20,7 @@ from core.model import (
     site_configuration_has_changed,
 )
 from core.selftest import HasSelfTests
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class MetadataServicesController(
@@ -38,7 +38,7 @@ class MetadataServicesController(
                 protocol=protocol,
             )
             if existing_service is not None:
-                raise ProblemError(DUPLICATE_INTEGRATION)
+                raise ProblemDetailException(DUPLICATE_INTEGRATION)
         return super().create_new_service(name, protocol)
 
     def default_registry(self) -> IntegrationRegistry[MetadataServiceType]:
@@ -86,7 +86,7 @@ class MetadataServicesController(
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 

@@ -17,7 +17,7 @@ from api.authentication.basic import BasicAuthenticationProvider
 from core.integration.base import LibrarySettingsType, SettingsType
 from core.model import Patron, Session, get_one
 from core.selftest import SelfTestResult
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if TYPE_CHECKING:
     from core.model import Library
@@ -65,7 +65,7 @@ class BasicTokenAuthenticationProvider(
 
         try:
             data = PatronJWEAccessTokenProvider.decrypt_token(_db, token)
-        except ProblemError as ex:
+        except ProblemDetailException as ex:
             return ex.problem_detail
 
         patron: Patron | None = get_one(_db, Patron, id=data.id)
@@ -80,7 +80,7 @@ class BasicTokenAuthenticationProvider(
             try:
                 token = PatronJWEAccessTokenProvider.decrypt_token(self._db, auth.token)
                 return token.pwd
-            except ProblemError:
+            except ProblemDetailException:
                 ...
 
         return None

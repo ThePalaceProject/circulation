@@ -29,7 +29,7 @@ from core.model.discovery_service_registration import (
 )
 from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from core.util.problem_detail import JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.api.mockapi.circulation import MockCirculationManager
 from tests.core.mock import MockRequestsResponse
 from tests.fixtures.database import (
@@ -196,7 +196,7 @@ class TestOpdsRegistrationService:
         assert ("register url", None) == m(request)
 
         # OPDS 2 feed with no link.
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             request = mock_request(dict(metadata=metadata))
             m(request)
 
@@ -209,7 +209,7 @@ class TestOpdsRegistrationService:
         assert REMOTE_INTEGRATION_FAILED.uri == detail.uri
 
         # Non-OPDS document.
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             request = mock_request("plain text here", "text/plain")
             m(request)
 
@@ -228,9 +228,9 @@ class TestOpdsRegistrationService:
         # First, test the case where we can't even get the catalog
         # document.
         remote_registry_fixture.registry.fetch_catalog = MagicMock(
-            side_effect=ProblemError(problem_detail=REMOTE_INTEGRATION_FAILED)
+            side_effect=ProblemDetailException(problem_detail=REMOTE_INTEGRATION_FAILED)
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             remote_registry_fixture.registry.fetch_registration_document()
 
         # The fetch_catalog method raised a ProblemError,
@@ -253,7 +253,7 @@ class TestOpdsRegistrationService:
             return_value=("http://register-here/", "vendor id")
         )
 
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             remote_registry_fixture.registry.fetch_registration_document()
 
         # A request was made to the registration URL mentioned in the catalog.
@@ -491,13 +491,15 @@ class TestOpdsRegistrationService:
         # that they raise ProblemError exceptions. This tests that if
         # there is a failure at any stage, the ProblemError is
         # propagated.
-        def create_exception(message: str) -> ProblemError:
-            return ProblemError(problem_detail=INVALID_REGISTRATION.detailed(message))
+        def create_exception(message: str) -> ProblemDetailException:
+            return ProblemDetailException(
+                problem_detail=INVALID_REGISTRATION.detailed(message)
+            )
 
         registry._process_registration_result = MagicMock(
             side_effect=create_exception("could not process registration result")
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             register_library()
         assert (
             "could not process registration result"
@@ -507,7 +509,7 @@ class TestOpdsRegistrationService:
         registry._send_registration_request = MagicMock(
             side_effect=create_exception("could not send registration request")
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             register_library()
         assert (
             "could not send registration request" == excinfo.value.problem_detail.detail
@@ -516,7 +518,7 @@ class TestOpdsRegistrationService:
         registry._create_registration_payload = MagicMock(
             side_effect=create_exception("could not create registration payload")
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             register_library()
         assert (
             "could not create registration payload"
@@ -526,7 +528,7 @@ class TestOpdsRegistrationService:
         registry.fetch_catalog = MagicMock(
             side_effect=create_exception("could not fetch catalog")
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             register_library()
         assert "could not fetch catalog" == excinfo.value.problem_detail.detail
 
@@ -598,7 +600,7 @@ class TestOpdsRegistrationService:
             headers={"Content-Type": PROBLEM_DETAIL_JSON_MEDIA_TYPE},
             text=json.dumps(dict(detail="this is a problem detail")),
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(url, headers, payload)
         assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
         assert excinfo.value.problem_detail.detail is not None
@@ -614,7 +616,7 @@ class TestOpdsRegistrationService:
             headers={"Content-Type": "text/html"},
             text="log in why don't you",
         )
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(url, headers, payload)
 
         assert REMOTE_INTEGRATION_FAILED.uri == excinfo.value.problem_detail.uri
@@ -643,7 +645,7 @@ class TestOpdsRegistrationService:
 
         # If we try to decrypt using the wrong key, a ProblemError is
         # raised explaining the problem.
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(encryptor2, encrypted_secret)
 
         assert SHARED_SECRET_DECRYPTION_ERROR.uri == excinfo.value.problem_detail.uri
@@ -661,7 +663,7 @@ class TestOpdsRegistrationService:
         reg = MagicMock(spec=DiscoveryServiceRegistration)
 
         # Result must be a dictionary.
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(reg, "not a dictionary", encryptor, stage)
 
         problem = excinfo.value.problem_detail
@@ -704,8 +706,10 @@ class TestOpdsRegistrationService:
         assert reg.stage == RegistrationStage.PRODUCTION
 
         # Now simulate a problem decrypting the shared secret.
-        mock.side_effect = ProblemError(problem_detail=SHARED_SECRET_DECRYPTION_ERROR)
-        with pytest.raises(ProblemError) as excinfo:
+        mock.side_effect = ProblemDetailException(
+            problem_detail=SHARED_SECRET_DECRYPTION_ERROR
+        )
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(reg, catalog, encryptor, stage)
 
         assert SHARED_SECRET_DECRYPTION_ERROR == excinfo.value.problem_detail
@@ -823,7 +827,9 @@ class TestLibraryRegistrationScript:
 
         # Next, simulate register_library() returning a problem detail document.
         registry.register_library = MagicMock(
-            side_effect=ProblemError(problem_detail=INVALID_INPUT.detailed("oops"))
+            side_effect=ProblemDetailException(
+                problem_detail=INVALID_INPUT.detailed("oops")
+            )
         )
 
         result = script.process_library(registry, library, stage, url_for)

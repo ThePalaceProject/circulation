@@ -10,7 +10,7 @@ from api.admin.announcement_list_validator import AnnouncementListValidator
 from api.config import Configuration
 from core.model.announcements import Announcement
 from core.problem_details import INVALID_INPUT
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class AnnouncementSettings:
@@ -26,7 +26,7 @@ class AnnouncementSettings:
     def process_many(self) -> dict[str, Any] | ProblemDetail:
         try:
             return self._action()()
-        except ProblemError as e:
+        except ProblemDetailException as e:
             return e.problem_detail
 
     def get(self) -> dict[str, Any]:
@@ -45,7 +45,7 @@ class AnnouncementSettings:
         """POST multiple announcements to the global namespace"""
         validator = AnnouncementListValidator()
         if flask.request.form is None or "announcements" not in flask.request.form:
-            raise ProblemError(problem_detail=INVALID_INPUT)
+            raise ProblemDetailException(problem_detail=INVALID_INPUT)
         validated_announcements = validator.validate_announcements(
             flask.request.form["announcements"]
         )

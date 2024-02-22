@@ -13,7 +13,7 @@ from core.util.http import (
     RequestNetworkException,
     RequestTimedOut,
 )
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.core.mock import MockRequestsResponse
 
 
@@ -280,7 +280,7 @@ class TestHTTP:
 
         # An error is turned into a ProblemError
         error = MockRequestsResponse(500, content="Error!")
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m("url", error)
         problem = excinfo.value.problem_detail
         assert isinstance(problem, ProblemDetail)
@@ -289,7 +289,7 @@ class TestHTTP:
 
         content, status_code, headers = INVALID_INPUT.response
         error = MockRequestsResponse(status_code, headers, content)
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m("url", error)
         problem = excinfo.value.problem_detail
         assert isinstance(problem, ProblemDetail)
