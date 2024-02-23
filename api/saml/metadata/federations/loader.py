@@ -41,7 +41,7 @@ class SAMLMetadataLoader:
         try:
             xml_metadata = OneLogin_Saml2_IdPMetadataParser.get_metadata(url)
         except Exception as exception:
-            raise SAMLMetadataLoadingError(inner_exception=exception)
+            raise SAMLMetadataLoadingError() from exception
 
         self._logger.info(f"Finished loading IdP XML metadata from {url}")
 

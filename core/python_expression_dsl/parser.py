@@ -192,4 +192,4 @@ class DSLParser:
         except ParseException as exception:
             error_message = self._parse_error_message(exception)
 
-            raise DSLParseError(error_message, inner_exception=exception)
+            raise DSLParseError(error_message) from exception

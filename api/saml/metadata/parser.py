@@ -116,7 +116,7 @@ class SAMLMetadataParser:
                 "An unhandled exception occurred during converting XML string containing SAML metadata into XML DOM"
             )
 
-            raise SAMLMetadataParsingError(inner_exception=exception)
+            raise SAMLMetadataParsingError() from exception
 
         self._logger.debug(
             "Finished converting XML string containing SAML metadata into XML DOM"
@@ -149,7 +149,7 @@ class SAMLMetadataParser:
 
                 certificates.append(certificate)
         except XMLSyntaxError as exception:
-            raise SAMLMetadataParsingError(inner_exception=exception)
+            raise SAMLMetadataParsingError() from exception
 
         self._logger.debug(
             "Finished parsing {} certificates: {}".format(
@@ -605,7 +605,7 @@ class SAMLMetadataParser:
                 "An unexpected error occurred during parsing an XML string containing SAML metadata"
             )
 
-            raise SAMLMetadataParsingError(inner_exception=exception)
+            raise SAMLMetadataParsingError() from exception
 
         self._logger.info("Finished parsing an XML string containing SAML metadata")
 
