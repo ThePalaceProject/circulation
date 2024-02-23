@@ -150,7 +150,7 @@ class ProblemDetail:
         )
 
 
-class BaseProblemDetailException(Exception, ABC):
+class BaseProblemDetailException(BasePalaceException, ABC):
     """Mixin for exceptions that can be converted into a ProblemDetail."""
 
     @property
@@ -160,7 +160,7 @@ class BaseProblemDetailException(Exception, ABC):
         ...
 
 
-class ProblemDetailException(BasePalaceException, BaseProblemDetailException):
+class ProblemDetailException(BaseProblemDetailException):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
     def __init__(self, problem_detail: ProblemDetail) -> None:
@@ -172,7 +172,7 @@ class ProblemDetailException(BasePalaceException, BaseProblemDetailException):
             raise ValueError(
                 'Argument "problem_detail" must be an instance of ProblemDetail class'
             )
-
+        super().__init__(problem_detail.title)
         self._problem_detail = problem_detail
 
     @property

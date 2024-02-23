@@ -6,8 +6,8 @@ class BasePalaceException(Exception):
 
         :param message: String containing description of the error occurred
         """
-        self.message = message
         super().__init__(message)
+        self.message = message
 
 
 class IntegrationException(BasePalaceException):
