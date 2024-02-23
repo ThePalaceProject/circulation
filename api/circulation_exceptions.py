@@ -36,8 +36,8 @@ class CirculationException(IntegrationException, BaseProblemDetailException, ABC
     def __init__(
         self, message: str | None = None, debug_info: str | None = None
     ) -> None:
-        self.message = message
         super().__init__(message or self.__class__.__name__, debug_info)
+        self.message = message
 
     @property
     def detail(self) -> str | None:
