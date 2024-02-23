@@ -8,7 +8,7 @@ from flask_babel import lazy_gettext as _
 
 from core.model.announcements import AnnouncementData
 from core.problem_details import INVALID_INPUT
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 
 class AnnouncementListValidator:
@@ -41,11 +41,11 @@ class AnnouncementListValidator:
             try:
                 announcements = json.loads(announcements)
             except ValueError:
-                raise ProblemError(bad_format)
+                raise ProblemDetailException(bad_format)
         if not isinstance(announcements, list):
-            raise ProblemError(bad_format)
+            raise ProblemDetailException(bad_format)
         if len(announcements) > self.maximum_announcements:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     _(
                         "Too many announcements: maximum is %(maximum)d",
@@ -58,7 +58,7 @@ class AnnouncementListValidator:
             validated = self.validate_announcement(announcement)
             id = cast(uuid.UUID, validated.id)
             if id in validated_announcements:
-                raise ProblemError(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(_("Duplicate announcement ID: %s" % id))
                 )
             validated_announcements[id] = validated
@@ -66,7 +66,7 @@ class AnnouncementListValidator:
 
     def validate_announcement(self, announcement: dict[str, str]) -> AnnouncementData:
         if not isinstance(announcement, dict):
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     _(
                         "Invalid announcement format: %(announcement)r",
@@ -80,7 +80,7 @@ class AnnouncementListValidator:
             try:
                 id = uuid.UUID(id_str)
             except ValueError:
-                raise ProblemError(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(
                         _("Invalid announcement ID: %(id)s", id=id_str)
                     )
@@ -90,7 +90,7 @@ class AnnouncementListValidator:
 
         for required_field in ("content",):
             if required_field not in announcement:
-                raise ProblemError(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(
                         _("Missing required field: %(field)s", field=required_field)
                     )
@@ -134,7 +134,7 @@ class AnnouncementListValidator:
         :return: Raise ProblemError if validation fails; otherwise return the value.
         """
         if len(value) < minimum:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     _(
                         "Value too short (%(length)d versus %(limit)d characters): %(value)s",
@@ -146,7 +146,7 @@ class AnnouncementListValidator:
             )
 
         if len(value) > maximum:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     _(
                         "Value too long (%(length)d versus %(limit)d characters): %(value)s",
@@ -183,7 +183,7 @@ class AnnouncementListValidator:
                 value = value.replace(tzinfo=dateutil.tz.tzlocal())
                 value = value.date()
             except ValueError as e:
-                raise ProblemError(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(
                         _(
                             "Value for %(field)s is not a date: %(date)s",
@@ -193,7 +193,7 @@ class AnnouncementListValidator:
                     )
                 )
         if minimum and value < minimum:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     _(
                         "Value for %(field)s must be no earlier than %(minimum)s",

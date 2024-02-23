@@ -13,7 +13,7 @@ from core.integration.settings import (
     FormField,
     SettingsValidationError,
 )
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_settings_init(mock_settings):
 def test_settings_init_invalid(mock_settings):
     # Make sure that the settings class raises a ProblemError
     # when there is a problem with validation.
-    with pytest.raises(ProblemError) as e:
+    with pytest.raises(ProblemDetailException) as e:
         mock_settings(number=-1)
 
     problem_detail = e.value.problem_detail
@@ -93,7 +93,7 @@ def test_settings_init_invalid(mock_settings):
         == "'Number' validation error: ensure this value is greater than 0."
     )
 
-    with pytest.raises(ProblemError) as e:
+    with pytest.raises(ProblemDetailException) as e:
         mock_settings()
 
     problem_detail = e.value.problem_detail
@@ -116,7 +116,7 @@ def test_settings_validation_custom(mock_settings, mock_problem_detail):
     # We can also add custom validation functions to the settings class.
     # These functions should raise a ProblemError if there is
     # a problem with validation.
-    with pytest.raises(ProblemError) as e:
+    with pytest.raises(ProblemDetailException) as e:
         mock_settings(number=1, test="xyz")
 
     problem_detail = e.value.problem_detail

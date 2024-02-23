@@ -16,7 +16,7 @@ from core.model.key import KeyType
 from core.model.patron import Patron
 from core.util.datetime_helpers import utc_now
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 from core.util.uuid import uuid_encode
 
 if TYPE_CHECKING:
@@ -106,27 +106,37 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
             jwe_token.deserialize(token)
         except jwe.InvalidJWEData as ex:
             cls.logger().exception(f"Invalid JWE data was encountered: {ex}")
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         # Check expiry
         exp = jwe_token.jose_header.get("exp")
         if exp is None or utc_now().timestamp() > exp:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_EXPIRED)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_EXPIRED
+            )
 
         # Make sure there is a kid
         kid = jwe_token.jose_header.get("kid")
         if kid is None:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         # Make sure we have the token type
         typ = jwe_token.jose_header.get("typ")
         if typ != "JWE":
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         # Make sure we have the payload type
         cty = jwe_token.jose_header.get("cty")
         if cty != cls.CTY:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         return jwe_token
 
@@ -142,17 +152,23 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
             key = None
 
         if key is None:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         try:
             token.decrypt(cls.get_jwk(key))
         except jwe.InvalidJWEData:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         try:
             payload = jwe.json_decode(token.payload)
         except ValueError:
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         # Validate the payload
         if (
@@ -161,7 +177,9 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
             or "pwd" not in payload
             or len(payload) != 2
         ):
-            raise ProblemError(problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID)
+            raise ProblemDetailException(
+                problem_detail=PATRON_AUTH_ACCESS_TOKEN_INVALID
+            )
 
         return TokenPatronInfo(**payload)
 

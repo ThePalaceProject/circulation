@@ -25,7 +25,7 @@ from core.integration.settings import (
 from core.model import Patron
 from core.util import MoneyUtility
 from core.util.http import RemoteIntegrationException
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class SIP2Settings(BasicAuthProviderSettings):

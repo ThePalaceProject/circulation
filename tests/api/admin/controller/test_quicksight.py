@@ -6,7 +6,7 @@ import pytest
 
 from core.model import Library, create
 from core.model.admin import Admin, AdminRole
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 
@@ -209,7 +209,7 @@ class TestQuicksightController:
                 f"/?library_uuids={library.uuid}",
                 admin=admin,
             ) as ctx:
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("secondary")
                 assert (
                     raised.value.problem_detail.detail
@@ -217,7 +217,7 @@ class TestQuicksightController:
                 )
 
                 mock_qs_arns.return_value = []
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
@@ -229,7 +229,7 @@ class TestQuicksightController:
                 admin=admin,
             ) as ctx:
                 mock_qs_arns.return_value = arns
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
@@ -244,7 +244,7 @@ class TestQuicksightController:
                 mock_boto.generate_embed_url_for_anonymous_user.return_value = dict(
                     status=400, embed_url="http://embed"
                 )
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
@@ -255,7 +255,7 @@ class TestQuicksightController:
                 mock_boto.generate_embed_url_for_anonymous_user.return_value = dict(
                     status=200,
                 )
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail
@@ -266,7 +266,7 @@ class TestQuicksightController:
                 mock_boto.generate_embed_url_for_anonymous_user.side_effect = Exception(
                     ""
                 )
-                with pytest.raises(ProblemError) as raised:
+                with pytest.raises(ProblemDetailException) as raised:
                     ctrl.generate_quicksight_url("primary")
                 assert (
                     raised.value.problem_detail.detail

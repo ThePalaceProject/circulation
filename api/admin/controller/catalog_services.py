@@ -18,7 +18,7 @@ from core.model import (
     json_serializer,
     site_configuration_has_changed,
 )
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class CatalogServicesController(
@@ -64,7 +64,7 @@ class CatalogServicesController(
             .count()
         )
         if integrations > 1:
-            raise ProblemError(
+            raise ProblemDetailException(
                 MULTIPLE_SERVICES_FOR_LIBRARY.detailed(
                     f"You tried to add a MARC export service to {library.short_name}, but it already has one."
                 )
@@ -100,7 +100,7 @@ class CatalogServicesController(
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
 
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 

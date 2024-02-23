@@ -36,7 +36,7 @@ from core.model import (
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENT_SETTING_NAME
 from core.model.announcements import Announcement
 from core.model.library import LibraryLogo
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
@@ -51,7 +51,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
                 return self.process_post()
             else:
                 return INCOMPLETE_CONFIGURATION
-        except ProblemError as e:
+        except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
 
@@ -113,7 +113,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
         name = form_data.get("name", "").strip()
         if name == "":
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                     "Required field 'Name' is missing."
                 )
@@ -121,7 +121,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
         short_name = form_data.get("short_name", "").strip()
         if short_name == "":
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                     "Required field 'Short name' is missing."
                 )
@@ -198,7 +198,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         if library:
             return library
         else:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=LIBRARY_NOT_FOUND.detailed(
                     _("The specified library uuid does not exist.")
                 )
@@ -212,7 +212,9 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             # existing library or creating a new library, it must be unique.
             library_with_short_name = get_one(self._db, Library, short_name=short_name)
             if library_with_short_name:
-                raise ProblemError(problem_detail=LIBRARY_SHORT_NAME_ALREADY_IN_USE)
+                raise ProblemDetailException(
+                    problem_detail=LIBRARY_SHORT_NAME_ALREADY_IN_USE
+                )
 
     @staticmethod
     def _process_image(image: Image.Image, _format: str = "PNG") -> bytes:
@@ -244,7 +246,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         ]
         image_type = image_file.headers.get("Content-Type")
         if image_type not in allowed_types:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(
                     f"Image upload must be in GIF, PNG, or JPG format. (Upload was {image_type}.)"
                 )
@@ -253,7 +255,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         try:
             image = Image.open(image_file.stream)
         except UnidentifiedImageError:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INVALID_CONFIGURATION_OPTION.detailed(
                     f"Unable to open uploaded image, please try again or upload a different image."
                 )

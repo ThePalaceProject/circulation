@@ -30,7 +30,7 @@ from core.model.discovery_service_registration import (
 )
 from core.problem_details import INTEGRATION_ERROR
 from core.util.http import HTTP
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -200,7 +200,7 @@ class OpdsRegistrationService(
                 register_url = link.get("href")
                 break
         if not register_url:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=REMOTE_INTEGRATION_FAILED.detailed(
                     _(
                         "The service at %(url)s did not provide a register link.",
@@ -248,7 +248,7 @@ class OpdsRegistrationService(
         tos_html = None
         try:
             catalog, links = cls._extract_links(response)
-        except ProblemError:
+        except ProblemDetailException:
             return None, None
         for link in links:
             if link.get("rel") != "terms-of-service":
@@ -279,7 +279,7 @@ class OpdsRegistrationService(
         # The response must contain an OPDS 2 catalog.
         type = response.headers.get("Content-Type")
         if not (type and type.startswith(cls.OPDS_2_TYPE)):
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=REMOTE_INTEGRATION_FAILED.detailed(
                     _("The service at %(url)s did not return OPDS.", url=response.url)
                 )
@@ -452,7 +452,7 @@ class OpdsRegistrationService(
         try:
             shared_secret = cipher.decrypt(base64.b64decode(cipher_text))
         except ValueError:
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=SHARED_SECRET_DECRYPTION_ERROR.detailed(
                     f"Could not decrypt shared secret: '{cipher_text}'"
                 )
@@ -481,7 +481,7 @@ class OpdsRegistrationService(
         # e.g. through Short Client Tokens or authenticated API
         # requests.
         if not isinstance(catalog, dict):
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INTEGRATION_ERROR.detailed(
                     f"Remote service served '{catalog}', which I can't make sense of as an OPDS document.",
                 )

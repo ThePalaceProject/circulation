@@ -39,7 +39,7 @@ from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from core.selftest import HasSelfTests
 from core.util.cache import memoize
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 T = TypeVar("T", bound=HasIntegrationConfiguration[BaseSettings])
 
@@ -188,13 +188,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             goal=self.registry.goal,
         )
         if service is None:
-            raise ProblemError(MISSING_SERVICE)
+            raise ProblemDetailException(MISSING_SERVICE)
         if protocol is not None and service.protocol != protocol:
-            raise ProblemError(CANNOT_CHANGE_PROTOCOL)
+            raise ProblemDetailException(CANNOT_CHANGE_PROTOCOL)
         if name is not None and service.name != name:
             service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
             if service_with_name is not None:
-                raise ProblemError(INTEGRATION_NAME_ALREADY_IN_USE)
+                raise ProblemDetailException(INTEGRATION_NAME_ALREADY_IN_USE)
             service.name = name
 
         return service
@@ -209,7 +209,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         # Create a new service
         service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
         if service_with_name is not None:
-            raise ProblemError(INTEGRATION_NAME_ALREADY_IN_USE)
+            raise ProblemDetailException(INTEGRATION_NAME_ALREADY_IN_USE)
 
         new_service, _ = create(
             self._db,
@@ -219,7 +219,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             name=name,
         )
         if not new_service:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     f"Could not create the '{self.registry.goal.value}' integration."
                 )
@@ -241,7 +241,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """
         if protocol is None or protocol not in self.registry:
             self.log.warning(f"Unknown service protocol: {protocol}")
-            raise ProblemError(UNKNOWN_PROTOCOL)
+            raise ProblemDetailException(UNKNOWN_PROTOCOL)
         return self.registry[protocol]
 
     def get_service(
@@ -257,7 +257,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         name = form_data.get("name", None, str)
 
         if protocol is None and _id is None:
-            raise ProblemError(NO_PROTOCOL_FOR_NEW_SERVICE)
+            raise ProblemDetailException(NO_PROTOCOL_FOR_NEW_SERVICE)
 
         # Lookup the protocol class to make sure it exists
         # this will raise a ProblemError if the protocol is unknown
@@ -274,7 +274,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         else:
             # Create a new service
             if name is None:
-                raise ProblemError(MISSING_SERVICE_NAME)
+                raise ProblemDetailException(MISSING_SERVICE_NAME)
             service = self.create_new_service(name, protocol)
             response_code = 201
 
@@ -286,7 +286,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """
         library: Library | None = get_one(self._db, Library, short_name=short_name)
         if library is None:
-            raise ProblemError(
+            raise ProblemDetailException(
                 NO_SUCH_LIBRARY.detailed(
                     f"You attempted to add the integration to {short_name}, but it does not exist.",
                 )
@@ -308,7 +308,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             parent_id=service.id,
         )
         if not library_settings:
-            raise ProblemError(
+            raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Could not create the library configuration"
                 )
@@ -356,7 +356,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 self.log.error(
                     f"Library settings missing short_name. Settings: {library}."
                 )
-                raise ProblemError(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(
                         "Invalid library settings, missing short_name."
                     )
@@ -434,7 +434,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         and raises a ProblemError on any errors.
         """
         if flask.request.method != "DELETE":
-            raise ProblemError(
+            raise ProblemDetailException(
                 problem_detail=INVALID_INPUT.detailed(
                     "Method not allowed for this endpoint"
                 )
@@ -447,7 +447,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             goal=self.registry.goal,
         )
         if not integration:
-            raise ProblemError(problem_detail=MISSING_SERVICE)
+            raise ProblemDetailException(problem_detail=MISSING_SERVICE)
         self._db.delete(integration)
         return Response("Deleted", 200)
 
@@ -512,7 +512,7 @@ class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], A
                 return self.self_tests_process_get(identifier)
             else:
                 return self.self_tests_process_post(identifier)
-        except ProblemError as e:
+        except ProblemDetailException as e:
             return e.problem_detail
 
     def self_tests_process_get(self, identifier: int) -> Response:
@@ -542,4 +542,4 @@ class IntegrationSettingsSelfTestsController(IntegrationSettingsController[T], A
         if results is not None:
             return Response("Successfully ran new self tests", 200)
         else:
-            raise ProblemError(problem_detail=FAILED_TO_RUN_SELF_TESTS)
+            raise ProblemDetailException(problem_detail=FAILED_TO_RUN_SELF_TESTS)

@@ -44,7 +44,7 @@ from core.util.authentication_for_opds import AuthenticationForOPDSDocument
 from core.util.http import RemoteIntegrationException
 from core.util.log import LoggerMixin, elapsed_time_logging
 from core.util.opds_writer import OPDSFeed
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -351,7 +351,7 @@ class LibraryAuthenticator(LoggerMixin):
                 library_settings,
                 analytics,
             )
-        except (RemoteIntegrationException, ProblemError):
+        except (RemoteIntegrationException, ProblemDetailException):
             raise CannotLoadConfiguration(
                 f"Could not instantiate {impl_cls.__name__} authentication provider for "
                 f"library {self.library_short_name}."

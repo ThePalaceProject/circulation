@@ -8,7 +8,7 @@ import pytest
 from api.admin.announcement_list_validator import AnnouncementListValidator
 from core.model.announcements import AnnouncementData
 from core.problem_details import INVALID_INPUT
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.announcements import AnnouncementFixture
 
 
@@ -67,9 +67,9 @@ class TestAnnouncementListValidator:
         # If you pass in something other than a list or JSON-encoded
         # list, you get a ProblemDetail.
         for invalid in dict(), json.dumps(dict()), "non-json string":
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 m(invalid)
-            assert isinstance(excinfo.value, ProblemError)
+            assert isinstance(excinfo.value, ProblemDetailException)
             assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
             assert (
                 "Invalid announcement list format"
@@ -98,9 +98,9 @@ class TestAnnouncementListValidator:
                 "finish": "2020-01-02",
             },
         ]
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(too_many)
-        assert isinstance(excinfo.value, ProblemError)
+        assert isinstance(excinfo.value, ProblemDetailException)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
             "Too many announcements: maximum is 2"
@@ -122,9 +122,9 @@ class TestAnnouncementListValidator:
                 "finish": "2020-01-02",
             },
         ]
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(duplicate_ids)
-        assert isinstance(excinfo.value, ProblemError)
+        assert isinstance(excinfo.value, ProblemDetailException)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
             "Duplicate announcement ID: announcement1"
@@ -188,7 +188,7 @@ class TestAnnouncementListValidator:
 
         # Totally bogus format
         for invalid in '{"a": "string"}', ["a list"]:
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 m(invalid)
             assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
             assert "Invalid announcement format" in excinfo.value.problem_detail.detail
@@ -200,14 +200,14 @@ class TestAnnouncementListValidator:
 
         # Missing a required field
         no_content = dict(start=today)
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(no_content)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert "Missing required field: content" in excinfo.value.problem_detail.detail
 
         # Bad content -- tested at greater length in another test.
         bad_content = dict(start=today, content="short")
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(bad_content)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -217,7 +217,7 @@ class TestAnnouncementListValidator:
 
         # Bad id
         bad_id = dict(id="not-a-uuid", start=today, content=message)
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(bad_id)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -226,7 +226,7 @@ class TestAnnouncementListValidator:
 
         # Bad start date -- tested at greater length in another test.
         bad_start_date = dict(start="not-a-date", content=message)
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(bad_start_date)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -238,7 +238,7 @@ class TestAnnouncementListValidator:
         yesterday = today - timedelta(days=1)
         for bad_finish_date in (today, yesterday):
             bad_data = dict(start=today, finish=bad_finish_date, content=message)
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 m(bad_data)
             assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
             assert (
@@ -254,7 +254,7 @@ class TestAnnouncementListValidator:
         value = "four"
         assert value == m(value, 3, 5)
 
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(value, 10, 20)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -262,7 +262,7 @@ class TestAnnouncementListValidator:
             in excinfo.value.problem_detail.detail
         )
 
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m(value, 1, 3)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -283,7 +283,7 @@ class TestAnnouncementListValidator:
         assert february_1 == m("somedate", february_1)
 
         # But if a string is used, it must be in a specific format.
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m("somedate", "not-a-date")
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (
@@ -297,7 +297,7 @@ class TestAnnouncementListValidator:
         january_1 = date(2020, 1, 1)
         assert february_1 == m("somedate", february_1, minimum=january_1)
 
-        with pytest.raises(ProblemError) as excinfo:
+        with pytest.raises(ProblemDetailException) as excinfo:
             m("somedate", january_1, minimum=february_1)
         assert INVALID_INPUT.uri == excinfo.value.problem_detail.uri
         assert (

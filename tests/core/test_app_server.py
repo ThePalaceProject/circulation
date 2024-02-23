@@ -31,7 +31,7 @@ from core.model import Identifier
 from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT, INVALID_URN
 from core.service.logging.configuration import LogLevel
 from core.util.opds_writer import OPDSFeed, OPDSMessage
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -560,7 +560,9 @@ class TestErrorHandler:
         handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             try:
-                self.raise_exception(ProblemError(problem_detail=INTEGRATION_ERROR))
+                self.raise_exception(
+                    ProblemDetailException(problem_detail=INTEGRATION_ERROR)
+                )
             except Exception as exception:
                 response = handler.handle(exception)
 

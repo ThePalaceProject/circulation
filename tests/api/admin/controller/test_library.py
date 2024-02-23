@@ -29,7 +29,7 @@ from core.model import AdminRole, Library, get_one
 from core.model.announcements import SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME
 from core.model.announcements import Announcement, AnnouncementData
 from core.model.library import LibraryLogo
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
@@ -240,7 +240,7 @@ class TestLibrarySettings:
     ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict([])
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
@@ -254,7 +254,7 @@ class TestLibrarySettings:
                     ("name", "Brooklyn Public Library"),
                 ]
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert (
@@ -265,7 +265,7 @@ class TestLibrarySettings:
         library = db.library()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = self.library_form(library, {"uuid": "1234"})
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == LIBRARY_NOT_FOUND.uri
 
@@ -276,7 +276,7 @@ class TestLibrarySettings:
                     ("short_name", str(library.short_name)),
                 ]
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
 
             assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
@@ -290,7 +290,7 @@ class TestLibrarySettings:
                     ("short_name", str(library.short_name)),
                 ]
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail == LIBRARY_SHORT_NAME_ALREADY_IN_USE
 
@@ -302,7 +302,7 @@ class TestLibrarySettings:
                     ("short_name", str(library.short_name)),
                 ]
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
 
@@ -316,7 +316,7 @@ class TestLibrarySettings:
                     ("default_notification_email_address", "email@example.org"),
                 ]
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INCOMPLETE_CONFIGURATION.uri
             assert excinfo.value.problem_detail.detail is not None
@@ -335,7 +335,7 @@ class TestLibrarySettings:
                     "web_secondary_color": "#e0e0e0",
                 },
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
             assert excinfo.value.problem_detail.detail is not None
@@ -361,7 +361,7 @@ class TestLibrarySettings:
                     "web_header_labels": "One",
                 },
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
 
@@ -370,7 +370,7 @@ class TestLibrarySettings:
             flask.request.form = self.library_form(
                 library, {"tiny_collection_languages": "zzz"}
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == UNKNOWN_LANGUAGE.uri
             assert excinfo.value.problem_detail.detail is not None
@@ -391,7 +391,7 @@ class TestLibrarySettings:
                     )
                 }
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
             assert excinfo.value.problem_detail.detail is not None
@@ -412,7 +412,7 @@ class TestLibrarySettings:
                     )
                 }
             )
-            with pytest.raises(ProblemError) as excinfo:
+            with pytest.raises(ProblemDetailException) as excinfo:
                 controller.process_post()
             assert excinfo.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
             assert excinfo.value.problem_detail.detail is not None
@@ -750,7 +750,7 @@ class TestLibrarySettings:
 
         # Make sure that if process_get or process_post raises a ProblemError,
         # we return the problem detail.
-        mock_process_get.side_effect = ProblemError(
+        mock_process_get.side_effect = ProblemDetailException(
             problem_detail=INCOMPLETE_CONFIGURATION.detailed("test")
         )
         with flask_app_fixture.test_request_context("/", method="GET"):

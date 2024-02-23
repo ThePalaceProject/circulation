@@ -20,7 +20,7 @@ from api.problem_details import (
 )
 from core.model.key import Key, KeyType
 from core.util.datetime_helpers import utc_now
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 from core.util.uuid import uuid_encode
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -146,50 +146,50 @@ class TestJWEProvider:
 
     def test_decode_token_errors(self, jwe_provider: JWEProviderFixture):
         # Completely invalid token
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token("not-a-token")
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Expired token
         with freeze_time(jwe_provider.one_hour_ago):
             token = jwe_provider.generate_token()
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 
         # Token with no exp
         token = jwe_provider.create_token(exp=None)
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_EXPIRED
 
         # Token with no kid
         token = jwe_provider.create_token(kid=None)
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Token with no typ
         token = jwe_provider.create_token(typ=None)
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Token with wrong typ
         token = jwe_provider.create_token(typ="foo")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Token with no cty
         token = jwe_provider.create_token(cty=None)
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Token with wrong cty
         token = jwe_provider.create_token(cty="foo")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decode_token(token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
@@ -215,7 +215,7 @@ class TestJWEProvider:
 
         # No key
         db.session.delete(jwe_provider.key)
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, decoded)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
@@ -224,43 +224,43 @@ class TestJWEProvider:
     ):
         # Bad kid
         token = jwe_provider.create_token(kid="fake")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid token - Bad tag
         token = jwe_provider.create_token() + "B"
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid token - Bad enc type
         token = jwe_provider.create_token(enc="A256GCM")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid payload - not json
         token = jwe_provider.create_token(plaintext="not-json")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid payload - missing keys
         token = jwe_provider.create_token(plaintext="{}")
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid payload - missing id
         token = jwe_provider.create_token(plaintext=json.dumps({"pwd": "password"}))
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
         # Invalid payload - missing pwd
         token = jwe_provider.create_token(plaintext=json.dumps({"id": "1234"}))
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 
@@ -268,7 +268,7 @@ class TestJWEProvider:
         token = jwe_provider.create_token(
             plaintext=json.dumps({"id": "1234", "pwd": "password", "extra": "key"})
         )
-        with pytest.raises(ProblemError) as exc:
+        with pytest.raises(ProblemDetailException) as exc:
             PatronJWEAccessTokenProvider.decrypt_token(db.session, token)
         assert exc.value.problem_detail == PATRON_AUTH_ACCESS_TOKEN_INVALID
 

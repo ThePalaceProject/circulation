@@ -7,7 +7,7 @@ from api.controller.circulation_manager import CirculationManagerController
 from api.model.patron_auth import PatronAuthAccessToken
 from api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 from core.util.log import LoggerMixin
-from core.util.problem_detail import ProblemError
+from core.util.problem_detail import ProblemDetailException
 
 
 class PatronAuthTokenController(CirculationManagerController, LoggerMixin):
@@ -27,7 +27,7 @@ class PatronAuthTokenController(CirculationManagerController, LoggerMixin):
                 auth["password"],
                 expires_in=token_expiry,
             )
-        except ProblemError as ex:
+        except ProblemDetailException as ex:
             self.log.error(f"Could not generate Patron Auth Access Token: {ex}")
             return ex.problem_detail
 

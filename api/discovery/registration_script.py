@@ -20,7 +20,7 @@ from core.model.discovery_service_registration import (
 )
 from core.scripts import LibraryInputScript
 from core.service.container import Services
-from core.util.problem_detail import ProblemDetail, ProblemError
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class LibraryRegistrationScript(LibraryInputScript):
@@ -121,7 +121,7 @@ class LibraryRegistrationScript(LibraryInputScript):
         self.log.info("Registering with %s as %s", registry.settings.url, stage.value)
         try:
             registry.register_library(library, stage, url_for)
-        except ProblemError as e:
+        except ProblemDetailException as e:
             data, status_code, headers = e.problem_detail.response
             self.log.exception(
                 "Could not complete registration. Problem detail document: %r" % data
