@@ -1,5 +1,5 @@
 class BasePalaceException(Exception):
-    """Base class for all errors"""
+    """Base class for all Exceptions in the Palace manager."""
 
     def __init__(self, message: str | None = None):
         """Initializes a new instance of BaseError class
