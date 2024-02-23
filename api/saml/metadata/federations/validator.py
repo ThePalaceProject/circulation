@@ -182,7 +182,7 @@ class SAMLMetadataSignatureValidator(SAMLFederatedMetadataValidator):
                 metadata, federation.certificate, raise_exceptions=True
             )
         except Exception as exception:
-            raise SAMLFederatedMetadataValidationError(str(exception), exception)
+            raise SAMLFederatedMetadataValidationError(str(exception)) from exception
 
         self._logger.info(
             "Finished verifying the validity of the metadata's signature belonging to {}".format(
