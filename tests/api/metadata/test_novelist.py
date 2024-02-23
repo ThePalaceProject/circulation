@@ -10,6 +10,7 @@ from api.metadata.novelist import NoveListAPI, NoveListApiSettings
 from core.integration.goals import Goals
 from core.metadata_layer import Metadata
 from core.model import DataSource, Identifier
+from core.model.resource import HttpResponseTuple
 from core.util.http import HTTP
 from tests.core.mock import DummyHTTPClient, MockRequestsResponse
 from tests.fixtures.api_novelist_files import NoveListFilesFixture
@@ -72,7 +73,7 @@ class TestNoveListAPI:
         assert NoveListAPI.is_configured(library) is False
 
     def test_review_response(self, novelist_fixture: NoveListFixture):
-        invalid_credential_response: tuple[int, dict[str, str], bytes] = (
+        invalid_credential_response: HttpResponseTuple = (
             403,
             {},
             b"HTML Access Denied page",
@@ -83,7 +84,7 @@ class TestNoveListAPI:
             invalid_credential_response,
         )
 
-        missing_argument_response: tuple[int, dict[str, str], bytes] = (
+        missing_argument_response: HttpResponseTuple = (
             200,
             {},
             b'"Missing ISBN, UPC, or Client Identifier!"',
@@ -94,7 +95,7 @@ class TestNoveListAPI:
             missing_argument_response,
         )
 
-        response: tuple[int, dict[str, str], bytes] = (200, {}, b"Here's the goods!")
+        response: HttpResponseTuple = (200, {}, b"Here's the goods!")
         novelist_fixture.novelist.review_response(response)
 
     def test_lookup_info_to_metadata(self, novelist_fixture: NoveListFixture):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, Any
@@ -68,6 +68,7 @@ from core.model import (
     Subject,
 )
 from core.model.constants import IdentifierType
+from core.model.resource import HttpResponseTuple
 from core.opds_import import (
     BaseOPDSAPI,
     BaseOPDSImporter,
@@ -335,7 +336,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str | None = None,
-        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -1140,7 +1141,7 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
     MEDIA_TYPE = OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
 
     def _verify_media_type(
-        self, url: str, status_code: int, headers: dict[str, str], feed: bytes
+        self, url: str, status_code: int, headers: Mapping[str, str], feed: bytes
     ) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.

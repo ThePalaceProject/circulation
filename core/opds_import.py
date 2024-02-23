@@ -5,7 +5,7 @@ import traceback
 import urllib
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
@@ -68,6 +68,7 @@ from core.model import (
     get_one,
 )
 from core.model.formats import FormatPrioritiesSettings
+from core.model.resource import HttpResponseTuple
 from core.monitor import CollectionMonitor
 from core.saml.wayfless import (
     SAMLWAYFlessConstants,
@@ -363,7 +364,7 @@ class BaseOPDSImporter(
         _db: Session,
         collection: Collection,
         data_source_name: str | None,
-        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         self._db = _db
         if collection.id is None:
@@ -671,7 +672,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         _db: Session,
         collection: Collection,
         data_source_name: str | None = None,
-        http_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -960,7 +961,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         feed: bytes | str,
         data_source: DataSource,
         feed_url: str | None = None,
-        do_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> tuple[dict[str, Any], dict[str, CoverageFailure]]:
         """Parse the OPDS as XML and extract all author and subject
         information, as well as ratings and medium.
@@ -1290,7 +1291,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         entry_tag: Element,
         data_source: DataSource,
         feed_url: str | None = None,
-        do_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> tuple[str | None, dict[str, Any] | None, CoverageFailure | None]:
         """Turn an <atom:entry> tag into a dictionary of metadata that can be
         used as keyword arguments to the Metadata contructor.
@@ -1324,7 +1325,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         parser: OPDSXMLParser,
         entry_tag: Element,
         feed_url: str | None = None,
-        do_get: Callable[..., tuple[int, Any, bytes]] | None = None,
+        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> dict[str, Any]:
         """Helper method that extracts metadata and circulation data from an elementtree
         entry. This method can be overridden in tests to check that callers handle things
@@ -1715,9 +1716,7 @@ class OPDSImportMonitor(CollectionMonitor):
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"
         super().__init__(_db, collection)
 
-    def _get(
-        self, url: str, headers: dict[str, str]
-    ) -> tuple[int, dict[str, str], bytes]:
+    def _get(self, url: str, headers: Mapping[str, str]) -> HttpResponseTuple:
         """Make the sort of HTTP request that's normal for an OPDS feed.
 
         Long timeout, raise error on anything but 2xx or 3xx.
@@ -1732,7 +1731,7 @@ class OPDSImportMonitor(CollectionMonitor):
         if not url.startswith("http"):
             url = urljoin(self._feed_base_url, url)
         response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
-        return response.status_code, response.headers, response.content  # type: ignore[return-value]
+        return response.status_code, response.headers, response.content
 
     def _get_accept_header(self) -> str:
         return ",".join(
@@ -1744,7 +1743,7 @@ class OPDSImportMonitor(CollectionMonitor):
             ]
         )
 
-    def _update_headers(self, headers: dict[str, str] | None) -> dict[str, str]:
+    def _update_headers(self, headers: Mapping[str, str] | None) -> dict[str, str]:
         headers = dict(headers) if headers else {}
         if self.username and self.password and not "Authorization" in headers:
             headers["Authorization"] = "Basic %s" % base64.b64encode(
@@ -1863,7 +1862,7 @@ class OPDSImportMonitor(CollectionMonitor):
         return False
 
     def _verify_media_type(
-        self, url: str, status_code: int, headers: dict[str, str], feed: bytes
+        self, url: str, status_code: int, headers: Mapping[str, str], feed: bytes
     ) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.
@@ -1877,7 +1876,7 @@ class OPDSImportMonitor(CollectionMonitor):
             )
 
     def follow_one_link(
-        self, url: str, do_get: Callable[..., tuple[int, Any, bytes]] | None = None
+        self, url: str, do_get: Callable[..., HttpResponseTuple] | None = None
     ) -> tuple[list[str], bytes | None]:
         """Download a representation of a URL and extract the useful
         information.
