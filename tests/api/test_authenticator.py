@@ -43,8 +43,12 @@ from api.authenticator import (
 from api.config import CannotLoadConfiguration, Configuration
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from api.millenium_patron import MilleniumPatronAPI
-from api.problem_details import *
-from api.problem_details import PATRON_OF_ANOTHER_LIBRARY
+from api.problem_details import (
+    LIBRARY_NOT_FOUND,
+    PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
+    PATRON_OF_ANOTHER_LIBRARY,
+    UNSUPPORTED_AUTHENTICATION_MECHANISM,
+)
 from api.simple_authentication import SimpleAuthenticationProvider
 from api.sip import SIP2AuthenticationProvider
 from api.util.patron import PatronUtility

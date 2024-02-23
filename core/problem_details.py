@@ -12,13 +12,6 @@ INVALID_INPUT = pd(
     _("You provided invalid or unrecognized input."),
 )
 
-INVALID_CREDENTIALS = pd(
-    "http://librarysimplified.org/terms/problem/credentials-invalid",
-    401,
-    _("Invalid credentials"),
-    _("Valid credentials are required."),
-)
-
 METHOD_NOT_ALLOWED = pd(
     "http://librarysimplified.org/terms/problem/method-not-allowed",
     405,

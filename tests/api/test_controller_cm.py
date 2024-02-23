@@ -4,7 +4,7 @@ from _pytest.monkeypatch import MonkeyPatch
 
 from api.authenticator import LibraryAuthenticator
 from api.circulation_manager import CirculationManager
-from api.problem_details import *
+from api.problem_details import NO_SUCH_LANE
 from core.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
@@ -12,7 +12,6 @@ from core.feed.annotator.circulation import (
 from core.lane import Facets, WorkList
 from core.model import create
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
-from core.problem_details import *
 from core.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7

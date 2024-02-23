@@ -11,19 +11,17 @@ from api.admin.controller.integration_settings import (
     UpdatedLibrarySettingsTuple,
 )
 from api.admin.form_data import ProcessFormData
-from api.admin.problem_details import *
+from api.admin.problem_details import (
+    FAILED_TO_RUN_SELF_TESTS,
+    MULTIPLE_BASIC_AUTH_SERVICES,
+)
 from api.authentication.base import AuthenticationProviderType
 from api.authentication.basic import BasicAuthenticationProvider
 from api.integration.registry.patron_auth import PatronAuthRegistry
 from core.integration.goals import Goals
 from core.integration.registry import IntegrationRegistry
 from core.integration.settings import BaseSettings
-from core.model import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-    json_serializer,
-    site_configuration_has_changed,
-)
+from core.model import json_serializer, site_configuration_has_changed
 from core.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,

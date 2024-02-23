@@ -2,7 +2,11 @@ import json
 
 from flask_babel import lazy_gettext as _
 
-from core.problem_details import *
+from core.problem_details import (
+    INTERNAL_SERVER_ERROR,
+    INVALID_INPUT,
+    UNSUPPORTED_MEDIA_TYPE,
+)
 
 
 class ProfileController:

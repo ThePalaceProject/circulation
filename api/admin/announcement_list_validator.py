@@ -7,7 +7,7 @@ import dateutil
 from flask_babel import lazy_gettext as _
 
 from core.model.announcements import AnnouncementData
-from core.problem_details import *
+from core.problem_details import INVALID_INPUT
 from core.util.problem_detail import ProblemError
 
 

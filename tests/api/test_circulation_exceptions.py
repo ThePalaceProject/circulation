@@ -1,7 +1,6 @@
 from flask_babel import lazy_gettext as _
 
 from api.circulation_exceptions import *
-from api.problem_details import *
 from core.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 

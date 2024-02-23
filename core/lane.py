@@ -63,7 +63,7 @@ from core.model.before_flush_decorator import Listener
 from core.model.constants import EditionConstants
 from core.model.hybrid import hybrid_property
 from core.model.listeners import site_configuration_has_changed
-from core.problem_details import *
+from core.problem_details import INVALID_INPUT
 from core.util import LanguageCodes
 from core.util.accept_language import parse_accept_language
 from core.util.datetime_helpers import utc_now

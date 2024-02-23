@@ -5,8 +5,23 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 
 from api.admin.controller.base import AdminPermissionsControllerMixin
-from api.admin.problem_details import *
+from api.admin.problem_details import (
+    EROTICA_FOR_ADULTS_ONLY,
+    GENRE_NOT_FOUND,
+    INCOMPATIBLE_GENRE,
+    INVALID_DATE_FORMAT,
+    INVALID_EDIT,
+    INVALID_RATING,
+    INVALID_SERIES_POSITION,
+    METADATA_REFRESH_FAILURE,
+    METADATA_REFRESH_PENDING,
+    MISSING_CUSTOM_LIST,
+    UNKNOWN_LANGUAGE,
+    UNKNOWN_MEDIUM,
+    UNKNOWN_ROLE,
+)
 from api.controller.circulation_manager import CirculationManagerController
+from api.problem_details import REMOTE_INTEGRATION_FAILED
 from core.classifier import NO_NUMBER, NO_VALUE, SimplifiedGenreClassifier, genres
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.admin import AdminAnnotator

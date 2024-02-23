@@ -4,7 +4,11 @@ import os
 from flask import url_for
 from pyld import jsonld
 
-from api.problem_details import *
+from api.problem_details import (
+    INVALID_ANNOTATION_FORMAT,
+    INVALID_ANNOTATION_MOTIVATION,
+    INVALID_ANNOTATION_TARGET,
+)
 from core.model import Annotation, Identifier
 from core.util.datetime_helpers import utc_now
 

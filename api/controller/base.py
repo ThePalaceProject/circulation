@@ -4,7 +4,11 @@ from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
 from api.circulation_exceptions import *
-from api.problem_details import *
+from api.problem_details import (
+    INVALID_CREDENTIALS,
+    LIBRARY_NOT_FOUND,
+    REMOTE_INTEGRATION_FAILED,
+)
 from core.model import Library, Patron
 from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail

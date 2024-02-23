@@ -17,7 +17,7 @@ from api.admin.config import Configuration as AdminUiConfig
 from core.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from core.lane import Facets, Pagination
 from core.model import Identifier
-from core.problem_details import *
+from core.problem_details import INVALID_URN
 from core.util.log import LoggerMixin
 from core.util.opds_writer import OPDSMessage
 from core.util.problem_detail import ProblemDetail, ProblemError
