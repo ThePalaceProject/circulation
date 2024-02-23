@@ -14,7 +14,7 @@ from pyparsing import (
     alphas,
 )
 
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.python_expression_dsl.ast import Node, Operator
 from core.python_expression_dsl.util import (
     _parse_binary_arithmetic_expression,
@@ -32,7 +32,7 @@ from core.python_expression_dsl.util import (
 )
 
 
-class DSLParseError(BaseError):
+class DSLParseError(BasePalaceException):
     """Raised when expression has an incorrect format."""
 
 

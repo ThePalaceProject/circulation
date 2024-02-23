@@ -22,10 +22,10 @@ from api.saml.metadata.model import (
     SAMLSubject,
     SAMLUIInfo,
 )
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 
 
-class SAMLMetadataParsingError(BaseError):
+class SAMLMetadataParsingError(BasePalaceException):
     """Raised in the case of any errors occurred during parsing of SAML metadata"""
 
 

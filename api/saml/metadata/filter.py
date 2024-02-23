@@ -6,11 +6,11 @@ from api.saml.metadata.model import (
     SAMLNameID,
     SAMLSubject,
 )
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.python_expression_dsl.evaluator import DSLEvaluator
 
 
-class SAMLSubjectFilterError(BaseError):
+class SAMLSubjectFilterError(BasePalaceException):
     """Raised in the case of any errors during execution of a filter expression."""
 
     def __init__(self, inner_exception):

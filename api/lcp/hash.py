@@ -2,7 +2,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 
 
 class HashingAlgorithm(Enum):
@@ -10,7 +10,7 @@ class HashingAlgorithm(Enum):
     SHA512 = "http://www.w3.org/2001/04/xmlenc#sha512"
 
 
-class HashingError(BaseError):
+class HashingError(BasePalaceException):
     """Raised in the case of errors occurred during hashing"""
 
 

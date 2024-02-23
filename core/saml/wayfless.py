@@ -1,6 +1,6 @@
 from flask_babel import lazy_gettext as _
 
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
@@ -50,5 +50,5 @@ class SAMLWAYFlessSetttings(BaseSettings):
     )
 
 
-class SAMLWAYFlessFulfillmentError(BaseError):
+class SAMLWAYFlessFulfillmentError(BasePalaceException):
     pass

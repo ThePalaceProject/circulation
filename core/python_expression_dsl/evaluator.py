@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 
 from multipledispatch import dispatch
 
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.python_expression_dsl.ast import (
     BinaryArithmeticExpression,
     BinaryBooleanExpression,
@@ -26,7 +26,7 @@ from core.python_expression_dsl.ast import (
 from core.python_expression_dsl.parser import DSLParser
 
 
-class DSLEvaluationError(BaseError):
+class DSLEvaluationError(BasePalaceException):
     """Raised when evaluation of a DSL expression fails."""
 
 

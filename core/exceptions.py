@@ -1,4 +1,4 @@
-class BaseError(Exception):
+class BasePalaceException(Exception):
     """Base class for all errors"""
 
     def __init__(self, message: str | None = None):

@@ -6,7 +6,7 @@ from collections.abc import Generator, Iterable
 from sqlalchemy.orm.session import Session
 
 from core.config import IntegrationException
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.model import Collection, Library, LicensePool, Patron
 from core.model.integration import IntegrationConfiguration
 from core.selftest import HasSelfTests, SelfTestResult
@@ -20,7 +20,7 @@ class HasPatronSelfTests(HasSelfTests, ABC):
     on behalf of a specific patron.
     """
 
-    class _NoValidLibrarySelfTestPatron(BaseError):
+    class _NoValidLibrarySelfTestPatron(BasePalaceException):
         """Exception raised when no valid self-test patron found for library.
 
         Attributes:

@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from flask_babel import LazyString
 from pydantic import BaseModel
 
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 
 JSON_MEDIA_TYPE = "application/api-problem+json"
 
@@ -160,7 +160,7 @@ class BaseProblemDetailException(Exception, ABC):
         ...
 
 
-class ProblemDetailException(BaseError, BaseProblemDetailException):
+class ProblemDetailException(BasePalaceException, BaseProblemDetailException):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
     def __init__(self, problem_detail: ProblemDetail) -> None:

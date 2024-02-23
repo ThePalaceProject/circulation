@@ -1,5 +1,5 @@
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 
 
-class LCPError(BaseError):
+class LCPError(BasePalaceException):
     """Base class for all LCP related exceptions"""

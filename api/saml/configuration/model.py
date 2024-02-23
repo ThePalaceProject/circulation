@@ -29,7 +29,7 @@ from api.saml.metadata.model import (
     SAMLSubjectPatronIDExtractor,
 )
 from api.saml.metadata.parser import SAMLMetadataParser, SAMLMetadataParsingError
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -42,7 +42,7 @@ from core.python_expression_dsl.parser import DSLParser
 from core.util.log import LoggerMixin
 
 
-class SAMLConfigurationError(BaseError):
+class SAMLConfigurationError(BasePalaceException):
     """Raised in the case of any configuration errors."""
 
 
