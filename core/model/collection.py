@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, Query, mapper, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
 
+from core.exceptions import BasePalaceException
 from core.integration.goals import Goals
 from core.model import Base, create
 from core.model.constants import DataSourceConstants, EditionConstants
@@ -617,7 +618,7 @@ class CollectionIdentifier:
     pass
 
 
-class CollectionMissing(Exception):
+class CollectionMissing(BasePalaceException):
     """An operation was attempted that can only happen within the context
     of a Collection, but there was no Collection available.
     """

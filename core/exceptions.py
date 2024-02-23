@@ -6,10 +6,11 @@ class BasePalaceException(Exception):
 
         :param message: String containing description of the error occurred
         """
+        self.message = message
         super().__init__(message)
 
 
-class IntegrationException(Exception):
+class IntegrationException(BasePalaceException):
     """An exception that happens when the site's connection to a
     third-party service is broken.
 

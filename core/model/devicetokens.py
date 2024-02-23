@@ -4,6 +4,7 @@ from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, backref, relationship
 
+from core.exceptions import BasePalaceException
 from core.model import Base
 from core.model.patron import Patron
 
@@ -82,9 +83,9 @@ class DeviceToken(Base):
         return device
 
 
-class InvalidTokenTypeError(Exception):
+class InvalidTokenTypeError(BasePalaceException):
     pass
 
 
-class DuplicateDeviceTokenError(Exception):
+class DuplicateDeviceTokenError(BasePalaceException):
     pass

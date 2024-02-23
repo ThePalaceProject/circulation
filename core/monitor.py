@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.expression import and_, or_
 
+from core.exceptions import BasePalaceException
 from core.metadata_layer import TimestampData
 from core.model import (
     Base,
@@ -776,7 +777,7 @@ class MakePresentationReadyMonitor(NotPresentationReadyWorkSweepMonitor):
         return failures
 
 
-class CoverageProvidersFailed(Exception):
+class CoverageProvidersFailed(BasePalaceException):
     """We tried to run CoverageProviders on a Work's identifier,
     but some of the providers failed.
     """

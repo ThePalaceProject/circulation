@@ -2,12 +2,13 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
+from core.exceptions import BasePalaceException
 from core.search.revision import SearchSchemaRevision
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchService, SearchServiceFailedDocument
 
 
-class SearchMigrationException(Exception):
+class SearchMigrationException(BasePalaceException):
     """The type of exceptions raised by the search migrator."""
 
     def __init__(self, fatal: bool, message: str):

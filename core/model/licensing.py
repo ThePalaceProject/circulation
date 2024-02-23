@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
 
+from core.exceptions import BasePalaceException
 from core.model import Base, flush, get_one, get_one_or_create
 from core.model.circulationevent import CirculationEvent
 from core.model.constants import (
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     )
 
 
-class PolicyException(Exception):
+class PolicyException(BasePalaceException):
     pass
 
 

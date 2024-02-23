@@ -5,6 +5,7 @@ from typing import Any
 
 from werkzeug.datastructures import MIMEAccept
 
+from core.exceptions import BasePalaceException
 from core.feed.base import FeedInterface
 from core.feed.serializer.base import SerializerInterface
 from core.feed.serializer.opds import OPDS1Serializer
@@ -95,7 +96,7 @@ class BaseOPDSFeed(FeedInterface):
         return response
 
 
-class UnfulfillableWork(Exception):
+class UnfulfillableWork(BasePalaceException):
     """Raise this exception when it turns out a Work currently cannot be
     fulfilled through any means, *and* this is a problem sufficient to
     cancel the creation of an <entry> for the Work.

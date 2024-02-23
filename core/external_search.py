@@ -32,6 +32,7 @@ from core.classifier import (
     GradeLevelClassifier,
     KeywordBasedClassifier,
 )
+from core.exceptions import BasePalaceException
 from core.facets import FacetConstants
 from core.lane import Pagination
 from core.metadata_layer import IdentifierData
@@ -1334,7 +1335,7 @@ class JSONQuery(Query):
 
 
 @define
-class QueryParseException(Exception):
+class QueryParseException(BasePalaceException):
     detail: str = ""
 
 
