@@ -4,7 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, ClassVar, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, cast
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -64,7 +64,6 @@ from core.model import (
 from core.scripts import RunCollectionCoverageProviderScript
 from core.util.datetime_helpers import datetime_utc, utc_now
 from core.util.http import BadResponseException
-from core.util.problem_detail import ProblemDetail
 from core.util.web_publication_manifest import AudiobookManifest
 from tests.api.mockapi.bibliotheca import MockBibliothecaAPI
 
@@ -856,86 +855,49 @@ class TestErrorParser:
         "</Message></Error>"
     )
 
-    @runtime_checkable
-    class CirculationExceptionWithProblemDetail(Protocol):
-        status_code: ClassVar[int]
-
-        def as_problem_detail_document(self, debug=False) -> ProblemDetail:
-            ...
-
     @pytest.mark.parametrize(
-        "incoming_message, error_class, error_code, problem_detail_title, problem_detail_code",
+        "incoming_message, error_class",
         [
             (
                 "Patron cannot loan more than 12 documents",
                 PatronLoanLimitReached,
-                500,
-                "Loan limit reached.",
-                403,
             ),
             (
                 "Patron cannot have more than 15 holds",
                 PatronHoldLimitReached,
-                500,
-                "Limit reached.",
-                403,
             ),
             (
                 "the patron document status was CAN_WISH and not one of CAN_LOAN,RESERVATION",
                 NoLicenses,
-                404,
-                "No licenses.",
-                404,
             ),
             (
                 "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
                 NoAvailableCopies,
-                400,
-                None,
-                None,
             ),
             (
                 "the patron document status was LOAN and not one of CAN_LOAN,RESERVATION",
                 AlreadyCheckedOut,
-                400,
-                None,
-                None,
             ),
             (
                 "The patron has no eBooks checked out",
                 NotCheckedOut,
-                400,
-                None,
-                None,
             ),
             (
                 "the patron document status was CAN_LOAN and not one of CAN_HOLD",
                 CurrentlyAvailable,
-                400,
-                None,
-                None,
             ),
             (
                 "the patron document status was HOLD and not one of CAN_HOLD",
                 AlreadyOnHold,
-                400,
-                None,
-                None,
             ),
             (
                 "The patron does not have the book on hold",
                 NotOnHold,
-                400,
-                None,
-                None,
             ),
             # This is such a weird case we don't have a special exception for it.
             (
                 "the patron document status was LOAN and not one of CAN_HOLD",
                 CannotHold,
-                500,
-                None,
-                None,
             ),
         ],
     )
@@ -943,22 +905,13 @@ class TestErrorParser:
         self,
         incoming_message: str,
         error_class: type[CirculationException],
-        error_code: int,
-        problem_detail_title: str,
-        problem_detail_code: int,
     ):
         document = self.BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE.format(
             message=incoming_message
         )
         error = ErrorParser().process_first(document)
-        assert isinstance(error, error_class)
+        assert error.__class__ is error_class
         assert incoming_message == str(error)
-        assert error_code == error.status_code
-
-        if isinstance(error, self.CirculationExceptionWithProblemDetail):
-            problem = error.as_problem_detail_document()
-            assert problem_detail_code == problem.status_code
-            assert problem_detail_title == problem.title
 
     @pytest.mark.parametrize(
         "incoming_message, incoming_message_from_file, error_string",
@@ -968,6 +921,18 @@ class TestErrorParser:
                 "The server has encountered an error",
                 None,
                 "The server has encountered an error",
+            ),
+            (
+                # Simulate an unexpected response, which is not a unicode string.
+                b"Beep boop bytes",
+                None,
+                "Beep boop bytes",
+            ),
+            (
+                # Simulate an unexpected response, which cannot be decoded as a string.
+                b"\xDE\xAD\xBE\xEF",
+                None,
+                "Unreadable error message (Unicode decode error).",
             ),
             (
                 # Simulate the message we get when the server gives a vague error.
@@ -998,7 +963,7 @@ class TestErrorParser:
     )
     def test_remote_initiated_server_error(
         self,
-        incoming_message: str | None,
+        incoming_message: str | bytes | None,
         incoming_message_from_file: str | None,
         error_string: str,
         api_bibliotheca_files_fixture: BibliothecaFilesFixture,
@@ -1012,10 +977,9 @@ class TestErrorParser:
         assert isinstance(error, RemoteInitiatedServerError)
 
         assert BibliothecaAPI.SERVICE_NAME == error.service_name
-        assert 502 == error.status_code
         assert error_string == str(error)
 
-        problem = error.as_problem_detail_document()
+        problem = error.problem_detail
         assert 502 == problem.status_code
         assert "Integration error communicating with Bibliotheca" == problem.detail
         assert "Third-party service failed." == problem.title

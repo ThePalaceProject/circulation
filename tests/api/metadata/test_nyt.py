@@ -136,6 +136,7 @@ class TestNYTBestSellerAPI:
             raise Exception("Expected an IntegrationException!")
         except IntegrationException as e:
             assert "Unknown API error (status 500)" == str(e)
+            assert e.debug_message is not None
             assert e.debug_message.startswith("Response from")
             assert e.debug_message.endswith("was: 'bad value'")
 

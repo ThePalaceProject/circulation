@@ -1,95 +1,125 @@
+from abc import ABC, abstractmethod
+
 from flask_babel import lazy_gettext as _
 
 from api.problem_details import (
+    BAD_DELIVERY_MECHANISM,
     BLOCKED_CREDENTIALS,
+    CANNOT_FULFILL,
+    CANNOT_RELEASE_HOLD,
+    CHECKOUT_FAILED,
+    COULD_NOT_MIRROR_TO_REMOTE,
+    DELIVERY_CONFLICT,
     EXPIRED_CREDENTIALS,
+    HOLD_FAILED,
     HOLD_LIMIT_REACHED,
+    INVALID_CREDENTIALS,
     LOAN_LIMIT_REACHED,
+    NO_ACCEPTABLE_FORMAT,
+    NO_ACTIVE_LOAN,
     NO_LICENSES,
+    NOT_FOUND_ON_REMOTE,
+    OUTSTANDING_FINES,
+    RENEW_FAILED,
     SPECIFIC_HOLD_LIMIT_MESSAGE,
     SPECIFIC_LOAN_LIMIT_MESSAGE,
 )
 from core.config import IntegrationException
-from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR
-from core.util.problem_detail import ProblemDetail
+from core.problem_details import INTEGRATION_ERROR, INTERNAL_SERVER_ERROR, INVALID_INPUT
+from core.util import MoneyUtility
+from core.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 
-class CirculationException(IntegrationException):
-    """An exception occured when carrying out a circulation operation.
+class CirculationException(IntegrationException, BaseProblemDetailException, ABC):
+    """An exception occurred when carrying out a circulation operation."""
 
-    `status_code` is the status code that should be returned to the patron.
-    """
+    def __init__(
+        self, message: str | None = None, debug_info: str | None = None
+    ) -> None:
+        self.message = message
+        super().__init__(message or self.__class__.__name__, debug_info)
 
-    status_code = 400
+    @property
+    def detail(self) -> str | None:
+        return self.message
 
-    def __init__(self, message=None, debug_info=None):
-        message = message or self.__class__.__name__
-        super().__init__(message, debug_info)
+    @property
+    @abstractmethod
+    def base(self) -> ProblemDetail:
+        """A ProblemDetail, used as the basis for conversion of this exception into a
+        problem detail document."""
 
-
-class InternalServerError(IntegrationException):
-    status_code = 500
-
-    def as_problem_detail_document(self, debug=False):
+    @property
+    def problem_detail(self) -> ProblemDetail:
         """Return a suitable problem detail document."""
+        if self.detail is not None:
+            return self.base.detailed(
+                detail=self.detail, debug_message=self.debug_message
+            )
+        elif self.debug_message is not None:
+            return self.base.with_debug(self.debug_message)
+        else:
+            return self.base
+
+
+class InternalServerError(IntegrationException, BaseProblemDetailException):
+    @property
+    def problem_detail(self) -> ProblemDetail:
         return INTERNAL_SERVER_ERROR
 
 
 class RemoteInitiatedServerError(InternalServerError):
     """One of the servers we communicate with had an internal error."""
 
-    status_code = 502
-
-    def __init__(self, message, service_name):
-        super().__init__(message)
+    def __init__(self, debug_info: str, service_name: str):
+        super().__init__(debug_info)
         self.service_name = service_name
 
-    def as_problem_detail_document(self, debug=False):
-        """Return a suitable problem detail document."""
+    @property
+    def problem_detail(self) -> ProblemDetail:
         msg = _(
             "Integration error communicating with %(service_name)s",
             service_name=self.service_name,
         )
-        return INTEGRATION_ERROR.detailed(msg)
+        return INTEGRATION_ERROR.detailed(msg, debug_message=str(self))
 
 
-class NoOpenAccessDownload(CirculationException):
-    """We expected a book to have an open-access download, but it didn't."""
-
-    status_code = 500
-
-
-class AuthorizationFailedException(CirculationException):
-    status_code = 401
-
-
-class PatronAuthorizationFailedException(AuthorizationFailedException):
-    status_code = 400
-
-
-class RemotePatronCreationFailedException(CirculationException):
-    status_code = 500
+class PatronAuthorizationFailedException(CirculationException):
+    @property
+    def base(self) -> ProblemDetail:
+        return INVALID_CREDENTIALS
 
 
 class LibraryAuthorizationFailedException(CirculationException):
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return INTEGRATION_ERROR
 
 
 class InvalidInputException(CirculationException):
     """The patron gave invalid input to the library."""
 
-    status_code = 400
+    @property
+    def base(self) -> ProblemDetail:
+        return INVALID_INPUT.detailed("The patron gave invalid input to the library.")
 
 
 class LibraryInvalidInputException(InvalidInputException):
     """The library gave invalid input to the book provider."""
 
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return INVALID_INPUT.detailed(
+            "The library gave invalid input to the book provider."
+        )
 
 
 class DeliveryMechanismError(InvalidInputException):
-    status_code = 400
     """The patron broke the rules about delivery mechanisms."""
+
+    @property
+    def base(self) -> ProblemDetail:
+        return BAD_DELIVERY_MECHANISM
 
 
 class DeliveryMechanismMissing(DeliveryMechanismError):
@@ -101,25 +131,57 @@ class DeliveryMechanismConflict(DeliveryMechanismError):
     one already set in stone.
     """
 
+    @property
+    def base(self) -> ProblemDetail:
+        return DELIVERY_CONFLICT
+
 
 class CannotLoan(CirculationException):
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return CHECKOUT_FAILED
 
 
 class OutstandingFines(CannotLoan):
     """The patron has outstanding fines above the limit in the library's
     policy."""
 
-    status_code = 403
+    def __init__(
+        self,
+        message: str | None = None,
+        debug_info: str | None = None,
+        fines: str | None = None,
+    ) -> None:
+        parsed_fines = None
+        if fines:
+            try:
+                parsed_fines = MoneyUtility.parse(fines).amount
+            except ValueError:
+                # If the fines are not in a valid format, we'll just leave them as None.
+                ...
+
+        self.fines = parsed_fines
+        super().__init__(message, debug_info)
+
+    @property
+    def detail(self) -> str | None:
+        if self.fines:
+            return _(  # type: ignore[no-any-return]
+                "You must pay your $%(fine_amount).2f outstanding fines before you can borrow more books.",
+                fine_amount=self.fines,
+            )
+        return super().detail
+
+    @property
+    def base(self) -> ProblemDetail:
+        return OUTSTANDING_FINES
 
 
 class AuthorizationExpired(CannotLoan):
     """The patron's authorization has expired."""
 
-    status_code = 403
-
-    def as_problem_detail_document(self, debug=False):
-        """Return a suitable problem detail document."""
+    @property
+    def base(self) -> ProblemDetail:
         return EXPIRED_CREDENTIALS
 
 
@@ -130,89 +192,106 @@ class AuthorizationBlocked(CannotLoan):
     For instance, the patron has been banned from the library.
     """
 
-    status_code = 403
-
-    def as_problem_detail_document(self, debug=False):
-        """Return a suitable problem detail document."""
+    @property
+    def base(self) -> ProblemDetail:
         return BLOCKED_CREDENTIALS
 
 
-class LimitReached(CirculationException):
+class LimitReached(CirculationException, ABC):
     """The patron cannot carry out an operation because it would push them above
     some limit set by library policy.
-
-    This exception cannot be used on its own. It must be subclassed and the following constants defined:
-        * `BASE_DOC`: A ProblemDetail, used as the basis for conversion of this exception into a
-           problem detail document.
-        * `MESSAGE_WITH_LIMIT` A string containing the interpolation value "%(limit)s", which
-          offers a more specific explanation of the limit exceeded.
     """
 
-    status_code = 403
-    BASE_DOC: ProblemDetail | None = None
-    MESSAGE_WITH_LIMIT = None
+    def __init__(
+        self,
+        message: str | None = None,
+        debug_info: str | None = None,
+        limit: int | None = None,
+    ):
+        super().__init__(message, debug_info=debug_info)
+        self.limit = limit
 
-    def __init__(self, message=None, debug_info=None, limit=None):
-        super().__init__(message=message, debug_info=debug_info)
-        self.limit = limit if limit else None
+    @property
+    @abstractmethod
+    def message_with_limit(self) -> str:
+        """A string containing the interpolation value "%(limit)s", which
+        offers a more specific explanation of the limit exceeded."""
 
-    def as_problem_detail_document(self, debug=False):
-        """Return a suitable problem detail document."""
-        doc = self.BASE_DOC
-        if not self.limit:
-            return doc
-        detail = self.MESSAGE_WITH_LIMIT % dict(limit=self.limit)
-        return doc.detailed(detail=detail)
+    @property
+    def detail(self) -> str | None:
+        if self.limit:
+            return self.message_with_limit % dict(limit=self.limit)
+        elif self.message:
+            return self.message
+        return None
 
 
 class PatronLoanLimitReached(CannotLoan, LimitReached):
-    BASE_DOC = LOAN_LIMIT_REACHED
-    MESSAGE_WITH_LIMIT = SPECIFIC_LOAN_LIMIT_MESSAGE
+    @property
+    def base(self) -> ProblemDetail:
+        return LOAN_LIMIT_REACHED
+
+    @property
+    def message_with_limit(self) -> str:
+        return SPECIFIC_LOAN_LIMIT_MESSAGE  # type: ignore[no-any-return]
 
 
 class CannotReturn(CirculationException):
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return COULD_NOT_MIRROR_TO_REMOTE
 
 
 class CannotHold(CirculationException):
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLD_FAILED
 
 
 class PatronHoldLimitReached(CannotHold, LimitReached):
-    BASE_DOC = HOLD_LIMIT_REACHED
-    MESSAGE_WITH_LIMIT = SPECIFIC_HOLD_LIMIT_MESSAGE
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLD_LIMIT_REACHED
+
+    @property
+    def message_with_limit(self) -> str:
+        return SPECIFIC_HOLD_LIMIT_MESSAGE  # type: ignore[no-any-return]
 
 
 class CannotReleaseHold(CirculationException):
-    status_code = 500
+    @property
+    def base(self) -> ProblemDetail:
+        return CANNOT_RELEASE_HOLD
 
 
 class CannotFulfill(CirculationException):
-    status_code = 500
-
-
-class CannotPartiallyFulfill(CannotFulfill):
-    status_code = 400
+    @property
+    def base(self) -> ProblemDetail:
+        return CANNOT_FULFILL
 
 
 class FormatNotAvailable(CannotFulfill):
     """Our format information for this book was outdated, and it's
     no longer available in the requested format."""
 
-    status_code = 502
+    @property
+    def base(self) -> ProblemDetail:
+        return NO_ACCEPTABLE_FORMAT
 
 
 class NotFoundOnRemote(CirculationException):
     """We know about this book but the remote site doesn't seem to."""
 
-    status_code = 404
+    @property
+    def base(self) -> ProblemDetail:
+        return NOT_FOUND_ON_REMOTE
 
 
 class NoLicenses(NotFoundOnRemote):
     """The library no longer has licenses for this book."""
 
-    def as_problem_detail_document(self, debug=False):
-        """Return a suitable problem detail document."""
+    @property
+    def base(self) -> ProblemDetail:
         return NO_LICENSES
 
 
@@ -222,7 +301,9 @@ class CannotRenew(CirculationException):
     Probably because it's not available for renewal.
     """
 
-    status_code = 400
+    @property
+    def base(self) -> ProblemDetail:
+        return RENEW_FAILED
 
 
 class NoAvailableCopies(CannotLoan):
@@ -230,15 +311,11 @@ class NoAvailableCopies(CannotLoan):
     copies are already checked out.
     """
 
-    status_code = 400
-
 
 class AlreadyCheckedOut(CannotLoan):
     """The patron can't put check this book out because they already have
     it checked out.
     """
-
-    status_code = 400
 
 
 class AlreadyOnHold(CannotHold):
@@ -246,21 +323,11 @@ class AlreadyOnHold(CannotHold):
     it on hold.
     """
 
-    status_code = 400
-
 
 class NotCheckedOut(CannotReturn):
     """The patron can't return this book because they don't
     have it checked out in the first place.
     """
-
-    status_code = 400
-
-
-class RemoteRefusedReturn(CannotReturn):
-    """The remote refused to count this book as returned."""
-
-    status_code = 500
 
 
 class NotOnHold(CannotReleaseHold):
@@ -268,13 +335,9 @@ class NotOnHold(CannotReleaseHold):
     have it on hold in the first place.
     """
 
-    status_code = 400
-
 
 class CurrentlyAvailable(CannotHold):
     """The patron can't put this book on hold because it's available now."""
-
-    status_code = 400
 
 
 class NoAcceptableFormat(CannotFulfill):
@@ -282,7 +345,9 @@ class NoAcceptableFormat(CannotFulfill):
     in an acceptable format.
     """
 
-    status_code = 400
+    @property
+    def base(self) -> ProblemDetail:
+        return super().base.detailed("No acceptable format", status_code=400)
 
 
 class FulfilledOnIncompatiblePlatform(CannotFulfill):
@@ -291,7 +356,11 @@ class FulfilledOnIncompatiblePlatform(CannotFulfill):
     exclusive to that platform.
     """
 
-    status_code = 451
+    @property
+    def base(self) -> ProblemDetail:
+        return super().base.detailed(
+            "Fulfilled on an incompatible platform", status_code=451
+        )
 
 
 class NoActiveLoan(CannotFulfill):
@@ -299,8 +368,8 @@ class NoActiveLoan(CannotFulfill):
     active loan.
     """
 
-    status_code = 400
-
-
-class PatronNotFoundOnRemote(NotFoundOnRemote):
-    status_code = 404
+    @property
+    def base(self) -> ProblemDetail:
+        return NO_ACTIVE_LOAN.detailed(
+            "Can't fulfill loan because you have no active loan for this book.",
+        )

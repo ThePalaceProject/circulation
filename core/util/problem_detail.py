@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json as j
 import logging
+from abc import ABC, abstractmethod
 
 from flask_babel import LazyString
 from pydantic import BaseModel
@@ -131,8 +132,35 @@ class ProblemDetail:
             self.debug_message,
         )
 
+    def __eq__(self, other: object) -> bool:
+        """Compares two ProblemDetail objects.
 
-class ProblemDetailException(BaseError):
+        :param other: ProblemDetail object
+        :return: Boolean value indicating whether two items are equal
+        """
+        if not isinstance(other, ProblemDetail):
+            return False
+
+        return (
+            self.uri == other.uri
+            and self.title == other.title
+            and self.status_code == other.status_code
+            and self.detail == other.detail
+            and self.debug_message == other.debug_message
+        )
+
+
+class BaseProblemDetailException(Exception, ABC):
+    """Mixin for exceptions that can be converted into a ProblemDetail."""
+
+    @property
+    @abstractmethod
+    def problem_detail(self) -> ProblemDetail:
+        """Convert this object into a ProblemDetail."""
+        ...
+
+
+class ProblemDetailException(BaseError, BaseProblemDetailException):
     """Exception class allowing to raise and catch ProblemDetail objects."""
 
     def __init__(self, problem_detail: ProblemDetail) -> None:

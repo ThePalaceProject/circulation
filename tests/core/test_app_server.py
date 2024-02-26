@@ -31,7 +31,11 @@ from core.model import Identifier
 from core.problem_details import INTEGRATION_ERROR, INVALID_INPUT, INVALID_URN
 from core.service.logging.configuration import LogLevel
 from core.util.opds_writer import OPDSFeed, OPDSMessage
-from core.util.problem_detail import ProblemDetailException
+from core.util.problem_detail import (
+    BaseProblemDetailException,
+    ProblemDetail,
+    ProblemDetailException,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -304,7 +308,7 @@ class TestURNLookupController:
         controller = Mock(session)
         with data.app.test_request_context("/?urn=foobar"):
             response = controller.work_lookup(annotator=object())
-            assert INVALID_INPUT == response
+            assert response is INVALID_INPUT
 
     def test_permalink(self, urn_lookup_controller_fixture: URNLookupControllerFixture):
         data, session = (
@@ -473,12 +477,13 @@ class TestLoadMethods:
         # pagination classes.
 
 
-class CanBeProblemDetailDocument(Exception):
+class CanBeProblemDetailDocument(BaseProblemDetailException):
     """A fake exception that can be represented as a problem
     detail document.
     """
 
-    def as_problem_detail_document(self, debug):
+    @property
+    def problem_detail(self) -> ProblemDetail:
         return INVALID_URN.detailed(
             _("detail info"),
             debug_message="A debug_message which should only appear in debug mode.",

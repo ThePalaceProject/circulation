@@ -3,7 +3,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
-from api.circulation_exceptions import *
+from api.circulation_exceptions import RemoteInitiatedServerError
 from api.problem_details import (
     INVALID_CREDENTIALS,
     LIBRARY_NOT_FOUND,

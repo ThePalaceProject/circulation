@@ -23,8 +23,8 @@ from api.controller.static_file import StaticFileController
 from api.routes import allows_library, has_library, library_route
 from core.app_server import ensure_pydantic_after_problem_detail, returns_problem_detail
 from core.util.problem_detail import (
+    BaseProblemDetailException,
     ProblemDetail,
-    ProblemDetailException,
     ProblemDetailModel,
 )
 
@@ -95,8 +95,8 @@ def returns_json_or_response_or_problem_detail(f):
     def decorated(*args, **kwargs):
         try:
             v = f(*args, **kwargs)
-        except ProblemDetailException as ex:
-            # A ProblemError is the same as a ProblemDetail
+        except BaseProblemDetailException as ex:
+            # A ProblemDetailException just needs to be converted to a ProblemDetail.
             v = ex.problem_detail
         if isinstance(v, ProblemDetail):
             return v.response

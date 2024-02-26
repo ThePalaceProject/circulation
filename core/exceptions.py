@@ -53,7 +53,7 @@ class IntegrationException(Exception):
     missing or obviously wrong (CannotLoadConfiguration).
     """
 
-    def __init__(self, message, debug_message=None):
+    def __init__(self, message: str | None, debug_message: str | None = None) -> None:
         """Constructor.
 
         :param message: The normal message passed to any Exception

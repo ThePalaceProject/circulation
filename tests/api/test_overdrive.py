@@ -15,7 +15,18 @@ from requests import Response
 from sqlalchemy.orm.exc import StaleDataError
 
 from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    CannotFulfill,
+    CannotHold,
+    CannotLoan,
+    CannotRenew,
+    FormatNotAvailable,
+    FulfilledOnIncompatiblePlatform,
+    NoAcceptableFormat,
+    NoAvailableCopies,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+)
 from api.config import Configuration
 from api.overdrive import (
     GenerateOverdriveAdvantageAccountList,

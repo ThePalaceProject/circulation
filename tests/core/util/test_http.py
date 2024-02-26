@@ -1,4 +1,3 @@
-import json
 from unittest import mock
 
 import pytest
@@ -189,30 +188,22 @@ class TestHTTP:
             exc = e
         assert exc is not None
 
-        debug_doc = exc.as_problem_detail_document(debug=True)
+        problem_detail = exc.problem_detail
 
         # 502 is the status code to be returned if this integration error
         # interrupts the processing of an incoming HTTP request, not the
         # status code that caused the problem.
         #
-        assert 502 == debug_doc.status_code
-        assert "Bad response" == debug_doc.title
+        assert 502 == problem_detail.status_code
+        assert "Bad response" == problem_detail.title
         assert (
-            "The server made a request to http://url/, and got an unexpected or invalid response."
-            == debug_doc.detail
+            "The server made a request to url, and got an unexpected or invalid response."
+            == problem_detail.detail
         )
         assert (
             "Bad response from http://url/: Got status code 200 from external server, cannot continue.\n\nResponse content: Hurray"
-            == debug_doc.debug_message
+            == problem_detail.debug_message
         )
-
-        no_debug_doc = exc.as_problem_detail_document(debug=False)
-        assert "Bad response" == no_debug_doc.title
-        assert (
-            "The server made a request to url, and got an unexpected or invalid response."
-            == no_debug_doc.detail
-        )
-        assert None == no_debug_doc.debug_message
 
     def test_unicode_converted_to_utf8(self):
         """Any Unicode that sneaks into the URL, headers or body is
@@ -316,115 +307,158 @@ class TestRemoteIntegrationException:
             "Unreliable Service", "I just can't handle your request right now."
         )
 
-        # Since only the service name is provided, there are no details to
-        # elide in the non-debug version of a problem detail document.
-        debug_detail = exc.document_detail(debug=True)
-        other_detail = exc.document_detail(debug=False)
-        assert debug_detail == other_detail
-
+        details = exc.document_detail()
         assert (
             "The server tried to access Unreliable Service but the third-party service experienced an error."
-            == debug_detail
+            == details
+        )
+
+        debug_details = exc.document_debug_message()
+        assert (
+            "Error accessing Unreliable Service: I just can't handle your request right now."
+            == debug_details
+        )
+
+        assert str(exc) == debug_details
+
+        assert exc.problem_detail.title == "Failure contacting external service"
+        assert exc.problem_detail.detail == details
+        assert exc.problem_detail.debug_message == debug_details
+
+    def test_with_service_url(self):
+        # If you do provide a URL, it's included in the error message.
+        exc = RemoteIntegrationException(
+            "http://unreliable-service/",
+            "I just can't handle your request right now.",
+        )
+
+        # The url isn't included in the main details
+        details = exc.document_detail()
+        assert (
+            "The server tried to access unreliable-service but the third-party service experienced an error."
+            == details
+        )
+
+        # But it is included in the debug details.
+        debug_details = exc.document_debug_message()
+        assert (
+            "Error accessing http://unreliable-service/: I just can't handle your request right now."
+            == debug_details
+        )
+
+        assert str(exc) == debug_details
+
+        assert exc.problem_detail.title == "Failure contacting external service"
+        assert exc.problem_detail.detail == details
+        assert exc.problem_detail.debug_message == debug_details
+
+    def test_with_debug_message(self):
+        # If you provide a debug message, it's included in the debug details.
+        exc = RemoteIntegrationException(
+            "http://unreliable-service/",
+            "I just can't handle your request right now.",
+            "technical details",
+        )
+        details = exc.document_detail()
+        assert (
+            "The server tried to access unreliable-service but the third-party service experienced an error."
+            == details
+        )
+
+        debug_details = exc.document_debug_message()
+        assert (
+            "Error accessing http://unreliable-service/: I just can't handle your request right now.\n\ntechnical details"
+            == debug_details
         )
 
 
 class TestBadResponseException:
-    def test_helper_constructor(self):
+    def test_from_response(self):
         response = MockRequestsResponse(102, content="nonsense")
         exc = BadResponseException.from_response(
             "http://url/", "Terrible response, just terrible", response
         )
 
+        # the status code gets set on the exception
+        assert exc.status_code == 102
+
         # Turn the exception into a problem detail document, and it's full
         # of useful information.
-        doc, status_code, headers = exc.as_problem_detail_document(debug=True).response
-        doc = json.loads(doc)
+        problem_detail = exc.problem_detail
 
-        assert "Bad response" == doc["title"]
+        assert problem_detail.title == "Bad response"
         assert (
-            "The server made a request to http://url/, and got an unexpected or invalid response."
-            == doc["detail"]
+            problem_detail.detail
+            == "The server made a request to url, and got an unexpected or invalid response."
         )
         assert (
-            "Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense"
-            == doc["debug_message"]
+            problem_detail.debug_message
+            == "Bad response from http://url/: Terrible response, just terrible\n\nStatus code: 102\nContent: nonsense"
         )
+        assert problem_detail.status_code == 502
 
-        # Unless debug is turned off, in which case none of that
-        # information is present.
-        doc, status_code, headers = exc.as_problem_detail_document(debug=False).response
-        assert "debug_message" not in json.loads(doc)
-
-    def test_bad_status_code_helper(object):
+    def test_bad_status_code(object):
         response = MockRequestsResponse(500, content="Internal Server Error!")
         exc = BadResponseException.bad_status_code("http://url/", response)
-        doc, status_code, headers = exc.as_problem_detail_document(debug=True).response
-        doc = json.loads(doc)
+        doc = exc.problem_detail
 
-        assert doc["debug_message"].startswith(
-            "Bad response from http://url/: Got status code 500 from external server, cannot continue."
+        assert doc.title == "Bad response"
+        assert (
+            doc.detail
+            == "The server made a request to url, and got an unexpected or invalid response."
+        )
+        assert (
+            doc.debug_message
+            == "Bad response from http://url/: Got status code 500 from external server, cannot continue.\n\nStatus code: 500\nContent: Internal Server Error!"
         )
 
-    def test_as_problem_detail_document(self):
+    def test_problem_detail(self):
         exception = BadResponseException(
-            "http://url/", "What even is this", debug_message="some debug info"
+            "http://url/",
+            "What even is this",
+            debug_message="some debug info",
+            status_code=401,
         )
-        document = exception.as_problem_detail_document(debug=True)
+        document = exception.problem_detail
         assert 502 == document.status_code
         assert "Bad response" == document.title
         assert (
-            "The server made a request to http://url/, and got an unexpected or invalid response."
+            "The server made a request to url, and got an unexpected or invalid response."
             == document.detail
         )
         assert (
             "Bad response from http://url/: What even is this\n\nsome debug info"
             == document.debug_message
         )
+        assert exception.status_code == 401
 
 
 class TestRequestTimedOut:
-    def test_as_problem_detail_document(self):
+    def test_problem_detail(self):
         exception = RequestTimedOut("http://url/", "I give up")
 
-        debug_detail = exception.as_problem_detail_document(debug=True)
-        assert "Timeout" == debug_detail.title
-        assert (
-            "The server made a request to http://url/, and that request timed out."
-            == debug_detail.detail
-        )
-
-        # If we're not in debug mode, we hide the URL we accessed and just
-        # show the hostname.
-        standard_detail = exception.as_problem_detail_document(debug=False)
+        detail = exception.problem_detail
+        assert "Timeout" == detail.title
         assert (
             "The server made a request to url, and that request timed out."
-            == standard_detail.detail
+            == detail.detail
         )
-
-        # The status code corresponding to an upstream timeout is 502.
-        document, status_code, headers = standard_detail.response
-        assert 502 == status_code
+        assert detail.status_code == 502
+        assert detail.debug_message == "Timeout accessing http://url/: I give up"
 
 
 class TestRequestNetworkException:
-    def test_as_problem_detail_document(self):
+    def test_problem_detail(self):
         exception = RequestNetworkException("http://url/", "Colossal failure")
 
-        debug_detail = exception.as_problem_detail_document(debug=True)
-        assert "Network failure contacting third-party service" == debug_detail.title
-        assert (
-            "The server experienced a network error while contacting http://url/."
-            == debug_detail.detail
-        )
-
-        # If we're not in debug mode, we hide the URL we accessed and just
-        # show the hostname.
-        standard_detail = exception.as_problem_detail_document(debug=False)
+        detail = exception.problem_detail
+        assert "Network failure contacting third-party service" == detail.title
         assert (
             "The server experienced a network error while contacting url."
-            == standard_detail.detail
+            == detail.detail
         )
-
-        # The status code corresponding to an upstream timeout is 502.
-        document, status_code, headers = standard_detail.response
-        assert 502 == status_code
+        assert detail.status_code == 502
+        assert (
+            detail.debug_message
+            == "Network error contacting http://url/: Colossal failure"
+        )

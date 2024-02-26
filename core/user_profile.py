@@ -7,6 +7,7 @@ from core.problem_details import (
     INVALID_INPUT,
     UNSUPPORTED_MEDIA_TYPE,
 )
+from core.util.problem_detail import BaseProblemDetailException
 
 
 class ProfileController:
@@ -32,14 +33,13 @@ class ProfileController:
         :param return: A ProblemDetail if there is a problem; otherwise,
             a 3-tuple (entity-body, response code, headers)
         """
-        profile_document = None
         try:
             profile_document = self.storage.profile_document
+        except BaseProblemDetailException as e:
+            return e.problem_detail
         except Exception as e:
-            if hasattr(e, "as_problem_detail_document"):
-                return e.as_problem_detail_document()
-            else:
-                return INTERNAL_SERVER_ERROR.with_debug(str(e))
+            return INTERNAL_SERVER_ERROR.with_debug(str(e))
+
         if not isinstance(profile_document, dict):
             return INTERNAL_SERVER_ERROR.with_debug(
                 _("Profile document is not a JSON object: %r.") % (profile_document)
@@ -89,12 +89,11 @@ class ProfileController:
             try:
                 # Update the profile storage with the new settings.
                 self.storage.update(new_settings, profile_document)
+            except BaseProblemDetailException as e:
+                return e.problem_detail
             except Exception as e:
                 # There was a problem updating the profile storage.
-                if hasattr(e, "as_problem_detail_document"):
-                    return e.as_problem_detail_document()
-                else:
-                    return INTERNAL_SERVER_ERROR.with_debug(str(e))
+                return INTERNAL_SERVER_ERROR.with_debug(str(e))
         return body, 200, {"Content-Type": "text/plain"}
 
 

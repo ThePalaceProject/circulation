@@ -8,45 +8,15 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from werkzeug import Response as wkResponse
 
-from api.circulation_exceptions import (
-    AuthorizationBlocked,
-    AuthorizationExpired,
-    CannotFulfill,
-    CannotHold,
-    CannotLoan,
-    CannotReleaseHold,
-    CannotRenew,
-    CannotReturn,
-    CirculationException,
-    DeliveryMechanismConflict,
-    DeliveryMechanismError,
-    FormatNotAvailable,
-    NoActiveLoan,
-    NoOpenAccessDownload,
-    NotFoundOnRemote,
-    OutstandingFines,
-    PatronAuthorizationFailedException,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-    RemoteRefusedReturn,
-)
+from api.circulation_exceptions import CirculationException
 from api.controller.circulation_manager import CirculationManagerController
 from api.problem_details import (
     BAD_DELIVERY_MECHANISM,
-    CANNOT_FULFILL,
     CANNOT_RELEASE_HOLD,
-    CHECKOUT_FAILED,
-    COULD_NOT_MIRROR_TO_REMOTE,
-    DELIVERY_CONFLICT,
     HOLD_FAILED,
-    INVALID_CREDENTIALS,
-    NO_ACCEPTABLE_FORMAT,
     NO_ACTIVE_LOAN,
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
-    NOT_FOUND_ON_REMOTE,
-    OUTSTANDING_FINES,
-    RENEW_FAILED,
 )
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.model import DataSource, DeliveryMechanism, Loan, Patron, Representation
@@ -170,48 +140,14 @@ class LoanController(CirculationManagerController):
            created but a Hold could be), or a ProblemDetail (if the
            entire operation failed).
         """
-        result = None
         is_new = False
         try:
             loan, hold, is_new = self.circulation.borrow(
                 patron, credential, pool, mechanism
             )
             result = loan or hold
-        except NoOpenAccessDownload as e:
-            result = NO_LICENSES.detailed(
-                _("Couldn't find an open-access download link for this book."),
-                status_code=404,
-            )
-        except PatronAuthorizationFailedException as e:
-            result = INVALID_CREDENTIALS
-        except (PatronLoanLimitReached, PatronHoldLimitReached) as e:
-            result = e.as_problem_detail_document().with_debug(str(e))
-        except DeliveryMechanismError as e:
-            result = BAD_DELIVERY_MECHANISM.with_debug(
-                str(e), status_code=e.status_code
-            )
-        except OutstandingFines as e:
-            result = OUTSTANDING_FINES.detailed(
-                _(
-                    "You must pay your $%(fine_amount).2f outstanding fines before you can borrow more books.",
-                    fine_amount=patron.fines,
-                )
-            )
-        except AuthorizationExpired as e:
-            result = e.as_problem_detail_document(debug=False)
-        except AuthorizationBlocked as e:
-            result = e.as_problem_detail_document(debug=False)
-        except CannotLoan as e:
-            result = CHECKOUT_FAILED.with_debug(str(e))
-        except CannotHold as e:
-            result = HOLD_FAILED.with_debug(str(e))
-        except CannotRenew as e:
-            result = RENEW_FAILED.with_debug(str(e))
-        except NotFoundOnRemote as e:
-            result = NOT_FOUND_ON_REMOTE
         except CirculationException as e:
-            # Generic circulation error.
-            result = CHECKOUT_FAILED.with_debug(str(e))
+            result = e.problem_detail
 
         if result is None:
             # This shouldn't happen, but if it does, it means no exception
@@ -386,19 +322,8 @@ class LoanController(CirculationManagerController):
                 requested_license_pool,
                 mechanism,
             )
-        except DeliveryMechanismConflict as e:
-            return DELIVERY_CONFLICT.detailed(str(e))
-        except NoActiveLoan as e:
-            return NO_ACTIVE_LOAN.detailed(
-                _("Can't fulfill loan because you have no active loan for this book."),
-                status_code=e.status_code,
-            )
-        except FormatNotAvailable as e:
-            return NO_ACCEPTABLE_FORMAT.with_debug(str(e), status_code=e.status_code)
-        except CannotFulfill as e:
-            return CANNOT_FULFILL.with_debug(str(e), status_code=e.status_code)
-        except DeliveryMechanismError as e:
-            return BAD_DELIVERY_MECHANISM.with_debug(str(e), status_code=e.status_code)
+        except CirculationException as e:
+            return e.problem_detail
 
         # A subclass of FulfillmentInfo may want to bypass the whole
         # response creation process.
@@ -454,7 +379,7 @@ class LoanController(CirculationManagerController):
                     )
                     headers = dict(resp_headers)
                 except RemoteIntegrationException as e:
-                    return e.as_problem_detail_document(debug=False)
+                    return e.problem_detail
             else:
                 status_code = 200
             if fulfillment.content_type:
@@ -521,25 +446,16 @@ class LoanController(CirculationManagerController):
         if loan:
             try:
                 self.circulation.revoke_loan(patron, credential, pool)
-            except RemoteRefusedReturn as e:
-                title = _(
-                    "Loan deleted locally but remote refused. Loan is likely to show up again on next sync."
-                )
-                return COULD_NOT_MIRROR_TO_REMOTE.detailed(title, status_code=503)
-            except CannotReturn as e:
-                title = _("Loan deleted locally but remote failed.")
-                return COULD_NOT_MIRROR_TO_REMOTE.detailed(title, 503).with_debug(
-                    str(e)
-                )
+            except CirculationException as e:
+                return e.problem_detail
         elif hold:
             if not self.circulation.can_revoke_hold(pool, hold):
                 title = _("Cannot release a hold once it enters reserved state.")
                 return CANNOT_RELEASE_HOLD.detailed(title, 400)
             try:
                 self.circulation.release_hold(patron, credential, pool)
-            except CannotReleaseHold as e:
-                title = _("Hold released locally but remote failed.")
-                return CANNOT_RELEASE_HOLD.detailed(title, 503).with_debug(str(e))
+            except CirculationException as e:
+                return e.problem_detail
 
         work = pool.work
         annotator = self.manager.annotator(None)

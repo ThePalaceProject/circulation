@@ -1871,9 +1871,7 @@ class OPDSImportMonitor(CollectionMonitor):
             x in media_type for x in (OPDSFeed.ATOM_LIKE_TYPES)
         ):
             message = "Expected Atom feed, got %s" % media_type
-            raise BadResponseException(
-                url, message=message, debug_message=feed, status_code=status_code
-            )
+            raise BadResponseException(url, message=message, status_code=status_code)
 
     def follow_one_link(
         self, url: str, do_get: Callable[..., HttpResponseTuple] | None = None

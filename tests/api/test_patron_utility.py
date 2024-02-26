@@ -5,7 +5,11 @@ import dateutil
 import pytest
 
 from api.authentication.base import PatronData
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    AuthorizationBlocked,
+    AuthorizationExpired,
+    OutstandingFines,
+)
 from api.util.patron import Patron, PatronUtility
 from core.util import MoneyUtility
 from core.util.datetime_helpers import utc_now

@@ -21,7 +21,13 @@ from api.circulation import (
     LoanInfo,
     PatronActivityCirculationAPI,
 )
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    CannotFulfill,
+    CannotLoan,
+    NoAvailableCopies,
+    PatronAuthorizationFailedException,
+    RemoteInitiatedServerError,
+)
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from core.analytics import Analytics
 from core.config import ConfigurationAttributeValue
@@ -404,7 +410,9 @@ class EnkiAPI(
             patron.authorization_identifier, pin, enki_id, enki_library_id
         )
         if response.status_code != 200:
-            raise CannotLoan(response.status_code)
+            raise CannotLoan(
+                debug_info=f"Unexpected HTTP status: {response.status_code}"
+            )
         result = json.loads(response.content)["result"]
         if not result["success"]:
             message = result["message"]
@@ -416,7 +424,7 @@ class EnkiAPI(
                     "User validation against Enki server with %s / %s was unsuccessful."
                     % (patron.authorization_identifier, pin)
                 )
-                raise AuthorizationFailedException()
+                raise PatronAuthorizationFailedException()
         due_date = result["checkedOutItems"][0]["duedate"]
         expires = self._epoch_to_struct(due_date)
 
@@ -471,7 +479,9 @@ class EnkiAPI(
             patron.authorization_identifier, pin, book_id, enki_library_id
         )
         if response.status_code != 200:
-            raise CannotFulfill(response.status_code)
+            raise CannotFulfill(
+                debug_info=f"Unexpected HTTP status: {response.status_code}"
+            )
         result = json.loads(response.content)["result"]
         if not result["success"]:
             message = result["message"]
@@ -483,7 +493,7 @@ class EnkiAPI(
                     "User validation against Enki server with %s / %s was unsuccessful."
                     % (patron.authorization_identifier, pin)
                 )
-                raise AuthorizationFailedException()
+                raise PatronAuthorizationFailedException()
 
         url, item_type, expires = self.parse_fulfill_result(result)
         # We don't know for sure which DRM scheme is in use, (that is,
@@ -526,17 +536,19 @@ class EnkiAPI(
             patron.authorization_identifier, pin, enki_library_id
         )
         if response.status_code != 200:
-            raise PatronNotFoundOnRemote(response.status_code)
+            raise PatronAuthorizationFailedException(
+                debug_info=f"Unexpected HTTP status: {response.status_code}"
+            )
         result = json.loads(response.content).get("result", {})
         if not result.get("success"):
             message = result.get("message", "")
             if "Login unsuccessful" in message:
-                raise AuthorizationFailedException()
+                raise PatronAuthorizationFailedException()
             else:
                 self.log.error(
                     "Unexpected error in patron_activity: %r", response.content
                 )
-                raise CirculationException(response.content)
+                raise RemoteInitiatedServerError(response.text, self.label())
         for loan in result["checkedOutItems"]:
             yield self.parse_patron_loans(loan)
         for type, holds in list(result["holds"].items()):

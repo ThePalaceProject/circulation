@@ -30,7 +30,21 @@ from api.circulation import (
     LoanInfo,
     PatronActivityCirculationAPI,
 )
-from api.circulation_exceptions import *
+from api.circulation_exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotHold,
+    CannotLoan,
+    CannotReleaseHold,
+    CurrentlyAvailable,
+    NoAvailableCopies,
+    NoLicenses,
+    NotCheckedOut,
+    NotOnHold,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+    RemoteInitiatedServerError,
+)
 from api.selftest import HasCollectionSelfTests, SelfTestResult
 from api.web_publication_manifest import FindawayManifest, SpineItem
 from core.analytics import Analytics
@@ -79,6 +93,7 @@ from core.service.container import Services
 from core.util import base64
 from core.util.datetime_helpers import datetime_utc, strptime_utc, to_utc, utc_now
 from core.util.http import HTTP
+from core.util.problem_detail import BaseProblemDetailException
 from core.util.xmlparser import XMLParser, XMLProcessor
 
 
@@ -894,23 +909,7 @@ class BibliothecaParser(XMLProcessor[T], ABC):
         return self.parse_date(value)
 
 
-class BibliothecaException(Exception):
-    pass
-
-
-class WorkflowException(BibliothecaException):
-    def __init__(self, actual_status, statuses_that_would_work):
-        self.actual_status = actual_status
-        self.statuses_that_would_work = statuses_that_would_work
-
-    def __str__(self):
-        return "Book status is {}, must be: {}".format(
-            self.actual_status,
-            ", ".join(self.statuses_that_would_work),
-        )
-
-
-class ErrorParser(BibliothecaParser[Exception]):
+class ErrorParser(BibliothecaParser[BaseProblemDetailException]):
     """Turn an error document from the Bibliotheca web service into a CheckoutException"""
 
     wrong_status = re.compile(
@@ -930,13 +929,20 @@ class ErrorParser(BibliothecaParser[Exception]):
     def xpath_expression(self) -> str:
         return "//Error"
 
-    def process_first(self, string: str | bytes) -> Exception:
+    def process_first(self, string: str | bytes) -> BaseProblemDetailException:
         try:
             return_val = super().process_first(string)
         except Exception as e:
             # The server sent us an error with an incorrect or
             # nonstandard syntax.
-            return RemoteInitiatedServerError(string, BibliothecaAPI.SERVICE_NAME)
+            if isinstance(string, bytes):
+                try:
+                    debug = string.decode("utf-8")
+                except UnicodeDecodeError:
+                    debug = "Unreadable error message (Unicode decode error)."
+            else:
+                debug = string
+            return RemoteInitiatedServerError(debug, BibliothecaAPI.SERVICE_NAME)
 
         if return_val is None:
             # We were not able to interpret the result as an error.
@@ -950,7 +956,7 @@ class ErrorParser(BibliothecaParser[Exception]):
 
     def process_one(
         self, error_tag: _Element, namespaces: dict[str, str] | None
-    ) -> Exception:
+    ) -> BaseProblemDetailException:
         message = self.text_of_optional_subtag(error_tag, "Message")
         if not message:
             return RemoteInitiatedServerError(
@@ -982,7 +988,7 @@ class ErrorParser(BibliothecaParser[Exception]):
 
         m = self.wrong_status.search(message)
         if not m:
-            return BibliothecaException(message)
+            return RemoteInitiatedServerError(message, BibliothecaAPI.SERVICE_NAME)
         actual, expected = m.groups()
         expected = expected.split(",")
 
@@ -1010,7 +1016,7 @@ class ErrorParser(BibliothecaParser[Exception]):
         if "CAN_LOAN" in expected:
             return CannotLoan(message)
 
-        return BibliothecaException(message)
+        return RemoteInitiatedServerError(message, BibliothecaAPI.SERVICE_NAME)
 
 
 class PatronCirculationParser(XMLParser):
