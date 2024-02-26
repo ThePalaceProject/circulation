@@ -339,6 +339,52 @@ class TestPushNotifications:
             message_call3, "test-token-3", work2, hold2, include_auth_id=False
         )
 
+    def test_holds_notification_errors(
+        self,
+        push_notf_fixture: PushNotificationsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        db = push_notf_fixture.db
+
+        # Hold lacking patron
+        hold1 = Hold()
+
+        # Hold with patron, but lacking other required data
+        hold2 = Hold()
+        hold2.patron = db.patron()
+        hold2.patron.authorization_identifier = "12345"
+
+        # Complete hold
+        work = db.work(with_license_pool=True)
+        license_pool = work.active_license_pool()
+        assert license_pool is not None
+        patron = db.patron()
+        DeviceToken.create(
+            db.session, DeviceTokenTypes.FCM_ANDROID, "test-token-1", patron
+        )
+        hold3, _ = license_pool.on_hold_to(patron, position=0)
+
+        # mock the send_messages method to avoid actual calls
+        mock_send_messages = MagicMock()
+        push_notf_fixture.notifications.send_messages = mock_send_messages
+
+        # We should log errors, but continue on and send the successful notifications
+        caplog.set_level(logging.INFO)
+        push_notf_fixture.notifications.send_holds_notifications([hold1, hold2, hold3])
+
+        error1, error2, success = caplog.records
+        assert error1.levelname == error2.levelname == "ERROR"
+        assert f"Failed to send notification for hold {hold1.id}" in error1.message
+        assert (
+            f"Failed to send notification for hold {hold2.id} to patron {hold2.patron.authorization_identifier}"
+            in error2.message
+        )
+
+        assert success.levelname == "INFO"
+        assert "Notifying patron" in success.message
+
+        assert mock_send_messages.call_count == 1
+
     def test_send_messages(
         self,
         push_notf_fixture: PushNotificationsFixture,

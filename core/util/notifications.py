@@ -175,37 +175,45 @@ class PushNotifications(LoggerMixin):
         _db = Session.object_session(holds[0])
         url = self.base_url
         for hold in holds:
-            tokens = self.notifiable_tokens(hold.patron)
-            self.log.info(
-                f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for "
-                f"hold: {hold.work.title}. Patron has {len(tokens)} device tokens."
-            )
-            loans_api = f"{url}/{hold.patron.library.short_name}/loans"
-            work: Work = hold.work
-            identifier: Identifier = hold.license_pool.identifier
-            title = "Your hold is available!"
-            body = f'Your hold on "{work.title}" is available!'
-            data = dict(
-                title=title,
-                body=body,
-                event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
-                loans_endpoint=loans_api,
-                identifier=identifier.identifier,
-                type=identifier.type,
-                library=hold.patron.library.short_name,
-            )
-            if hold.patron.external_identifier:
-                data["external_identifier"] = hold.patron.external_identifier
-            if hold.patron.authorization_identifier:
-                data["authorization_identifier"] = hold.patron.authorization_identifier
+            try:
+                tokens = self.notifiable_tokens(hold.patron)
+                self.log.info(
+                    f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for "
+                    f"hold: {hold.work.title}. Patron has {len(tokens)} device tokens."
+                )
+                loans_api = f"{url}/{hold.patron.library.short_name}/loans"
+                work: Work = hold.work
+                identifier: Identifier = hold.license_pool.identifier
+                title = "Your hold is available!"
+                body = f'Your hold on "{work.title}" is available!'
+                data = dict(
+                    title=title,
+                    body=body,
+                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                    loans_endpoint=loans_api,
+                    identifier=identifier.identifier,
+                    type=identifier.type,
+                    library=hold.patron.library.short_name,
+                )
+                if hold.patron.external_identifier:
+                    data["external_identifier"] = hold.patron.external_identifier
+                if hold.patron.authorization_identifier:
+                    data[
+                        "authorization_identifier"
+                    ] = hold.patron.authorization_identifier
 
-            resp = self.send_messages(
-                tokens, messaging.Notification(title=title, body=body), data
-            )
-            if len(resp) > 0:
-                # At least one notification succeeded
-                hold.patron_last_notified = utc_now().date()
+                resp = self.send_messages(
+                    tokens, messaging.Notification(title=title, body=body), data
+                )
+                if len(resp) > 0:
+                    # At least one notification succeeded
+                    hold.patron_last_notified = utc_now().date()
 
-            responses.extend(resp)
+                responses.extend(resp)
+            except AttributeError:
+                error = f"Failed to send notification for hold {hold.id}"
+                if hold.patron is not None:
+                    error += f" to patron {hold.patron.authorization_identifier or hold.patron.username}"
+                self.log.exception(error)
 
         return responses
