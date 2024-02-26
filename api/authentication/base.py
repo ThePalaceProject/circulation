@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
 from core.analytics import Analytics
+from core.exceptions import BasePalaceException
 from core.integration.base import HasLibraryIntegrationConfiguration
 from core.integration.settings import BaseSettings
 from core.model import CirculationEvent, Library, Patron, get_one_or_create
@@ -113,7 +114,7 @@ AuthenticationProviderType = AuthenticationProvider[
 ]
 
 
-class CannotCreateLocalPatron(Exception):
+class CannotCreateLocalPatron(BasePalaceException):
     """A remote system provided information about a patron, but we could
     not put it into our database schema.
 

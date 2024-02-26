@@ -6,22 +6,18 @@ from api.saml.metadata.model import (
     SAMLNameID,
     SAMLSubject,
 )
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.python_expression_dsl.evaluator import DSLEvaluator
 
 
-class SAMLSubjectFilterError(BaseError):
+class SAMLSubjectFilterError(BasePalaceException):
     """Raised in the case of any errors during execution of a filter expression."""
 
-    def __init__(self, inner_exception):
-        """Initialize a new instance of SAMLSubjectFilterError class.
-
-        :param inner_exception: Inner exception
-        :type inner_exception: Exception
-        """
+    def __init__(self, inner_exception: Exception) -> None:
+        """Initialize a new instance of SAMLSubjectFilterError class."""
         message = f"Incorrect filter expression: {str(inner_exception)}"
 
-        super().__init__(message, inner_exception)
+        super().__init__(message)
 
 
 class SAMLSubjectFilter:
@@ -76,7 +72,7 @@ class SAMLSubjectFilter:
                 ],
             )
         except Exception as exception:
-            raise SAMLSubjectFilterError(exception)
+            raise SAMLSubjectFilterError(exception) from exception
 
         self._logger.info(
             "Finished applying expression '{}' to {}: {}".format(
@@ -104,4 +100,4 @@ class SAMLSubjectFilter:
         try:
             self._dsl_evaluator.parser.parse(expression)
         except Exception as exception:
-            raise SAMLSubjectFilterError(exception)
+            raise SAMLSubjectFilterError(exception) from exception

@@ -9,11 +9,11 @@ from api.saml.metadata.federations.model import (
 )
 from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidator
 from api.saml.metadata.parser import SAMLMetadataParser
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.util import first_or_default
 
 
-class SAMLMetadataLoadingError(BaseError):
+class SAMLMetadataLoadingError(BasePalaceException):
     """Raised in the case of any errors occurred during loading of SAML metadata from a remote source"""
 
 
@@ -41,7 +41,7 @@ class SAMLMetadataLoader:
         try:
             xml_metadata = OneLogin_Saml2_IdPMetadataParser.get_metadata(url)
         except Exception as exception:
-            raise SAMLMetadataLoadingError(inner_exception=exception)
+            raise SAMLMetadataLoadingError() from exception
 
         self._logger.info(f"Finished loading IdP XML metadata from {url}")
 

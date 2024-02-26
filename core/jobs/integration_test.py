@@ -13,6 +13,7 @@ import yaml
 from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
 
 from core.crypt.aes import CryptAESCBC
+from core.exceptions import BasePalaceException
 from core.scripts import Script
 from core.util.datetime_helpers import utc_now
 from core.util.http import (
@@ -165,7 +166,7 @@ The config file format is a YML file of the form:
                 self._run_test(test)
             except FailedIntegrationTest as ex:
                 self.log.error(
-                    f"Test run failed for {test.name} {test.endpoint}: {ex.args[0]}"
+                    f"Test run failed for {test.name} {test.endpoint}: {ex.message}"
                 )
                 if ex.exception:
                     self.log.error(f"Test run exception {ex.exception}")
@@ -182,7 +183,7 @@ The config file format is a YML file of the form:
             )
         except (RequestNetworkException, RequestTimedOut, BadResponseException) as ex:
             raise FailedIntegrationTest(
-                f"Network Failure: {ex.url}", exception=ex.args[0]
+                f"Network Failure: {ex.url}", exception=ex.message
             )
 
         # Run tests on the SSL certificate
@@ -243,7 +244,7 @@ The config file format is a YML file of the form:
             raise FailedIntegrationTest(f"The SSL certificate expires on {expires}")
 
 
-class FailedIntegrationTest(Exception):
-    def __init__(self, *args: object, exception=None) -> None:
+class FailedIntegrationTest(BasePalaceException):
+    def __init__(self, message: str, exception: str | None = None) -> None:
         self.exception = exception
-        super().__init__(*args)
+        super().__init__(message)

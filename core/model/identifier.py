@@ -28,6 +28,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
 
+from core.exceptions import BasePalaceException
 from core.model import (
     Base,
     PresentationCalculationPolicy,
@@ -421,7 +422,7 @@ class Identifier(Base, IdentifierConstants):
             if lp.work:
                 return lp.work
 
-    class UnresolvableIdentifierException(Exception):
+    class UnresolvableIdentifierException(BasePalaceException):
         # Raised when an identifier that can't be resolved into a LicensePool
         # is provided in a context that requires a resolvable identifier
         pass

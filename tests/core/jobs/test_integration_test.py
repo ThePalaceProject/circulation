@@ -202,7 +202,7 @@ class TestIntegrationTest:
 
             # Test the exception case
             run_test.side_effect = FailedIntegrationTest(
-                "Error", exception=Exception("...")
+                "Error", exception="Nested Error"
             )
             # Script does not fail
             script.do_run()

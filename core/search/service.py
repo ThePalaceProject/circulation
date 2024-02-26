@@ -8,6 +8,7 @@ import opensearchpy.helpers
 from opensearch_dsl import MultiSearch, Search
 from opensearchpy import NotFoundError, OpenSearch, RequestError
 
+from core.exceptions import BasePalaceException
 from core.search.revision import SearchSchemaRevision
 
 
@@ -27,7 +28,7 @@ class SearchWritePointer:
         return f"{self.base_name}-v{self.version}"
 
 
-class SearchServiceException(Exception):
+class SearchServiceException(BasePalaceException):
     """The type of exceptions raised by the search service."""
 
     def __init__(self, message: str):

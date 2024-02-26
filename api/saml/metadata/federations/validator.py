@@ -6,11 +6,11 @@ from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
 from api.saml.metadata.federations.model import SAMLFederation
-from core.exceptions import BaseError
+from core.exceptions import BasePalaceException
 from core.util.datetime_helpers import from_timestamp, utc_now
 
 
-class SAMLFederatedMetadataValidationError(BaseError):
+class SAMLFederatedMetadataValidationError(BasePalaceException):
     """Raised in the case of any errors happened during SAML metadata validation."""
 
 
@@ -113,8 +113,8 @@ class SAMLFederatedMetadataExpirationValidator(SAMLFederatedMetadataValidator):
             root = fromstring(metadata)
         except Exception as exception:
             raise SAMLFederatedMetadataValidationError(
-                "Metadata's XML is not valid", exception
-            )
+                "Metadata's XML is not valid"
+            ) from exception
 
         if "EntitiesDescriptor" not in root.tag:
             raise SAMLFederatedMetadataValidationError(
@@ -182,7 +182,7 @@ class SAMLMetadataSignatureValidator(SAMLFederatedMetadataValidator):
                 metadata, federation.certificate, raise_exceptions=True
             )
         except Exception as exception:
-            raise SAMLFederatedMetadataValidationError(str(exception), exception)
+            raise SAMLFederatedMetadataValidationError(str(exception)) from exception
 
         self._logger.info(
             "Finished verifying the validity of the metadata's signature belonging to {}".format(
