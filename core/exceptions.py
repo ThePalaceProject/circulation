@@ -2,9 +2,9 @@ class BasePalaceException(Exception):
     """Base class for all Exceptions in the Palace manager."""
 
     def __init__(self, message: str | None = None):
-        """Initializes a new instance of BaseError class
+        """Initializes a new instance of BasePalaceException class
 
-        :param message: String containing description of the error occurred
+        :param message: String containing description of the exception that occurred
         """
         super().__init__(message)
         self.message = message
