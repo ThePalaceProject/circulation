@@ -5,8 +5,8 @@ from abc import ABCMeta
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
-from api.saml.metadata.federations.model import SAMLFederation
 from core.exceptions import BasePalaceException
+from core.model import SAMLFederation
 from core.util.datetime_helpers import from_timestamp, utc_now
 
 
