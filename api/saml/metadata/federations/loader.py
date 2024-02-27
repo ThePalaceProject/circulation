@@ -3,13 +3,10 @@ import logging
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
 from onelogin.saml2.xmlparser import tostring
 
-from api.saml.metadata.federations.model import (
-    SAMLFederatedIdentityProvider,
-    SAMLFederation,
-)
 from api.saml.metadata.federations.validator import SAMLFederatedMetadataValidator
 from api.saml.metadata.parser import SAMLMetadataParser
 from core.exceptions import BasePalaceException
+from core.model import SAMLFederatedIdentityProvider, SAMLFederation
 from core.util import first_or_default
 
 
