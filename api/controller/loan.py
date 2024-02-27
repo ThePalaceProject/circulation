@@ -8,7 +8,7 @@ from flask_babel import lazy_gettext as _
 from lxml import etree
 from werkzeug import Response as wkResponse
 
-from api.circulation_exceptions import CirculationException
+from api.circulation_exceptions import CirculationException, RemoteInitiatedServerError
 from api.controller.circulation_manager import CirculationManagerController
 from api.problem_details import (
     BAD_DELIVERY_MECHANISM,
@@ -146,7 +146,7 @@ class LoanController(CirculationManagerController):
                 patron, credential, pool, mechanism
             )
             result = loan or hold
-        except CirculationException as e:
+        except (CirculationException, RemoteInitiatedServerError) as e:
             result = e.problem_detail
 
         if result is None:
@@ -322,7 +322,7 @@ class LoanController(CirculationManagerController):
                 requested_license_pool,
                 mechanism,
             )
-        except CirculationException as e:
+        except (CirculationException, RemoteInitiatedServerError) as e:
             return e.problem_detail
 
         # A subclass of FulfillmentInfo may want to bypass the whole
@@ -446,7 +446,7 @@ class LoanController(CirculationManagerController):
         if loan:
             try:
                 self.circulation.revoke_loan(patron, credential, pool)
-            except CirculationException as e:
+            except (CirculationException, RemoteInitiatedServerError) as e:
                 return e.problem_detail
         elif hold:
             if not self.circulation.can_revoke_hold(pool, hold):
@@ -454,7 +454,7 @@ class LoanController(CirculationManagerController):
                 return CANNOT_RELEASE_HOLD.detailed(title, 400)
             try:
                 self.circulation.release_hold(patron, credential, pool)
-            except CirculationException as e:
+            except (CirculationException, RemoteInitiatedServerError) as e:
                 return e.problem_detail
 
         work = pool.work

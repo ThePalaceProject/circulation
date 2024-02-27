@@ -1639,6 +1639,13 @@ class TestAxis360FulfillmentInfoResponseParser:
             m(bad_date, license_pool=pool)
         assert "Could not parse expiration date: not-a-date" in str(excinfo.value)
 
+        # Try with an expired session key.
+        expired_session_key = get_data()
+        expired_session_key["FNDSessionKey"] = "Expired"
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
+            m(expired_session_key, license_pool=pool)
+        assert "Expired findaway session key" in str(excinfo.value)
+
     def test__parse_axisnow(self, axis360parsers: Axis360FixturePlusParsers) -> None:
         # _parse will create a valid AxisNowManifest given a
         # complete document.

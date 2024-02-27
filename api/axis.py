@@ -1703,7 +1703,8 @@ class JSONResponseParser(Generic[T], ResponseParser, ABC):
 class Axis360FulfillmentInfoResponseParser(
     JSONResponseParser[
         tuple[Union[FindawayManifest, "AxisNowManifest"], datetime.datetime]
-    ]
+    ],
+    LoggerMixin,
 ):
     """Parse JSON documents into Findaway audiobook manifests or AxisNow manifests."""
 
@@ -1770,6 +1771,19 @@ class Axis360FulfillmentInfoResponseParser(
         licenseId = k("FNDLicenseID", parsed)
         sessionKey = k("FNDSessionKey", parsed)
         checkoutId = k("FNDTransactionID", parsed)
+
+        if sessionKey == "Expired":
+            try:
+                identifier_msg = f"{license_pool.identifier.type}/{license_pool.identifier.identifier}"
+            except AttributeError:
+                identifier_msg = f"LicensePool.id {license_pool.id}"
+
+            message = f"Expired findaway session key for {identifier_msg}. Request data: {json.dumps(parsed)}"
+            self.log.error(message)
+            raise RemoteInitiatedServerError(
+                message,
+                self.SERVICE_NAME,
+            )
 
         # Acquire the TOC information
         metadata_response = self.api.get_audiobook_metadata(fulfillmentId)
