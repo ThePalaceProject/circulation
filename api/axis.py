@@ -1773,12 +1773,12 @@ class Axis360FulfillmentInfoResponseParser(
         checkoutId = k("FNDTransactionID", parsed)
 
         if sessionKey == "Expired":
-            if license_pool.identifier is None:
-                identifier = f"LicensePool {license_pool.id}"
-            else:
-                identifier = f"{license_pool.identifier.type}/{license_pool.identifier.identifier}"
+            try:
+                identifier_msg = f"{license_pool.identifier.type}/{license_pool.identifier.identifier}"
+            except AttributeError:
+                identifier_msg = f"LicensePool.id {license_pool.id}"
 
-            message = f"Expired findaway session key for {identifier}. Request data: {json.dumps(parsed)}"
+            message = f"Expired findaway session key for {identifier_msg}. Request data: {json.dumps(parsed)}"
             self.log.error(message)
             raise RemoteInitiatedServerError(
                 message,
