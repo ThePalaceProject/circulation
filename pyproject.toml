@@ -228,7 +228,7 @@ pyOpenSSL = "^24.0.0"
 pyparsing = "3.1.1"
 pyspellchecker = "0.8.1"
 python = ">=3.10,<4"
-python-dateutil = "2.8.2"
+python-dateutil = "2.9.0"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
 pytz = "^2023.3"
 pyyaml = "^6.0"
