@@ -1864,17 +1864,18 @@ referencing = ">=0.28.0"
 
 [[package]]
 name = "jwcrypto"
-version = "1.5.4"
+version = "1.5.5"
 description = "Implementation of JOSE Web standards"
 optional = false
 python-versions = ">= 3.8"
 files = [
-    {file = "jwcrypto-1.5.4.tar.gz", hash = "sha256:0815fbab613db99bad85691da5f136f8860423396667728a264bcfa6e1db36b0"},
+    {file = "jwcrypto-1.5.5-py3-none-any.whl", hash = "sha256:c18b10b2049603bef3ae7b77ad14bded431a9077d113447d62bebd8550b0d5bd"},
+    {file = "jwcrypto-1.5.5.tar.gz", hash = "sha256:59e7d5e4589d1b07170f368e20c32eb32a023911806a9723b1f43a0d8b3028d6"},
 ]
 
 [package.dependencies]
 cryptography = ">=3.4"
-typing_extensions = ">=4.5.0"
+typing-extensions = ">=4.5.0"
 
 [[package]]
 name = "levenshtein"
