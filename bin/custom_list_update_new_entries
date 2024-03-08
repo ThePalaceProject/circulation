@@ -8,6 +8,11 @@ import sys
 bin_dir = os.path.split(__file__)[0]
 package_dir = os.path.join(bin_dir, "..")
 sys.path.append(os.path.abspath(package_dir))
-from core.scripts import CustomListUpdateEntriesScript
 
+from core.model import production_session
+from core.scripts import CustomListUpdateEntriesScript
+from core.util.cache import CachedData
+
+# The cache needs to be initialized for this script to work properly.
+CachedData.initialize(production_session(initialize_data=False))
 CustomListUpdateEntriesScript().run()
