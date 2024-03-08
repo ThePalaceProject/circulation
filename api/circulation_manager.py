@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from api.admin.controller.patron import PatronController
     from api.admin.controller.patron_auth_services import PatronAuthServicesController
     from api.admin.controller.quicksight import QuickSightController
+    from api.admin.controller.report import ReportController
     from api.admin.controller.reset_password import ResetPasswordController
     from api.admin.controller.sign_in import SignInController
     from api.admin.controller.timestamps import TimestampsController
@@ -110,6 +111,7 @@ class CirculationManager(LoggerMixin):
     admin_search_controller: AdminSearchController
     admin_view_controller: ViewController
     admin_quicksight_controller: QuickSightController
+    admin_report_controller: ReportController
 
     @inject
     def __init__(

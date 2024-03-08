@@ -702,6 +702,13 @@ def diagnostics():
     return app.manager.timestamps_controller.diagnostics()
 
 
+@app.route("/admin/reports/generate_inventory_report", methods=["POST"])
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def generate_inventory_report():
+    return app.manager.admin_report_controller.generate_inventory_report()
+
+
 @app.route("/admin/sign_in_again")
 def admin_sign_in_again():
     """Allows an  admin with expired credentials to sign back in
