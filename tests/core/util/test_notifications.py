@@ -297,7 +297,7 @@ class TestPushNotifications:
         ) -> None:
             data = dict(
                 title="Your hold is available!",
-                body=f'Your hold on "{work.title}" is available!',
+                body=f'Your hold on "{work.title}" is available at {hold.library.name}!',
                 event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
                 loans_endpoint=loans_api,
                 identifier=hold.license_pool.identifier.identifier,

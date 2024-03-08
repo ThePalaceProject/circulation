@@ -184,8 +184,9 @@ class PushNotifications(LoggerMixin):
                 loans_api = f"{url}/{hold.patron.library.short_name}/loans"
                 work: Work = hold.work
                 identifier: Identifier = hold.license_pool.identifier
+                library_name = hold.patron.library.name
                 title = "Your hold is available!"
-                body = f'Your hold on "{work.title}" is available!'
+                body = f'Your hold on "{work.title}" is available at {library_name}!'
                 data = dict(
                     title=title,
                     body=body,
