@@ -25,32 +25,85 @@ def holds_fixture(db: DatabaseTransactionFixture) -> HoldsNotificationFixture:
 
 
 class TestHoldsNotifications:
-    def test_item_query(self, holds_fixture: HoldsNotificationFixture):
+    @pytest.mark.parametrize(
+        "position, end_delta, last_notified_delta, expected",
+        [
+            pytest.param(
+                1, datetime.timedelta(days=2), None, False, id="patron in position 1"
+            ),
+            pytest.param(
+                0,
+                datetime.timedelta(days=2),
+                datetime.timedelta(days=-1),
+                True,
+                id="patron notified yesterday",
+            ),
+            pytest.param(
+                0, datetime.timedelta(days=2), None, True, id="patron never notified"
+            ),
+            pytest.param(
+                None, datetime.timedelta(days=2), None, False, id="no hold position"
+            ),
+            pytest.param(
+                0,
+                datetime.timedelta(days=2),
+                datetime.timedelta(days=0),
+                False,
+                id="already notified today",
+            ),
+            pytest.param(
+                0,
+                datetime.timedelta(days=-1),
+                datetime.timedelta(days=-1),
+                False,
+                id="hold expired",
+            ),
+        ],
+    )
+    def test_item_query(
+        self,
+        holds_fixture: HoldsNotificationFixture,
+        position: int | None,
+        end_delta: datetime.timedelta | None,
+        last_notified_delta: datetime.timedelta | None,
+        expected: bool,
+    ):
+        now = utc_now()
+
+        end = now + end_delta if end_delta is not None else None
+        patron_last_notified = (
+            now.date() + last_notified_delta
+            if last_notified_delta is not None
+            else None
+        )
+
         db = holds_fixture.db
-        patron1 = db.patron()
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
-        work3 = db.work(with_license_pool=True)
-        work4 = db.work(with_license_pool=True)
-        work5 = db.work(with_license_pool=True)
-        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=1)
-        hold2, _ = work2.active_license_pool().on_hold_to(patron1, position=0)
-        hold3, _ = work3.active_license_pool().on_hold_to(patron1, position=0)
-        hold4, _ = work4.active_license_pool().on_hold_to(patron1, position=None)
-        hold5, _ = work5.active_license_pool().on_hold_to(patron1, position=0)
-        hold5.patron_last_notified = utc_now().date()
-        hold2.patron_last_notified = utc_now().date() - datetime.timedelta(days=1)
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        hold, _ = work.active_license_pool().on_hold_to(
+            patron, position=position, end=end
+        )
+        hold.patron_last_notified = patron_last_notified
 
         # Only position 0 holds, that haven't bene notified today, should be queried for
-        assert holds_fixture.monitor.item_query().all() == [hold2, hold3]
+        query = holds_fixture.monitor.item_query()
+        if expected:
+            assert query.all() == [hold]
+        else:
+            assert query.all() == []
 
     def test_script_run(self, holds_fixture: HoldsNotificationFixture):
         db = holds_fixture.db
         patron1 = db.patron()
         work1 = db.work(with_license_pool=True)
         work2 = db.work(with_license_pool=True)
-        hold1, _ = work1.active_license_pool().on_hold_to(patron1, position=0)
-        hold2, _ = work2.active_license_pool().on_hold_to(patron1, position=0)
+        tomorrow = utc_now() + datetime.timedelta(days=1)
+        hold1, _ = work1.active_license_pool().on_hold_to(
+            patron1, end=tomorrow, position=0
+        )
+        hold2, _ = work2.active_license_pool().on_hold_to(
+            patron1, end=tomorrow, position=0
+        )
 
         holds_fixture.monitor.run()
         assert holds_fixture.mock_notifications.send_holds_notifications.call_count == 1

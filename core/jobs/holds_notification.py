@@ -39,11 +39,13 @@ class HoldsNotificationMonitor(SweepMonitor):
         return qu
 
     def item_query(self) -> Query:
+        now = utc_now()
         query = super().item_query()
         query = query.filter(
             Hold.position == 0,
+            Hold.end > now,
             or_(
-                Hold.patron_last_notified != utc_now().date(),
+                Hold.patron_last_notified != now.date(),
                 Hold.patron_last_notified == None,
             ),
         )
