@@ -106,7 +106,7 @@ class TestPushNotifications:
                     ),
                     "data": dict(
                         title="Only 1 day left on your loan!",
-                        body=f"Your loan on {work.presentation_edition.title} is expiring soon",
+                        body=f'Your loan for "{work.presentation_edition.title}" at {loan.library.name} is expiring soon',
                         event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
                         loans_endpoint="http://localhost/default/loans",
                         external_identifier=patron.external_identifier,
