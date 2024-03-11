@@ -106,8 +106,9 @@ class PushNotifications(LoggerMixin):
         edition = loan.license_pool.presentation_edition
         identifier = loan.license_pool.identifier
         library_short_name = loan.library.short_name
+        library_name = loan.library.name
         title = f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!"
-        body = f"Your loan on {edition.title} is expiring soon"
+        body = f'Your loan for "{edition.title}" at {library_name} is expiring soon'
         data = dict(
             title=title,
             body=body,
