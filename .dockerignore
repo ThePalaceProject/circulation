@@ -7,10 +7,6 @@
 # Readmes
 **/*.md
 
-# Tests
-tests/
-integration_tests/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

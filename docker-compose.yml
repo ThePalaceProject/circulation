@@ -17,6 +17,10 @@ x-cm-variables: &cm
     PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
     PALACE_PATRON_WEB_HOSTNAMES: "*"
     PALACE_BASE_URL: "http://localhost:6500"
+
+    # Set up the environment variables used for testing as well
+    SIMPLIFIED_TEST_DATABASE: "postgresql://palace:test@pg:5432/circ"
+    PALACE_TEST_SEARCH_URL: "http://os:9200"
   depends_on:
     pg:
       condition: service_healthy
