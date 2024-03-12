@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version of poetry to install"
     required: false
-    default: "1.5.1"
+    default: "1.7.1"
 
 outputs:
   version:
@@ -15,9 +15,21 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - run: |
-        curl -sSL https://install.python-poetry.org | python - --yes --version ${{ inputs.version }}
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ${{ runner.temp }}/poetry
+        key: ${{ runner.os }}-poetry-install-${{ inputs.version }}
+
+    - run: curl -sSL https://install.python-poetry.org | python - --yes --version ${{ inputs.version }}
+      env:
+        POETRY_HOME: ${{ runner.temp }}/poetry
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+
+    - run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
+      env:
+        POETRY_HOME: ${{ runner.temp }}/poetry
       shell: bash
 
     - id: poetry-version
