@@ -18,18 +18,18 @@ runs:
     - uses: actions/cache@v4
       id: cache
       with:
-        path: $HOME/.poetry
+        path: ${{ runner.temp }}/poetry
         key: ${{ runner.os }}-poetry-install-${{ inputs.version }}
 
     - run: curl -sSL https://install.python-poetry.org | python - --yes --version ${{ inputs.version }}
       env:
-        POETRY_HOME: $HOME/.poetry
+        POETRY_HOME: ${{ runner.temp }}/poetry
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
 
     - run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
       env:
-        POETRY_HOME: $HOME/.poetry
+        POETRY_HOME: ${{ runner.temp }}/poetry
       shell: bash
 
     - id: poetry-version
