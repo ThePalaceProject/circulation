@@ -100,7 +100,7 @@ class MockAPIServerRequestHandler(BaseHTTPRequestHandler, LoggerMixin):
     def version_string(self) -> str:
         return ""
 
-    def date_time_string(self, timestamp: int | None = 0) -> str:
+    def date_time_string(self, timestamp: float | None = 0) -> str:
         return "Sat, 1 January 2000 00:00:00 UTC"
 
 
