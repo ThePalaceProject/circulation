@@ -60,7 +60,7 @@ repos:
     hooks:
       - id: toml-sort
         args: []
-        files: pyproject.toml
+        files: pyproject\.toml|poetry\.toml
 
   - repo: https://github.com/jackdewinter/pymarkdown
     rev: v0.9.13.4
