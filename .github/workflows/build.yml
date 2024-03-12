@@ -154,7 +154,7 @@ jobs:
         env:
           BUILD_PLATFORM: ${{ matrix.platform }}
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.docker-image-build.outputs.baseimage }}
+          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
 
       - name: Run tests
         run: ./docker/ci/test_${{ matrix.image }}.sh ${{ matrix.image }}
@@ -197,7 +197,7 @@ jobs:
         run: docker compose run --build webapp bash -c "source env/bin/activate && poetry install --without ci --sync && pytest tests/${{ matrix.module }}"
         env:
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.docker-image-build.outputs.baseimage }}
+          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
 
       - name: Stop container
         if: always()
@@ -280,4 +280,4 @@ jobs:
           cache-from: type=gha,scope=buildkit-${{ github.run_id }}
           platforms: linux/amd64, linux/arm64
           build-args: |
-            BASE_IMAGE=${{ needs.docker-image-build.outputs.baseimage }}
+            BASE_IMAGE=${{ needs.build.outputs.baseimage }}
