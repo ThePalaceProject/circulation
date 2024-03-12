@@ -1,5 +1,9 @@
-name: Test & Build
-on: [pull_request]
+name: Test
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
 concurrency:
   group: test-build-${{ github.ref_name }}-${{ github.event_name }}
