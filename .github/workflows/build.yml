@@ -194,7 +194,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Run unit tests
-        run: docker compose run --build webapp bash -c "source env/bin/activate && poetry install --without ci --sync && pytest tests/${{ matrix.module }}"
+        run: >
+          docker compose run --build webapp
+          bash -c "
+            source env/bin/activate &&
+            poetry install --without ci --sync &&
+            pytest --no-cov tests/${{ matrix.module }}
+          "
         env:
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
           BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
