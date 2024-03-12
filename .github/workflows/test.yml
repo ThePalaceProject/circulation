@@ -42,6 +42,14 @@ jobs:
       - name: Install Poetry
         uses: ./.github/actions/poetry
 
+      - name: Cache Poetry packages
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-cache-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-cache
+
       - name: Install Tox
         run: |
           poetry install --only ci
@@ -87,6 +95,14 @@ jobs:
 
       - name: Install Poetry
         uses: ./.github/actions/poetry
+
+      - name: Cache Poetry packages
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-cache-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-cache
 
       - name: Install Tox
         run: |
