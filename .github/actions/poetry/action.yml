@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version of poetry to install"
     required: false
-    default: "1.5.1"
+    default: "1.7.1"
 
 outputs:
   version:
