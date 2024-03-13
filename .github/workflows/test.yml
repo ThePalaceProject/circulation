@@ -6,7 +6,7 @@ on:
   pull_request:
 
 concurrency:
-  group: test-build-${{ github.ref_name }}-${{ github.event_name }}
+  group: test-${{ github.ref_name }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:

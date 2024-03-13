@@ -2,7 +2,7 @@ name: Docker Build
 on: [push]
 
 concurrency:
-  group: test-build-${{ github.ref_name }}-${{ github.event_name }}
+  group: build-${{ github.ref_name }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
