@@ -1,157 +1,17 @@
-name: Test & Build
-on: [push, pull_request]
+name: Docker Build
+on: [push]
 
 concurrency:
   group: test-build-${{ github.ref_name }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: ${{ matrix.module }} Tests (Py ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11"]
-        module: [Api, Core]
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Apt Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
-
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
-
-      - name: Install Tox
-        run: |
-          poetry install --only ci
-        env:
-          POETRY_VIRTUALENVS_CREATE: false
-
-      - name: Run Tests
-        run: tox
-        env:
-          MODULE: ${{ matrix.module }}
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: ${{ matrix.module }}
-          name: ${{ matrix.module }}-${{ matrix.python-version }}
-          verbose: true
-
-  test-migrations:
-    name: Migration Tests
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install Apt Packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
-
-      - name: Install Poetry
-        uses: ./.github/actions/poetry
-
-      - name: Install Tox
-        run: |
-          poetry install --only ci
-        env:
-          POETRY_VIRTUALENVS_CREATE: false
-
-      - name: Run Migration Tests
-        run: tox -e "migration-docker"
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
-          flags: migration
-          name: "migration-3.10"
-          verbose: true
-
-  docker-test-migrations:
-    name: Docker migration test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch. This prevents duplicated runs on internal PRs.
-    # Some discussion of this here:
-    # https://github.community/t/duplicate-checks-on-push-and-pull-request-simultaneous-event/18012
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Test migrations
-        run: ./docker/ci/test_migrations.sh
-
-  docker-image-build:
+  build:
     name: Docker build
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
-    # Only build docker containers on a push event. Otherwise, we won't have
-    # permissions to push the built containers into registry.
-    if: github.event_name == 'push'
 
     outputs:
       baseimage-changed: ${{ steps.changes.outputs.baseimage }}
@@ -262,10 +122,10 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
 
-  docker-image-test:
-    name: Docker test circ-${{ matrix.image }} (${{ matrix.platform }})
+  integration-test:
+    name: Test circ-${{ matrix.image }} (${{ matrix.platform }})
     runs-on: ubuntu-latest
-    needs: [docker-image-build]
+    needs: [build]
     permissions:
       contents: read
     strategy:
@@ -294,7 +154,7 @@ jobs:
         env:
           BUILD_PLATFORM: ${{ matrix.platform }}
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.docker-image-build.outputs.baseimage }}
+          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
 
       - name: Run tests
         run: ./docker/ci/test_${{ matrix.image }}.sh ${{ matrix.image }}
@@ -307,10 +167,52 @@ jobs:
         if: always()
         run: docker compose down
 
-  docker-image-push:
+  unit-test:
+    name: Unit tests (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ["api", "core"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run unit tests
+        run: >
+          docker compose run --build webapp
+          bash -c "
+            source env/bin/activate &&
+            poetry install --without ci --no-root --sync &&
+            pytest --no-cov tests/${{ matrix.module }}
+          "
+        env:
+          BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
+          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
+
+      - name: Stop container
+        if: always()
+        run: docker compose down
+
+  push:
     name: Push circ-${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [test, test-migrations, docker-test-migrations, docker-image-build, docker-image-test]
+    needs: [build, integration-test, unit-test]
     permissions:
       contents: read
       packages: write
@@ -344,7 +246,7 @@ jobs:
         uses: ./.github/actions/poetry
 
       - name: Setup Dunamai
-        run: poetry install --only ci
+        run: poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 
@@ -384,4 +286,4 @@ jobs:
           cache-from: type=gha,scope=buildkit-${{ github.run_id }}
           platforms: linux/amd64, linux/arm64
           build-args: |
-            BASE_IMAGE=${{ needs.docker-image-build.outputs.baseimage }}
+            BASE_IMAGE=${{ needs.build.outputs.baseimage }}

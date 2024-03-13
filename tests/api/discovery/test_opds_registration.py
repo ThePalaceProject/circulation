@@ -717,8 +717,12 @@ class TestOpdsRegistrationService:
 
 class TestLibraryRegistrationScript:
     def test_constructor(
-        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
     ):
+        # Make sure that we raise an error if the base URL is not set.
+        services_fixture.set_base_url(None)
         with pytest.raises(CannotLoadConfiguration) as excinfo:
             LibraryRegistrationScript(db.session, services=services_fixture.services)
         assert "Missing required environment variable: PALACE_BASE_URL" in str(

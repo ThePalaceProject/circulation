@@ -20,10 +20,13 @@ jobs:
 
       - name: Install Poetry
         uses: ./.github/actions/poetry
+        with:
+          cache: true
+          cache-restore-only: true
 
       - name: Install Pre-commit
         run: |
-          poetry install --only ci
+          poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import uuid
 from collections.abc import Generator
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -244,20 +245,25 @@ class S3ServiceIntegrationFixture:
     def __init__(self):
         self.container = Storage()
         self.configuration = S3UploaderIntegrationConfiguration()
+        self.analytics_bucket = self.random_name("analytics")
+        self.public_access_bucket = self.random_name("public")
         self.container.config.from_dict(
             {
                 "access_key": self.configuration.user,
                 "secret_key": self.configuration.password,
                 "endpoint_url": self.configuration.endpoint_url,
                 "region": "us-east-1",
-                "analytics_bucket": "analytics",
-                "public_access_bucket": "public",
+                "analytics_bucket": self.analytics_bucket,
+                "public_access_bucket": self.public_access_bucket,
                 "url_template": self.configuration.endpoint_url + "/{bucket}/{key}",
             }
         )
         self.buckets = []
-        self.create_bucket("analytics")
-        self.create_bucket("public")
+        self.create_buckets()
+
+    @classmethod
+    def random_name(cls, prefix: str = "test"):
+        return f"{prefix}-{uuid.uuid4()}"
 
     @property
     def s3_client(self) -> S3Client:
@@ -275,6 +281,18 @@ class S3ServiceIntegrationFixture:
         client = self.s3_client
         client.create_bucket(Bucket=bucket_name)
         self.buckets.append(bucket_name)
+
+    def get_bucket(self, bucket_name: str) -> str:
+        if bucket_name == "public":
+            return self.public_access_bucket
+        elif bucket_name == "analytics":
+            return self.analytics_bucket
+        else:
+            raise ValueError(f"Unknown bucket name: {bucket_name}")
+
+    def create_buckets(self) -> None:
+        for bucket in [self.analytics_bucket, self.public_access_bucket]:
+            self.create_bucket(bucket)
 
     def close(self):
         for bucket in self.buckets:
@@ -317,7 +335,7 @@ class TestS3ServiceIntegration:
         assert len(bucket_contents) == 0
 
     @pytest.mark.parametrize(
-        "key, bucket, content, content_type",
+        "key, service_name, content, content_type",
         [
             ("key", "public", "foo bar baz", "text/plain"),
             ("key/w i t h/slash/.!%:", "public", b"byte string", None),
@@ -330,13 +348,14 @@ class TestS3ServiceIntegration:
     def test_store(
         self,
         key: str,
-        bucket: str,
+        service_name: str,
         content: bytes | str,
         content_type: str | None,
         s3_service_integration_fixture: S3ServiceIntegrationFixture,
     ):
         """The S3Service.store method stores content in the bucket."""
-        service = getattr(s3_service_integration_fixture, bucket)
+        service = getattr(s3_service_integration_fixture, service_name)
+        bucket = s3_service_integration_fixture.get_bucket(service_name)
         service.store(key, content, content_type)
         response = s3_service_integration_fixture.s3_client.get_object(
             Bucket=bucket, Key=key
@@ -357,7 +376,7 @@ class TestS3ServiceIntegration:
         assert response["ContentType"] == expected_content_type
 
     @pytest.mark.parametrize(
-        "key, bucket, content, content_type",
+        "key, service_name, content, content_type",
         [
             ("key", "public", b"foo bar baz", "text/plain"),
             ("key/with/slash", "public", b"byte string", None),
@@ -370,12 +389,13 @@ class TestS3ServiceIntegration:
     def test_multipart(
         self,
         key: str,
-        bucket: str,
+        service_name: str,
         content: bytes,
         content_type: str | None,
         s3_service_integration_fixture: S3ServiceIntegrationFixture,
     ):
-        service = getattr(s3_service_integration_fixture, bucket)
+        service = getattr(s3_service_integration_fixture, service_name)
+        bucket = s3_service_integration_fixture.get_bucket(service_name)
         part_1_data = (
             b"a" * 5 * 1024**2
         )  # Minimum part size is 5MB, so we generate some junk data to send.
@@ -416,6 +436,6 @@ class TestS3ServiceIntegration:
         assert upload.exception is None
 
         response = s3_service_integration_fixture.s3_client.get_object(
-            Bucket="public", Key="key"
+            Bucket=s3_service_integration_fixture.public_access_bucket, Key="key"
         )
         assert response["Body"].read() == b"small data"

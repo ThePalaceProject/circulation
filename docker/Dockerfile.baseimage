@@ -65,7 +65,7 @@ RUN python3 -m venv env && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
     . env/bin/activate && \
     pip install --upgrade pip && \
-    poetry install --only main,pg --sync && \
+    poetry install --only main,pg --sync --no-root && \
     python3 -m textblob.download_corpora lite && \
     mv /root/nltk_data /usr/lib/ && \
     find /usr/lib/nltk_data -name *.zip -delete && \
