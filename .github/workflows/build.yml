@@ -198,7 +198,7 @@ jobs:
           docker compose run --build webapp
           bash -c "
             source env/bin/activate &&
-            poetry install --without ci --sync &&
+            poetry install --without ci --no-root --sync &&
             pytest --no-cov tests/${{ matrix.module }}
           "
         env:
@@ -246,7 +246,7 @@ jobs:
         uses: ./.github/actions/poetry
 
       - name: Setup Dunamai
-        run: poetry install --only ci
+        run: poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 

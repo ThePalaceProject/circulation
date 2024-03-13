@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Pre-commit
         run: |
-          poetry install --only ci
+          poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 

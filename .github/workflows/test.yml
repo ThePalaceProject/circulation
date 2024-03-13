@@ -52,7 +52,7 @@ jobs:
 
       - name: Install Tox
         run: |
-          poetry install --only ci
+          poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 
@@ -106,7 +106,7 @@ jobs:
 
       - name: Install Tox
         run: |
-          poetry install --only ci
+          poetry install --only ci --no-root
         env:
           POETRY_VIRTUALENVS_CREATE: false
 
