@@ -19,6 +19,9 @@ jobs:
 
       - name: Install Poetry 🎸
         uses: ./.github/actions/poetry
+        with:
+          cache: true
+          cache-restore-only: true
 
       - name: Install OS Packages 🧰
         run: |

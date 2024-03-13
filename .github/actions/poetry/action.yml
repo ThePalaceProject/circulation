@@ -6,32 +6,84 @@ inputs:
     description: "Version of poetry to install"
     required: false
     default: "1.7.1"
+  cache:
+    description: "Cache poetry packages"
+    required: false
+    default: "false"
+  cache-restore-only:
+    description: "Restore cache only, never save new cache"
+    required: false
+    default: "false"
+  cache-name:
+    description: "Cache name"
+    required: false
+    default: "default"
 
 outputs:
   version:
     description: "Installed version"
-    value: ${{ steps.poetry-version.outputs.version }}
+    value: ${{ steps.poetry-info.outputs.version }}
+  home:
+    description: "Poetry home"
+    value: ${{ steps.poetry-dir.outputs.home }}
+  cache-dir:
+    description: "Poetry cache directory"
+    value: ${{ steps.poetry-info.outputs.cache-dir }}
+
 
 runs:
   using: "composite"
   steps:
+    - id: python-version
+      run: >
+        echo "version=$(
+          python -c 'import sys; version=sys.version_info[:3]; print("{0}.{1}.{2}".format(*version))'
+        )" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - id: poetry-dir
+      run: echo "home=$POETRY_HOME" >> $GITHUB_OUTPUT
+      env:
+          POETRY_HOME: ${{ runner.temp }}/poetry
+      shell: bash
+
     - uses: actions/cache@v4
       id: cache
       with:
-        path: ${{ runner.temp }}/poetry
-        key: ${{ runner.os }}-poetry-install-${{ inputs.version }}
+        path: ${{ steps.poetry-dir.outputs.home }}
+        key: ${{ runner.os }}-poetry${{ inputs.version }}-install-py${{ steps.python-version.outputs.version }}
 
     - run: curl -sSL https://install.python-poetry.org | python - --yes --version ${{ inputs.version }}
       env:
-        POETRY_HOME: ${{ runner.temp }}/poetry
+        POETRY_HOME: ${{ steps.poetry-dir.outputs.home }}
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
 
-    - run: echo "$POETRY_HOME/bin" >> $GITHUB_PATH
-      env:
-        POETRY_HOME: ${{ runner.temp }}/poetry
+    - run: echo "${{ steps.poetry-dir.outputs.home }}/bin" >> $GITHUB_PATH
       shell: bash
 
-    - id: poetry-version
-      run: echo "version=$(poetry --version)" >> $GITHUB_OUTPUT
+    - id: poetry-info
+      run: |
+        echo "version=$(poetry --version | grep -o "\d\.\d\.\d")" >> $GITHUB_OUTPUT
+        echo "cache-dir=$(poetry config cache-dir)" >> $GITHUB_OUTPUT
       shell: bash
+
+    - uses: actions/cache@v4
+      with:
+        path: ${{ steps.poetry-info.outputs.cache-dir }}
+        key: |
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
+      if: inputs.cache != 'false' && inputs.cache-restore-only == 'false'
+
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.poetry-info.outputs.cache-dir }}
+        restore-keys: |
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
+          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
+      if: inputs.cache != 'false' && inputs.cache-restore-only != 'false'
