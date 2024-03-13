@@ -74,7 +74,6 @@ runs:
         key: |
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
       if: inputs.cache != 'false' && inputs.cache-restore-only == 'false'
@@ -82,8 +81,9 @@ runs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{ steps.poetry-info.outputs.cache-dir }}
-        restore-keys: |
+        key: |
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
           ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
       if: inputs.cache != 'false' && inputs.cache-restore-only != 'false'
