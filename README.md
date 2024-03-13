@@ -1,6 +1,7 @@
 # Palace Manager
 
-[![Test & Build](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test-build.yml)
+[![Test](https://github.com/ThePalaceProject/circulation/actions/workflows/test.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/test.yml)
+[![Build](https://github.com/ThePalaceProject/circulation/actions/workflows/build.yml/badge.svg)](https://github.com/ThePalaceProject/circulation/actions/workflows/build.yml)
 [![codecov](https://codecov.io/github/thepalaceproject/circulation/branch/main/graph/badge.svg?token=T09QW6DLH6)](https://codecov.io/github/thepalaceproject/circulation)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
