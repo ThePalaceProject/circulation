@@ -65,8 +65,17 @@ While you're at it, go ahead and install the following required dependencies:
 
 ```sh
 brew install pkg-config libffi
-brew install libxmlsec1
 brew install libjpeg
+```
+
+The version of libxmlsec1 (v1.3) that ships with brew is currently not compatible with the python
+xmlsec package that we use (for more details see
+[this xmlsec issue](https://github.com/xmlsec/python-xmlsec/issues/163)). In order to install a
+compatible version of libxmlsec1, you can use the following command:
+
+```sh
+brew tap jonathangreen/xmlsec
+brew install libxmlsec1@1.2
 ```
 
 #### Linux
@@ -490,29 +499,6 @@ These can be found at `/admin/web/config/SitewideSettings` in the admin interfac
 
 This setting is a toggle that may be used to turn on or off the ability for the the system
 to send the Loan and Hold reminders to the mobile applications.
-
-### Installation Issues
-
-When running the `poetry install ...` command, you may run into installation issues. On newer macos machines, you may
-encounter an error such as:
-
-```sh
-error: command '/usr/bin/clang' failed with exit code 1
-  ----------------------------------------
-  ERROR: Failed building wheel for xmlsec
-Failed to build xmlsec
-ERROR: Could not build wheels for xmlsec which use PEP 517 and cannot be installed directly
-```
-
-This typically happens after installing packages through brew and then running the `pip install` command.
-
-This [blog post](https://mbbroberg.fun/clang-error-in-pip/) explains and shows a fix for this issue. Start by trying
-the `xcode-select --install` command. If it does not work, you can try adding the following to your `~/.zshrc` or
-`~/.bashrc` file, depending on what you use:
-
-```sh
-export CPPFLAGS="-DXMLSEC_NO_XKMS=1"
-```
 
 ## Scheduled Jobs
 
