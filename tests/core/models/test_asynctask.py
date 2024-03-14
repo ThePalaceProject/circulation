@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from core.model import get_one_or_create
 from core.model.asynctask import (
@@ -11,7 +11,7 @@ from core.model.asynctask import (
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestAsyncTAsk:
+class TestAsyncTask:
     def test_start_next_task(self, db: DatabaseTransactionFixture):
         session = db.session
 
@@ -24,7 +24,7 @@ class TestAsyncTAsk:
         )
 
         # create a second task, but set the creation date back a minute
-        oldest_task_date = datetime.now() - timedelta(seconds=60)
+        oldest_task_date = datetime.now(timezone.utc) - timedelta(seconds=60)
         task2, _ = get_one_or_create(
             session,
             AsyncTask,

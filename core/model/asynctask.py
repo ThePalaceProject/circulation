@@ -36,8 +36,8 @@ class AsyncTask(Base):
     )
     task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=True, nullable=False)
     status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=True, nullable=False)
-    processing_start_time = Column(DateTime, nullable=True)
-    processing_end_time = Column(DateTime, nullable=True)
+    processing_start_time = Column(DateTime(timezone=True), nullable=True)
+    processing_end_time = Column(DateTime(timezone=True), nullable=True)
     status_details = Column(String, nullable=True)
     data: dict[str, Any] = Column(MutableDict.as_mutable(JSON), default={})
 
