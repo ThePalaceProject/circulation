@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import csv
 import datetime
 import json
 import random
+from dataclasses import asdict
 from io import StringIO
 from unittest.mock import MagicMock, call, create_autospec, patch
 
@@ -35,6 +37,12 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
+from core.model.asynctask import (
+    AsyncTaskStatus,
+    AsyncTaskType,
+    InventoryReportTaskData,
+    queue_task,
+)
 from core.model.classification import Classification, Subject
 from core.model.customlist import CustomList
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
@@ -52,6 +60,7 @@ from core.scripts import (
     CustomListUpdateEntriesScript,
     DeleteInvisibleLanesScript,
     Explain,
+    GenerateInventoryReports,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
@@ -2562,6 +2571,135 @@ class TestSuppressWorkForLibraryScript:
         script.suppress_work(test_library, work.presentation_edition.primary_identifier)
 
         assert work.suppressed_for == [test_library]
+
+
+class TestGenerateInventoryReports:
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        # create some test data
+        library = db.library(short_name="test")
+        collection = db.collection(
+            name="BiblioBoard Test collection", data_source_name="BiblioBoard"
+        )
+        collection.libraries = [library]
+        ds = collection.data_source
+        title = "Leaves of Grass"
+        author = "Walt Whitman"
+        email = "test@email.com"
+        checkouts_left = 10
+        checkouts_available = 11
+        terms_concurrency = 5
+        edition = db.edition(data_source_name=ds.name)
+        edition.title = title
+        edition.author = author
+        work = db.work(
+            language="eng",
+            fiction=True,
+            with_license_pool=False,
+            data_source_name=ds.name,
+            presentation_edition=edition,
+            collection=collection,
+        )
+        licensepool = db.licensepool(
+            edition=edition,
+            open_access=False,
+            data_source_name=ds.name,
+            set_edition_as_presentation=True,
+            collection=collection,
+        )
+
+        db.license(
+            pool=licensepool,
+            checkouts_available=checkouts_available,
+            checkouts_left=checkouts_left,
+            terms_concurrency=terms_concurrency,
+        )
+
+        data = InventoryReportTaskData(
+            admin_id=1, library_id=library.id, admin_email=email
+        )
+        task, is_new = queue_task(
+            db.session, task_type=AsyncTaskType.INVENTORY_REPORT, data=asdict(data)
+        )
+
+        assert task.status == AsyncTaskStatus.READY
+
+        script = GenerateInventoryReports(db.session)
+        send_email_mock = create_autospec(script.services.email.container.send_email)
+        script.services.email.container.send_email = send_email_mock
+        script.do_run()
+        send_email_mock.assert_called_once()
+        args, kwargs = send_email_mock.call_args
+        assert task.status == AsyncTaskStatus.SUCCESS
+        assert kwargs["receivers"] == [email]
+        assert kwargs["subject"].__contains__("Inventory Report")
+        attachments: dict = kwargs["attachments"]
+        csv_titles_strings = [
+            "biblioboard",
+            "palace_marketplace",
+            "unlimited_listens",
+            "palace_bookshelf",
+        ]
+
+        def at_least_one_contains_the_other(list1: [str], list2: [str]) -> bool:
+            for s1 in list1:
+                for s2 in list2:
+                    if s1.__contains__(s2):
+                        return True
+            return False
+
+        assert at_least_one_contains_the_other(attachments.keys(), csv_titles_strings)
+
+        for key in attachments.keys():
+            value = attachments[key]
+            assert len(value) > 0
+            if str(key).__contains__("biblioboard"):
+                csv_file = StringIO(value)
+                reader = csv.reader(csv_file, delimiter=",")
+                first_row = None
+                row_count = 0
+
+                for row in reader:
+                    row_count += 1
+                    if not first_row:
+                        first_row = row
+                        row_headers = [
+                            "title",
+                            "author",
+                            "identifier",
+                            "language",
+                            "publisher",
+                            "format",
+                            "collection_name",
+                            "license_duration_days",
+                            "license_expiration_date",
+                            "initial_loan_count",
+                            "consumed_loans",
+                            "remaining_loans",
+                            "allowed_concurrent_users",
+                            "library_active_hold_count",
+                            "library_active_loan_count",
+                            "shared_active_hold_count",
+                            "shared_active_loan_count",
+                        ]
+                        for h in row_headers:
+                            assert h in row
+                        continue
+
+                    assert row[first_row.index("title")] == title
+                    assert row[first_row.index("author")] == author
+                    assert row[first_row.index("shared_active_hold_count")] == "-1"
+                    assert row[first_row.index("shared_active_loan_count")] == "-1"
+                    assert row[first_row.index("initial_loan_count")] == str(
+                        checkouts_available
+                    )
+                    assert row[first_row.index("consumed_loans")] == str(
+                        checkouts_available - checkouts_left
+                    )
+                    assert row[first_row.index("allowed_concurrent_users")] == str(
+                        terms_concurrency
+                    )
+
+                assert row_count == 2
 
 
 class TestWorkConsolidationScript:
