@@ -24,7 +24,7 @@ class TestReportController:
     def test_generate_inventory_report(self, report_fixture: ReportControllerFixture):
         ctrl = report_fixture.manager.admin_report_controller
         db = report_fixture.ctrl.db
-
+        library = report_fixture.ctrl.db.default_library()
         system_admin, _ = create(db.session, Admin, email="admin@email.com")
         system_admin.add_role(AdminRole.SYSTEM_ADMIN)
         default = db.default_library()

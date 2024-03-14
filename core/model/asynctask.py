@@ -1,43 +1,64 @@
 # Async
 import datetime
 import json
+import uuid
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Integer, String
-from sqlalchemy.dialects.postgresql import JSON
+from pydantic.dataclasses import dataclass
+from sqlalchemy import Column, DateTime, String
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.sql.functions import now
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
 from core.model import Base, create
+from core.util.datetime_helpers import utc_now
 
 
 class AsyncTaskStatus(str, Enum):
-    READY = "ready"
-    PROCESSING = "processing"
-    SUCCESSFUL = "successful"
-    FAILED = "failed"
+    READY = "READY"
+    PROCESSING = "PROCESSING"
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
 
 
 class AsyncTaskType(Enum):
-    INVENTORY_REPORT = "inventory-report"
+    INVENTORY_REPORT = "INVENTORY_REPORT"
 
 
 class AsyncTask(Base):
     """An asynchronous task."""
 
     __tablename__ = "asynctasks"
-    id = Column(Integer, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created = Column(
+        DateTime(timezone=True), index=True, nullable=False, default=utc_now
+    )
     task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=True, nullable=False)
     status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=True, nullable=False)
-    created = Column(DateTime, default=now(), nullable=False)
     processing_start_time = Column(DateTime, nullable=True)
     processing_end_time = Column(DateTime, nullable=True)
-    failure_details = Column(String, nullable=True)
+    status_details = Column(String, nullable=True)
     data = Column(MutableDict.as_mutable(JSON), default={})
 
     def __repr__(self):
         return f"<{self.__class__.__name__}({repr(self.__dict__)})>"
+
+    def complete(self):
+        if self.status != AsyncTaskStatus.PROCESSING:
+            raise Exception(
+                "The task must be in the PROCESSING state in order to transition to a completion state"
+            )
+        self.status = AsyncTaskStatus.SUCCESS
+        self.processing_end_time = datetime.datetime.now()
+
+    def fail(self, failure_details: str):
+        if self.status != AsyncTaskStatus.PROCESSING:
+            raise Exception(
+                "The task must be in the PROCESSING state in order to transition to a completion state"
+            )
+        self.status = AsyncTaskStatus.FAIL
+        self.processing_end_time = datetime.datetime.now()
+        self.status_details = failure_details
 
 
 def start_next_task(_db, task_type: str) -> AsyncTask | None:
@@ -87,3 +108,10 @@ def queue_task(_db, task_type, data: dict[str, str]) -> tuple[AsyncTask, bool]:
         return create(
             _db, AsyncTask, task_type=task_type, status=AsyncTaskStatus.READY, data=data
         )
+
+
+@dataclass
+class InventoryReportTaskData:
+    admin_id: int
+    library_id: int
+    admin_email: str
