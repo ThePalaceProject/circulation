@@ -19,9 +19,11 @@ class ReportController(CirculationManagerController):
         library: Library = getattr(flask.request, "library")
         admin: Admin = getattr(flask.request, "admin")
         try:
-            email = admin.email
+            email: str = admin.email  # type:ignore
+            admin_id: int = admin.id  # type:ignore
+            library_id: int = library.id  # type: ignore
             data: InventoryReportTaskData = InventoryReportTaskData(
-                admin_email=email, admin_id=admin.id, library_id=library.id
+                admin_email=email, admin_id=admin_id, library_id=library_id
             )
             task, is_new = queue_task(
                 self._db, task_type=AsyncTaskType.INVENTORY_REPORT, data=asdict(data)
@@ -30,7 +32,7 @@ class ReportController(CirculationManagerController):
 
             msg = (
                 f"An inventory report request was {'already' if not is_new else ''} received at {task.created}. "
-                f"When processing is complete, the report will be sent to {email}."
+                f"When processing is complete, the report will be sent to {admin.email}."
             )
             http_status = HTTPStatus.ACCEPTED if is_new else HTTPStatus.CONFLICT
 

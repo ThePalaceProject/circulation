@@ -14,7 +14,7 @@ from collections.abc import Generator, Sequence
 from enum import Enum
 from typing import TextIO
 
-from sqlalchemy import and_, exists, or_, select, tuple_
+from sqlalchemy import and_, exists, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -2811,23 +2811,16 @@ class GenerateInventoryReports(Script):
 
             for data_source_name in self.DATA_SOURCES:
                 formatted_ds_name = data_source_name.lower().replace(" ", "_")
-                prefix = f"palace-inventory-report-{formatted_ds_name}-{date_str}"
-                suffix = ".csv"
-                with tempfile.NamedTemporaryFile(
-                    "w",
-                    delete=False,
-                    prefix=prefix,
-                    suffix=suffix,
-                ) as temp:
-                    self.generate_report(
-                        data_source_name=data_source_name,
-                        library_id=data.library_id,
-                        output_file=temp,
-                    )
-
-                with open(temp.name) as temp:
-                    attachments[f"{prefix}{suffix}"] = temp.read()
-                    files.append(temp)
+                file_name = f"palace-inventory-report-{formatted_ds_name}-{date_str}"
+                # generate csv file
+                file_path = self.generate_report(
+                    data_source_name=data_source_name,
+                    library_id=data.library_id,
+                )
+                # extract contents of files and prepare in a dictionary of email attachments
+                with open(file_path) as csv_file:
+                    attachments[f"{file_name}.csv"] = csv_file.read()
+                    files.append(csv_file)
 
             self.services.email.send_email(
                 subject=f"Inventory Report {current_time}",
@@ -2845,14 +2838,20 @@ class GenerateInventoryReports(Script):
             for file in files:
                 os.remove(file.name)
 
-    def generate_report(self, data_source_name: str, library_id: int, output_file):
-        writer = csv.writer(output_file, delimiter=",")
-        rows = self._db.execute(
-            self.inventory_report_query(),
-            {"data_source_name": data_source_name, "library_id": library_id},
-        )
-        writer.writerow(rows.keys())
-        writer.writerows(rows)
+    def generate_report(self, data_source_name: str, library_id: int) -> str:
+        """Generate a csv file and return the file path"""
+        with tempfile.NamedTemporaryFile(
+            "w",
+            delete=False,
+        ) as temp:
+            writer = csv.writer(temp, delimiter=",")
+            rows = self._db.execute(
+                text(self.inventory_report_query()),
+                {"data_source_name": data_source_name, "library_id": library_id},
+            )
+            writer.writerow(rows.keys())
+            writer.writerows(rows)
+        return temp.name
 
     def inventory_report_query(self) -> str:
         return """

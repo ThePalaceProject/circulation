@@ -3,6 +3,7 @@ import datetime
 import json
 import uuid
 from enum import Enum
+from typing import Any
 
 from pydantic.dataclasses import dataclass
 from sqlalchemy import Column, DateTime, String
@@ -38,7 +39,7 @@ class AsyncTask(Base):
     processing_start_time = Column(DateTime, nullable=True)
     processing_end_time = Column(DateTime, nullable=True)
     status_details = Column(String, nullable=True)
-    data = Column(MutableDict.as_mutable(JSON), default={})
+    data: dict[str, Any] = Column(MutableDict.as_mutable(JSON), default={})
 
     def __repr__(self):
         return f"<{self.__class__.__name__}({repr(self.__dict__)})>"
@@ -56,12 +57,12 @@ class AsyncTask(Base):
             raise Exception(
                 "The task must be in the PROCESSING state in order to transition to a completion state"
             )
-        self.status = AsyncTaskStatus.FAIL
+        self.status = AsyncTaskStatus.FAILURE
         self.processing_end_time = datetime.datetime.now()
         self.status_details = failure_details
 
 
-def start_next_task(_db, task_type: str) -> AsyncTask | None:
+def start_next_task(_db, task_type: AsyncTaskType) -> AsyncTask | None:
     """
     Start the next ready task in the queue of the specified type.
     The next task will be the oldest task in the READY state.

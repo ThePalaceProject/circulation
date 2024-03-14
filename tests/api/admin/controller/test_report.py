@@ -34,8 +34,8 @@ class TestReportController:
         ) as ctx:
             response = ctrl.generate_inventory_report()
             assert response.status_code == HTTPStatus.ACCEPTED
-            body = json.loads(response.data)
-            assert body["message"].__contains__("admin@email.com")
+            body = json.loads(response.data)  # type: ignore
+            assert body and body["message"].__contains__("admin@email.com")
             assert not body.__contains__("already")
 
         # check that when generating a duplicate request a 409 is returned.
@@ -44,7 +44,7 @@ class TestReportController:
             admin=system_admin,
         ) as ctx:
             response = ctrl.generate_inventory_report()
-            body = json.loads(response.data)
+            body = json.loads(response.data)  # type: ignore
             assert response.status_code == HTTPStatus.CONFLICT
-            assert body["message"].__contains__("admin@email.com")
+            assert body and body["message"].__contains__("admin@email.com")
             assert body["message"].__contains__("already")

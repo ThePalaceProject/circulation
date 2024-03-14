@@ -1,4 +1,4 @@
-from _datetime import datetime, timedelta
+from datetime import datetime, timedelta
 
 from core.model import get_one_or_create
 from core.model.asynctask import (
@@ -35,20 +35,22 @@ class TestAsyncTAsk:
         session.commit()
 
         # retrieve the first task
-        first_retrieved: AsyncTask = start_next_task(
+        first_retrieved = start_next_task(
             session, task_type=AsyncTaskType.INVENTORY_REPORT
         )
-        print(f"first_retrieved={first_retrieved}")
+
+        assert first_retrieved
         assert first_retrieved.id == task2.id
         assert first_retrieved.created == oldest_task_date
         assert first_retrieved.status == AsyncTaskStatus.PROCESSING
         assert first_retrieved.processing_start_time
 
         # verify that it is no longer returned by the next_ready_task
-        second_retrieved: AsyncTask = start_next_task(
+        second_retrieved = start_next_task(
             session, task_type=AsyncTaskType.INVENTORY_REPORT
         )
-        assert second_retrieved.id == task1.id
+
+        assert second_retrieved and second_retrieved.id == task1.id
 
     def test_queue_task(self, db: DatabaseTransactionFixture):
         session = db.session
