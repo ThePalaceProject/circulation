@@ -1,3 +1,4 @@
+import json
 from http import HTTPStatus
 
 import pytest
@@ -27,23 +28,23 @@ class TestReportController:
         library = report_fixture.ctrl.db.default_library()
         system_admin, _ = create(db.session, Admin, email="admin@email.com")
         system_admin.add_role(AdminRole.SYSTEM_ADMIN)
-        default = db.default_library()
-        library1 = db.library()
-        with report_fixture.request_context_with_admin(
+        with report_fixture.request_context_with_library_and_admin(
             f"/",
             admin=system_admin,
         ) as ctx:
             response = ctrl.generate_inventory_report()
             assert response.status_code == HTTPStatus.ACCEPTED
-            assert response.response["message"].__contains__("admin@email.com")
-            assert not response.response["message"].__contains__("already")
+            body = json.loads(response.data)
+            assert body["message"].__contains__("admin@email.com")
+            assert not body.__contains__("already")
 
         # check that when generating a duplicate request a 409 is returned.
-        with report_fixture.request_context_with_admin(
+        with report_fixture.request_context_with_library_and_admin(
             f"/",
             admin=system_admin,
         ) as ctx:
             response = ctrl.generate_inventory_report()
+            body = json.loads(response.data)
             assert response.status_code == HTTPStatus.CONFLICT
-            assert response.response["message"].__contains__("admin@email.com")
-            assert response.response["message"].__contains__("already")
+            assert body["message"].__contains__("admin@email.com")
+            assert body["message"].__contains__("already")
