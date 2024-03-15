@@ -32,7 +32,7 @@ class AsyncTask(Base):
     __tablename__ = "asynctasks"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created = Column(
-        DateTime(timezone=True), index=False, nullable=False, default=utc_now
+        DateTime(timezone=True), index=True, nullable=False, default=utc_now
     )
     task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=False, nullable=False)
     status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=False, nullable=False)

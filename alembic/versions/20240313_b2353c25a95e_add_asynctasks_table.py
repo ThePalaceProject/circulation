@@ -47,18 +47,16 @@ def upgrade() -> None:
         sa.Column("data", postgresql.JSONB(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    # op.create_index(
-    #     op.f("ix_asynctasks_tasktype_status_created"),
-    #     "asynctasks",
-    #     ["task_type", "status", "created"],
-    #     unique=False,
-    # )
+    op.create_index(
+        op.f("ix_asynctasks_created"),
+        "asynctasks",
+        ["created"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
-    # op.drop_index(
-    #     op.f("ix_asynctasks_tasktype_status_created"), table_name="asynctasks"
-    # )
+    op.drop_index(op.f("ix_asynctasks_created"), table_name="asynctasks")
     op.drop_table("asynctasks")
     sa.Enum(name="asynctasktype").drop(op.get_bind(), checkfirst=False)
     sa.Enum(name="asynctaskstatus").drop(op.get_bind(), checkfirst=False)
