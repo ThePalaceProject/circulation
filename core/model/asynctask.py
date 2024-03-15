@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic.dataclasses import dataclass
 from sqlalchemy import Column, DateTime, String
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
@@ -32,14 +32,14 @@ class AsyncTask(Base):
     __tablename__ = "asynctasks"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created = Column(
-        DateTime(timezone=True), index=True, nullable=False, default=utc_now
+        DateTime(timezone=True), index=False, nullable=False, default=utc_now
     )
-    task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=True, nullable=False)
-    status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=True, nullable=False)
+    task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=False, nullable=False)
+    status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=False, nullable=False)
     processing_start_time = Column(DateTime(timezone=True), nullable=True)
     processing_end_time = Column(DateTime(timezone=True), nullable=True)
     status_details = Column(String, nullable=True)
-    data: dict[str, Any] = Column(MutableDict.as_mutable(JSON), default={})
+    data: dict[str, Any] = Column(MutableDict.as_mutable(JSONB), default={})
 
     def __repr__(self):
         return f"<{self.__class__.__name__}({repr(self.__dict__)})>"
