@@ -41,9 +41,6 @@ class AsyncTask(Base):
     status_details = Column(String, nullable=True)
     data: dict[str, Any] = Column(MutableDict.as_mutable(JSONB), default={})
 
-    def __repr__(self):
-        return f"<{self.__class__.__name__}({repr(self.__dict__)})>"
-
     def complete(self):
         if self.status != AsyncTaskStatus.PROCESSING:
             raise Exception(

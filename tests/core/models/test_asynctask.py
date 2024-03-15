@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from core.model import get_one_or_create
 from core.model.asynctask import (
     AsyncTask,
@@ -79,3 +81,48 @@ class TestAsyncTask:
         )
         assert is_new
         assert task3.id != task.id
+
+    def test_complete(self, db: DatabaseTransactionFixture):
+        session = db.session
+        task, is_new = queue_task(
+            session, task_type=AsyncTaskType.INVENTORY_REPORT, data={}
+        )
+
+        assert task.status == AsyncTaskStatus.READY
+        assert not task.processing_start_time
+        assert not task.processing_end_time
+        with pytest.raises(Exception):
+            task.complete()
+
+        task = start_next_task(session, AsyncTaskType.INVENTORY_REPORT)
+
+        assert task.status == AsyncTaskStatus.PROCESSING
+        assert task.processing_start_time
+        task.complete()
+        assert task.status == AsyncTaskStatus.SUCCESS
+        assert task.processing_end_time
+        with pytest.raises(Exception):
+            task.complete()
+
+    def test_fail(self, db: DatabaseTransactionFixture):
+        session = db.session
+        task, is_new = queue_task(
+            session, task_type=AsyncTaskType.INVENTORY_REPORT, data={}
+        )
+
+        assert task.status == AsyncTaskStatus.READY
+        assert not task.processing_start_time
+        assert not task.processing_end_time
+        with pytest.raises(Exception):
+            task.fail("details")
+
+        task = start_next_task(session, AsyncTaskType.INVENTORY_REPORT)
+
+        assert task.status == AsyncTaskStatus.PROCESSING
+        assert task.processing_start_time
+        task.fail("details")
+        assert task.status == AsyncTaskStatus.FAILURE
+        assert task.processing_end_time
+        assert task.status_details == "details"
+        with pytest.raises(Exception):
+            task.fail()
