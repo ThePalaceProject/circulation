@@ -93,3 +93,12 @@ def previous_months(number_of_months: int) -> tuple[datetime.date, datetime.date
     start = start.replace(day=1)
     until = now.replace(day=1)
     return start.date(), until.date()
+
+
+def minute_timestamp(dt: datetime.datetime) -> datetime.datetime:
+    """Minute resolution timestamp by truncating the seconds from a datetime object.
+
+    :param dt: datetime object with seconds resolution
+    :return: datetime object with minute resolution
+    """
+    return datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute)
