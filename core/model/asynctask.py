@@ -34,8 +34,8 @@ class AsyncTask(Base):
     created = Column(
         DateTime(timezone=True), index=True, nullable=False, default=utc_now
     )
-    task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=False, nullable=False)
-    status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=False, nullable=False)
+    task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=True, nullable=False)
+    status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=True, nullable=False)
     processing_start_time = Column(DateTime(timezone=True), nullable=True)
     processing_end_time = Column(DateTime(timezone=True), nullable=True)
     status_details = Column(String, nullable=True)
