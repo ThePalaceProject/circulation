@@ -399,18 +399,20 @@ class Identifier(Base, IdentifierConstants):
 
     @property
     def urn(self) -> str:
-        identifier_text = quote(self.identifier or "")
-        if self.type == Identifier.ISBN:
-            return self.ISBN_URN_SCHEME_PREFIX + identifier_text
-        elif self.type == Identifier.URI:
-            return self.identifier or ""
-        elif self.type == Identifier.GUTENBERG_ID:
-            return self.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
+        return self._urn_from_type_and_value(self.type, self.identifier)
+
+    @classmethod
+    def _urn_from_type_and_value(cls, id_type: str | None, id_value: str | None) -> str:
+        identifier_text = quote(id_value or "")
+        if id_type == Identifier.ISBN:
+            return cls.ISBN_URN_SCHEME_PREFIX + identifier_text
+        elif id_type == Identifier.URI:
+            return id_value or ""
+        elif id_type == Identifier.GUTENBERG_ID:
+            return cls.GUTENBERG_URN_SCHEME_PREFIX + identifier_text
         else:
-            identifier_type = quote(self.type or "")
-            return self.URN_SCHEME_PREFIX + "{}/{}".format(
-                identifier_type, identifier_text
-            )
+            identifier_type = quote(id_type or "")
+            return f"{cls.URN_SCHEME_PREFIX}{identifier_type}/{identifier_text}"
 
     @property
     def work(self):
@@ -546,6 +548,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str,
         identifier_type: str,
         must_support_license_pools: bool = False,
+        autocreate: bool = True,
     ) -> tuple[Identifier, bool]:
         """Parse identifier string.
 
@@ -554,6 +557,7 @@ class Identifier(Base, IdentifierConstants):
         :param identifier_type: Identifier's type
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
+        :param autocreate: Boolean value indicating whether an identifier should be created if it's not found.
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
         """
         if must_support_license_pools:
@@ -565,7 +569,9 @@ class Identifier(Base, IdentifierConstants):
                 # This is fine.
                 pass
 
-        return cls.for_foreign_id(_db, identifier_type, identifier_string)
+        return cls.for_foreign_id(
+            _db, identifier_type, identifier_string, autocreate=autocreate
+        )
 
     @classmethod
     @overload
@@ -574,6 +580,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str,
         must_support_license_pools: bool = False,
+        autocreate=True,
     ) -> tuple[Identifier, bool]:
         ...
 
@@ -584,6 +591,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str | None,
         must_support_license_pools: bool = False,
+        autocreate=True,
     ) -> tuple[Identifier | None, bool | None]:
         ...
 
@@ -593,6 +601,7 @@ class Identifier(Base, IdentifierConstants):
         _db: Session,
         identifier_string: str | None,
         must_support_license_pools: bool = False,
+        autocreate=True,
     ) -> tuple[Identifier | None, bool | None]:
         """Parse identifier string.
 
@@ -600,6 +609,7 @@ class Identifier(Base, IdentifierConstants):
         :param identifier_string: String containing an identifier
         :param must_support_license_pools: Boolean value indicating whether there should be a DataSource that provides
             licenses for books identified by the given identifier
+        :param autocreate: Boolean value indicating whether an identifier should be created if it's not found.
         :return: 2-tuple containing Identifier object and a boolean value indicating whether it's new
         """
         # I added this in here in my refactoring because there is a test
@@ -615,7 +625,11 @@ class Identifier(Base, IdentifierConstants):
         )
 
         return cls._parse_urn(
-            _db, identifier_string, identifier_type, must_support_license_pools
+            _db,
+            identifier_string,
+            identifier_type,
+            must_support_license_pools,
+            autocreate=autocreate,
         )
 
     @classmethod
