@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from typing import Literal
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 import pytz
 from freezegun import freeze_time
+from sqlalchemy.sql.expression import and_, null
 
 from api.model.time_tracking import PlaytimeTimeEntry
 from core.config import Configuration
@@ -15,7 +17,6 @@ from core.jobs.playtime_entries import (
     PlaytimeEntriesEmailReportsScript,
     PlaytimeEntriesSummationScript,
 )
-from core.model import create
 from core.model.collection import Collection
 from core.model.identifier import Equivalency, Identifier
 from core.model.library import Library
@@ -41,6 +42,9 @@ def create_playtime_entries(
             library_id=library.id,
             collection_id=collection.id,
             total_seconds_played=entry.seconds_played,
+            identifier_str=identifier.urn,
+            collection_name=collection.name,
+            library_name=library.name,
         )
         db.session.add(inserted)
         all_inserted.append(inserted)
@@ -60,10 +64,24 @@ class TestPlaytimeEntriesSummationScript:
         P = PlaytimeTimeEntry
         dk = date2k
         identifier = db.identifier()
-        identifier2 = db.identifier()
-        collection = db.default_collection()
-        collection2 = db.collection()
+        collection = db.collection()
         library = db.default_library()
+
+        c2_old_name = "Colletcion 2 with typo"
+        c2_new_name = "Collection 2"
+        id2_old_value = "original-id"
+        id2_new_value = "updated-id"
+        id2_old_urn = f"urn:isbn:{id2_old_value}"
+        id2_new_urn = f"urn:isbn:{id2_new_value}"
+        l2_old_name = "Lirbrary 2 with typo"
+        l2_new_name = "Library 2"
+
+        identifier2 = db.identifier(
+            identifier_type=Identifier.ISBN, foreign_id=id2_old_value
+        )
+        collection2 = db.collection(name=c2_old_name)
+        library2 = db.library(name=l2_old_name)
+
         entries = create_playtime_entries(
             db,
             identifier,
@@ -97,6 +115,17 @@ class TestPlaytimeEntriesSummationScript:
             P(id="1", during_minute=dk(m=1), seconds_played=40),
         )
 
+        # Different library, should get grouped separately.
+        entries4 = create_playtime_entries(
+            db,
+            identifier2,
+            collection2,
+            library2,
+            P(id="0", during_minute=dk(m=0), seconds_played=30),
+            P(id="1", during_minute=dk(m=0), seconds_played=40),
+            P(id="2", during_minute=dk(m=0), seconds_played=30),
+        )
+
         # This entry should not be considered as it is too recent
         [out_of_scope_entry] = create_playtime_entries(
             db,
@@ -116,9 +145,52 @@ class TestPlaytimeEntriesSummationScript:
         )
         processed_entry.processed = True
 
+        # Update identifer2, collection2 and library2.
+        # The existing playtime entries should remain unchanged, but the resulting
+        # playtime summary records should reflect these changes.
+        identifier2.identifier = id2_new_value
+        collection2.integration_configuration.name = c2_new_name
+        library2.name = l2_new_name
+
+        presummation_entries = db.session.query(PlaytimeEntry).count()
+
         PlaytimeEntriesSummationScript(db.session).run()
 
-        playtimes = (
+        postsummation_entries = db.session.query(PlaytimeEntry).count()
+
+        # The old "processed_entry" has been deleted, reducing the entry count
+        # by 1. Counts for the associated id2, c(1) and l(1) are also reduced by 1.
+        assert presummation_entries == 15
+        assert postsummation_entries == 14
+
+        # Ensure that the playtime entries have the original identifier 2 urn.
+        i2_entries = (
+            db.session.query(PlaytimeEntry)
+            .where(PlaytimeEntry.identifier_id == identifier2.id)
+            .all()
+        )
+        assert len(i2_entries) == 10
+        assert all(e.identifier_str == id2_old_urn for e in i2_entries)
+
+        # Ensure that the playtime entries have the original collection 2 name.
+        c2_entries = (
+            db.session.query(PlaytimeEntry)
+            .where(PlaytimeEntry.collection_id == collection2.id)
+            .all()
+        )
+        assert len(c2_entries) == 5
+        assert all(e.collection_name == c2_old_name for e in c2_entries)
+
+        # Ensure that the playtime entries have the original library 2 name.
+        l2_entries = (
+            db.session.query(PlaytimeEntry)
+            .where(PlaytimeEntry.library_id == library2.id)
+            .all()
+        )
+        assert len(l2_entries) == 3
+        assert all(e.library_name == l2_old_name for e in l2_entries)
+
+        summaries = (
             db.session.query(PlaytimeSummary)
             .order_by(
                 PlaytimeSummary.identifier_id,
@@ -129,39 +201,63 @@ class TestPlaytimeEntriesSummationScript:
             .all()
         )
 
-        assert len(playtimes) == 5
+        assert len(summaries) == 6
 
-        id1time, id2time1, id2time2, id2col2time, id2col2time1 = playtimes
+        id1time, id2time1, id2time2, id2col2time, id2col2time1, id2c2l2time = summaries
 
         assert id1time.identifier == identifier
         assert id1time.total_seconds_played == 120
         assert id1time.collection == collection
         assert id1time.library == library
+        assert id1time.identifier_str == identifier.urn
+        assert id1time.collection_name == collection.name
+        assert id1time.library_name == library.name
         assert id1time.timestamp == dk()
 
         assert id2time1.identifier == identifier2
         assert id2time1.total_seconds_played == 90
         assert id2time1.collection == collection
         assert id2time1.library == library
+        assert id2time1.identifier_str == id2_new_urn
+        assert id2time1.collection_name == collection.name
+        assert id2time1.library_name == library.name
         assert id2time1.timestamp == dk()
 
         assert id2time2.identifier == identifier2
         assert id2time2.collection == collection
         assert id2time2.library == library
+        assert id2time2.identifier_str == id2_new_urn
+        assert id2time2.collection_name == collection.name
+        assert id2time2.library_name == library.name
         assert id2time2.total_seconds_played == 30
         assert id2time2.timestamp == dk(m=1)
 
         assert id2col2time.identifier == identifier2
         assert id2col2time.collection == collection2
         assert id2col2time.library == library
+        assert id2col2time.identifier_str == id2_new_urn
+        assert id2col2time.collection_name == c2_new_name
+        assert id2col2time.library_name == library.name
         assert id2col2time.total_seconds_played == 30
         assert id2col2time.timestamp == dk()
 
         assert id2col2time1.identifier == identifier2
         assert id2col2time1.collection == collection2
         assert id2col2time1.library == library
+        assert id2col2time1.identifier_str == id2_new_urn
+        assert id2col2time1.collection_name == c2_new_name
+        assert id2col2time1.library_name == library.name
         assert id2col2time1.total_seconds_played == 40
         assert id2col2time1.timestamp == dk(m=1)
+
+        assert id2c2l2time.identifier == identifier2
+        assert id2c2l2time.collection == collection2
+        assert id2c2l2time.library == library2
+        assert id2c2l2time.identifier_str == id2_new_urn
+        assert id2c2l2time.collection_name == c2_new_name
+        assert id2c2l2time.library_name == l2_new_name
+        assert id2c2l2time.total_seconds_played == 100
+        assert id2c2l2time.timestamp == dk()
 
     def test_reap_processed_entries(self, db: DatabaseTransactionFixture):
         P = PlaytimeTimeEntry
@@ -200,24 +296,202 @@ class TestPlaytimeEntriesSummationScript:
             .values(PlaytimeEntry.tracking_id)
         ) == [("4",), ("5",)]
 
+    def test_deleted_related_rows(self, db: DatabaseTransactionFixture):
+        def related_rows(table, all_or_none: Literal["all"] | Literal["none"]):
+            condition = (
+                and_(
+                    table.identifier_id != null(),
+                    table.collection_id != null(),
+                    table.library_id != null(),
+                )
+                if all_or_none == "all"
+                else and_(
+                    table.identifier_id == null(),
+                    table.collection_id == null(),
+                    table.library_id == null(),
+                )
+            )
+            return db.session.query(table).where(condition)
 
-def date1m(days):
+        summaries_query = db.session.query(PlaytimeSummary).order_by(
+            PlaytimeSummary.identifier_str,
+            PlaytimeSummary.collection_name,
+            PlaytimeSummary.library_name,
+        )
+
+        # Set up our identifiers, collections, and libraries.
+        id1_value = "080442957X"
+        id2_value = "9788175257665"
+
+        c1_name = "Collection 1"
+        c2_name = "Collection 2"
+
+        l1_name = "Library 1"
+        l2_name = "Library 2"
+
+        id1 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=id1_value)
+        id2 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=id2_value)
+        id1_urn = id1.urn
+        id2_urn = id2.urn
+
+        c1 = db.collection(name=c1_name)
+        c2 = db.collection(name=c2_name)
+        l1 = db.library(name=l1_name)
+        l2 = db.library(name=l2_name)
+
+        P = PlaytimeTimeEntry
+        dk = date2k
+
+        # Create some client playtime entries.
+        book1_round1 = create_playtime_entries(
+            db,
+            id1,
+            c1,
+            l1,
+            P(id="0", during_minute=dk(m=0), seconds_played=30),
+            P(id="1", during_minute=dk(m=0), seconds_played=30),
+        )
+        book2_round1 = create_playtime_entries(
+            db,
+            id2,
+            c2,
+            l2,
+            P(id="2", during_minute=dk(m=0), seconds_played=12),
+            P(id="3", during_minute=dk(m=0), seconds_played=17),
+        )
+
+        # We should have four entries, all with keys to their associated records.
+        assert db.session.query(PlaytimeEntry).count() == 4
+        assert related_rows(PlaytimeEntry, "all").count() == 4
+        assert related_rows(PlaytimeEntry, "none").count() == 0
+
+        # We should have no summary records, at this point.
+        assert db.session.query(PlaytimeSummary).count() == 0
+
+        # Summarize those records.
+        PlaytimeEntriesSummationScript(db.session).run()
+
+        # Now we should have two summary records.
+        assert db.session.query(PlaytimeSummary).count() == 2
+        # And they should have associated identifier, collection, and library records.
+        assert related_rows(PlaytimeSummary, "all").count() == 2
+
+        # And those should be the correct identifier, collection, and library records.
+        b1sum1, b2sum1 = summaries_query.all()
+
+        assert b1sum1.total_seconds_played == 60
+        assert b1sum1.identifier_str == id1_urn
+        assert b1sum1.collection_name == c1_name
+        assert b1sum1.library_name == l1_name
+        assert b1sum1.identifier_id == id1.id
+        assert b1sum1.collection_id == c1.id
+        assert b1sum1.library_id == l1.id
+
+        assert b2sum1.total_seconds_played == 29
+        assert b2sum1.identifier_str == id2_urn
+        assert b2sum1.collection_name == c2_name
+        assert b2sum1.library_name == l2_name
+        assert b2sum1.identifier_id == id2.id
+        assert b2sum1.collection_id == c2.id
+        assert b2sum1.library_id == l2.id
+
+        # Add some new client playtime entries.
+        book1_round2 = create_playtime_entries(
+            db,
+            id1,
+            c1,
+            l1,
+            P(id="4", during_minute=dk(m=0), seconds_played=30),
+            P(id="5", during_minute=dk(m=0), seconds_played=30),
+        )
+        book2_round2 = create_playtime_entries(
+            db,
+            id2,
+            c2,
+            l2,
+            P(id="6", during_minute=dk(m=0), seconds_played=22),
+            P(id="7", during_minute=dk(m=0), seconds_played=46),
+        )
+
+        # Now we should have more entries.
+        assert db.session.query(PlaytimeEntry).count() == 8
+        assert related_rows(PlaytimeEntry, "all").count() == 8
+        assert related_rows(PlaytimeEntry, "none").count() == 0
+
+        # Remove our identifiers, collections, and libraries.
+        for obj in (id1, id2, c1, c2, l1, l2):
+            db.session.delete(obj)
+        db.session.flush()
+
+        # Verify that the entry records still exist, but that none have related values.
+        assert db.session.query(PlaytimeEntry).count() == 8
+        assert related_rows(PlaytimeEntry, "all").count() == 0
+        assert related_rows(PlaytimeEntry, "none").count() == 8
+
+        # Verify that the existing summary records have not been deleted.
+        assert db.session.query(PlaytimeSummary).count() == 2
+        # None of them should have all associated records.
+        assert related_rows(PlaytimeSummary, "all").count() == 0
+        # And all of them should have none of their associated records.
+        assert related_rows(PlaytimeSummary, "none").count() == 2
+
+        # Run the summarization script again.
+        PlaytimeEntriesSummationScript(db.session).run()
+
+        # We should have the same summary records, none of which have links.
+        assert db.session.query(PlaytimeSummary).count() == 2
+        assert related_rows(PlaytimeSummary, "all").count() == 0
+        assert related_rows(PlaytimeSummary, "none").count() == 2
+
+        # Verify the times and other details.
+        b1sum1, b2sum1 = summaries_query.all()
+
+        assert b1sum1.total_seconds_played == 120
+        assert b1sum1.identifier_str == id1_urn
+        assert b1sum1.collection_name == c1_name
+        assert b1sum1.library_name == l1_name
+        assert b1sum1.identifier_id is None
+        assert b1sum1.collection_id is None
+        assert b1sum1.library_id is None
+
+        assert b2sum1.total_seconds_played == 97
+        assert b2sum1.identifier_str == id2_urn
+        assert b2sum1.collection_name == c2_name
+        assert b2sum1.library_name == l2_name
+        assert b2sum1.identifier_id is None
+        assert b2sum1.collection_id is None
+        assert b2sum1.library_id is None
+
+
+def date1m(days) -> date:
+    """Helper to get a `date` value for 1 month ago, adjusted by the given number of days."""
     return previous_months(number_of_months=1)[0] + timedelta(days=days)
 
 
-def playtime(session, identifier, collection, library, timestamp, total_seconds):
-    return create(
+def dt1m(days) -> datetime:
+    """Helper to get a `datetime` value for 1 month ago, adjusted by the given number of days."""
+    return datetime.combine(date1m(days), datetime.min.time(), tzinfo=pytz.UTC)
+
+
+def playtime(
+    session,
+    identifier: Identifier,
+    collection: Collection,
+    library: Library,
+    timestamp: datetime,
+    total_seconds: int,
+):
+    return PlaytimeSummary.add(
         session,
-        PlaytimeSummary,
+        ts=timestamp,
+        seconds=total_seconds,
         identifier=identifier,
         collection=collection,
         library=library,
-        timestamp=timestamp,
-        total_seconds_played=total_seconds,
         identifier_str=identifier.urn,
         collection_name=collection.name,
         library_name=library.name,
-    )[0]
+    )
 
 
 class TestPlaytimeEntriesEmailReportsScript:
@@ -251,28 +525,28 @@ class TestPlaytimeEntriesEmailReportsScript:
             ),
         ]
         strongest_isbn = isbn_ids["i2"].identifier
-        no_isbn = ""
+        no_isbn = None
 
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
 
-        playtime(db.session, identifier, collection, library, date1m(3), 1)
-        playtime(db.session, identifier, collection, library, date1m(31), 2)
+        playtime(db.session, identifier, collection, library, dt1m(3), 1)
+        playtime(db.session, identifier, collection, library, dt1m(31), 2)
         playtime(
-            db.session, identifier, collection, library, date1m(-31), 60
+            db.session, identifier, collection, library, dt1m(-31), 60
         )  # out of range: prior to the beginning of the default reporting period
         playtime(
-            db.session, identifier, collection, library, date1m(95), 60
+            db.session, identifier, collection, library, dt1m(95), 60
         )  # out of range: future
-        playtime(db.session, identifier2, collection, library, date1m(3), 5)
-        playtime(db.session, identifier2, collection, library, date1m(4), 6)
+        playtime(db.session, identifier2, collection, library, dt1m(3), 5)
+        playtime(db.session, identifier2, collection, library, dt1m(4), 6)
 
         # Collection2
-        playtime(db.session, identifier, collection2, library, date1m(3), 100)
+        playtime(db.session, identifier, collection2, library, dt1m(3), 100)
         # library2
-        playtime(db.session, identifier, collection, library2, date1m(3), 200)
+        playtime(db.session, identifier, collection, library2, dt1m(3), 200)
         # collection2 library2
-        playtime(db.session, identifier, collection2, library2, date1m(3), 300)
+        playtime(db.session, identifier, collection2, library2, dt1m(3), 300)
 
         reporting_name = "test cm"
         with (
@@ -299,7 +573,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         call_args = writer().writerow.call_args_list
         assert call_args == [
             call(
-                [
+                (  # Header
                     "date",
                     "urn",
                     "isbn",
@@ -307,8 +581,8 @@ class TestPlaytimeEntriesEmailReportsScript:
                     "library",
                     "title",
                     "total seconds",
-                ]
-            ),  # Header
+                )
+            ),
             call(
                 (
                     column1,
@@ -382,7 +656,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-        _ = playtime(db.session, identifier, collection, library, date1m(20), 1)
+        _ = playtime(db.session, identifier, collection, library, dt1m(20), 1)
 
         with patch("core.jobs.playtime_entries.os.environ", new={}):
             script = PlaytimeEntriesEmailReportsScript(db.session)
@@ -392,85 +666,6 @@ class TestPlaytimeEntriesEmailReportsScript:
             assert script._log.error.call_count == 1
             assert script._log.warning.call_count == 1
             assert "date,urn,isbn,collection," in script._log.warning.call_args[0][0]
-
-    @pytest.mark.parametrize(
-        "id_key, equivalents, default_value, expected_isbn",
-        [
-            # If the identifier is an ISBN, we will not use an equivalency.
-            [
-                "i1",
-                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
-                "",
-                "080442957X",
-            ],
-            [
-                "i2",
-                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
-                "",
-                "9788175257665",
-            ],
-            ["i1", (("i1", "i2", 200),), "", "080442957X"],
-            ["i2", (("i2", "i1", 200),), "", "9788175257665"],
-            # If identifier is not an ISBN, but has an equivalency that is, use the strongest match.
-            [
-                "g2",
-                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
-                "",
-                "080442957X",
-            ],
-            [
-                "g2",
-                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
-                "",
-                "9788175257665",
-            ],
-            # If we don't find an equivalent ISBN identifier, then we'll use the default.
-            ["g2", (), "default value", "default value"],
-            ["g1", (("g1", "g2", 1),), "default value", "default value"],
-            # If identifier is None, expect default value.
-            [None, (), "default value", "default value"],
-        ],
-    )
-    def test__isbn_for_identifier(
-        self,
-        db: DatabaseTransactionFixture,
-        id_key: str | None,
-        equivalents: tuple[tuple[str, str, int | float]],
-        default_value: str,
-        expected_isbn: str,
-    ):
-        ids: dict[str, Identifier] = {
-            "i1": db.identifier(
-                identifier_type=Identifier.ISBN, foreign_id="080442957X"
-            ),
-            "i2": db.identifier(
-                identifier_type=Identifier.ISBN, foreign_id="9788175257665"
-            ),
-            "g1": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
-            "g2": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
-        }
-        equivalencies = [
-            Equivalency(
-                input_id=ids[equivalent[0]].id,
-                output_id=ids[equivalent[1]].id,
-                strength=equivalent[2],
-            )
-            for equivalent in equivalents
-        ]
-        test_identifier: Identifier | None = ids[id_key] if id_key is not None else None
-        if test_identifier is not None:
-            test_identifier.equivalencies = equivalencies
-
-        # We're using the RecursiveEquivalencyCache, so must refresh it.
-        EquivalentIdentifiersCoverageProvider(db.session).run()
-
-        # Act
-        result = PlaytimeEntriesEmailReportsScript._isbn_for_identifier(
-            test_identifier,
-            default_value=default_value,
-        )
-        # Assert
-        assert result == expected_isbn
 
     @pytest.mark.parametrize(
         "current_utc_time, start_arg, expected_start, until_arg, expected_until",

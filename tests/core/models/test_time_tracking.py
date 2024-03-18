@@ -3,8 +3,13 @@ import datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from core.model import create
-from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
+from core.equivalents_coverage import EquivalentIdentifiersCoverageProvider
+from core.model import Equivalency, Identifier, create
+from core.model.time_tracking import (
+    PlaytimeEntry,
+    PlaytimeSummary,
+    _isbn_for_identifier,
+)
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -21,6 +26,9 @@ class TestPlaytimeEntries:
             identifier_id=identifier.id,
             collection_id=collection.id,
             library_id=library.id,
+            identifier_str=identifier.urn,
+            collection_name=collection.name,
+            library_name=library.name,
             timestamp=now,
             total_seconds_played=30,
             tracking_id="tracking-id",
@@ -29,6 +37,9 @@ class TestPlaytimeEntries:
         assert entry.identifier == identifier
         assert entry.collection == collection
         assert entry.library == library
+        assert entry.identifier_str == identifier.urn
+        assert entry.collection_name == collection.name
+        assert entry.library_name == library.name
         assert entry.total_seconds_played == 30
         assert entry.timestamp == now
         assert entry.tracking_id == "tracking-id"
@@ -47,6 +58,9 @@ class TestPlaytimeEntries:
                 identifier_id=identifier.id,
                 collection_id=collection.id,
                 library_id=library.id,
+                identifier_str=identifier.urn,
+                collection_name=collection.name,
+                library_name=library.name,
                 timestamp=now,
                 total_seconds_played=61,
                 tracking_id="tracking-id",
@@ -66,6 +80,9 @@ class TestPlaytimeEntries:
             identifier_id=identifier.id,
             collection_id=collection.id,
             library_id=library.id,
+            identifier_str=identifier.urn,
+            collection_name=collection.name,
+            library_name=library.name,
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-0",
@@ -77,6 +94,9 @@ class TestPlaytimeEntries:
             identifier_id=identifier_2.id,
             collection_id=collection.id,
             library_id=library.id,
+            identifier_str=identifier_2.urn,
+            collection_name=collection.name,
+            library_name=library.name,
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-0",
@@ -88,6 +108,9 @@ class TestPlaytimeEntries:
             identifier_id=identifier.id,
             collection_id=collection.id,
             library_id=library.id,
+            identifier_str=identifier.urn,
+            collection_name=collection.name,
+            library_name=library.name,
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-1",
@@ -100,12 +123,15 @@ class TestPlaytimeEntries:
                 identifier_id=identifier.id,
                 collection_id=collection.id,
                 library_id=library.id,
+                identifier_str=identifier.urn,
+                collection_name=collection.name,
+                library_name=library.name,
                 timestamp=now,
                 total_seconds_played=60,
                 tracking_id="tracking-id-0",
             )
         assert (
-            f"Key (identifier_id, collection_id, library_id, tracking_id)=({identifier.id}, {collection.id}, {library.id}, tracking-id-0) already exists"
+            f"Key (tracking_id, identifier_str, collection_name, library_name)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}) already exists"
             in raised.exconly()
         )
 
@@ -144,7 +170,7 @@ class TestPlaytimeSummaries:
                 total_seconds_played=600,
             )
         assert (
-            f'Key (identifier_str, collection_name, library_name, "timestamp")=({identifier.urn}, {collection.name}, {library.name}, 2000-01-01 12:00:00+00) already exists'
+            f'Key ("timestamp", identifier_str, collection_name, library_name)=(2000-01-01 12:00:00+00, {identifier.urn}, {collection.name}, {library.name}) already exists'
             in raised.exconly()
         )
 
@@ -191,5 +217,78 @@ class TestPlaytimeSummaries:
         db.session.delete(identifier)
         db.session.refresh(entry)
 
-        assert entry.identifier == None
+        assert entry.identifier is None
         assert entry.identifier_str == urn
+
+
+class TestHelpers:
+    @pytest.mark.parametrize(
+        "id_key, equivalents, expected_isbn",
+        [
+            # If the identifier is an ISBN, we will not use an equivalency.
+            [
+                "i1",
+                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
+                "080442957X",
+            ],
+            [
+                "i2",
+                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
+                "9788175257665",
+            ],
+            ["i1", (("i1", "i2", 200),), "080442957X"],
+            ["i2", (("i2", "i1", 200),), "9788175257665"],
+            # If identifier is not an ISBN, but has an equivalency that is, use the strongest match.
+            [
+                "g2",
+                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
+                "080442957X",
+            ],
+            [
+                "g2",
+                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
+                "9788175257665",
+            ],
+            # If we don't find an equivalent ISBN identifier, then we should get None.
+            ["g2", (), None],
+            ["g1", (("g1", "g2", 1),), None],
+            # If identifier is None, expect default value.
+            [None, (), None],
+        ],
+    )
+    def test__isbn_for_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        id_key: str | None,
+        equivalents: tuple[tuple[str, str, int | float]],
+        expected_isbn: str,
+    ):
+        ids: dict[str, Identifier] = {
+            "i1": db.identifier(
+                identifier_type=Identifier.ISBN, foreign_id="080442957X"
+            ),
+            "i2": db.identifier(
+                identifier_type=Identifier.ISBN, foreign_id="9788175257665"
+            ),
+            "g1": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
+            "g2": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
+        }
+        equivalencies = [
+            Equivalency(
+                input_id=ids[equivalent[0]].id,
+                output_id=ids[equivalent[1]].id,
+                strength=equivalent[2],
+            )
+            for equivalent in equivalents
+        ]
+        test_identifier: Identifier | None = ids[id_key] if id_key is not None else None
+        if test_identifier is not None:
+            test_identifier.equivalencies = equivalencies
+
+        # We're using the RecursiveEquivalencyCache, so must refresh it.
+        EquivalentIdentifiersCoverageProvider(db.session).run()
+
+        # Act
+        result = _isbn_for_identifier(test_identifier)
+        # Assert
+        assert result == expected_isbn
