@@ -48,13 +48,13 @@ from core.model import (
     get_one_or_create,
     production_session,
 )
-from core.model.asynctask import (
-    AsyncTask,
-    AsyncTaskType,
+from core.model.classification import Classification
+from core.model.deferredtask import (
+    DeferredTask,
+    DeferredTaskType,
     InventoryReportTaskData,
     start_next_task,
 )
-from core.model.classification import Classification
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
@@ -2795,13 +2795,13 @@ class GenerateInventoryReports(Script):
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
 
         while True:
-            task = start_next_task(self._db, AsyncTaskType.INVENTORY_REPORT)
+            task = start_next_task(self._db, DeferredTaskType.INVENTORY_REPORT)
             if not task:
                 return
 
             self.process_task(task)
 
-    def process_task(self, task: AsyncTask):
+    def process_task(self, task: DeferredTask):
         data = InventoryReportTaskData(**task.data)
         files = []
         try:

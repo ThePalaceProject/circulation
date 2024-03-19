@@ -14,73 +14,73 @@ from core.model import Base, create
 from core.util.datetime_helpers import utc_now
 
 
-class AsyncTaskStatus(Enum):
+class DeferredTaskStatus(Enum):
     READY = auto()
     PROCESSING = auto()
     SUCCESS = auto()
     FAILURE = auto()
 
 
-class AsyncTaskType(Enum):
+class DeferredTaskType(Enum):
     INVENTORY_REPORT = auto()
 
 
-class AsyncTask(Base):
-    """An asynchronous task."""
+class DeferredTask(Base):
+    """A task to be processed at some point in the future."""
 
-    __tablename__ = "asynctasks"
+    __tablename__ = "deferredtasks"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created = Column(
         DateTime(timezone=True), index=True, nullable=False, default=utc_now
     )
-    task_type = Column(SqlAlchemyEnum(AsyncTaskType), index=True, nullable=False)
-    status = Column(SqlAlchemyEnum(AsyncTaskStatus), index=True, nullable=False)
+    task_type = Column(SqlAlchemyEnum(DeferredTaskType), index=True, nullable=False)
+    status = Column(SqlAlchemyEnum(DeferredTaskStatus), index=True, nullable=False)
     processing_start_time = Column(DateTime(timezone=True), nullable=True)
     processing_end_time = Column(DateTime(timezone=True), nullable=True)
     status_details = Column(String, nullable=True)
     data: dict[str, Any] = Column(MutableDict.as_mutable(JSONB), default={})
 
     def complete(self):
-        if self.status != AsyncTaskStatus.PROCESSING:
+        if self.status != DeferredTaskStatus.PROCESSING:
             raise Exception(
                 "The task must be in the PROCESSING state in order to transition to a completion state"
             )
-        self.status = AsyncTaskStatus.SUCCESS
+        self.status = DeferredTaskStatus.SUCCESS
         self.processing_end_time = datetime.datetime.now()
 
     def fail(self, failure_details: str):
-        if self.status != AsyncTaskStatus.PROCESSING:
+        if self.status != DeferredTaskStatus.PROCESSING:
             raise Exception(
                 "The task must be in the PROCESSING state in order to transition to a completion state"
             )
-        self.status = AsyncTaskStatus.FAILURE
+        self.status = DeferredTaskStatus.FAILURE
         self.processing_end_time = datetime.datetime.now()
         self.status_details = failure_details
 
 
-def start_next_task(_db, task_type: AsyncTaskType) -> AsyncTask | None:
+def start_next_task(_db, task_type: DeferredTaskType) -> DeferredTask | None:
     """
     Start the next ready task in the queue of the specified type.
     The next task will be the oldest task in the READY state.
     Once retrieved the status is set to the "PROCESSING" status and the
     start time property is set to the current time.
     """
-    t: AsyncTask = (
-        _db.query(AsyncTask)
-        .filter(AsyncTask.task_type == task_type)
-        .filter(AsyncTask.status == AsyncTaskStatus.READY)
-        .order_by(AsyncTask.created)
+    t: DeferredTask = (
+        _db.query(DeferredTask)
+        .filter(DeferredTask.task_type == task_type)
+        .filter(DeferredTask.status == DeferredTaskStatus.READY)
+        .order_by(DeferredTask.created)
         .first()
     )
 
     if t:
-        t.status = AsyncTaskStatus.PROCESSING
+        t.status = DeferredTaskStatus.PROCESSING
         t.processing_start_time = datetime.datetime.now()
 
     return t
 
 
-def queue_task(_db, task_type, data: dict[str, str]) -> tuple[AsyncTask, bool]:
+def queue_task(_db, task_type, data: dict[str, str]) -> tuple[DeferredTask, bool]:
     """
     Add a new task of the specified task type to the task queue.
     If the task is a duplicate - ie the task data and task_type match an existing task in the
@@ -92,10 +92,10 @@ def queue_task(_db, task_type, data: dict[str, str]) -> tuple[AsyncTask, bool]:
     """
     # does an unprocessed task like this already exist?
     t = (
-        _db.query(AsyncTask)
-        .filter(AsyncTask.task_type == task_type)
-        .filter(AsyncTask.status == AsyncTaskStatus.READY)
-        .filter(AsyncTask.data.cast(String) == json.dumps(data))
+        _db.query(DeferredTask)
+        .filter(DeferredTask.task_type == task_type)
+        .filter(DeferredTask.status == DeferredTaskStatus.READY)
+        .filter(DeferredTask.data.cast(String) == json.dumps(data))
         .first()
     )
 
@@ -103,7 +103,11 @@ def queue_task(_db, task_type, data: dict[str, str]) -> tuple[AsyncTask, bool]:
         return t, False
     else:
         return create(
-            _db, AsyncTask, task_type=task_type, status=AsyncTaskStatus.READY, data=data
+            _db,
+            DeferredTask,
+            task_type=task_type,
+            status=DeferredTaskStatus.READY,
+            data=data,
         )
 
 

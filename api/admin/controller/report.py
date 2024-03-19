@@ -8,7 +8,11 @@ from flask import Response
 from api.controller.circulation_manager import CirculationManagerController
 from core.model import Library
 from core.model.admin import Admin
-from core.model.asynctask import AsyncTaskType, InventoryReportTaskData, queue_task
+from core.model.deferredtask import (
+    DeferredTaskType,
+    InventoryReportTaskData,
+    queue_task,
+)
 from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
@@ -26,7 +30,7 @@ class ReportController(CirculationManagerController):
                 admin_email=admin.email, admin_id=admin.id, library_id=library.id
             )
             task, is_new = queue_task(
-                self._db, task_type=AsyncTaskType.INVENTORY_REPORT, data=asdict(data)
+                self._db, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
             )
             self._db.commit()
 

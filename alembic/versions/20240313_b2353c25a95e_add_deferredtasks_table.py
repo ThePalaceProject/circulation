@@ -1,4 +1,4 @@
-"""Add asynctasks table
+"""Add deferredtasks table
 
 Revision ID: b2353c25a95e
 Revises: 9d2dccb0d6ff
@@ -19,7 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "asynctasks",
+        "deferredtasks",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("created", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
@@ -29,7 +29,7 @@ def upgrade() -> None:
                 "PROCESSING",
                 "SUCCESS",
                 "FAILURE",
-                name="asynctaskstatus",
+                name="deferredtaskstatus",
             ),
             nullable=False,
         ),
@@ -37,7 +37,7 @@ def upgrade() -> None:
             "task_type",
             sa.Enum(
                 "INVENTORY_REPORT",
-                name="asynctasktype",
+                name="deferredtasktype",
             ),
             nullable=False,
         ),
@@ -48,21 +48,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_asynctasks_created"),
+        op.f("ix_deferredtasks_created"),
         "asynctasks",
         ["created"],
         unique=False,
     )
 
     op.create_index(
-        op.f("ix_asynctasks_task_type"),
+        op.f("ix_deferredtasks_task_type"),
         "asynctasks",
         ["task_type"],
         unique=False,
     )
 
     op.create_index(
-        op.f("ix_asynctasks_status"),
+        op.f("ix_deferredtasks_status"),
         "asynctasks",
         ["status"],
         unique=False,
@@ -70,9 +70,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_asynctasks_created"), table_name="asynctasks")
-    op.drop_index(op.f("ix_asynctasks_task_type"), table_name="asynctasks")
-    op.drop_index(op.f("ix_asynctasks_status"), table_name="asynctasks")
+    op.drop_index(op.f("ix_deferredtasks_created"), table_name="deferredtasks")
+    op.drop_index(op.f("ix_deferredtasks_task_type"), table_name="deferredtasks")
+    op.drop_index(op.f("ix_deferredtasks_status"), table_name="deferredtasks")
     op.drop_table("asynctasks")
-    sa.Enum(name="asynctasktype").drop(op.get_bind(), checkfirst=False)
-    sa.Enum(name="asynctaskstatus").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="deferredtasktype").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="deferredtaskstatus").drop(op.get_bind(), checkfirst=False)

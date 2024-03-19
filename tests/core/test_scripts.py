@@ -37,14 +37,14 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.model.asynctask import (
-    AsyncTaskStatus,
-    AsyncTaskType,
+from core.model.classification import Classification, Subject
+from core.model.customlist import CustomList
+from core.model.deferredtask import (
+    DeferredTaskStatus,
+    DeferredTaskType,
     InventoryReportTaskData,
     queue_task,
 )
-from core.model.classification import Classification, Subject
-from core.model.customlist import CustomList
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
@@ -2618,10 +2618,10 @@ class TestGenerateInventoryReports:
             admin_id=1, library_id=library.id, admin_email=email
         )
         task, is_new = queue_task(
-            db.session, task_type=AsyncTaskType.INVENTORY_REPORT, data=asdict(data)
+            db.session, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
         )
 
-        assert task.status == AsyncTaskStatus.READY
+        assert task.status == DeferredTaskStatus.READY
 
         script = GenerateInventoryReports(db.session)
         send_email_mock = create_autospec(script.services.email.container.send_email)
@@ -2629,7 +2629,7 @@ class TestGenerateInventoryReports:
         script.do_run()
         send_email_mock.assert_called_once()
         args, kwargs = send_email_mock.call_args
-        assert task.status == AsyncTaskStatus.SUCCESS
+        assert task.status == DeferredTaskStatus.SUCCESS
         assert kwargs["receivers"] == [email]
         assert kwargs["subject"].__contains__("Inventory Report")
         attachments: dict = kwargs["attachments"]

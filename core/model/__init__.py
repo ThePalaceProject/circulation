@@ -520,7 +520,6 @@ from api.saml.metadata.federations.model import (
     SAMLFederation,
 )
 from core.model.admin import Admin, AdminRole
-from core.model.asynctask import AsyncTask
 from core.model.circulationevent import CirculationEvent
 from core.model.classification import Classification, Genre, Subject
 from core.model.collection import (
@@ -539,6 +538,7 @@ from core.model.coverage import (
 from core.model.credential import Credential
 from core.model.customlist import CustomList, CustomListEntry
 from core.model.datasource import DataSource
+from core.model.deferredtask import DeferredTask
 from core.model.devicetokens import DeviceToken
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.model.edition import Edition
