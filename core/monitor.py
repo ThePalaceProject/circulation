@@ -117,6 +117,8 @@ class Monitor:
         self.services = container_instance()
         self.services.init_resources()
 
+        self.exception = None
+
     @property
     def log(self):
         if not hasattr(self, "_log"):
@@ -827,7 +829,7 @@ class ReaperMonitor(Monitor):
     MAX_AGE: datetime.timedelta | int | float
     BATCH_SIZE: int = 1000
 
-    REGISTRY: list[type[ReaperMonitor]] = []
+    REGISTRY: list[type[Monitor]] = []
 
     def __init__(self, *args, **kwargs):
         self.SERVICE_NAME = "Reaper for %s" % self.MODEL_CLASS.__name__

@@ -117,8 +117,8 @@ class TestScript:
         assert "Sample" == script.script_name
 
         # If a script does define .name, that's used instead.
-        script.name = "I'm a script"
-        assert script.name == script.script_name
+        script.name = "I'm a script"  # type: ignore[attr-defined]
+        assert script.name == script.script_name  # type: ignore[attr-defined]
 
 
 class TestTimestampScript:
@@ -206,7 +206,7 @@ class TestTimestampScript:
 class TestCheckContributorNamesInDB:
     def test_process_contribution_local(self, db: DatabaseTransactionFixture):
         stdin = MockStdin()
-        cmd_args = []
+        cmd_args: list[str] = []
 
         edition_alice, pool_alice = db.edition(
             data_source_name=DataSource.GUTENBERG,
@@ -590,9 +590,11 @@ class TestPatronInputScript:
         for every patron designated by the command-line arguments.
         """
 
+        processed_patrons = []
+
         class MockPatronInputScript(PatronInputScript):
             def process_patron(self, patron):
-                patron.processed = True
+                processed_patrons.append(patron)
 
         l1 = db.library()
         p1 = db.patron()
@@ -601,18 +603,15 @@ class TestPatronInputScript:
         p1.library_id = l1.id
         p2.library_id = l1.id
         p3.library_id = l1.id
-        p1.processed = False
-        p2.processed = False
-        p3.processed = False
         p1.authorization_identifier = db.fresh_str()
         p2.authorization_identifier = db.fresh_str()
         cmd_args = [l1.short_name, p1.authorization_identifier]
         stdin = MockStdin(p2.authorization_identifier)
         script = MockPatronInputScript(db.session)
         script.do_run(cmd_args=cmd_args, stdin=stdin)
-        assert True == p1.processed
-        assert True == p2.processed
-        assert False == p3.processed
+        assert p1 in processed_patrons
+        assert p2 in processed_patrons
+        assert p3 not in processed_patrons
 
 
 class TestLibraryInputScript:
@@ -647,18 +646,19 @@ class TestLibraryInputScript:
         for every library designated by the command-line arguments.
         """
 
+        processed_libraries = []
+
         class MockLibraryInputScript(LibraryInputScript):
             def process_library(self, library):
-                library.processed = True
+                processed_libraries.append(library)
 
         l1 = db.library()
         l2 = db.library()
-        l2.processed = False
         cmd_args = [l1.name]
         script = MockLibraryInputScript(db.session)
         script.do_run(cmd_args=cmd_args)
-        assert True == l1.processed
-        assert False == l2.processed
+        assert l1 in processed_libraries
+        assert l2 not in processed_libraries
 
 
 class TestLaneSweeperScript:
@@ -1034,9 +1034,7 @@ class TestShowCollectionsScript:
 
     def test_with_multiple_collections(self, db: DatabaseTransactionFixture):
         c1 = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
-        c1.collection_password = "a"
         c2 = db.collection(name="Collection 2", protocol=BibliothecaAPI.label())
-        c2.collection_password = "b"
 
         # The output of this script is the result of running explain()
         # on both collections.
@@ -1135,6 +1133,7 @@ class TestConfigureCollectionScript:
 
         # The collection was created and configured properly.
         collection = get_one(db.session, Collection)
+        assert collection is not None
         assert "New Collection" == collection.name
         assert "url" == collection.integration_configuration.settings_dict["url"]
         assert (
@@ -1298,6 +1297,7 @@ class TestConfigureLaneScript:
 
         # The lane was created and configured properly.
         lane = get_one(db.session, Lane, display_name="NewLane")
+        assert lane is not None
         assert db.default_library() == lane.library
         assert parent == lane.parent
         assert 3 == lane.priority
@@ -1597,6 +1597,7 @@ class TestWhereAreMyBooksScript:
         )
         script.explain_collection(db.default_collection())
         out = script.output
+        assert isinstance(out, list)
 
         # This always happens.
         assert (
@@ -1710,6 +1711,7 @@ class TestWhereAreMyBooksScript:
         work.presentation_ready = True
 
         docs = search.start_migration()
+        assert docs is not None
         docs.add_documents(search.create_search_documents_from_works([work]))
         docs.finish()
 
@@ -1731,10 +1733,10 @@ class TestExplain:
         source = DataSource.lookup(db.session, DataSource.OCLC_LINKED_DATA)
         CoverageRecord.add_for(identifier, source, "an operation")
         input = StringIO()
-        output = StringIO()
+        io_output = StringIO()
         args = ["--identifier-type", "Database ID", str(identifier.id)]
-        Explain(db.session).do_run(cmd_args=args, stdin=input, stdout=output)
-        output = output.getvalue()
+        Explain(db.session).do_run(cmd_args=args, stdin=input, stdout=io_output)
+        output = io_output.getvalue()
 
         # The script ran. Spot-check that it provided various
         # information about the work, without testing the exact
@@ -1772,7 +1774,7 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         # Assert all joins have been included in the Order By
         ordered_by = script.query._order_by_clauses
         for join in [Work, LicensePool, Identifier, Classification]:
-            assert join.id in ordered_by
+            assert join.id in ordered_by  # type: ignore[attr-defined]
 
         assert Work.id in ordered_by
 
@@ -1921,7 +1923,9 @@ class TestSearchIndexCoverageRemover:
 
 class TestUpdateLaneSizeScript:
     def test_do_run(self, db, end_to_end_search_fixture: EndToEndSearchFixture):
-        end_to_end_search_fixture.external_search_index.start_migration().finish()
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        assert migration is not None
+        migration.finish()
 
         lane = db.lane()
         lane.size = 100
@@ -1951,7 +1955,9 @@ class TestUpdateLaneSizeScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        end_to_end_search_fixture.external_search_index.start_migration().finish()
+        migration = end_to_end_search_fixture.external_search_index.start_migration()
+        assert migration is not None
+        migration.finish()
 
         library = db.default_library()
         lane1 = db.lane()
@@ -2024,7 +2030,7 @@ class TestDeleteInvisibleLanesScript:
 
         # run script and verify that it had no effect:
         DeleteInvisibleLanesScript(_db=db.session).do_run([short_name])
-        top_level_fiction_lane: Lane = (
+        top_level_fiction_lane = (
             db.session.query(Lane)
             .filter(Lane.library == l1)
             .filter(Lane.parent == None)
@@ -2138,8 +2144,8 @@ class TestCustomListUpdateEntriesScript:
         )  # default + new
         assert custom_list1.size == 1 + len(data.unpopular_books)
         # last updated time has updated correctly
-        assert custom_list.auto_update_last_update == frozen_time.time_to_freeze
-        assert custom_list1.auto_update_last_update == frozen_time.time_to_freeze
+        assert custom_list.auto_update_last_update == frozen_time()
+        assert custom_list1.auto_update_last_update == frozen_time()
 
     def test_search_facets(
         self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
@@ -2374,14 +2380,18 @@ class TestLoanNotificationsScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
         now = utc_now()
         self._setup_method(db)
-        loan, _ = self.work.active_license_pool().loan_to(
+        pool = self.work.active_license_pool()
+        assert pool is not None
+        loan, _ = pool.loan_to(
             self.patron,
             now,
             now + datetime.timedelta(days=1, hours=1),
         )
 
         work2 = db.work(with_license_pool=True)
-        loan2, _ = work2.active_license_pool().loan_to(
+        pool2 = work2.active_license_pool()
+        assert pool2 is not None
+        loan2, _ = pool2.loan_to(
             self.patron,
             now,
             now + datetime.timedelta(days=2, hours=1),
