@@ -217,8 +217,8 @@ class TestPlaytimeSummaries:
         db.session.delete(identifier)
         db.session.refresh(entry)
 
-        assert entry.identifier is None
         assert entry.identifier_str == urn
+        assert entry.identifier is None
 
 
 class TestHelpers:
