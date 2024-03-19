@@ -2,7 +2,7 @@ import json
 import re
 import time
 import uuid
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock
@@ -26,6 +26,7 @@ from psycopg2.extras import NumericRange
 from sqlalchemy.sql import Delete as sqlaDelete
 
 from core.classifier import Classifier
+from core.coverage import CoverageFailure
 from core.external_search import (
     ExternalSearchIndex,
     Filter,
@@ -40,6 +41,7 @@ from core.external_search import (
 from core.lane import Facets, FeaturedFacets, Pagination, SearchFacets, WorkList
 from core.metadata_layer import ContributorData, IdentifierData
 from core.model import (
+    Collection,
     Contribution,
     Contributor,
     CustomList,
@@ -420,7 +422,9 @@ class TestExternalSearchWithWorks:
         transaction = fixture.external_search.db
         session = transaction.session
 
-        fixture.external_search_index.start_migration().finish()
+        migration = fixture.external_search_index.start_migration()
+        assert migration is not None
+        migration.finish()
         data = self._populate_works(fixture)
         fixture.populate_search_index()
 
@@ -898,9 +902,9 @@ class TestExternalSearchWithWorks:
         assert [data.washington] == p2
 
         # Test a WorkList based on a language.
-        spanish = WorkList()
-        spanish.initialize(transaction.default_library(), languages=["spa"])
-        assert [[data.sherlock_spanish]] == pages(spanish)
+        spanish_wl = WorkList()
+        spanish_wl.initialize(transaction.default_library(), languages=["spa"])
+        assert [[data.sherlock_spanish]] == pages(spanish_wl)
 
         # Test a WorkList based on a genre.
         biography_wl = WorkList()
@@ -909,22 +913,22 @@ class TestExternalSearchWithWorks:
 
         # Search results may be sorted by some field other than search
         # quality.
-        f = SearchFacets
-        by_author = f(
+        facets = SearchFacets
+        by_author_facet = facets(
             library=transaction.default_library(),
-            collection=f.COLLECTION_FULL,
-            availability=f.AVAILABLE_ALL,
-            order=f.ORDER_AUTHOR,
+            collection=facets.COLLECTION_FULL,
+            availability=facets.AVAILABLE_ALL,
+            order=facets.ORDER_AUTHOR,
         )
-        by_author = Filter(facets=by_author)
+        by_author = Filter(facets=by_author_facet)
 
-        by_title = f(
+        by_title_facet = facets(
             library=transaction.default_library(),
-            collection=f.COLLECTION_FULL,
-            availability=f.AVAILABLE_ALL,
-            order=f.ORDER_TITLE,
+            collection=facets.COLLECTION_FULL,
+            availability=facets.AVAILABLE_ALL,
+            order=facets.ORDER_TITLE,
         )
-        by_title = Filter(facets=by_title)
+        by_title = Filter(facets=by_title_facet)
 
         # By default, search results sorted by a bibliographic field
         # are also filtered to eliminate low-quality results.  In a
@@ -1117,14 +1121,14 @@ class TestFacetFilters:
 
 
 class TestSearchOrderData:
-    a1: Work
+    a1: LicensePool
     a2: LicensePool
     a: Work
-    b1: Work
+    b1: LicensePool
     b2: LicensePool
     b: Work
     by_publication_date: CustomList
-    c1: Work
+    c1: LicensePool
     c2: LicensePool
     c: Work
     collection1: Collection
@@ -1194,7 +1198,6 @@ class TestSearchOrder:
         result.moby_dick.presentation_edition.series_position = 10
         result.moby_dick.summary_text = "Ishmael"
         result.moby_dick.presentation_edition.publisher = "Project Gutenberg"
-        result.moby_dick.random = 0.1
 
         result.moby_duck = _work(
             title="Moby Duck", authors="donovan hohn", fiction=False
@@ -1205,10 +1208,8 @@ class TestSearchOrder:
         result.moby_duck.summary_text = "A compulsively readable narrative"
         result.moby_duck.presentation_edition.series_position = 1
         result.moby_duck.presentation_edition.publisher = "Penguin"
-        result.moby_duck.random = 0.9
 
         result.untitled = _work(title="[Untitled]", authors="[Unknown]")
-        result.untitled.random = 0.99
         result.untitled.presentation_edition.series_position = 5
 
         # It's easier to refer to the books as a, b, and c when not
@@ -1375,7 +1376,7 @@ class TestSearchOrder:
 
                 # We are now off the edge of the list -- we got an
                 # empty page of results and there is no next page.
-                assert None == pagination
+                assert pagination is None
 
             # Now try the same tests but in reverse order.
             facets.order_ascending = False
@@ -1559,16 +1560,16 @@ class TestAuthorFilter:
         result = TestAuthorFilterData()
         result.full = Contributor(
             display_name="Ann Leckie",
-            sort_name="Leckie, Ann",
+            sort_name="Leckie, Ann",  # type: ignore[call-arg]
             viaf="73520345",
             lc="n2013008575",
         )
         result.display_name = Contributor(
-            sort_name=Edition.UNKNOWN_AUTHOR, display_name="ann leckie"
+            sort_name=Edition.UNKNOWN_AUTHOR, display_name="ann leckie"  # type: ignore[call-arg]
         )
-        result.sort_name = Contributor(sort_name="LECKIE, ANN")
-        result.viaf = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345")
-        result.lc = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575")
+        result.sort_name = Contributor(sort_name="LECKIE, ANN")  # type: ignore[call-arg]
+        result.viaf = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, viaf="73520345")  # type: ignore[call-arg]
+        result.lc = Contributor(sort_name=Edition.UNKNOWN_AUTHOR, lc="n2013008575")  # type: ignore[call-arg]
 
         # Create a different Work for every Contributor object.
         # Alternate among the various 'author match' roles.
@@ -1829,7 +1830,7 @@ class TestFeaturedFacetsData:
     hq_available_2: Work
     not_featured_on_list: Work
     featured_on_list: Work
-    best_seller_list: Work
+    best_seller_list: CustomList
     default_quality: Work
 
 
@@ -2299,12 +2300,18 @@ class TestQuery:
         # all kinds of modifications to queries, so it's better to
         # replace them with simpler versions.
         class MockFilter:
-            universal_base_term = Q("term", universal_base_called=True)
-            universal_nested_term = Q("term", universal_nested_called=True)
-            universal_nested_filter = dict(nested_called=[universal_nested_term])
+            universal_base_term: Query | None = Q("term", universal_base_called=True)
+            universal_nested_term: Query | None = Q(
+                "term", universal_nested_called=True
+            )
+            universal_nested_filter: dict[str, list[Query | None]] | None = dict(
+                nested_called=[universal_nested_term]
+            )
+            universal_called = False
+            nested_called = False
 
             @classmethod
-            def universal_base_filter(cls):
+            def universal_base_filter(cls) -> Query | None:
                 cls.universal_called = True
                 return cls.universal_base_term
 
@@ -2332,8 +2339,8 @@ class TestQuery:
 
         original_base = Filter.universal_base_filter
         original_nested = Filter.universal_nested_filters
-        Filter.universal_base_filter = MockFilter.universal_base_filter
-        Filter.universal_nested_filters = MockFilter.universal_nested_filters
+        Filter.universal_base_filter = MockFilter.universal_base_filter  # type: ignore[assignment]
+        Filter.universal_nested_filters = MockFilter.universal_nested_filters  # type: ignore[method-assign]
 
         # Test the simple case where the Query has no filter.
         qu = MockQuery("query string", filter=None)
@@ -3475,7 +3482,8 @@ class TestFilter:
         # are used to determine what should go into the constructor.
 
         library = transaction.default_library()
-        assert library.settings.allow_holds is True
+        settings = library.settings
+        assert settings.allow_holds is True
 
         parent = transaction.lane(display_name="Parent Lane", library=library)
         parent.media = Edition.AUDIO_MEDIUM
@@ -3506,10 +3514,10 @@ class TestFilter:
         assert parent.media == filter.media
         assert parent.languages == filter.languages
         assert parent.fiction == filter.fiction
-        assert parent.audiences + [Classifier.AUDIENCE_ALL_AGES] == filter.audiences
+        assert parent.audiences + [Classifier.AUDIENCE_ALL_AGES] == filter.audiences  # type: ignore[operator]
         assert [parent.license_datasource_id] == filter.license_datasources
         assert (parent.target_age.lower, parent.target_age.upper) == filter.target_age
-        assert True == filter.allow_holds
+        assert filter.allow_holds is True
 
         # Filter.from_worklist passed the mock Facets object in to
         # the Filter constructor, which called its modify_search_filter()
@@ -3566,7 +3574,7 @@ class TestFilter:
         settings = library_fixture.settings(library)
         settings.allow_holds = False
         filter = Filter.from_worklist(session, parent, facets)
-        assert library.settings.allow_holds is False
+        assert settings.allow_holds is False
 
         # A bit of setup to test how WorkList.collection_ids affects
         # the resulting Filter.
@@ -4854,17 +4862,17 @@ class TestSearchIndexCoverageProvider:
             else:
                 assert doc["contributors"] is None
 
-            if work.identifiers:
-                assert len(doc["identifiers"]) == len(work.identifiers)
-                for idx, identifier in enumerate(work.identifiers):
+            if work.identifiers:  # type: ignore[attr-defined]
+                assert len(doc["identifiers"]) == len(work.identifiers)  # type: ignore[attr-defined]
+                for idx, identifier in enumerate(work.identifiers):  # type: ignore[attr-defined]
                     actual = doc["identifiers"][idx]
                     assert actual["type"] == identifier.type
                     assert actual["identifier"] == identifier.identifier
             else:
                 assert doc["identifiers"] is None
 
-            if work.classifications:
-                assert len(doc["classifications"]) == len(work.classifications)
+            if work.classifications:  # type: ignore[attr-defined]
+                assert len(doc["classifications"]) == len(work.classifications)  # type: ignore[attr-defined]
             else:
                 assert doc["classifications"] is None
 
@@ -4895,7 +4903,7 @@ class TestSearchIndexCoverageProvider:
         assert result["identifiers"] == None
 
         # Missing just some attributes
-        work: Work = db.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         work.presentation_edition.title = None
         work.target_age = None
         [result] = Work.to_search_documents([work])
@@ -4937,8 +4945,9 @@ class TestSearchIndexCoverageProvider:
 
         # We have one transient failure.
         [record] = results
+        assert isinstance(record, CoverageFailure)
         assert work == record.obj
-        assert True == record.transient
+        assert record.transient is True
         assert "There was an error!" in record.exception
 
     def test_migration_available(
@@ -4948,9 +4957,11 @@ class TestSearchIndexCoverageProvider:
         directory = search._revision_directory
 
         # Create a new highest version
-        directory._available[10000] = SearchV10000()
+        available = dict(directory._available)
+        available[10000] = SearchV10000()
+        directory._available = available
         search._revision = directory._available[10000]
-        search._search_service.index_is_populated = lambda x: False
+        search._search_service.index_is_populated = lambda revision: False
 
         mock_db = MagicMock()
         provider = SearchIndexCoverageProvider(mock_db, search_index_client=search)
@@ -5009,7 +5020,7 @@ class SearchV10000(SearchSchemaRevision):
     SEARCH_VERSION = 10000
 
     def mapping_document(self) -> SearchMappingDocument:
-        return {}
+        return MagicMock()
 
 
 class TestJSONQuery:
@@ -5024,15 +5035,15 @@ class TestJSONQuery:
     match_args = JSONQuery.MATCH_ARGS
 
     def test_search_query(self, external_search_fixture: ExternalSearchFixture):
-        q = {"key": "medium", "value": "Book"}
-        q = self._jq(q)
-        q.search_query.to_dict() == {
+        q_dict = {"key": "medium", "value": "Book"}
+        q = self._jq(q_dict)
+        assert q.search_query.to_dict() == {
             "match": {"medium.keyword": {"query": "Book", **self.match_args}}
         }
 
         q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
-        q.search_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "bool": {
                 "should": [
                     {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
@@ -5047,7 +5058,7 @@ class TestJSONQuery:
 
         q = {"and": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
-        q.search_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
                     {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
@@ -5067,9 +5078,10 @@ class TestJSONQuery:
             ]
         }
         q = self._jq(q)
-        q.search_query.to_dict() == {
+        assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
+                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
                     {
                         "bool": {
                             "should": [
@@ -5092,7 +5104,6 @@ class TestJSONQuery:
                             ]
                         }
                     },
-                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
                 ]
             }
         }
@@ -5237,6 +5248,7 @@ class TestJSONQuery:
             .filter(DataSource.name == DataSource.GUTENBERG)
             .first()
         )
+        assert gutenberg is not None
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG))
         assert q.search_query.to_dict() == {
             "nested": {
@@ -5295,6 +5307,7 @@ class TestJSONQuery:
             .filter(DataSource.name == DataSource.GUTENBERG)
             .first()
         )
+        assert gutenberg is not None
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "neq"))
         assert q.search_query.to_dict() == {
             "nested": {
@@ -5386,7 +5399,7 @@ class TestExternalSearchJSONQuery:
         result.audio_work.presentation_edition.medium = "Audio"
 
         result.random_works = []
-        specifics = [
+        specifics: list[dict[str, Any]] = [
             dict(language="spa", authors=["charlie"]),
             dict(language="spa", authors=["alpha"]),
             dict(language="ger", authors=["beta"]),

@@ -176,12 +176,13 @@ class ToFeedEntry:
 
         simplified_genres = []
         for wg in work.work_genres:
-            simplified_genres.append(wg.genre.name)  # type: ignore[attr-defined]
+            simplified_genres.append(wg.genre.name)
 
         if simplified_genres:
             categories[Subject.SIMPLIFIED_GENRE] = [
                 dict(term=Subject.SIMPLIFIED_GENRE + quote(x), label=x)
                 for x in simplified_genres
+                if x
             ]
 
         # Add the appeals as a category of schema

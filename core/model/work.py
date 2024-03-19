@@ -41,7 +41,7 @@ from core.model import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
-from core.model.classification import Classification, Subject
+from core.model.classification import Classification, Genre, Subject
 from core.model.constants import DataSourceConstants
 from core.model.contributor import Contribution
 from core.model.coverage import CoverageRecord, WorkCoverageRecord
@@ -69,6 +69,8 @@ class WorkGenre(Base):
     __tablename__ = "workgenres"
     id = Column(Integer, primary_key=True)
     genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
+    genre: Mapped[Genre] = relationship("Genre", back_populates="work_genres")
+
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
     affinity = Column(Float, index=True, default=0)
 
@@ -211,7 +213,7 @@ class Work(Base):
     presentation_ready_exception = Column(Unicode, default=None, index=True)
 
     # Supress this work from appearing in any feeds for a specific library.
-    suppressed_for: Mapped[Library] = relationship(
+    suppressed_for: Mapped[list[Library]] = relationship(
         "Library", secondary="work_library_suppressions", passive_deletes=True
     )
 
@@ -1412,7 +1414,7 @@ class Work(Base):
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
             .joinedload(Contribution.contributor),
-            joinedload(Work.work_genres).joinedload(WorkGenre.genre),  # type: ignore
+            joinedload(Work.work_genres).joinedload(WorkGenre.genre),
             joinedload(Work.custom_list_entries),
         )
 

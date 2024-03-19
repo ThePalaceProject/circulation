@@ -2827,11 +2827,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         return self.id
 
     @hybrid_property
-    def audiences(self):
+    def audiences(self) -> list[str]:
         return self._audiences or []
 
     @audiences.setter
-    def audiences(self, value):
+    def audiences(self, value: list[str] | str) -> None:
         """The `audiences` field cannot be set to a value that
         contradicts the current value to the `target_age` field.
         """
