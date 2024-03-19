@@ -491,7 +491,7 @@ class Genre(Base, HasSessionCache):
     works = association_proxy("work_genres", "work")
 
     work_genres: Mapped[list[WorkGenre]] = relationship(
-        "WorkGenre", backref="genre", cascade="all, delete-orphan"
+        "WorkGenre", back_populates="genre", cascade="all, delete-orphan"
     )
 
     def __repr__(self):

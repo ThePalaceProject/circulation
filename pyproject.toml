@@ -33,8 +33,6 @@ disable_error_code = "annotation-unchecked"
 exclude = [
     'core/bin/repair/startup\.py',
     'core/classifier',
-    # TODO: Post test-suite refactoring.,
-    'tests/core/test_external_search\.py',
 ]
 files = ["."]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
