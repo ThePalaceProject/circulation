@@ -1,8 +1,7 @@
-# Async
 import datetime
 import json
 import uuid
-from enum import Enum
+from enum import Enum, auto
 from typing import Any
 
 from pydantic.dataclasses import dataclass
@@ -15,15 +14,15 @@ from core.model import Base, create
 from core.util.datetime_helpers import utc_now
 
 
-class AsyncTaskStatus(str, Enum):
-    READY = "READY"
-    PROCESSING = "PROCESSING"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
+class AsyncTaskStatus(Enum):
+    READY = auto()
+    PROCESSING = auto()
+    SUCCESS = auto()
+    FAILURE = auto()
 
 
 class AsyncTaskType(Enum):
-    INVENTORY_REPORT = "INVENTORY_REPORT"
+    INVENTORY_REPORT = auto()
 
 
 class AsyncTask(Base):
