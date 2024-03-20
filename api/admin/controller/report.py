@@ -32,7 +32,6 @@ class ReportController(CirculationManagerController):
             task, is_new = queue_task(
                 self._db, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
             )
-            self._db.commit()
 
             msg = (
                 f"An inventory report request was {'already' if not is_new else ''} received at {task.created}. "

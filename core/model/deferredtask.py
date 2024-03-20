@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
-from core.model import Base, create
+from core.model import LOCK_ID_DEFERRED_TASK_CREATE, Base, create, pg_advisory_lock
 from core.util.datetime_helpers import utc_now
 
 
@@ -90,25 +90,31 @@ def queue_task(_db, task_type, data: dict[str, str]) -> tuple[DeferredTask, bool
     :param data: The data associated with the task
     :return: Tuple containing a task and a boolean flag indicating whether a new task was created.
     """
-    # does an unprocessed task like this already exist?
-    t = (
-        _db.query(DeferredTask)
-        .filter(DeferredTask.task_type == task_type)
-        .filter(DeferredTask.status == DeferredTaskStatus.READY)
-        .filter(DeferredTask.data.cast(String) == json.dumps(data))
-        .first()
-    )
 
-    if t:
-        return t, False
-    else:
-        return create(
-            _db,
-            DeferredTask,
-            task_type=task_type,
-            status=DeferredTaskStatus.READY,
-            data=data,
+    # ensure that simultaneous identical calls in separate processes do not result in duplicate tasks.
+    with pg_advisory_lock(_db, lock_id=LOCK_ID_DEFERRED_TASK_CREATE):
+        # does an unprocessed task like this already exist?
+        t = (
+            _db.query(DeferredTask)
+            .filter(DeferredTask.task_type == task_type)
+            .filter(DeferredTask.status == DeferredTaskStatus.READY)
+            .filter(DeferredTask.data.cast(String) == json.dumps(data))
+            .first()
         )
+
+        if t:
+            return t, False
+        else:
+            t = create(
+                _db,
+                DeferredTask,
+                task_type=task_type,
+                status=DeferredTaskStatus.READY,
+                data=data,
+            )
+
+            _db.commit()
+            return t
 
 
 @dataclass

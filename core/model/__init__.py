@@ -34,6 +34,9 @@ from core.model.constants import (
 # initializes or migrates the database at a time.
 LOCK_ID_DB_INIT = 1000000001
 
+# # This lock is used to prevent duplicate deferred tasks from being created.
+LOCK_ID_DEFERRED_TASK_CREATE = 1000000002
+
 
 @contextmanager
 def pg_advisory_lock(
