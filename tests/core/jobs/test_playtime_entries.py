@@ -297,14 +297,15 @@ class TestPlaytimeEntriesSummationScript:
         ) == [("4",), ("5",)]
 
     def test_deleted_related_rows(self, db: DatabaseTransactionFixture):
-        def related_rows(table, all_or_none: Literal["all"] | Literal["none"]):
+        def related_rows(table, present: Literal["all"] | Literal["none"]):
+            """Query for the presence of related identifier, collection, and library rows."""
             condition = (
                 and_(
                     table.identifier_id != null(),
                     table.collection_id != null(),
                     table.library_id != null(),
                 )
-                if all_or_none == "all"
+                if present == "all"
                 else and_(
                     table.identifier_id == null(),
                     table.collection_id == null(),
@@ -362,8 +363,8 @@ class TestPlaytimeEntriesSummationScript:
 
         # We should have four entries, all with keys to their associated records.
         assert db.session.query(PlaytimeEntry).count() == 4
-        assert related_rows(PlaytimeEntry, "all").count() == 4
-        assert related_rows(PlaytimeEntry, "none").count() == 0
+        assert related_rows(PlaytimeEntry, present="all").count() == 4
+        assert related_rows(PlaytimeEntry, present="none").count() == 0
 
         # We should have no summary records, at this point.
         assert db.session.query(PlaytimeSummary).count() == 0
@@ -374,7 +375,7 @@ class TestPlaytimeEntriesSummationScript:
         # Now we should have two summary records.
         assert db.session.query(PlaytimeSummary).count() == 2
         # And they should have associated identifier, collection, and library records.
-        assert related_rows(PlaytimeSummary, "all").count() == 2
+        assert related_rows(PlaytimeSummary, present="all").count() == 2
 
         # And those should be the correct identifier, collection, and library records.
         b1sum1, b2sum1 = summaries_query.all()
@@ -415,8 +416,8 @@ class TestPlaytimeEntriesSummationScript:
 
         # Now we should have more entries.
         assert db.session.query(PlaytimeEntry).count() == 8
-        assert related_rows(PlaytimeEntry, "all").count() == 8
-        assert related_rows(PlaytimeEntry, "none").count() == 0
+        assert related_rows(PlaytimeEntry, present="all").count() == 8
+        assert related_rows(PlaytimeEntry, present="none").count() == 0
 
         # Remove our identifiers, collections, and libraries.
         for obj in (id1, id2, c1, c2, l1, l2):
@@ -425,23 +426,23 @@ class TestPlaytimeEntriesSummationScript:
 
         # Verify that the entry records still exist, but that none have related values.
         assert db.session.query(PlaytimeEntry).count() == 8
-        assert related_rows(PlaytimeEntry, "all").count() == 0
-        assert related_rows(PlaytimeEntry, "none").count() == 8
+        assert related_rows(PlaytimeEntry, present="all").count() == 0
+        assert related_rows(PlaytimeEntry, present="none").count() == 8
 
         # Verify that the existing summary records have not been deleted.
         assert db.session.query(PlaytimeSummary).count() == 2
         # None of them should have all associated records.
-        assert related_rows(PlaytimeSummary, "all").count() == 0
+        assert related_rows(PlaytimeSummary, present="all").count() == 0
         # And all of them should have none of their associated records.
-        assert related_rows(PlaytimeSummary, "none").count() == 2
+        assert related_rows(PlaytimeSummary, present="none").count() == 2
 
         # Run the summarization script again.
         PlaytimeEntriesSummationScript(db.session).run()
 
         # We should have the same summary records, none of which have links.
         assert db.session.query(PlaytimeSummary).count() == 2
-        assert related_rows(PlaytimeSummary, "all").count() == 0
-        assert related_rows(PlaytimeSummary, "none").count() == 2
+        assert related_rows(PlaytimeSummary, present="all").count() == 0
+        assert related_rows(PlaytimeSummary, present="none").count() == 2
 
         # Verify the times and other details.
         b1sum1, b2sum1 = summaries_query.all()
