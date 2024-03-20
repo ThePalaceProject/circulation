@@ -115,3 +115,4 @@ HOME=/var/www/circulation
 
 # check the inventory report task queue every 15 minutes.
 */15 * * * * root core/bin/run generate_inventory_reports >> /var/log/cron.log 2>&1
+0 0 * * * root core/bin/run delete_old_deferred_tasks >> /var/log/cron.log 2>&1

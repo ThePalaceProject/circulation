@@ -2797,9 +2797,11 @@ class GenerateInventoryReports(Script):
         while True:
             task = start_next_task(self._db, DeferredTaskType.INVENTORY_REPORT)
             if not task:
-                return
+                break
 
             self.process_task(task)
+
+        self.remove_old_tasks()
 
     def process_task(self, task: DeferredTask):
         data = InventoryReportTaskData(**task.data)
@@ -2924,6 +2926,69 @@ class GenerateInventoryReports(Script):
               lib.id = :library_id
          order by title, author
         """
+
+    def remove_old_tasks(self):
+        """Remove inventory generation tasks older than 30 days"""
+        self._db.query(DeferredTask)
+        thirty_days_ago = utc_now() - datetime.timedelta(days=30)
+        tasks = (
+            self._db.query(DeferredTask)
+            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
+            .filter(DeferredTask.processing_end_time < thirty_days_ago)
+        )
+        for task in tasks:
+            self._db.delete(task)
+
+
+class DeleteOldDeferredTasks(Script):
+    """Delete old deferred tasks."""
+
+    @classmethod
+    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
+        parser = argparse.ArgumentParser()
+        if _db is None:
+            raise ValueError("No database session provided.")
+
+        return parser
+
+    @classmethod
+    def parse_command_line(
+        cls, _db: Session | None = None, cmd_args: list[str] | None = None
+    ):
+        parser = cls.arg_parser(_db)
+        return parser.parse_known_args(cmd_args)[0]
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+        self.remove_old_tasks()
+
+    def remove_old_tasks(self):
+        """Remove inventory generation tasks older than 30 days"""
+        self._db.query(DeferredTask)
+        days = 30
+        thirty_days_ago = utc_now() - datetime.timedelta(days=days)
+        tasks = (
+            self._db.query(DeferredTask)
+            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
+            .filter(DeferredTask.processing_end_time < thirty_days_ago)
+        )
+
+        tasks_removed = 0
+
+        for task in tasks:
+            self._db.delete(task)
+            tasks_removed += 1
+
+        self._db.commit()
+        if tasks_removed > 0:
+            self.log.info(
+                f"Successfully removed {tasks_removed} task{ 's' if tasks_removed > 1 else ''} "
+                f"that were completed over {days} days ago."
+            )
+        else:
+            self.log.info(
+                f"There were no deferred tasks that were completed over {days} ago to be removed."
+            )
 
 
 class MockStdin:

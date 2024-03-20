@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import datetime
 import json
+import logging
 import random
 from dataclasses import asdict
 from io import StringIO
@@ -40,10 +41,12 @@ from core.model import (
 from core.model.classification import Classification, Subject
 from core.model.customlist import CustomList
 from core.model.deferredtask import (
+    DeferredTask,
     DeferredTaskStatus,
     DeferredTaskType,
     InventoryReportTaskData,
     queue_task,
+    start_next_task,
 )
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
@@ -59,6 +62,7 @@ from core.scripts import (
     ConfigureLibraryScript,
     CustomListUpdateEntriesScript,
     DeleteInvisibleLanesScript,
+    DeleteOldDeferredTasks,
     Explain,
     GenerateInventoryReports,
     IdentifierInputScript,
@@ -2700,6 +2704,60 @@ class TestGenerateInventoryReports:
                     )
 
                 assert row_count == 2
+
+
+class TestDeleteOldDeferredTasks:
+    def test_do_run(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
+        # create some test data
+        _db = db.session
+
+        # the deferred task table should be empty
+        task = _db.query(DeferredTask).first()
+        assert not task
+
+        data = InventoryReportTaskData(
+            admin_id=1, library_id=1, admin_email="test@email.com"
+        )
+        task, is_new = queue_task(
+            db.session, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
+        )
+
+        assert task
+        assert is_new
+
+        task2 = start_next_task(_db, task_type=DeferredTaskType.INVENTORY_REPORT)
+
+        assert task2
+        # sanity check: make sure we got back the task we just created.
+        assert task2.id == task.id
+        assert task2.processing_start_time
+        # make sure it is processing
+        assert task2.status == DeferredTaskStatus.PROCESSING
+        task2.complete()
+        assert task2.processing_end_time
+        _db.commit()
+
+        # run it with the expection of no tasks to be deleted.
+        DeleteOldDeferredTasks(_db).do_run()
+        assert caplog.messages[0].__contains__("There were no deferred tasks")
+
+        # set the task's end processing time to 30 days ago.
+        task3 = _db.query(DeferredTask).filter(DeferredTask.id == task2.id).first()
+        assert task3
+        task3.processing_end_time = task3.processing_end_time - datetime.timedelta(
+            days=30
+        )
+        _db.commit()
+        # run again with the expectation of 1 task removed.
+        DeleteOldDeferredTasks(_db).do_run()
+        task4 = _db.query(DeferredTask).first()
+        assert not task4
+        assert caplog.messages[1].__contains__(
+            "Successfully removed 1 task that were completed over 30 days ago."
+        )
 
 
 class TestWorkConsolidationScript:
