@@ -49,21 +49,21 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_deferredtasks_created"),
-        "asynctasks",
+        "deferredtasks",
         ["created"],
         unique=False,
     )
 
     op.create_index(
         op.f("ix_deferredtasks_task_type"),
-        "asynctasks",
+        "deferredtasks",
         ["task_type"],
         unique=False,
     )
 
     op.create_index(
         op.f("ix_deferredtasks_status"),
-        "asynctasks",
+        "deferredtasks",
         ["status"],
         unique=False,
     )
@@ -73,6 +73,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_deferredtasks_created"), table_name="deferredtasks")
     op.drop_index(op.f("ix_deferredtasks_task_type"), table_name="deferredtasks")
     op.drop_index(op.f("ix_deferredtasks_status"), table_name="deferredtasks")
-    op.drop_table("asynctasks")
+    op.drop_table("deferredtasks")
     sa.Enum(name="deferredtasktype").drop(op.get_bind(), checkfirst=False)
     sa.Enum(name="deferredtaskstatus").drop(op.get_bind(), checkfirst=False)
