@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 from sqlalchemy import Column, DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.orm import Session
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
 from core.model import (
@@ -47,7 +48,7 @@ class DeferredTask(Base):
     status_details = Column(String, nullable=True)
     data: dict[str, Any] = Column(MutableDict.as_mutable(JSONB), default={})
 
-    def complete(self):
+    def complete(self) -> None:
         if self.status != DeferredTaskStatus.PROCESSING:
             raise Exception(
                 "The task must be in the PROCESSING state in order to transition to a completion state"
@@ -55,7 +56,7 @@ class DeferredTask(Base):
         self.status = DeferredTaskStatus.SUCCESS
         self.processing_end_time = datetime.datetime.now()
 
-    def fail(self, failure_details: str):
+    def fail(self, failure_details: str) -> None:
         if self.status != DeferredTaskStatus.PROCESSING:
             raise Exception(
                 "The task must be in the PROCESSING state in order to transition to a completion state"
@@ -65,14 +66,14 @@ class DeferredTask(Base):
         self.status_details = failure_details
 
 
-def start_next_task(_db, task_type: DeferredTaskType) -> DeferredTask | None:
+def start_next_task(_db: Session, task_type: DeferredTaskType) -> DeferredTask | None:
     """
     Start the next ready task in the queue of the specified type.
     The next task will be the oldest task in the READY state.
     Once retrieved the status is set to the "PROCESSING" status and the
     start time property is set to the current time.
     """
-    t: DeferredTask = (
+    t: DeferredTask | None = (
         _db.query(DeferredTask)
         .filter(DeferredTask.task_type == task_type)
         .filter(DeferredTask.status == DeferredTaskStatus.READY)
@@ -85,10 +86,13 @@ def start_next_task(_db, task_type: DeferredTaskType) -> DeferredTask | None:
             t.status = DeferredTaskStatus.PROCESSING
             t.processing_start_time = datetime.datetime.now()
             flush(_db)
+
     return t
 
 
-def queue_task(_db, task_type, data: dict[str, str]) -> tuple[DeferredTask, bool]:
+def queue_task(
+    _db: Session, task_type: DeferredTaskType, data: dict[str, str]
+) -> tuple[DeferredTask, bool]:
     """
     Add a new task of the specified task type to the task queue.
     If the task is a duplicate - ie the task data and task_type match an existing task in the

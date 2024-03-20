@@ -2586,6 +2586,7 @@ class TestGenerateInventoryReports:
         )
         collection.libraries = [library]
         ds = collection.data_source
+        assert ds
         title = "Leaves of Grass"
         author = "Walt Whitman"
         email = "test@email.com"
@@ -2618,6 +2619,7 @@ class TestGenerateInventoryReports:
             terms_concurrency=terms_concurrency,
         )
 
+        assert library.id
         data = InventoryReportTaskData(
             admin_id=1, library_id=library.id, admin_email=email
         )
@@ -2634,7 +2636,7 @@ class TestGenerateInventoryReports:
         send_email_mock.assert_called_once()
         args, kwargs = send_email_mock.call_args
         assert task.status == DeferredTaskStatus.SUCCESS
-        assert kwargs["receivers"] == [email]
+        assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
         assert kwargs["subject"].__contains__("Inventory Report")
         attachments: dict = kwargs["attachments"]
         csv_titles_strings = [
@@ -2644,7 +2646,7 @@ class TestGenerateInventoryReports:
             "palace_bookshelf",
         ]
 
-        def at_least_one_contains_the_other(list1: [str], list2: [str]) -> bool:
+        def at_least_one_contains_the_other(list1: list[str], list2: list[str]) -> bool:
             for s1 in list1:
                 for s2 in list2:
                     if s1.__contains__(s2):
