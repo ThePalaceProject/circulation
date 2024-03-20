@@ -121,7 +121,7 @@ class FindawayManifest(AudiobookManifest):
         for item in spine_items:
             kwargs = {part_key: item.part, sequence_key: item.sequence}
             self.add_reading_order(
-                href=f"urn:org.thepalaceproject:findaway:{item.part}:{item.sequence}",
+                href=f"urn:org.thepalaceproject:findaway:{fulfillmentId}:{item.part}:{item.sequence}",
                 title=item.title,
                 duration=item.duration,
                 type=item.media_type,

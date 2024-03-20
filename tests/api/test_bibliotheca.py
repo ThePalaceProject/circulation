@@ -668,7 +668,8 @@ class TestBibliothecaAPI:
         assert "abcdef01234789abcdef0123" == encrypted["findaway:checkoutId"]
         assert "1234567890987654321ababa" == encrypted["findaway:licenseId"]
         assert "3M" == encrypted["findaway:accountId"]
-        assert "123456" == encrypted["findaway:fulfillmentId"]
+        fullfillment_id = encrypted["findaway:fulfillmentId"]
+        assert "123456" == fullfillment_id
         assert (
             "aaaaaaaa-4444-cccc-dddd-666666666666" == encrypted["findaway:sessionKey"]
         )
@@ -698,7 +699,8 @@ class TestBibliothecaAPI:
             sequence = item["findaway:sequence"]
             assert i + 1 == sequence
             assert (
-                f"urn:org.thepalaceproject:findaway:{part}:{sequence}" == item["href"]
+                f"urn:org.thepalaceproject:findaway:{fullfillment_id}:{part}:{sequence}"
+                == item["href"]
             )
 
         # The total duration, in seconds, has been added to metadata.
