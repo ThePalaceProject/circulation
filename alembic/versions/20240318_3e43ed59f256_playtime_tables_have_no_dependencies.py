@@ -109,9 +109,6 @@ def upgrade() -> None:
     op.add_column("playtime_summaries", sa.Column("title", sa.String(), nullable=True))
     op.add_column("playtime_summaries", sa.Column("isbn", sa.String(), nullable=True))
     op.alter_column(
-        "playtime_summaries", "identifier_id", existing_type=sa.INTEGER(), nullable=True
-    )
-    op.alter_column(
         "playtime_summaries", "collection_id", existing_type=sa.INTEGER(), nullable=True
     )
     op.alter_column(
@@ -138,6 +135,15 @@ def downgrade() -> None:
         "playtime_summaries_identifier_str_collection_name_library_n_key",
         "playtime_summaries",
         ["identifier_str", "collection_name", "library_name", "timestamp"],
+    )
+    op.alter_column(
+        "playtime_summaries",
+        "collection_id",
+        existing_type=sa.INTEGER(),
+        nullable=False,
+    )
+    op.alter_column(
+        "playtime_summaries", "library_id", existing_type=sa.INTEGER(), nullable=False
     )
     op.drop_column("playtime_summaries", "isbn")
     op.drop_column("playtime_summaries", "title")
