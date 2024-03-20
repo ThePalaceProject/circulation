@@ -111,6 +111,9 @@ class FindawayManifest(AudiobookManifest):
         # Add the SpineItems as reading order items. None of them will
         # have working 'href' fields -- it's just to give the client a
         # picture of the structure of the timeline.
+        # For the href we return a URN that includes the part and sequence
+        # numbers, these URNs are not expected to be resolved, but the client
+        # can use them to identify the reading order items for bookmarks etc.
         part_key = "findaway:part"
         sequence_key = "findaway:sequence"
         total_duration = 0

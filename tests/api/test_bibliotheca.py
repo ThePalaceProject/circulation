@@ -684,7 +684,7 @@ class TestBibliothecaAPI:
         assert 16.201 == first["duration"]
         assert "Track 1" == first["title"]
 
-        # There is no 'href' value for the readingOrder items because the
+        # The 'href' value for the readingOrder is a URN because the
         # files must be obtained through the Findaway SDK rather than
         # through regular HTTP requests.
         #
