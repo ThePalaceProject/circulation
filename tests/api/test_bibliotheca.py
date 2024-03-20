@@ -692,10 +692,14 @@ class TestBibliothecaAPI:
         # part #0. Within that part, the items have been sorted by
         # their sequence.
         for i, item in enumerate(reading_order):
-            assert None == item.get("href", None)
             assert Representation.MP3_MEDIA_TYPE == item["type"]
-            assert 0 == item["findaway:part"]
-            assert i + 1 == item["findaway:sequence"]
+            part = item["findaway:part"]
+            assert 0 == part
+            sequence = item["findaway:sequence"]
+            assert i + 1 == sequence
+            assert (
+                f"urn:org.thepalaceproject:findaway:{part}:{sequence}" == item["href"]
+            )
 
         # The total duration, in seconds, has been added to metadata.
         assert 28371 == int(metadata["duration"])
