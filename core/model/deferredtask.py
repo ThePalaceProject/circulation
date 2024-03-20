@@ -10,7 +10,14 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
-from core.model import LOCK_ID_DEFERRED_TASK_CREATE, Base, create, pg_advisory_lock
+from core.model import (
+    LOCK_ID_DEFERRED_TASK_CREATE,
+    LOCK_ID_DEFERRED_TASK_START_NEXT,
+    Base,
+    create,
+    flush,
+    pg_advisory_lock,
+)
 from core.util.datetime_helpers import utc_now
 
 
@@ -74,9 +81,10 @@ def start_next_task(_db, task_type: DeferredTaskType) -> DeferredTask | None:
     )
 
     if t:
-        t.status = DeferredTaskStatus.PROCESSING
-        t.processing_start_time = datetime.datetime.now()
-
+        with pg_advisory_lock(_db, lock_id=LOCK_ID_DEFERRED_TASK_START_NEXT):
+            t.status = DeferredTaskStatus.PROCESSING
+            t.processing_start_time = datetime.datetime.now()
+            flush(_db)
     return t
 
 
@@ -113,7 +121,6 @@ def queue_task(_db, task_type, data: dict[str, str]) -> tuple[DeferredTask, bool
                 data=data,
             )
 
-            _db.commit()
             return t
 
 

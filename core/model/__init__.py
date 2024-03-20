@@ -33,9 +33,10 @@ from core.model.constants import (
 # This is the lock ID used to ensure that only one circulation manager
 # initializes or migrates the database at a time.
 LOCK_ID_DB_INIT = 1000000001
-
-# # This lock is used to prevent duplicate deferred tasks from being created.
+# This lock is used to prevent duplicate deferred tasks from being created.
 LOCK_ID_DEFERRED_TASK_CREATE = 1000000002
+# This lock is used two separate processes from processing the same task.
+LOCK_ID_DEFERRED_TASK_START_NEXT = 1000000003
 
 
 @contextmanager
