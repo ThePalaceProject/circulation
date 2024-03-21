@@ -13,7 +13,8 @@ from core.model.deferredtask import (
     InventoryReportTaskData,
     queue_task,
 )
-from core.util.problem_detail import ProblemDetail, ProblemDetailException
+from core.problem_details import INTERNAL_SERVER_ERROR
+from core.util.problem_detail import ProblemDetail
 
 
 class ReportController(CirculationManagerController):
@@ -41,9 +42,8 @@ class ReportController(CirculationManagerController):
             self.log.info(msg + f" {task}")
             http_status = HTTPStatus.ACCEPTED if is_new else HTTPStatus.CONFLICT
             return Response(json.dumps(dict(message=msg)), http_status)
-        except ProblemDetailException as e:
-            self.log.error(
-                f"failed to generate inventory report request: {e.problem_detail}"
-            )
+        except Exception as e:
+            msg = f"failed to generate inventory report request: {e}"
+            self.log.error(msg=msg, exc_info=e)
             self._db.rollback()
-            return e.problem_detail
+            return INTERNAL_SERVER_ERROR.detailed(detail=msg)
