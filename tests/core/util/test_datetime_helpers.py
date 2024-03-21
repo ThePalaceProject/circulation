@@ -7,6 +7,7 @@ import pytz
 from core.util.datetime_helpers import (
     datetime_utc,
     from_timestamp,
+    minute_timestamp,
     previous_months,
     strptime_utc,
     to_utc,
@@ -273,3 +274,36 @@ class TestPreviousMonths:
             # Both dates should be the 1st of the month.
             assert 1 == computed_start.day
             assert 1 == computed_until.day
+
+
+class TestMinuteTimestamp:
+    @pytest.mark.parametrize(
+        "dt, expected",
+        [
+            (
+                datetime.datetime(2022, 1, 1, 12, 30, 45),
+                datetime.datetime(2022, 1, 1, 12, 30),
+            ),
+            (
+                datetime.datetime(2022, 1, 1, 12, 30),
+                datetime.datetime(2022, 1, 1, 12, 30),
+            ),
+            (
+                datetime.datetime(2022, 2, 15, 9, 45, 30),
+                datetime.datetime(2022, 2, 15, 9, 45),
+            ),
+            (
+                datetime.datetime(2023, 12, 31, 23, 59, 59),
+                datetime.datetime(2023, 12, 31, 23, 59),
+            ),
+            (
+                datetime.datetime(2024, 5, 10, 0, 0),
+                datetime.datetime(2024, 5, 10, 0, 0),
+            ),
+        ],
+    )
+    def test_minute_resolution(
+        self, dt: datetime.datetime, expected: datetime.datetime
+    ):
+        result = minute_timestamp(dt)
+        assert result == expected

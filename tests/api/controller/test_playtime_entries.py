@@ -103,6 +103,8 @@ class TestPlaytimeEntriesController:
         db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
+        library = db.default_library()
+
         # Attach the identifier to the collection
         pool = db.licensepool(
             db.edition(
@@ -119,7 +121,10 @@ class TestPlaytimeEntriesController:
                 total_seconds_played=12,
                 identifier_id=identifier.id,
                 collection_id=collection.id,
-                library_id=db.default_library().id,
+                library_id=library.id,
+                identifier_str=identifier.urn,
+                collection_name=collection.name,
+                library_name=library.name,
             )
         )
 

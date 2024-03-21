@@ -51,6 +51,9 @@ class PlaytimeEntries:
                         identifier_id=identifier.id,
                         collection_id=collection.id,
                         library_id=library.id,
+                        identifier_str=identifier.urn,
+                        collection_name=collection.name,
+                        library_name=library.name,
                         timestamp=entry.during_minute,
                         total_seconds_played=entry.seconds_played,
                     )

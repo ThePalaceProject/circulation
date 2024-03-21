@@ -4,25 +4,31 @@ import argparse
 import csv
 import os
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from tempfile import TemporaryFile
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
 import pytz
-from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import false, true
 from sqlalchemy.sql.functions import sum
 
 from core.config import Configuration
-from core.model import get_one
-from core.model.edition import Edition
-from core.model.identifier import Identifier, RecursiveEquivalencyCache
 from core.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from core.util.datetime_helpers import previous_months, utc_now
 from scripts import Script
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Query
+
+
+# TODO: Replace uses once we have a proper CSV writer type or protocol.
+class Writer(Protocol):
+    """CSV Writer protocol."""
+
+    def writerow(self, row: Iterable[Any]) -> Any:
+        ...
 
 
 class PlaytimeEntriesSummationScript(Script):
@@ -35,38 +41,69 @@ class PlaytimeEntriesSummationScript(Script):
         deleted = (
             self._db.query(PlaytimeEntry)
             .filter(
-                PlaytimeEntry.processed == True, PlaytimeEntry.timestamp < older_than_ts
+                PlaytimeEntry.processed == true(),
+                PlaytimeEntry.timestamp < older_than_ts,
             )
             .delete()
         )
         self.log.info(f"Deleted {deleted} entries. Older than {older_than_ts}")
 
         # Collect everything from one hour ago, reducing entries still in flux
-        cuttoff = utc_now() - timedelta(hours=1)
+        cut_off = utc_now() - timedelta(hours=1)
 
         # Fetch the unprocessed entries
         result = self._db.query(PlaytimeEntry).filter(
-            PlaytimeEntry.processed == False,
-            PlaytimeEntry.timestamp <= cuttoff,
+            PlaytimeEntry.processed == false(),
+            PlaytimeEntry.timestamp <= cut_off,
         )
-        by_identifier = defaultdict(int)
 
-        # Aggregate entries per identifier-timestamp-collection-library tuple
+        # Aggregate entries per identifier-timestamp-collection-library grouping.
+        # The label forms of the identifier, collection, and library are also
+        # factored in, in case any of the foreign keys are missing.
         # Since timestamps should be on minute-boundaries the aggregation
         # can be written to PlaytimeSummary directly
+        def group_key_for_entry(e: PlaytimeEntry) -> tuple:
+            return (
+                e.timestamp,
+                e.identifier,
+                e.collection,
+                e.library,
+                e.identifier_str,
+                e.collection_name,
+                e.library_name,
+            )
+
+        by_group = defaultdict(int)
         for entry in result.all():
-            by_identifier[
-                (entry.identifier, entry.collection, entry.library, entry.timestamp)
-            ] += entry.total_seconds_played
+            by_group[group_key_for_entry(entry)] += entry.total_seconds_played
             entry.processed = True
 
-        for id_ts, seconds in by_identifier.items():
-            identifier, collection, library, timestamp = id_ts
+        for group, seconds in by_group.items():
+            # Values are in the same order returned from `group_key_for_entry` above.
+            (
+                timestamp,
+                identifier,
+                collection,
+                library,
+                identifier_str,
+                collection_name,
+                library_name,
+            ) = group
+
+            # Update the playtime summary.
             playtime = PlaytimeSummary.add(
-                identifier, collection, library, timestamp, seconds
+                self._db,
+                ts=timestamp,
+                seconds=seconds,
+                identifier=identifier,
+                collection=collection,
+                library=library,
+                identifier_str=identifier_str,
+                collection_name=collection_name,
+                library_name=library_name,
             )
             self.log.info(
-                f"Added {seconds} to {identifier.urn} ({collection.name} in {library.name}) for {timestamp}: new total {playtime.total_seconds_played}."
+                f"Added {seconds} to {identifier_str} ({collection_name} in {library_name}) for {timestamp}: new total {playtime.total_seconds_played}."
             )
 
         self._db.commit()
@@ -154,51 +191,11 @@ class PlaytimeEntriesEmailReportsScript(Script):
         ) as temp:
             # Write the data as a CSV
             writer = csv.writer(temp)
-            writer.writerow(
-                [
-                    "date",
-                    "urn",
-                    "isbn",
-                    "collection",
-                    "library",
-                    "title",
-                    "total seconds",
-                ]
+            _produce_report(
+                writer,
+                date_label=report_date_label,
+                records=self._fetch_report_records(start=start, until=until),
             )
-
-            for (
-                urn,
-                collection_name,
-                library_name,
-                identifier_id,
-                total,
-            ) in self._fetch_report_records(start=start, until=until):
-                edition: Edition | None = None
-                identifier: Identifier | None = None
-                if identifier_id:
-                    edition = get_one(
-                        self._db, Edition, primary_identifier_id=identifier_id
-                    )
-                    # Use the identifier from the edition where available.
-                    # Otherwise, we'll have to look it up.
-                    identifier = (
-                        edition.primary_identifier
-                        if edition
-                        else get_one(self._db, Identifier, id=identifier_id)
-                    )
-                isbn = self._isbn_for_identifier(identifier)
-                title = edition and edition.title
-                row = (
-                    report_date_label,
-                    urn,
-                    isbn,
-                    collection_name,
-                    library_name,
-                    title,
-                    total,
-                )
-                # Write the row to the CSV
-                writer.writerow(row)
 
             # Rewind the file and send the report email
             temp.seek(0)
@@ -223,7 +220,8 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_id,
+                PlaytimeSummary.isbn,
+                PlaytimeSummary.title,
                 sum(PlaytimeSummary.total_seconds_played),
             )
             .filter(
@@ -235,41 +233,47 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
                 PlaytimeSummary.identifier_id,
+                PlaytimeSummary.isbn,
+                PlaytimeSummary.title,
+            )
+            .order_by(
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.identifier_str,
             )
         )
 
-    @staticmethod
-    def _isbn_for_identifier(
-        identifier: Identifier | None,
-        /,
-        *,
-        default_value: str = "",
-    ) -> str:
-        """Find the strongest ISBN match for the given identifier.
 
-        :param identifier: The identifier to match.
-        :param default_value: The default value to return if the identifier is missing or a match is not found.
-        """
-        if identifier is None:
-            return default_value
-
-        if identifier.type == Identifier.ISBN:
-            return cast(str, identifier.identifier)
-
-        # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
-        # mechanism to find the next best one that is, if available.
-        db = Session.object_session(identifier)
-        eq_subquery = db.query(RecursiveEquivalencyCache.identifier_id).filter(
-            RecursiveEquivalencyCache.parent_identifier_id == identifier.id
+def _produce_report(writer: Writer, date_label, records=None) -> None:
+    if not records:
+        records = []
+    writer.writerow(
+        (
+            "date",
+            "urn",
+            "isbn",
+            "collection",
+            "library",
+            "title",
+            "total seconds",
         )
-        equivalent_identifiers = (
-            db.query(Identifier)
-            .filter(Identifier.id.in_(eq_subquery))
-            .filter(Identifier.type == Identifier.ISBN)
+    )
+    for (
+        identifier_str,
+        collection_name,
+        library_name,
+        isbn,
+        title,
+        total,
+    ) in records:
+        row = (
+            date_label,
+            identifier_str,
+            isbn,
+            collection_name,
+            library_name,
+            title,
+            total,
         )
-
-        isbn = next(
-            map(lambda id_: id_.identifier, equivalent_identifiers),
-            None,
-        )
-        return isbn or default_value
+        # Write the row to the CSV
+        writer.writerow(row)
