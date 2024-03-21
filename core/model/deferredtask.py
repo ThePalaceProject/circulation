@@ -11,6 +11,7 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Session
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
+from core.exceptions import BasePalaceException
 from core.model import (
     LOCK_ID_DEFERRED_TASK_CREATE,
     LOCK_ID_DEFERRED_TASK_START_NEXT,
@@ -33,6 +34,10 @@ class DeferredTaskType(Enum):
     INVENTORY_REPORT = auto()
 
 
+class DeferredTaskInvalidStateTransition(BasePalaceException):
+    """Indicates an unexpected/invalid task state transition"""
+
+
 class DeferredTask(Base):
     """A task to be processed at some point in the future."""
 
@@ -48,19 +53,20 @@ class DeferredTask(Base):
     status_details = Column(String, nullable=True)
     data: dict[str, Any] = Column(MutableDict.as_mutable(JSONB), default={})
 
-    def complete(self) -> None:
-        if self.status != DeferredTaskStatus.PROCESSING:
-            raise Exception(
-                "The task must be in the PROCESSING state in order to transition to a completion state"
+    def _check_status(self, status: DeferredTaskStatus) -> None:
+        if self.status != status:
+            raise DeferredTaskInvalidStateTransition(
+                message=f"The task ({self.id}, currently in the {self.status} state must be in "
+                f"the {status} state in order to transition to a completion state"
             )
+
+    def complete(self) -> None:
+        self._check_status(DeferredTaskStatus.PROCESSING)
         self.status = DeferredTaskStatus.SUCCESS
         self.processing_end_time = datetime.datetime.now()
 
     def fail(self, failure_details: str) -> None:
-        if self.status != DeferredTaskStatus.PROCESSING:
-            raise Exception(
-                "The task must be in the PROCESSING state in order to transition to a completion state"
-            )
+        self._check_status(DeferredTaskStatus.PROCESSING)
         self.status = DeferredTaskStatus.FAILURE
         self.processing_end_time = datetime.datetime.now()
         self.status_details = failure_details
