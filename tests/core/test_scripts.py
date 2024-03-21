@@ -2584,6 +2584,11 @@ class TestGenerateInventoryReports:
         collection = db.collection(
             name="BiblioBoard Test collection", data_source_name="BiblioBoard"
         )
+
+        # flag the collection as one that should be included in inventory report
+        collection.integration_configuration.settings_dict[
+            "include_in_inventory_report"
+        ] = "yes"
         collection.libraries = [library]
         ds = collection.data_source
         assert ds
@@ -2639,73 +2644,59 @@ class TestGenerateInventoryReports:
         assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
         assert kwargs["subject"].__contains__("Inventory Report")
         attachments: dict = kwargs["attachments"]
-        csv_titles_strings = [
-            "biblioboard",
-            "palace_marketplace",
-            "unlimited_listens",
-            "palace_bookshelf",
-        ]
 
-        def at_least_one_contains_the_other(list1: list[str], list2: list[str]) -> bool:
-            for s1 in list1:
-                for s2 in list2:
-                    if s1.__contains__(s2):
-                        return True
-            return False
+        assert len(attachments) == 1
+        key = [*attachments.keys()][0]
+        assert "biblioboard" in key
+        value = attachments[key]
+        assert len(value) > 0
+        csv_file = StringIO(value)
+        reader = csv.reader(csv_file, delimiter=",")
+        first_row = None
+        row_count = 0
 
-        assert at_least_one_contains_the_other(attachments.keys(), csv_titles_strings)
+        for row in reader:
+            row_count += 1
+            if not first_row:
+                first_row = row
+                row_headers = [
+                    "title",
+                    "author",
+                    "identifier",
+                    "language",
+                    "publisher",
+                    "format",
+                    "collection_name",
+                    "license_duration_days",
+                    "license_expiration_date",
+                    "initial_loan_count",
+                    "consumed_loans",
+                    "remaining_loans",
+                    "allowed_concurrent_users",
+                    "library_active_hold_count",
+                    "library_active_loan_count",
+                    "shared_active_hold_count",
+                    "shared_active_loan_count",
+                ]
+                for h in row_headers:
+                    assert h in row
+                continue
 
-        for key in attachments.keys():
-            value = attachments[key]
-            assert len(value) > 0
-            if str(key).__contains__("biblioboard"):
-                csv_file = StringIO(value)
-                reader = csv.reader(csv_file, delimiter=",")
-                first_row = None
-                row_count = 0
+            assert row[first_row.index("title")] == title
+            assert row[first_row.index("author")] == author
+            assert row[first_row.index("shared_active_hold_count")] == "-1"
+            assert row[first_row.index("shared_active_loan_count")] == "-1"
+            assert row[first_row.index("initial_loan_count")] == str(
+                checkouts_available
+            )
+            assert row[first_row.index("consumed_loans")] == str(
+                checkouts_available - checkouts_left
+            )
+            assert row[first_row.index("allowed_concurrent_users")] == str(
+                terms_concurrency
+            )
 
-                for row in reader:
-                    row_count += 1
-                    if not first_row:
-                        first_row = row
-                        row_headers = [
-                            "title",
-                            "author",
-                            "identifier",
-                            "language",
-                            "publisher",
-                            "format",
-                            "collection_name",
-                            "license_duration_days",
-                            "license_expiration_date",
-                            "initial_loan_count",
-                            "consumed_loans",
-                            "remaining_loans",
-                            "allowed_concurrent_users",
-                            "library_active_hold_count",
-                            "library_active_loan_count",
-                            "shared_active_hold_count",
-                            "shared_active_loan_count",
-                        ]
-                        for h in row_headers:
-                            assert h in row
-                        continue
-
-                    assert row[first_row.index("title")] == title
-                    assert row[first_row.index("author")] == author
-                    assert row[first_row.index("shared_active_hold_count")] == "-1"
-                    assert row[first_row.index("shared_active_loan_count")] == "-1"
-                    assert row[first_row.index("initial_loan_count")] == str(
-                        checkouts_available
-                    )
-                    assert row[first_row.index("consumed_loans")] == str(
-                        checkouts_available - checkouts_left
-                    )
-                    assert row[first_row.index("allowed_concurrent_users")] == str(
-                        terms_concurrency
-                    )
-
-                assert row_count == 2
+            assert row_count == 2
 
 
 class TestDeleteOldDeferredTasks:

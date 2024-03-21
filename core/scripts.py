@@ -14,7 +14,7 @@ from collections.abc import Generator, Sequence
 from enum import Enum
 from typing import TextIO
 
-from sqlalchemy import and_, exists, or_, select, text, tuple_
+from sqlalchemy import String, and_, exists, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -34,6 +34,7 @@ from core.model import (
     Edition,
     Identifier,
     IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -2769,13 +2770,6 @@ class SuppressWorkForLibraryScript(Script):
 class GenerateInventoryReports(Script):
     """Generate inventory reports from queued report tasks"""
 
-    DATA_SOURCES = [
-        "Palace Marketplace",
-        "BiblioBoard",
-        "Palace Bookshelf",
-        "Unlimited Listens",
-    ]
-
     @classmethod
     def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
         parser = argparse.ArgumentParser()
@@ -2811,7 +2805,28 @@ class GenerateInventoryReports(Script):
             date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
             attachments = {}
 
-            for data_source_name in self.DATA_SOURCES:
+            integrations = (
+                self._db.query(IntegrationConfiguration)
+                .join(IntegrationLibraryConfiguration)
+                .filter(IntegrationLibraryConfiguration.library_id == data.library_id)
+                .filter(
+                    IntegrationConfiguration.settings_dict[
+                        "include_in_inventory_report"
+                    ].astext.cast(String)
+                    == "yes"
+                )
+                .filter(
+                    IntegrationConfiguration.settings_dict["data_source"].astext.cast(
+                        String
+                    )
+                    != None
+                )
+                .all()
+            )
+
+            data_source_names = [i.settings_dict["data_source"] for i in integrations]
+
+            for data_source_name in data_source_names:
                 formatted_ds_name = data_source_name.lower().replace(" ", "_")
                 file_name = f"palace-inventory-report-{formatted_ds_name}-{date_str}"
                 # generate csv file
@@ -2849,7 +2864,7 @@ class GenerateInventoryReports(Script):
             writer = csv.writer(temp, delimiter=",")
             rows = self._db.execute(
                 text(self.inventory_report_query()),
-                {"data_source_name": data_source_name, "library_id": library_id},
+                {"library_id": library_id, "data_source_name": data_source_name},
             )
             writer.writerow(rows.keys())
             writer.writerows(rows)
@@ -2922,7 +2937,7 @@ class GenerateInventoryReports(Script):
               ic.id = il.parent_id and
               ic.id = collection_sharing.parent_id and
               il.library_id = lib.id and
-              d.name = :data_source_name  and
+              d.name = :data_source_name and
               lib.id = :library_id
          order by title, author
         """
