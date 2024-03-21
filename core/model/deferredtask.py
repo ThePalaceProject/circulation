@@ -12,14 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import Enum as SqlAlchemyEnum
 
 from core.exceptions import BasePalaceException
-from core.model import (
-    LOCK_ID_DEFERRED_TASK_CREATE,
-    LOCK_ID_DEFERRED_TASK_START_NEXT,
-    Base,
-    create,
-    flush,
-    pg_advisory_lock,
-)
+from core.model import Base, create, flush
 from core.util.datetime_helpers import utc_now
 
 
@@ -79,6 +72,9 @@ def start_next_task(_db: Session, task_type: DeferredTaskType) -> DeferredTask |
     Once retrieved the status is set to the "PROCESSING" status and the
     start time property is set to the current time.
     """
+
+    # TODO: This operation is subject to race conditions so it would be possible for duplicate tasks to be queued.
+
     t: DeferredTask | None = (
         _db.query(DeferredTask)
         .filter(DeferredTask.task_type == task_type)
@@ -88,10 +84,9 @@ def start_next_task(_db: Session, task_type: DeferredTaskType) -> DeferredTask |
     )
 
     if t:
-        with pg_advisory_lock(_db, lock_id=LOCK_ID_DEFERRED_TASK_START_NEXT):
-            t.status = DeferredTaskStatus.PROCESSING
-            t.processing_start_time = datetime.datetime.now()
-            flush(_db)
+        t.status = DeferredTaskStatus.PROCESSING
+        t.processing_start_time = datetime.datetime.now()
+        flush(_db)
 
     return t
 
@@ -109,29 +104,28 @@ def queue_task(
     :return: Tuple containing a task and a boolean flag indicating whether a new task was created.
     """
 
-    # ensure that simultaneous identical calls in separate processes do not result in duplicate tasks.
-    with pg_advisory_lock(_db, lock_id=LOCK_ID_DEFERRED_TASK_CREATE):
-        # does an unprocessed task like this already exist?
-        t = (
-            _db.query(DeferredTask)
-            .filter(DeferredTask.task_type == task_type)
-            .filter(DeferredTask.status == DeferredTaskStatus.READY)
-            .filter(DeferredTask.data.cast(String) == json.dumps(data))
-            .first()
+    # TODO: This operation is subject to race conditions so it would be possible for duplicate tasks to be queued.
+    # does an unprocessed task like this already exist?
+    t = (
+        _db.query(DeferredTask)
+        .filter(DeferredTask.task_type == task_type)
+        .filter(DeferredTask.status == DeferredTaskStatus.READY)
+        .filter(DeferredTask.data.cast(String) == json.dumps(data))
+        .first()
+    )
+
+    if t:
+        return t, False
+    else:
+        t = create(
+            _db,
+            DeferredTask,
+            task_type=task_type,
+            status=DeferredTaskStatus.READY,
+            data=data,
         )
 
-        if t:
-            return t, False
-        else:
-            t = create(
-                _db,
-                DeferredTask,
-                task_type=task_type,
-                status=DeferredTaskStatus.READY,
-                data=data,
-            )
-
-            return t
+        return t
 
 
 @dataclass
