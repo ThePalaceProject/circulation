@@ -1,8 +1,8 @@
 """Add deferredtasks table
 
 Revision ID: b2353c25a95e
-Revises: 9d2dccb0d6ff
-Create Date: 2024-03-13 21:48:45.911507+00:00
+Revises: 3e43ed59f256
+Create Date: 2024-03-19 21:48:45.911507+00:00
 
 """
 import sqlalchemy as sa
@@ -12,7 +12,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "b2353c25a95e"
-down_revision = "9d2dccb0d6ff"
+down_revision = "3e43ed59f256"
 branch_labels = None
 depends_on = None
 
