@@ -64,4 +64,4 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_announcement_service = AnnouncementSettings(manager._db)
     manager.admin_search_controller = AdminSearchController(manager)
     manager.admin_quicksight_controller = QuickSightController(manager)
-    manager.admin_report_controller = ReportController(manager)
+    manager.admin_report_controller = ReportController(manager._db)

@@ -4,8 +4,8 @@ from http import HTTPStatus
 
 import flask
 from flask import Response
+from sqlalchemy.orm import Session
 
-from api.controller.circulation_manager import CirculationManagerController
 from core.model import Library
 from core.model.admin import Admin
 from core.model.deferredtask import (
@@ -14,10 +14,14 @@ from core.model.deferredtask import (
     queue_task,
 )
 from core.problem_details import INTERNAL_SERVER_ERROR
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
 
-class ReportController(CirculationManagerController):
+class ReportController(LoggerMixin):
+    def __init__(self, db: Session):
+        self._db = db
+
     def generate_inventory_report(self) -> Response | ProblemDetail:
         library: Library = getattr(flask.request, "library")
         admin: Admin = getattr(flask.request, "admin")
