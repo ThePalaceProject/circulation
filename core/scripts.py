@@ -14,7 +14,7 @@ from collections.abc import Generator, Sequence
 from enum import Enum
 from typing import TextIO
 
-from sqlalchemy import String, and_, exists, or_, select, text, tuple_
+from sqlalchemy import and_, exists, not_, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -60,7 +60,12 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
-from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor
+from core.opds_import import (
+    OPDSAPI,
+    OPDSImporter,
+    OPDSImporterSettings,
+    OPDSImportMonitor,
+)
 from core.query.customlist import CustomListQueries
 from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
@@ -2805,26 +2810,27 @@ class GenerateInventoryReports(Script):
             date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
             attachments = {}
 
-            integrations = (
-                self._db.query(IntegrationConfiguration)
+            integrations = self._db.scalars(
+                select(IntegrationConfiguration)
                 .join(IntegrationLibraryConfiguration)
-                .filter(IntegrationLibraryConfiguration.library_id == data.library_id)
-                .filter(
-                    IntegrationConfiguration.settings_dict[
-                        "include_in_inventory_report"
-                    ].astext.cast(String)
-                    == "yes"
+                .where(
+                    IntegrationLibraryConfiguration.library_id == data.library_id,
+                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                    not_(
+                        IntegrationConfiguration.settings_dict.contains(
+                            {"include_in_inventory_report": False}
+                        )
+                    ),
                 )
-                .filter(
-                    IntegrationConfiguration.settings_dict["data_source"].astext.cast(
-                        String
-                    )
-                    != None
-                )
-                .all()
-            )
+            ).all()
 
-            data_source_names = [i.settings_dict["data_source"] for i in integrations]
+            registry = LicenseProvidersRegistry()
+            data_source_names = []
+            for integration in integrations:
+                settings = registry[integration.protocol].settings_load(integration)
+                if not isinstance(settings, OPDSImporterSettings):
+                    continue
+                data_source_names.append(settings.data_source)
 
             for data_source_name in data_source_names:
                 formatted_ds_name = data_source_name.lower().replace(" ", "_")

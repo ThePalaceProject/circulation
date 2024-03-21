@@ -122,16 +122,16 @@ class OPDSImporterSettings(
         form=ConfigurationFormItem(label=_("Data source name"), required=True)
     )
 
-    include_in_inventory_report: str | None = FormField(
+    include_in_inventory_report: bool = FormField(
+        True,
         form=ConfigurationFormItem(
             label=_("Include in inventory report?"),
             type=ConfigurationFormItemType.SELECT,
             options={
-                "yes": "(Default) Yes",
-                "no": "No",
+                "true": "(Default) Yes",
+                "false": "No",
             },
-            required=False,
-        )
+        ),
     )
 
     default_audience: str | None = FormField(

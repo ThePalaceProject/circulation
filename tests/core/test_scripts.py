@@ -51,7 +51,7 @@ from core.model.deferredtask import (
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
-from core.opds_import import OPDSAPI, OPDSImportMonitor
+from core.opds_import import OPDSAPI, OPDSImporterSettings, OPDSImportMonitor
 from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
@@ -2579,17 +2579,29 @@ class TestSuppressWorkForLibraryScript:
 
 class TestGenerateInventoryReports:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        # create some test data
+        # create some test data that we expect to be picked up in the inventory report
         library = db.library(short_name="test")
-        collection = db.collection(
-            name="BiblioBoard Test collection", data_source_name="BiblioBoard"
+        settings = OPDSImporterSettings(
+            include_in_inventory_report=True,
+            external_account_id="http://opds.com",
+            data_source="BiblioBoard",
         )
-
-        # flag the collection as one that should be included in inventory report
-        collection.integration_configuration.settings_dict[
-            "include_in_inventory_report"
-        ] = "yes"
+        collection = db.collection(
+            name="BiblioBoard Test Collection", settings=settings.dict()
+        )
         collection.libraries = [library]
+
+        # Configure test data we expect will not be picked up.
+        no_inventory_report_settings = OPDSImporterSettings(
+            include_in_inventory_report=False,
+            external_account_id="http://opds.com",
+            data_source="AnotherOpdsDataSource",
+        )
+        collection_not_to_include = db.collection(
+            name="Another Test Collection", settings=no_inventory_report_settings.dict()
+        )
+        collection_not_to_include.libraries = [library]
+
         ds = collection.data_source
         assert ds
         title = "Leaves of Grass"
@@ -2601,7 +2613,7 @@ class TestGenerateInventoryReports:
         edition = db.edition(data_source_name=ds.name)
         edition.title = title
         edition.author = author
-        work = db.work(
+        db.work(
             language="eng",
             fiction=True,
             with_license_pool=False,
