@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
 import datetime
 import json
+import logging
 import random
+from dataclasses import asdict
 from io import StringIO
 from unittest.mock import MagicMock, call, create_autospec, patch
 
@@ -37,10 +40,18 @@ from core.model import (
 )
 from core.model.classification import Classification, Subject
 from core.model.customlist import CustomList
+from core.model.deferredtask import (
+    DeferredTask,
+    DeferredTaskStatus,
+    DeferredTaskType,
+    InventoryReportTaskData,
+    queue_task,
+    start_next_task,
+)
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.patron import Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
-from core.opds_import import OPDSAPI, OPDSImportMonitor
+from core.opds_import import OPDSAPI, OPDSImporterSettings, OPDSImportMonitor
 from core.scripts import (
     AddClassificationScript,
     CheckContributorNamesInDB,
@@ -51,7 +62,9 @@ from core.scripts import (
     ConfigureLibraryScript,
     CustomListUpdateEntriesScript,
     DeleteInvisibleLanesScript,
+    DeleteOldDeferredTasks,
     Explain,
+    GenerateInventoryReports,
     IdentifierInputScript,
     LaneSweeperScript,
     LibraryInputScript,
@@ -2562,6 +2575,194 @@ class TestSuppressWorkForLibraryScript:
         script.suppress_work(test_library, work.presentation_edition.primary_identifier)
 
         assert work.suppressed_for == [test_library]
+
+
+class TestGenerateInventoryReports:
+    def test_do_run(self, db: DatabaseTransactionFixture):
+        # create some test data that we expect to be picked up in the inventory report
+        library = db.library(short_name="test")
+        settings = OPDSImporterSettings(
+            include_in_inventory_report=True,
+            external_account_id="http://opds.com",
+            data_source="BiblioBoard",
+        )
+        collection = db.collection(
+            name="BiblioBoard Test Collection", settings=settings.dict()
+        )
+        collection.libraries = [library]
+
+        # Configure test data we expect will not be picked up.
+        no_inventory_report_settings = OPDSImporterSettings(
+            include_in_inventory_report=False,
+            external_account_id="http://opds.com",
+            data_source="AnotherOpdsDataSource",
+        )
+        collection_not_to_include = db.collection(
+            name="Another Test Collection", settings=no_inventory_report_settings.dict()
+        )
+        collection_not_to_include.libraries = [library]
+
+        ds = collection.data_source
+        assert ds
+        title = "Leaves of Grass"
+        author = "Walt Whitman"
+        email = "test@email.com"
+        checkouts_left = 10
+        checkouts_available = 11
+        terms_concurrency = 5
+        edition = db.edition(data_source_name=ds.name)
+        edition.title = title
+        edition.author = author
+        db.work(
+            language="eng",
+            fiction=True,
+            with_license_pool=False,
+            data_source_name=ds.name,
+            presentation_edition=edition,
+            collection=collection,
+        )
+        licensepool = db.licensepool(
+            edition=edition,
+            open_access=False,
+            data_source_name=ds.name,
+            set_edition_as_presentation=True,
+            collection=collection,
+        )
+
+        db.license(
+            pool=licensepool,
+            checkouts_available=checkouts_available,
+            checkouts_left=checkouts_left,
+            terms_concurrency=terms_concurrency,
+        )
+
+        assert library.id
+        data = InventoryReportTaskData(
+            admin_id=1, library_id=library.id, admin_email=email
+        )
+        task, is_new = queue_task(
+            db.session, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
+        )
+
+        assert task.status == DeferredTaskStatus.READY
+
+        script = GenerateInventoryReports(db.session)
+        send_email_mock = create_autospec(script.services.email.container.send_email)
+        script.services.email.container.send_email = send_email_mock
+        script.do_run()
+        send_email_mock.assert_called_once()
+        args, kwargs = send_email_mock.call_args
+        assert task.status == DeferredTaskStatus.SUCCESS
+        assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
+        assert kwargs["subject"].__contains__("Inventory Report")
+        attachments: dict = kwargs["attachments"]
+
+        assert len(attachments) == 1
+        key = [*attachments.keys()][0]
+        assert "biblioboard" in key
+        value = attachments[key]
+        assert len(value) > 0
+        csv_file = StringIO(value)
+        reader = csv.reader(csv_file, delimiter=",")
+        first_row = None
+        row_count = 0
+
+        for row in reader:
+            row_count += 1
+            if not first_row:
+                first_row = row
+                row_headers = [
+                    "title",
+                    "author",
+                    "identifier",
+                    "language",
+                    "publisher",
+                    "format",
+                    "collection_name",
+                    "license_duration_days",
+                    "license_expiration_date",
+                    "initial_loan_count",
+                    "consumed_loans",
+                    "remaining_loans",
+                    "allowed_concurrent_users",
+                    "library_active_hold_count",
+                    "library_active_loan_count",
+                    "shared_active_hold_count",
+                    "shared_active_loan_count",
+                ]
+                for h in row_headers:
+                    assert h in row
+                continue
+
+            assert row[first_row.index("title")] == title
+            assert row[first_row.index("author")] == author
+            assert row[first_row.index("shared_active_hold_count")] == "-1"
+            assert row[first_row.index("shared_active_loan_count")] == "-1"
+            assert row[first_row.index("initial_loan_count")] == str(
+                checkouts_available
+            )
+            assert row[first_row.index("consumed_loans")] == str(
+                checkouts_available - checkouts_left
+            )
+            assert row[first_row.index("allowed_concurrent_users")] == str(
+                terms_concurrency
+            )
+
+            assert row_count == 2
+
+
+class TestDeleteOldDeferredTasks:
+    def test_do_run(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
+        # create some test data
+        _db = db.session
+
+        # the deferred task table should be empty
+        task = _db.query(DeferredTask).first()
+        assert not task
+
+        data = InventoryReportTaskData(
+            admin_id=1, library_id=1, admin_email="test@email.com"
+        )
+        task, is_new = queue_task(
+            db.session, task_type=DeferredTaskType.INVENTORY_REPORT, data=asdict(data)
+        )
+
+        assert task
+        assert is_new
+
+        task2 = start_next_task(_db, task_type=DeferredTaskType.INVENTORY_REPORT)
+
+        assert task2
+        # sanity check: make sure we got back the task we just created.
+        assert task2.id == task.id
+        assert task2.processing_start_time
+        # make sure it is processing
+        assert task2.status == DeferredTaskStatus.PROCESSING
+        task2.complete()
+        assert task2.processing_end_time
+        _db.commit()
+
+        # run it with the expection of no tasks to be deleted.
+        DeleteOldDeferredTasks(_db).do_run()
+        assert caplog.messages[0].__contains__("There were no deferred tasks")
+
+        # set the task's end processing time to 30 days ago.
+        task3 = _db.query(DeferredTask).filter(DeferredTask.id == task2.id).first()
+        assert task3
+        task3.processing_end_time = task3.processing_end_time - datetime.timedelta(
+            days=30
+        )
+        _db.commit()
+        # run again with the expectation of 1 task removed.
+        DeleteOldDeferredTasks(_db).do_run()
+        task4 = _db.query(DeferredTask).first()
+        assert not task4
+        assert caplog.messages[1].__contains__(
+            "Successfully removed 1 task that were completed over 30 days ago."
+        )
 
 
 class TestWorkConsolidationScript:

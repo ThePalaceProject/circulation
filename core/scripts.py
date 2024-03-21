@@ -1,10 +1,12 @@
 import argparse
+import csv
 import datetime
 import json
 import logging
 import os
 import random
 import sys
+import tempfile
 import traceback
 import unicodedata
 import uuid
@@ -12,7 +14,7 @@ from collections.abc import Generator, Sequence
 from enum import Enum
 from typing import TextIO
 
-from sqlalchemy import and_, exists, or_, select, tuple_
+from sqlalchemy import and_, exists, not_, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -32,6 +34,7 @@ from core.model import (
     Edition,
     Identifier,
     IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -47,11 +50,22 @@ from core.model import (
     production_session,
 )
 from core.model.classification import Classification
+from core.model.deferredtask import (
+    DeferredTask,
+    DeferredTaskType,
+    InventoryReportTaskData,
+    start_next_task,
+)
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
-from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor
+from core.opds_import import (
+    OPDSAPI,
+    OPDSImporter,
+    OPDSImporterSettings,
+    OPDSImportMonitor,
+)
 from core.query.customlist import CustomListQueries
 from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
@@ -2756,6 +2770,246 @@ class SuppressWorkForLibraryScript(Script):
         )
 
         self._db.commit()
+
+
+class GenerateInventoryReports(Script):
+    """Generate inventory reports from queued report tasks"""
+
+    @classmethod
+    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
+        parser = argparse.ArgumentParser()
+        if _db is None:
+            raise ValueError("No database session provided.")
+
+        return parser
+
+    @classmethod
+    def parse_command_line(
+        cls, _db: Session | None = None, cmd_args: list[str] | None = None
+    ):
+        parser = cls.arg_parser(_db)
+        return parser.parse_known_args(cmd_args)[0]
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+
+        while True:
+            task = start_next_task(self._db, DeferredTaskType.INVENTORY_REPORT)
+            if not task:
+                break
+
+            self.process_task(task)
+
+        self.remove_old_tasks()
+
+    def process_task(self, task: DeferredTask):
+        data = InventoryReportTaskData(**task.data)
+        files = []
+        try:
+            current_time = datetime.datetime.now()
+            date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
+            attachments = {}
+
+            integrations = self._db.scalars(
+                select(IntegrationConfiguration)
+                .join(IntegrationLibraryConfiguration)
+                .where(
+                    IntegrationLibraryConfiguration.library_id == data.library_id,
+                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                    not_(
+                        IntegrationConfiguration.settings_dict.contains(
+                            {"include_in_inventory_report": False}
+                        )
+                    ),
+                )
+            ).all()
+
+            registry = LicenseProvidersRegistry()
+            data_source_names = []
+            for integration in integrations:
+                settings = registry[integration.protocol].settings_load(integration)
+                if not isinstance(settings, OPDSImporterSettings):
+                    continue
+                data_source_names.append(settings.data_source)
+
+            for data_source_name in data_source_names:
+                formatted_ds_name = data_source_name.lower().replace(" ", "_")
+                file_name = f"palace-inventory-report-{formatted_ds_name}-{date_str}"
+                # generate csv file
+                file_path = self.generate_report(
+                    data_source_name=data_source_name,
+                    library_id=data.library_id,
+                )
+                # extract contents of files and prepare in a dictionary of email attachments
+                with open(file_path) as csv_file:
+                    attachments[f"{file_name}.csv"] = csv_file.read()
+                    files.append(csv_file)
+
+            self.services.email.send_email(
+                subject=f"Inventory Report {current_time}",
+                receivers=[data.admin_email],
+                text="",
+                attachments=attachments,
+            )
+            task.complete()
+        except Exception as e:
+            # log error
+            self.log.error(f"Failed to process task: {task}", e)
+            task.fail(failure_details=f"{e}")
+        finally:
+            self._db.commit()
+            for file in files:
+                os.remove(file.name)
+
+    def generate_report(self, data_source_name: str, library_id: int) -> str:
+        """Generate a csv file and return the file path"""
+        with tempfile.NamedTemporaryFile(
+            "w",
+            delete=False,
+        ) as temp:
+            writer = csv.writer(temp, delimiter=",")
+            rows = self._db.execute(
+                text(self.inventory_report_query()),
+                {"library_id": library_id, "data_source_name": data_source_name},
+            )
+            writer.writerow(rows.keys())
+            writer.writerows(rows)
+        return temp.name
+
+    def inventory_report_query(self) -> str:
+        return """
+            select
+               e.title,
+               e.author,
+               i.identifier,
+               e.language,
+               e.publisher,
+               e.medium as format,
+               ic.name collection_name,
+               DATE_PART('day', l.expires::date) - DATE_PART('day',lp.availability_time::date) as license_duration_days,
+               l.expires license_expiration_date,
+               l.checkouts_available initial_loan_count,
+               (l.checkouts_available-l.checkouts_left) consumed_loans,
+               l.checkouts_left remaining_loans,
+               l.terms_concurrency allowed_concurrent_users,
+               coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
+               coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
+               CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
+                    ELSE -1
+               END shared_active_hold_count,
+               CASE WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
+                    ELSE -1
+               END shared_active_loan_count
+        from datasources d,
+             collections c,
+             integration_configurations ic,
+             integration_library_configurations il,
+             libraries lib,
+             editions e,
+             identifiers i,
+             (select ic.parent_id,
+                      count(ic.parent_id) > 1 is_shared_collection
+              from integration_library_configurations ic,
+                   integration_configurations i,
+                   collections c
+              where c.integration_configuration_id = i.id  and
+                    i.id = ic.parent_id group by ic.parent_id) collection_sharing,
+             licensepools lp left outer join licenses l on lp.id = l.license_pool_id
+                 left outer join (select h.license_pool_id,
+                                         p.library_id,
+                                         count(h.id) active_hold_count
+                                  from holds h,
+                                       patrons p,
+                                       libraries l
+                                  where p.id = h.patron_id and
+                                        p.library_id = l.id and
+                                        l.id = :library_id
+                                  group by p.library_id, h.license_pool_id) lib_holds on lp.id = lib_holds.license_pool_id
+                 left outer join (select ln.license_pool_id,
+                                         p.library_id,
+                                         count(ln.id) active_loan_count
+                                  from loans ln,
+                                       patrons p,
+                                       libraries l
+                                  where p.id = ln.patron_id and
+                                        p.library_id = l.id and
+                                        l.id = :library_id
+                                  group by p.library_id, ln.license_pool_id) lib_loans on lp.id = lib_holds.license_pool_id
+        where lp.identifier_id = i.id and
+              e.primary_identifier_id = i.id and
+              d.id = e.data_source_id and
+              c.id = lp.collection_id and
+              c.integration_configuration_id = ic.id and
+              ic.id = il.parent_id and
+              ic.id = collection_sharing.parent_id and
+              il.library_id = lib.id and
+              d.name = :data_source_name and
+              lib.id = :library_id
+         order by title, author
+        """
+
+    def remove_old_tasks(self):
+        """Remove inventory generation tasks older than 30 days"""
+        self._db.query(DeferredTask)
+        thirty_days_ago = utc_now() - datetime.timedelta(days=30)
+        tasks = (
+            self._db.query(DeferredTask)
+            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
+            .filter(DeferredTask.processing_end_time < thirty_days_ago)
+        )
+        for task in tasks:
+            self._db.delete(task)
+
+
+class DeleteOldDeferredTasks(Script):
+    """Delete old deferred tasks."""
+
+    @classmethod
+    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
+        parser = argparse.ArgumentParser()
+        if _db is None:
+            raise ValueError("No database session provided.")
+
+        return parser
+
+    @classmethod
+    def parse_command_line(
+        cls, _db: Session | None = None, cmd_args: list[str] | None = None
+    ):
+        parser = cls.arg_parser(_db)
+        return parser.parse_known_args(cmd_args)[0]
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+        self.remove_old_tasks()
+
+    def remove_old_tasks(self):
+        """Remove inventory generation tasks older than 30 days"""
+        self._db.query(DeferredTask)
+        days = 30
+        thirty_days_ago = utc_now() - datetime.timedelta(days=days)
+        tasks = (
+            self._db.query(DeferredTask)
+            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
+            .filter(DeferredTask.processing_end_time < thirty_days_ago)
+        )
+
+        tasks_removed = 0
+
+        for task in tasks:
+            self._db.delete(task)
+            tasks_removed += 1
+
+        self._db.commit()
+        if tasks_removed > 0:
+            self.log.info(
+                f"Successfully removed {tasks_removed} task{ 's' if tasks_removed > 1 else ''} "
+                f"that were completed over {days} days ago."
+            )
+        else:
+            self.log.info(
+                f"There were no deferred tasks that were completed over {days} ago to be removed."
+            )
 
 
 class MockStdin:
