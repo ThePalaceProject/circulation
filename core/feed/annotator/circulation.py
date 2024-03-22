@@ -23,6 +23,7 @@ from core.analytics import Analytics
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.entrypoint import EverythingEntryPoint
+from core.exceptions import BasePalaceException
 from core.external_search import WorkSearchResult
 from core.feed.annotator.base import Annotator
 from core.feed.opds import UnfulfillableWork
@@ -954,6 +955,17 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             entry.computed.other_links.append(
                 Link(href=group_uri, rel=OPDSFeed.GROUP_REL, title=str(group_title))
             )
+
+    def active_licensepool_for(
+        self, work: Work, library: Library | None = None
+    ) -> LicensePool | None:
+        if library and library != self.library:
+            raise BasePalaceException(
+                message=f"This is a LibraryAnnotator: does it ever make sense to lookup get the "
+                f"active license pool a library not associated with this library?  "
+                f"self.library = {self.library} vs library arg = {library}"
+            )
+        return super().active_licensepool_for(work=work, library=self.library)
 
     @classmethod
     def related_books_available(cls, work: Work, library: Library) -> bool:
