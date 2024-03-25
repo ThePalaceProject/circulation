@@ -19,6 +19,7 @@ from core.classifier import (  # type: ignore[attr-defined]
     Urban_Fantasy,
 )
 from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint, EverythingEntryPoint
+from core.exceptions import BasePalaceException
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.feed.annotator.circulation import LibraryAnnotator
 from core.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
@@ -1806,3 +1807,18 @@ class TestLibraryAnnotator:
         assert (
             mech2.delivery_mechanism.content_type == link.indirect_acquisitions[0].type
         )
+
+    def test_library_conflict_when_resolving_active_license_pool(
+        self,
+        annotator_fixture: LibraryAnnotatorFixture,
+        library_fixture: LibraryFixture,
+    ):
+        # we would never want to
+        other_library = library_fixture.library("otherlibrary")
+        annotator = LibraryAnnotator(None, None, annotator_fixture.db.default_library())
+
+        # This book has two delivery mechanisms
+        work = annotator_fixture.db.work(with_license_pool=True)
+
+        with pytest.raises(BasePalaceException):
+            annotator.active_licensepool_for(work, other_library)
