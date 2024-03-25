@@ -1820,5 +1820,10 @@ class TestLibraryAnnotator:
         # This book has two delivery mechanisms
         work = annotator_fixture.db.work(with_license_pool=True)
 
-        with pytest.raises(BasePalaceException):
+        with pytest.raises(BasePalaceException) as execinfo:
             annotator.active_licensepool_for(work, other_library)
+
+        assert (
+            "An active license pool cannot be resolved for a library not associated with this annotator"
+            in str(execinfo.value)
+        )

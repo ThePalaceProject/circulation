@@ -961,9 +961,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     ) -> LicensePool | None:
         if library and library != self.library:
             raise BasePalaceException(
-                message=f"This is a LibraryAnnotator: does it ever make sense to lookup get the "
-                f"active license pool a library not associated with this library?  "
-                f"self.library = {self.library} vs library arg = {library}"
+                message=f"An active license pool cannot be resolved for a library not associated with this annotator: "
+                f"self.library = {self.library} vs library arg = {library}. This condition is likely arising from "
+                f"a programming error."
             )
         return super().active_licensepool_for(work=work, library=self.library)
 
