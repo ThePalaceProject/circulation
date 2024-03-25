@@ -1813,12 +1813,13 @@ class TestLibraryAnnotator:
         annotator_fixture: LibraryAnnotatorFixture,
         library_fixture: LibraryFixture,
     ):
-        # we would never want to
-        other_library = library_fixture.library("otherlibrary")
+        # we would never want to resolve an active license pool with a library other
+        # than the library that was passed to construct the LibraryAnnotator.
         annotator = LibraryAnnotator(None, None, annotator_fixture.db.default_library())
 
-        # This book has two delivery mechanisms
         work = annotator_fixture.db.work(with_license_pool=True)
+
+        other_library = library_fixture.library("otherlibrary")
 
         with pytest.raises(BasePalaceException) as execinfo:
             annotator.active_licensepool_for(work, other_library)
