@@ -1049,6 +1049,7 @@ class TestParsers:
         assert parser.process_first(data) is None
         assert parser.process_first(None) is None
         assert parser.process_first(b"") is None
+        assert parser.process_first(b"not xml") is None
 
     def test_bibliographic_parser(self, axis360: Axis360Fixture):
         # Make sure the bibliographic information gets properly

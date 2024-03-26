@@ -948,12 +948,9 @@ class StatusResponseParser(Axis360Parser[tuple[int, str]]):
     def process_one(
         self, tag: _Element, namespaces: dict[str, str] | None
     ) -> tuple[int, str] | None:
-        try:
-            status_code = self.int_of_subtag(tag, "axis:code", namespaces)
-            message = self.text_of_subtag(tag, "axis:statusMessage", namespaces)
-            return status_code, message
-        except ValueError:
-            return None
+        status_code = self.int_of_subtag(tag, "axis:code", namespaces)
+        message = self.text_of_subtag(tag, "axis:statusMessage", namespaces)
+        return status_code, message
 
     def process_first(
         self,
@@ -962,7 +959,12 @@ class StatusResponseParser(Axis360Parser[tuple[int, str]]):
         if not xml:
             return None
 
-        return super().process_first(xml)
+        # Since this is being used to parse error codes, we want to generally be
+        # very forgiving of errors in the XML, and return None if we can't parse it.
+        try:
+            return super().process_first(xml)
+        except (etree.XMLSyntaxError, AssertionError, ValueError):
+            return None
 
 
 class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], LoggerMixin):
