@@ -312,7 +312,7 @@ class TestAxis360API:
         # The fourth request never got made.
         assert [301] == [x.status_code for x in axis360.api.responses]
 
-    def test_bearer_token_only_refreshed_when_axis_status_code_is_401(
+    def test_bearer_token_not_refreshed_for_patron_not_found(
         self, axis360: Axis360Fixture
     ):
         axis360.api.queue_response(
@@ -327,6 +327,17 @@ class TestAxis360API:
 
         # Only a single request was made.
         assert len(axis360.api.requests) == 1
+
+    def test_refresh_bearer_token_on_invalid_token_status(
+        self, axis360: Axis360Fixture
+    ):
+        axis360.api.queue_response(
+            401, content=axis360.sample_data("availability_invalid_token.xml")
+        )
+        axis360.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
+        axis360.api.queue_response(200, content="The data")
+        response = axis360.api.request("http://url/")
+        assert b"The data" == response.content
 
     def test_update_availability(self, axis360: Axis360Fixture):
         # Test the Axis 360 implementation of the update_availability method
