@@ -17,7 +17,7 @@ import certifi
 from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from lxml.etree import _Element
+from lxml.etree import _Element, _ElementTree
 from pydantic import validator
 from requests import Response as RequestsResponse
 
@@ -310,7 +310,7 @@ class Axis360API(
         extra_headers: dict[str, str] | None = None,
         data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
-        exception_on_401: bool = False,
+        request_retried: bool = False,
         **kwargs: Any,
     ) -> RequestsResponse:
         """Make an HTTP request, acquiring/refreshing a bearer token
@@ -323,36 +323,34 @@ class Axis360API(
         headers = dict(extra_headers)
         headers["Authorization"] = "Bearer " + self.token
         headers["Library"] = self.library_id
-        if exception_on_401:
-            disallowed_response_codes = ["401"]
-        else:
-            disallowed_response_codes = None
         response = self._make_request(
             url=url,
             method=method,
             headers=headers,
             data=data,
             params=params,
-            disallowed_response_codes=disallowed_response_codes,
             **kwargs,
         )
-        if response.status_code == 401:
-            # This must be our first 401, since our second 401 will
-            # make _make_request raise a RemoteIntegrationException.
-            #
-            # The token has expired. Get a new token and try again.
-            self.token = None
-            return self.request(
-                url=url,
-                method=method,
-                extra_headers=extra_headers,
-                data=data,
-                params=params,
-                exception_on_401=True,
-                **kwargs,
-            )
-        else:
-            return response
+        if response.status_code == 401 and not request_retried:
+            parsed = StatusResponseParser().process_first(response.content)
+            if parsed is None or parsed[0] in [1001, 1002, 1003]:
+                # The token is probably expired. Get a new token and try again.
+                # Axis 360's status codes mean:
+                #   1001: Invalid token
+                #   1002: Token expired
+                #   1003: Token is invalid for given library
+                self.token = None
+                return self.request(
+                    url=url,
+                    method=method,
+                    extra_headers=extra_headers,
+                    data=data,
+                    params=params,
+                    request_retried=True,
+                    **kwargs,
+                )
+
+        return response
 
     def availability(
         self,
@@ -938,6 +936,33 @@ class Axis360Parser(XMLProcessor[T], ABC):
     ) -> datetime.datetime | None:
         value = self.text_of_optional_subtag(e, target, ns)
         return self._pd(value)
+
+
+class StatusResponseParser(Axis360Parser[tuple[int, str]]):
+    @property
+    def xpath_expression(self) -> str:
+        # Sometimes the status tag is overloaded, so we want to only
+        # look for the status tag that contains the code tag.
+        return "//axis:status/axis:code/.."
+
+    def process_one(
+        self, tag: _Element, namespaces: dict[str, str] | None
+    ) -> tuple[int, str] | None:
+        try:
+            status_code = self.int_of_subtag(tag, "axis:code", namespaces)
+            message = self.text_of_subtag(tag, "axis:statusMessage", namespaces)
+            return status_code, message
+        except ValueError:
+            return None
+
+    def process_first(
+        self,
+        xml: str | bytes | _ElementTree | None,
+    ) -> tuple[int, str] | None:
+        if not xml:
+            return None
+
+        return super().process_first(xml)
 
 
 class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], LoggerMixin):
