@@ -2867,7 +2867,7 @@ class GenerateInventoryReports(Script):
             "w",
             delete=False,
         ) as temp:
-            writer = csv.writer(temp, delimiter=",")
+            writer = csv.writer(temp, delimiter=",", encoding="utf-8")
             rows = self._db.execute(
                 text(self.inventory_report_query()),
                 {"library_id": library_id, "data_source_name": data_source_name},
@@ -2905,7 +2905,32 @@ class GenerateInventoryReports(Script):
              integration_configurations ic,
              integration_library_configurations il,
              libraries lib,
-             editions e,
+             editions e left outer join (select lp.presentation_edition_id,
+                                         p.library_id,
+                                         count(h.id) active_hold_count
+                                  from holds h,
+                                       licensepools lp,
+                                       patrons p,
+                                       libraries l
+                                  where p.id = h.patron_id and
+                                        h.license_pool_id = lp.id and
+                                        p.library_id = l.id and
+                                        l.id = :library_id
+                                  group by p.library_id, lp.presentation_edition_id) lib_holds
+                                  on e.id = lib_holds.presentation_edition_id
+                 left outer join (select lp.presentation_edition_id,
+                                         p.library_id,
+                                         count(ln.id) active_loan_count
+                                  from loans ln,
+                                       licensepools lp,
+                                       patrons p,
+                                       libraries l
+                                  where p.id = ln.patron_id and
+                                        p.library_id = l.id and
+                                        ln.license_pool_id = lp.id and
+                                        l.id = :library_id
+                                  group by p.library_id, lp.presentation_edition_id) lib_loans
+                                  on e.id = lib_loans.presentation_edition_id,
              identifiers i,
              (select ic.parent_id,
                       count(ic.parent_id) > 1 is_shared_collection
@@ -2915,26 +2940,6 @@ class GenerateInventoryReports(Script):
               where c.integration_configuration_id = i.id  and
                     i.id = ic.parent_id group by ic.parent_id) collection_sharing,
              licensepools lp left outer join licenses l on lp.id = l.license_pool_id
-                 left outer join (select h.license_pool_id,
-                                         p.library_id,
-                                         count(h.id) active_hold_count
-                                  from holds h,
-                                       patrons p,
-                                       libraries l
-                                  where p.id = h.patron_id and
-                                        p.library_id = l.id and
-                                        l.id = :library_id
-                                  group by p.library_id, h.license_pool_id) lib_holds on lp.id = lib_holds.license_pool_id
-                 left outer join (select ln.license_pool_id,
-                                         p.library_id,
-                                         count(ln.id) active_loan_count
-                                  from loans ln,
-                                       patrons p,
-                                       libraries l
-                                  where p.id = ln.patron_id and
-                                        p.library_id = l.id and
-                                        l.id = :library_id
-                                  group by p.library_id, ln.license_pool_id) lib_loans on lp.id = lib_holds.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
               d.id = e.data_source_id and
