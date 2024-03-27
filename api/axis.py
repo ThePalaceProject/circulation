@@ -333,12 +333,11 @@ class Axis360API(
         )
         if response.status_code == 401 and not request_retried:
             parsed = StatusResponseParser().process_first(response.content)
-            if parsed is None or parsed[0] in [1001, 1002, 1003]:
+            if parsed is None or parsed[0] in [1001, 1002]:
                 # The token is probably expired. Get a new token and try again.
                 # Axis 360's status codes mean:
                 #   1001: Invalid token
                 #   1002: Token expired
-                #   1003: Token is invalid for given library
                 self.token = None
                 return self.request(
                     url=url,
