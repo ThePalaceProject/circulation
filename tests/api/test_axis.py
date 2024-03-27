@@ -30,6 +30,7 @@ from api.axis import (
     HoldReleaseResponseParser,
     HoldResponseParser,
     JSONResponseParser,
+    StatusResponseParser,
 )
 from api.circulation import FulfillmentInfo, HoldInfo, LoanInfo
 from api.circulation_exceptions import (
@@ -295,9 +296,9 @@ class TestAxis360API:
             in str(excinfo.value)
         )
 
-    def test_exception_after_401_with_fresh_token(self, axis360: Axis360Fixture):
-        # If we get a 401 immediately after refreshing the token, we will
-        # raise an exception.
+    def test_bearer_token_only_refreshed_once_after_401(self, axis360: Axis360Fixture):
+        # If we get a 401 immediately after refreshing the token, we just
+        # return the response instead of refreshing the token again.
 
         axis360.api.queue_response(401)
         axis360.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
@@ -305,14 +306,38 @@ class TestAxis360API:
 
         axis360.api.queue_response(301)
 
-        with pytest.raises(RemoteIntegrationException) as excinfo:
-            axis360.api.request("http://url/")
-        assert "Got status code 401 from external server, cannot continue." in str(
-            excinfo.value
-        )
+        response = axis360.api.request("http://url/")
+        assert response.status_code == 401
 
         # The fourth request never got made.
         assert [301] == [x.status_code for x in axis360.api.responses]
+
+    def test_bearer_token_not_refreshed_for_patron_not_found(
+        self, axis360: Axis360Fixture
+    ):
+        axis360.api.queue_response(
+            401, content=axis360.sample_data("availability_patron_not_found.xml")
+        )
+        axis360.api.queue_response(301)
+
+        # This request will fail with a 401, but the bearer token will not be refreshed because it has
+        # an axis:code set in the response XML, and the code does not indicate that the token is invalid.
+        response = axis360.api.request("http://url/")
+        assert response.status_code == 401
+
+        # Only a single request was made.
+        assert len(axis360.api.requests) == 1
+
+    def test_refresh_bearer_token_on_invalid_token_status(
+        self, axis360: Axis360Fixture
+    ):
+        axis360.api.queue_response(
+            401, content=axis360.sample_data("availability_invalid_token.xml")
+        )
+        axis360.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
+        axis360.api.queue_response(200, content="The data")
+        response = axis360.api.request("http://url/")
+        assert b"The data" == response.content
 
     def test_update_availability(self, axis360: Axis360Fixture):
         # Test the Axis 360 implementation of the update_availability method
@@ -998,6 +1023,45 @@ class TestReaper:
 
 
 class TestParsers:
+    def test_status_parser(self, axis360: Axis360Fixture):
+        data = axis360.sample_data("availability_patron_not_found.xml")
+        parser = StatusResponseParser()
+        parsed = parser.process_first(data)
+        assert parsed is not None
+        status, message = parsed
+        assert status == 3122
+        assert message == "Patron information is not found."
+
+        data = axis360.sample_data("availability_with_loans.xml")
+        parsed = parser.process_first(data)
+        assert parsed is not None
+        status, message = parsed
+        assert status == 0
+        assert message == "Availability Data is Successfully retrieved."
+
+        data = axis360.sample_data("availability_with_ebook_fulfillment.xml")
+        parsed = parser.process_first(data)
+        assert parsed is not None
+        status, message = parsed
+        assert status == 0
+        assert message == "Availability Data is Successfully retrieved."
+
+        data = axis360.sample_data("checkin_failure.xml")
+        parsed = parser.process_first(data)
+        assert parsed is not None
+        status, message = parsed
+        assert status == 3103
+        assert message == "Invalid Title Id"
+
+        data = axis360.sample_data("invalid_error_code.xml")
+        assert parser.process_first(data) is None
+
+        data = axis360.sample_data("missing_error_code.xml")
+        assert parser.process_first(data) is None
+        assert parser.process_first(None) is None
+        assert parser.process_first(b"") is None
+        assert parser.process_first(b"not xml") is None
+
     def test_bibliographic_parser(self, axis360: Axis360Fixture):
         # Make sure the bibliographic information gets properly
         # collated in preparation for creating Edition objects.
@@ -1489,6 +1553,13 @@ class TestAvailabilityResponseParser:
         # The API object is present in the FulfillmentInfo and ready to go
         # make that extra request.
         assert axis360parsers.api == fulfillment.api
+
+    def test_patron_not_found(self, axis360parsers: Axis360FixturePlusParsers):
+        # If the patron is not found, the parser will return an empty list, since
+        # that patron can't have any loans or holds.
+        data = axis360parsers.sample_data("availability_patron_not_found.xml")
+        parser = AvailabilityResponseParser(axis360parsers.api)
+        assert list(parser.process_all(data)) == []
 
 
 class TestJSONResponseParser:
