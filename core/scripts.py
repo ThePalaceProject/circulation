@@ -2863,11 +2863,8 @@ class GenerateInventoryReports(Script):
 
     def generate_report(self, data_source_name: str, library_id: int) -> str:
         """Generate a csv file and return the file path"""
-        with tempfile.NamedTemporaryFile(
-            "w",
-            delete=False,
-        ) as temp:
-            writer = csv.writer(temp, delimiter=",", encoding="utf-8")
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
+            writer = csv.writer(temp, delimiter=",")
             rows = self._db.execute(
                 text(self.inventory_report_query()),
                 {"library_id": library_id, "data_source_name": data_source_name},
@@ -2885,6 +2882,8 @@ class GenerateInventoryReports(Script):
                e.language,
                e.publisher,
                e.medium as format,
+               w.audience,
+               wg.genres,
                ic.name collection_name,
                DATE_PART('day', l.expires::date) - DATE_PART('day',lp.availability_time::date) as license_duration_days,
                l.expires license_expiration_date,
@@ -2905,6 +2904,11 @@ class GenerateInventoryReports(Script):
              integration_configurations ic,
              integration_library_configurations il,
              libraries lib,
+             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
+                                     from genres g,
+                                     workgenres wg
+                                     where g.id = wg.genre_id
+                                     group by wg.work_id) wg on w.id = wg.work_id,
              editions e left outer join (select lp.presentation_edition_id,
                                          p.library_id,
                                          count(h.id) active_hold_count
@@ -2942,6 +2946,7 @@ class GenerateInventoryReports(Script):
              licensepools lp left outer join licenses l on lp.id = l.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
+              e.id = w.presentation_edition_id and
               d.id = e.data_source_id and
               c.id = lp.collection_id and
               c.integration_configuration_id = ic.id and
