@@ -38,7 +38,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.model.classification import Classification, Subject
+from core.model.classification import Classification, Genre, Subject
 from core.model.customlist import CustomList
 from core.model.deferredtask import (
     DeferredTask,
@@ -2604,8 +2604,8 @@ class TestGenerateInventoryReports:
 
         ds = collection.data_source
         assert ds
-        title = "Leaves of Grass"
-        author = "Walt Whitman"
+        title = "展翅高飞 : Whistling Wings"
+        author = "Laura Goering"
         email = "test@email.com"
         checkouts_left = 10
         checkouts_available = 11
@@ -2613,14 +2613,20 @@ class TestGenerateInventoryReports:
         edition = db.edition(data_source_name=ds.name)
         edition.title = title
         edition.author = author
-        db.work(
+        work = db.work(
             language="eng",
             fiction=True,
             with_license_pool=False,
             data_source_name=ds.name,
             presentation_edition=edition,
             collection=collection,
+            genre="genre_z",
         )
+
+        genre, ignore = Genre.lookup(db.session, "genre_a", autocreate=True)
+        work.genres.append(genre)
+        work.audience = "young adult"
+
         licensepool = db.licensepool(
             edition=edition,
             open_access=False,
@@ -2677,6 +2683,8 @@ class TestGenerateInventoryReports:
                     "identifier",
                     "language",
                     "publisher",
+                    "audience",
+                    "genres",
                     "format",
                     "collection_name",
                     "license_duration_days",
@@ -2696,6 +2704,8 @@ class TestGenerateInventoryReports:
 
             assert row[first_row.index("title")] == title
             assert row[first_row.index("author")] == author
+            assert row[first_row.index("genres")] == "genre_a,genre_z"
+            assert row[first_row.index("audience")] == "young adult"
             assert row[first_row.index("shared_active_hold_count")] == "-1"
             assert row[first_row.index("shared_active_loan_count")] == "-1"
             assert row[first_row.index("initial_loan_count")] == str(
