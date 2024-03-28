@@ -312,32 +312,35 @@ class TestAxis360API:
         # The fourth request never got made.
         assert [301] == [x.status_code for x in axis360.api.responses]
 
-    def test_bearer_token_not_refreshed_for_patron_not_found(
-        self, axis360: Axis360Fixture
+    @pytest.mark.parametrize(
+        "file, should_refresh",
+        [
+            pytest.param(None, True, id="no_message"),
+            pytest.param("availability_invalid_token.xml", True, id="invalid_token"),
+            pytest.param("availability_expired_token.xml", True, id="expired_token"),
+            pytest.param(
+                "availability_patron_not_found.xml", False, id="patron_not_found"
+            ),
+        ],
+    )
+    def test_refresh_bearer_token_based_on_token_status(
+        self, axis360: Axis360Fixture, file: str | None, should_refresh: bool
     ):
-        axis360.api.queue_response(
-            401, content=axis360.sample_data("availability_patron_not_found.xml")
-        )
-        axis360.api.queue_response(301)
+        data = axis360.sample_data(file) if file else None
 
-        # This request will fail with a 401, but the bearer token will not be refreshed because it has
-        # an axis:code set in the response XML, and the code does not indicate that the token is invalid.
-        response = axis360.api.request("http://url/")
-        assert response.status_code == 401
-
-        # Only a single request was made.
-        assert len(axis360.api.requests) == 1
-
-    def test_refresh_bearer_token_on_invalid_token_status(
-        self, axis360: Axis360Fixture
-    ):
-        axis360.api.queue_response(
-            401, content=axis360.sample_data("availability_invalid_token.xml")
-        )
+        axis360.api.queue_response(401, content=data)
         axis360.api.queue_response(200, content=json.dumps(dict(access_token="foo")))
         axis360.api.queue_response(200, content="The data")
         response = axis360.api.request("http://url/")
-        assert b"The data" == response.content
+
+        if should_refresh:
+            assert response.content == b"The data"
+            assert response.status_code == 200
+            assert len(axis360.api.requests) == 3
+        else:
+            assert response.content == data
+            assert response.status_code == 401
+            assert len(axis360.api.requests) == 1
 
     def test_update_availability(self, axis360: Axis360Fixture):
         # Test the Axis 360 implementation of the update_availability method
