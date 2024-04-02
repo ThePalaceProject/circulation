@@ -15,7 +15,7 @@ jobs:
   docker-build-baseimage:
     name: Build Base Image
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: write
