@@ -2885,12 +2885,10 @@ class GenerateInventoryReports(Script):
                w.audience,
                wg.genres,
                ic.name collection_name,
-               DATE_PART('day', l.expires::date) - DATE_PART('day',lp.availability_time::date) as license_duration_days,
-               l.expires license_expiration_date,
-               l.checkouts_available initial_loan_count,
-               (l.checkouts_available-l.checkouts_left) consumed_loans,
+               l.latest_expires latest_license_expiration,
+               DATE_PART('day', l.latest_expires - CURRENT_DATE) max_remaining_days_on_license,
                l.checkouts_left remaining_loans,
-               l.terms_concurrency allowed_concurrent_users,
+               l.max_terms_concurrency allowed_concurrent_users,
                coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
                coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
                CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
@@ -2922,7 +2920,7 @@ class GenerateInventoryReports(Script):
                                         l.id = :library_id
                                   group by p.library_id, lp.presentation_edition_id) lib_holds
                                   on e.id = lib_holds.presentation_edition_id
-                 left outer join (select lp.presentation_edition_id,
+                        left outer join (select lp.presentation_edition_id,
                                          p.library_id,
                                          count(ln.id) active_loan_count
                                   from loans ln,
@@ -2936,14 +2934,19 @@ class GenerateInventoryReports(Script):
                                   group by p.library_id, lp.presentation_edition_id) lib_loans
                                   on e.id = lib_loans.presentation_edition_id,
              identifiers i,
-             (select ic.parent_id,
-                      count(ic.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ic,
+             (select ilc.parent_id,
+                      count(ilc.parent_id) > 1 is_shared_collection
+              from integration_library_configurations ilc,
                    integration_configurations i,
                    collections c
               where c.integration_configuration_id = i.id  and
-                    i.id = ic.parent_id group by ic.parent_id) collection_sharing,
-             licensepools lp left outer join licenses l on lp.id = l.license_pool_id
+                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
+             licensepools lp left outer join (select license_pool_id,
+                                                     sum(checkouts_available) checkouts_available,
+                                                     sum(checkouts_left) checkouts_left,
+                                                     max(expires) latest_expires,
+                                                     max(terms_concurrency) max_terms_concurrency
+                                              from licenses group by license_pool_id) l on lp.id = l.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
               e.id = w.presentation_edition_id and

@@ -2608,7 +2608,6 @@ class TestGenerateInventoryReports:
         author = "Laura Goering"
         email = "test@email.com"
         checkouts_left = 10
-        checkouts_available = 11
         terms_concurrency = 5
         edition = db.edition(data_source_name=ds.name)
         edition.title = title
@@ -2637,7 +2636,6 @@ class TestGenerateInventoryReports:
 
         db.license(
             pool=licensepool,
-            checkouts_available=checkouts_available,
             checkouts_left=checkouts_left,
             terms_concurrency=terms_concurrency,
         )
@@ -2687,10 +2685,8 @@ class TestGenerateInventoryReports:
                     "genres",
                     "format",
                     "collection_name",
-                    "license_duration_days",
-                    "license_expiration_date",
-                    "initial_loan_count",
-                    "consumed_loans",
+                    "latest_license_expiration",
+                    "max_remaining_days_on_license",
                     "remaining_loans",
                     "allowed_concurrent_users",
                     "library_active_hold_count",
@@ -2708,12 +2704,7 @@ class TestGenerateInventoryReports:
             assert row[first_row.index("audience")] == "young adult"
             assert row[first_row.index("shared_active_hold_count")] == "-1"
             assert row[first_row.index("shared_active_loan_count")] == "-1"
-            assert row[first_row.index("initial_loan_count")] == str(
-                checkouts_available
-            )
-            assert row[first_row.index("consumed_loans")] == str(
-                checkouts_available - checkouts_left
-            )
+            assert row[first_row.index("remaining_loans")] == str(checkouts_left)
             assert row[first_row.index("allowed_concurrent_users")] == str(
                 terms_concurrency
             )
