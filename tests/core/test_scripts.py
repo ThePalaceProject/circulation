@@ -49,7 +49,7 @@ from core.model.deferredtask import (
     start_next_task,
 )
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
-from core.model.patron import Patron
+from core.model.patron import Hold, Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSAPI, OPDSImporterSettings, OPDSImportMonitor
 from core.scripts import (
@@ -2580,7 +2580,8 @@ class TestSuppressWorkForLibraryScript:
 class TestGenerateInventoryReports:
     def test_do_run(self, db: DatabaseTransactionFixture):
         # create some test data that we expect to be picked up in the inventory report
-        library = db.library(short_name="test")
+        library = db.library(short_name="test_library")
+        library2 = db.library(short_name="test_library2")
         settings = OPDSImporterSettings(
             include_in_inventory_report=True,
             external_account_id="http://opds.com",
@@ -2589,7 +2590,7 @@ class TestGenerateInventoryReports:
         collection = db.collection(
             name="BiblioBoard Test Collection", settings=settings.dict()
         )
-        collection.libraries = [library]
+        collection.libraries = [library, library2]
 
         # Configure test data we expect will not be picked up.
         no_inventory_report_settings = OPDSImporterSettings(
@@ -2634,6 +2635,19 @@ class TestGenerateInventoryReports:
             collection=collection,
         )
 
+        patron = db.patron(library=library)
+
+        hold, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron,
+            license_pool=licensepool,
+            start=utc_now(),
+            end=utc_now() + datetime.timedelta(days=1),
+        )
+
+        shared_patrons_in_hold_queue = 3
+        licensepool.patrons_in_hold_queue = shared_patrons_in_hold_queue
         db.license(
             pool=licensepool,
             checkouts_left=checkouts_left,
@@ -2661,17 +2675,19 @@ class TestGenerateInventoryReports:
         assert kwargs["subject"].__contains__("Inventory Report")
         attachments: dict = kwargs["attachments"]
 
-        assert len(attachments) == 1
-        key = [*attachments.keys()][0]
-        assert "biblioboard" in key
-        value = attachments[key]
-        assert len(value) > 0
-        csv_file = StringIO(value)
-        reader = csv.reader(csv_file, delimiter=",")
+        assert len(attachments) == 2
+        inventory_report_key = [x for x in attachments.keys() if "inventory" in x][0]
+        assert inventory_report_key
+        assert "test_library" in inventory_report_key
+        inventory_report_value = attachments[inventory_report_key]
+        assert len(inventory_report_value) > 0
+        inventory_report_reader = csv.reader(
+            StringIO(inventory_report_value), delimiter=","
+        )
         first_row = None
         row_count = 0
 
-        for row in reader:
+        for row in inventory_report_reader:
             row_count += 1
             if not first_row:
                 first_row = row
@@ -2684,14 +2700,13 @@ class TestGenerateInventoryReports:
                     "audience",
                     "genres",
                     "format",
+                    "data_source",
                     "collection_name",
-                    "latest_license_expiration",
-                    "max_remaining_days_on_license",
+                    "license_expiration",
+                    "days_remaining_on_license",
                     "remaining_loans",
                     "allowed_concurrent_users",
-                    "library_active_hold_count",
                     "library_active_loan_count",
-                    "shared_active_hold_count",
                     "shared_active_loan_count",
                 ]
                 for h in row_headers:
@@ -2702,12 +2717,57 @@ class TestGenerateInventoryReports:
             assert row[first_row.index("author")] == author
             assert row[first_row.index("genres")] == "genre_a,genre_z"
             assert row[first_row.index("audience")] == "young adult"
-            assert row[first_row.index("shared_active_hold_count")] == "-1"
-            assert row[first_row.index("shared_active_loan_count")] == "-1"
+            assert row[first_row.index("data_source")] == "BiblioBoard"
+            assert row[first_row.index("shared_active_loan_count")] == "0"
             assert row[first_row.index("remaining_loans")] == str(checkouts_left)
             assert row[first_row.index("allowed_concurrent_users")] == str(
                 terms_concurrency
             )
+
+            assert row_count == 2
+
+        holds_report_key = [x for x in attachments.keys() if "holds" in x][0]
+        assert holds_report_key
+        assert "test_library" in holds_report_key
+        holds_report_value = attachments[holds_report_key]
+        assert len(holds_report_value) > 0
+        holds_report_reader = csv.reader(StringIO(holds_report_value), delimiter=",")
+        first_row = None
+        row_count = 0
+
+        for row in holds_report_reader:
+            row_count += 1
+            if not first_row:
+                first_row = row
+                row_headers = [
+                    "title",
+                    "author",
+                    "identifier",
+                    "language",
+                    "publisher",
+                    "audience",
+                    "genres",
+                    "format",
+                    "data_source",
+                    "collection_name",
+                    "library_active_hold_count",
+                    "shared_active_hold_count",
+                    "library_active_hold_count",
+                ]
+                for h in row_headers:
+                    assert h in row
+                continue
+
+            assert row[first_row.index("title")] == title
+            assert row[first_row.index("author")] == author
+            assert row[first_row.index("genres")] == "genre_a,genre_z"
+            assert row[first_row.index("audience")] == "young adult"
+            assert row[first_row.index("data_source")] == "BiblioBoard"
+            assert (
+                int(row[first_row.index("shared_active_hold_count")])
+                == shared_patrons_in_hold_queue
+            )
+            assert int(row[first_row.index("library_active_hold_count")]) == 1
 
             assert row_count == 2
 
