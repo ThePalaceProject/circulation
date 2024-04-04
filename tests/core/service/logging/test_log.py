@@ -94,6 +94,11 @@ class TestJSONFormatter:
                 "converted during string formatting'). Original message: message='Foo Bar Baz'"
                 " args=('a', 'b', 'c')",
             ),
+            (
+                "Another test %s",
+                MagicMock(),
+                "Another test %s",
+            ),
         ],
     )
     def test_format_args(
