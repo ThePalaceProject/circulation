@@ -170,7 +170,7 @@ def test_settings_extra_args(mock_settings, caplog):
 def test_settings_logger(mock_settings):
     log = mock_settings.logger()
     assert isinstance(log, logging.Logger)
-    assert log.name == "test_settings.MockSettings"
+    assert log.name == "tests.core.integration.test_settings.MockSettings"
 
 
 def test_settings_configuration_form(
