@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from logging import Handler
 from typing import TYPE_CHECKING, Any
 
 from watchtower import CloudWatchLogHandler
 
 from core.service.logging.configuration import LogLevel
-from core.util.datetime_helpers import utc_now
+from core.util.datetime_helpers import from_timestamp
 
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
@@ -37,26 +37,34 @@ class JSONFormatter(logging.Formatter):
 
         message = ensure_str(record.msg)
         if record.args:
-            record_args = tuple(ensure_str(arg) for arg in record.args)
-            try:
-                message = message % record_args
-            except Exception as e:
-                # There was a problem formatting the log message,
-                # which points to a bug. A problem with the logging
-                # code shouldn't break the code that actually does the
-                # work, but we can't just let this slide -- we need to
-                # report the problem so it can be fixed.
-                message = (
-                    "Log message could not be formatted. Exception: %r. Original message: message=%r args=%r"
-                    % (e, message, record_args)
-                )
+            record_args: tuple[Any, ...] | dict[str, Any] | None = None
+            if isinstance(record.args, Mapping):
+                record_args = {
+                    ensure_str(k): ensure_str(v) for k, v in record.args.items()
+                }
+            elif isinstance(record.args, Sequence):
+                record_args = tuple(ensure_str(arg) for arg in record.args)
+
+            if record_args is not None:
+                try:
+                    message = message % record_args
+                except Exception as e:
+                    # There was a problem formatting the log message,
+                    # which points to a bug. A problem with the logging
+                    # code shouldn't break the code that actually does the
+                    # work, but we can't just let this slide -- we need to
+                    # report the problem so it can be fixed.
+                    message = (
+                        "Log message could not be formatted. Exception: %r. Original message: message=%r args=%r"
+                        % (e, message, record_args)
+                    )
         data = dict(
             host=self.hostname,
             name=record.name,
             level=record.levelname,
             filename=record.filename,
             message=message,
-            timestamp=utc_now().isoformat(),
+            timestamp=from_timestamp(record.created).isoformat(),
         )
         if record.exc_info:
             data["traceback"] = self.formatException(record.exc_info)

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import sys
+from collections.abc import Callable, Mapping
 from functools import partial
 from unittest.mock import MagicMock, patch
 
@@ -21,8 +23,24 @@ from core.service.logging.log import (
 
 
 class TestJSONFormatter:
+    LogRecordCallable = Callable[..., logging.LogRecord]
+
+    @pytest.fixture()
+    def log_record(self) -> LogRecordCallable:
+        return functools.partial(
+            logging.LogRecord,
+            name="some logger",
+            level=logging.DEBUG,
+            pathname="pathname",
+            lineno=104,
+            msg="A message",
+            args={},
+            exc_info=None,
+            func=None,
+        )
+
     @freeze_time("1990-05-05")
-    def test_format(self) -> None:
+    def test_format_exception(self, log_record: LogRecordCallable) -> None:
         formatter = JSONFormatter()
 
         exc_info = None
@@ -32,45 +50,71 @@ class TestJSONFormatter:
         except ValueError as e:
             exc_info = sys.exc_info()
 
-        record = logging.LogRecord(
-            "some logger",
-            logging.DEBUG,
-            "pathname",
-            104,
-            "A message",
-            {},
-            exc_info,
-            None,
-        )
+        record = log_record(exc_info=exc_info)
         data = json.loads(formatter.format(record))
-        assert "some logger" == data["name"]
-        assert "1990-05-05T00:00:00+00:00" == data["timestamp"]
-        assert "DEBUG" == data["level"]
-        assert "A message" == data["message"]
-        assert "pathname" == data["filename"]
+        assert data["name"] == "some logger"
+        assert data["timestamp"] == "1990-05-05T00:00:00+00:00"
+        assert data["level"] == "DEBUG"
+        assert data["message"] == "A message"
+        assert data["filename"] == "pathname"
         assert "ValueError: fake exception" in data["traceback"]
 
     @pytest.mark.parametrize(
-        "msg, args",
+        "msg, args, expected",
         [
-            ("An important snowman: %s", "☃"),
-            ("An important snowman: %s", "☃".encode()),
-            (b"An important snowman: %s", "☃"),
-            (b"An important snowman: %s", "☃".encode()),
+            ("An important snowman: %s", ("☃",), "An important snowman: ☃"),
+            ("An important snowman: %s", ("☃".encode(),), "An important snowman: ☃"),
+            (b"An important snowman: %s", ("☃",), "An important snowman: ☃"),
+            (
+                b"An important snowman: %s",
+                [
+                    "☃".encode(),
+                ],
+                "An important snowman: ☃",
+            ),
+            (
+                "abc %(test1)s %(test2)s",
+                {"test1": "🚀".encode(), "test2": "🪄"},
+                "abc 🚀 🪄",
+            ),
+            (
+                b"cba %(test1)s %(test2)s",
+                {b"test1": "🎸", "test2": "🦃".encode()},
+                "cba 🎸 🦃",
+            ),
+            (
+                b"Not a string: %s %s %s %s",
+                ({}, [], "c", b"d"),
+                "Not a string: {} [] c d",
+            ),
+            (
+                "Foo Bar Baz",
+                ("a", "b", "c"),
+                "Log message could not be formatted. Exception: TypeError('not all arguments "
+                "converted during string formatting'). Original message: message='Foo Bar Baz'"
+                " args=('a', 'b', 'c')",
+            ),
+            (
+                "Another test %s",
+                MagicMock(),
+                "Another test %s",
+            ),
         ],
     )
-    def test_format_with_different_types_of_strings(
-        self, msg: str | bytes, args: str | bytes
+    def test_format_args(
+        self,
+        msg: str | bytes,
+        args: tuple[str | bytes, ...] | Mapping[str | bytes, str | bytes],
+        expected: str,
+        log_record: LogRecordCallable,
     ) -> None:
         # As long as all data is either Unicode or UTF-8, any combination
         # of Unicode and bytestrings can be combined in log messages.
         formatter = JSONFormatter()
-        record = logging.LogRecord(
-            "some logger", logging.DEBUG, "pathname", 104, msg, (args,), None, None
-        )
+        record = log_record(msg=msg, args=args)
         data = json.loads(formatter.format(record))
         # The resulting data is always a Unicode string.
-        assert "An important snowman: ☃" == data["message"]
+        assert data["message"] == expected
 
 
 class TestLogLoopPreventionFilter:
