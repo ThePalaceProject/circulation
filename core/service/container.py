@@ -4,6 +4,8 @@ from dependency_injector.providers import Container
 
 from core.service.analytics.configuration import AnalyticsConfiguration
 from core.service.analytics.container import AnalyticsContainer
+from core.service.celery.configuration import CeleryConfiguration
+from core.service.celery.container import CeleryContainer
 from core.service.email.configuration import EmailConfiguration
 from core.service.email.container import Email
 from core.service.logging.configuration import LoggingConfiguration
@@ -44,6 +46,11 @@ class Services(DeclarativeContainer):
         config=config.email,
     )
 
+    celery = Container(
+        CeleryContainer,
+        config=config.celery,
+    )
+
 
 def wire_container(container: Services) -> None:
     container.wire(
@@ -75,6 +82,7 @@ def create_container() -> Services:
             "analytics": AnalyticsConfiguration().dict(),
             "search": SearchConfiguration().dict(),
             "email": EmailConfiguration().dict(),
+            "celery": CeleryConfiguration().dict(),
         }
     )
     wire_container(container)

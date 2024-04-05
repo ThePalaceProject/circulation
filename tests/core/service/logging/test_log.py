@@ -183,6 +183,27 @@ class TestJSONFormatter:
             assert "uwsgi" in data
             assert data["uwsgi"]["worker"] == 42
 
+    def test_format_celery_worker(self, log_record: LogRecordCallable):
+        with patch(
+            "core.service.logging.log.get_current_task"
+        ) as mock_get_current_task:
+            formatter = JSONFormatter()
+            record = log_record()
+
+            # if we are in a celery task, we should include the task ID and task name
+            mock_get_current_task.return_value.configure_mock(
+                **{"name": "task_name", "request.id": "task_id"}
+            )
+            data = json.loads(formatter.format(record))
+            assert data["task_id"] == "task_id"
+            assert data["task_name"] == "task_name"
+
+            # otherwise, they should not be included
+            mock_get_current_task.return_value = None
+            data = json.loads(formatter.format(record))
+            assert "task_id" not in data
+            assert "task_name" not in data
+
 
 class TestLogLoopPreventionFilter:
     @pytest.mark.parametrize(
