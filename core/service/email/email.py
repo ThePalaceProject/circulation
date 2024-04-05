@@ -1,4 +1,5 @@
 import os
+from collections.abc import Mapping
 from email.message import EmailMessage
 from typing import Any, Protocol
 
@@ -34,7 +35,7 @@ def send_email(
     receivers: list[str] | str,
     html: str | None = None,
     text: str | None = None,
-    attachments: dict[str, str | os.PathLike[Any] | bytes] | None = None,
+    attachments: Mapping[str, str | os.PathLike[Any] | bytes] | None = None,
 ) -> EmailMessage:
     return emailer.send(
         subject=subject,
@@ -42,7 +43,7 @@ def send_email(
         receivers=receivers,
         text=text,
         html=html,
-        attachments=attachments,
+        attachments=attachments,  # type: ignore[arg-type]
     )
 
 
@@ -54,6 +55,6 @@ class SendEmailCallable(Protocol):
         receivers: list[str] | str,
         html: str | None = None,
         text: str | None = None,
-        attachments: dict[str, str | os.PathLike[Any] | bytes] | None = None,
+        attachments: Mapping[str, str | os.PathLike[Any] | bytes] | None = None,
     ) -> EmailMessage:
         ...
