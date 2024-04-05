@@ -12,15 +12,17 @@ import unicodedata
 import uuid
 from collections.abc import Generator, Sequence
 from enum import Enum
-from typing import IO, TextIO
+from pathlib import Path
+from typing import Any, TextIO
 
-from sqlalchemy import and_, exists, or_, select, text, tuple_
+from sqlalchemy import and_, exists, not_, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
+from core.exceptions import BasePalaceException
 from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
 from core.lane import Lane
@@ -34,6 +36,7 @@ from core.model import (
     Edition,
     Identifier,
     IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -59,7 +62,12 @@ from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
-from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor
+from core.opds_import import (
+    OPDSAPI,
+    OPDSImporter,
+    OPDSImporterSettings,
+    OPDSImportMonitor,
+)
 from core.query.customlist import CustomListQueries
 from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
@@ -2769,6 +2777,9 @@ class SuppressWorkForLibraryScript(Script):
 class GenerateInventoryReports(Script):
     """Generate inventory reports from queued report tasks"""
 
+    # set to False when testing attachments.
+    _delete_attachments = True
+
     @classmethod
     def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
         parser = argparse.ArgumentParser()
@@ -2798,40 +2809,63 @@ class GenerateInventoryReports(Script):
 
     def process_task(self, task: DeferredTask):
         data = InventoryReportTaskData(**task.data)
-        files: list[IO] = []
         try:
             current_time = datetime.datetime.now()
             date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
-            attachments: dict[str, str] = {}
+            attachments: dict[str, Path] = {}
             library = get_one(self._db, Library, id=data.library_id)
-            assert library
-            file_name_modifier = f"{library.short_name}-{date_str}"
-            # generate inventory report csv file
-            inventory_report_file_path = self.generate_inventory_report(
-                library_id=data.library_id,
-            )
 
-            self.prepare_email_attachment(
-                attachments,
-                inventory_report_file_path,
-                f"palace-inventory-report-{file_name_modifier}.csv",
-                files,
+            if not library:
+                raise BasePalaceException(
+                    message=f"Cannot process task: library {data.library_id} not found."
+                )
+
+            file_name_modifier = f"{library.short_name}-{date_str}"
+
+            # resolve integrations
+            integrations = self._db.scalars(
+                select(IntegrationConfiguration)
+                .join(IntegrationLibraryConfiguration)
+                .where(
+                    IntegrationLibraryConfiguration.library_id == data.library_id,
+                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                    not_(
+                        IntegrationConfiguration.settings_dict.contains(
+                            {"include_in_inventory_report": False}
+                        )
+                    ),
+                )
+            ).all()
+            registry = LicenseProvidersRegistry()
+            integration_ids: list[int] = []
+            for integration in integrations:
+                settings = registry[integration.protocol].settings_load(integration)
+                if not isinstance(settings, OPDSImporterSettings):
+                    continue
+                integration_ids.append(integration.id)
+
+            # generate inventory report csv file
+            sql_params: dict[str, Any] = {
+                "library_id": library.id,
+                "integration_ids": tuple(integration_ids),
+            }
+
+            inventory_report_file_path = self.generate_inventory_report(
+                sql_params=sql_params
             )
 
             # generate holds report csv file
-            holds_report_file_path = self.generate_holds_report(
-                library_id=data.library_id,
-            )
+            holds_report_file_path = self.generate_holds_report(sql_params=sql_params)
 
-            self.prepare_email_attachment(
-                attachments,
-                holds_report_file_path,
-                f"palace-holds-report-{file_name_modifier}.csv",
-                files,
+            attachments[f"palace-inventory-report-{file_name_modifier}.csv"] = Path(
+                inventory_report_file_path
+            )
+            attachments[f"palace-holds-report-{file_name_modifier}.csv"] = Path(
+                holds_report_file_path
             )
 
             self.services.email.send_email(
-                subject=f"Inventory Report {current_time}",
+                subject=f"Inventory and Holds Reports {current_time}",
                 receivers=[data.admin_email],
                 text="",
                 attachments=attachments,
@@ -2843,31 +2877,24 @@ class GenerateInventoryReports(Script):
             task.fail(failure_details=f"{e}")
         finally:
             self._db.commit()
-            for file in files:
-                os.remove(file.name)
+            if self._delete_attachments:
+                for file_path in attachments.values():
+                    os.remove(file_path)
 
-    def prepare_email_attachment(self, attachments, file_path, attachment_name, files):
-        """
-        extract contents of files and prepare in a dictionary of email attachments
-        """
-        with open(file_path) as the_file:
-            attachments[attachment_name] = the_file.read()
-            files.append(the_file)
-
-    def generate_inventory_report(self, library_id: int) -> str:
+    def generate_inventory_report(self, sql_params: dict[str, Any]) -> str:
         """Generate an inventory csv file and return the file path"""
-        return self.generate_csv_report(library_id, self.inventory_report_query())
+        return self.generate_csv_report(sql_params, self.inventory_report_query())
 
-    def generate_holds_report(self, library_id: int) -> str:
+    def generate_holds_report(self, sql_params: dict[str, Any]) -> str:
         """Generate a holds report csv file and return the file path"""
-        return self.generate_csv_report(library_id, self.holds_report_query())
+        return self.generate_csv_report(sql_params, self.holds_report_query())
 
-    def generate_csv_report(self, library_id: int, query: str):
+    def generate_csv_report(self, sql_params: dict[str, Any], query: str):
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
             writer = csv.writer(temp, delimiter=",")
             rows = self._db.execute(
                 text(query),
-                {"library_id": library_id},
+                sql_params,
             )
             writer.writerow(rows.keys())
             writer.writerows(rows)
@@ -2938,9 +2965,7 @@ class GenerateInventoryReports(Script):
               c.integration_configuration_id = ic.id and
               ic.id = il.parent_id and
               ic.id = collection_sharing.parent_id and
-              ic.goal = 'LICENSE_GOAL' and
-              (ic.settings -> 'include_in_inventory_report' = 'true' or
-              ic.settings -> 'include_in_inventory_report' is null) and
+              ic.id in :integration_ids and
               il.library_id = lib.id and
               lib.id = :library_id
          order by title, author
@@ -3002,9 +3027,7 @@ class GenerateInventoryReports(Script):
               c.integration_configuration_id = ic.id and
               ic.id = il.parent_id and
               ic.id = collection_sharing.parent_id and
-              ic.goal = 'LICENSE_GOAL' and
-              (ic.settings -> 'include_in_inventory_report' = 'true' or
-              ic.settings -> 'include_in_inventory_report' is null) and
+              ic.id in :integration_ids and
               il.library_id = lib.id and
               lib.id = :library_id
          order by title, author

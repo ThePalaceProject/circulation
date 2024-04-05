@@ -4,6 +4,7 @@ import csv
 import datetime
 import json
 import logging
+import os
 import random
 from dataclasses import asdict
 from io import StringIO
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from api.bibliotheca import BibliothecaAPI
 from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
-from api.overdrive import OverdriveAPI
+from api.overdrive import OverdriveAPI, OverdriveSettings
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.external_search import ExternalSearchIndex, Filter
@@ -2582,14 +2583,15 @@ class TestGenerateInventoryReports:
         # create some test data that we expect to be picked up in the inventory report
         library = db.library(short_name="test_library")
         library2 = db.library(short_name="test_library2")
+        data_source = "BiblioBoard"
         settings = OPDSImporterSettings(
             include_in_inventory_report=True,
             external_account_id="http://opds.com",
-            data_source="BiblioBoard",
+            data_source=data_source,
         )
-        collection = db.collection(
-            name="BiblioBoard Test Collection", settings=settings.dict()
-        )
+
+        collection_name = "BiblioBoard Test Collection"
+        collection = db.collection(name=collection_name, settings=settings.dict())
         collection.libraries = [library, library2]
 
         # Configure test data we expect will not be picked up.
@@ -2603,15 +2605,34 @@ class TestGenerateInventoryReports:
         )
         collection_not_to_include.libraries = [library]
 
+        od_settings = OverdriveSettings(
+            overdrive_website_id="overdrive_id",
+            overdrive_client_key="client_key",
+            overdrive_client_secret="secret",
+            external_account_id="http://www.overdrive/id",
+        )
+        od_collection_not_to_include = db.collection(
+            name="Overdrive Test Collection",
+            data_source_name="Overdrive",
+            settings=od_settings.dict(),
+        )
+
+        od_collection_not_to_include.libraries = [library]
+
         ds = collection.data_source
         assert ds
         title = "展翅高飞 : Whistling Wings"
         author = "Laura Goering"
         email = "test@email.com"
+        language = "eng"
+        publisher = "My Publisher"
         checkouts_left = 10
         terms_concurrency = 5
         edition = db.edition(data_source_name=ds.name)
+        edition.language = language
+        edition.publisher = publisher
         edition.title = title
+        edition.medium = edition.BOOK_MEDIUM
         edition.author = author
         work = db.work(
             language="eng",
@@ -2666,13 +2687,16 @@ class TestGenerateInventoryReports:
 
         script = GenerateInventoryReports(db.session)
         send_email_mock = create_autospec(script.services.email.container.send_email)
+        # for testing, don't delete the files associated with the attachments so we can read them after the script
+        # runs
+        script._delete_attachments = False
         script.services.email.container.send_email = send_email_mock
         script.do_run()
         send_email_mock.assert_called_once()
         args, kwargs = send_email_mock.call_args
         assert task.status == DeferredTaskStatus.SUCCESS
         assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
-        assert kwargs["subject"].__contains__("Inventory Report")
+        assert "Inventory and Holds Reports" in kwargs["subject"]
         attachments: dict = kwargs["attachments"]
 
         assert len(attachments) == 2
@@ -2680,96 +2704,59 @@ class TestGenerateInventoryReports:
         assert inventory_report_key
         assert "test_library" in inventory_report_key
         inventory_report_value = attachments[inventory_report_key]
-        assert len(inventory_report_value) > 0
-        inventory_report_reader = csv.reader(
-            StringIO(inventory_report_value), delimiter=","
-        )
-        first_row = None
-        row_count = 0
+        assert inventory_report_value
+        inventory_report_reader = csv.DictReader(open(inventory_report_value))
+        inventory_row_count = 0
 
         for row in inventory_report_reader:
-            row_count += 1
-            if not first_row:
-                first_row = row
-                row_headers = [
-                    "title",
-                    "author",
-                    "identifier",
-                    "language",
-                    "publisher",
-                    "audience",
-                    "genres",
-                    "format",
-                    "data_source",
-                    "collection_name",
-                    "license_expiration",
-                    "days_remaining_on_license",
-                    "remaining_loans",
-                    "allowed_concurrent_users",
-                    "library_active_loan_count",
-                    "shared_active_loan_count",
-                ]
-                for h in row_headers:
-                    assert h in row
-                continue
+            inventory_row_count += 1
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert row["license_expiration"] == ""
+            assert row["days_remaining_on_license"] == ""
+            assert row["shared_active_loan_count"] == "0"
+            assert row["library_active_loan_count"] == "0"
+            assert row["remaining_loans"] == str(checkouts_left)
+            assert row["allowed_concurrent_users"] == str(terms_concurrency)
 
-            assert row[first_row.index("title")] == title
-            assert row[first_row.index("author")] == author
-            assert row[first_row.index("genres")] == "genre_a,genre_z"
-            assert row[first_row.index("audience")] == "young adult"
-            assert row[first_row.index("data_source")] == "BiblioBoard"
-            assert row[first_row.index("shared_active_loan_count")] == "0"
-            assert row[first_row.index("remaining_loans")] == str(checkouts_left)
-            assert row[first_row.index("allowed_concurrent_users")] == str(
-                terms_concurrency
-            )
-
-            assert row_count == 2
+        assert inventory_row_count == 1
 
         holds_report_key = [x for x in attachments.keys() if "holds" in x][0]
         assert holds_report_key
         assert "test_library" in holds_report_key
         holds_report_value = attachments[holds_report_key]
-        assert len(holds_report_value) > 0
-        holds_report_reader = csv.reader(StringIO(holds_report_value), delimiter=",")
-        first_row = None
+        assert holds_report_value
+        holds_report_reader = csv.DictReader(open(holds_report_value))
         row_count = 0
 
         for row in holds_report_reader:
             row_count += 1
-            if not first_row:
-                first_row = row
-                row_headers = [
-                    "title",
-                    "author",
-                    "identifier",
-                    "language",
-                    "publisher",
-                    "audience",
-                    "genres",
-                    "format",
-                    "data_source",
-                    "collection_name",
-                    "library_active_hold_count",
-                    "shared_active_hold_count",
-                    "library_active_hold_count",
-                ]
-                for h in row_headers:
-                    assert h in row
-                continue
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
+            assert int(row["library_active_hold_count"]) == 1
 
-            assert row[first_row.index("title")] == title
-            assert row[first_row.index("author")] == author
-            assert row[first_row.index("genres")] == "genre_a,genre_z"
-            assert row[first_row.index("audience")] == "young adult"
-            assert row[first_row.index("data_source")] == "BiblioBoard"
-            assert (
-                int(row[first_row.index("shared_active_hold_count")])
-                == shared_patrons_in_hold_queue
-            )
-            assert int(row[first_row.index("library_active_hold_count")]) == 1
+            assert row_count == 1
 
-            assert row_count == 2
+            # clean up files
+            for f in attachments.values():
+                os.remove(f)
 
 
 class TestDeleteOldDeferredTasks:
