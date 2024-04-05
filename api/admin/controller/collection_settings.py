@@ -19,6 +19,7 @@ from api.admin.problem_details import (
 )
 from api.circulation import CirculationApiType
 from api.integration.registry.license_providers import LicenseProvidersRegistry
+from core.celery.tasks.collection_delete import collection_delete
 from core.integration.base import HasChildIntegrationConfiguration
 from core.integration.registry import IntegrationRegistry
 from core.model import (
@@ -169,6 +170,7 @@ class CollectionSettingsController(
 
         # Flag the collection to be deleted by script in the background.
         collection.marked_for_deletion = True
+        collection_delete.delay(collection.id)
         return Response("Deleted", 200)
 
     def process_collection_self_tests(
