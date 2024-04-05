@@ -43,6 +43,12 @@ def send_email(
         receivers=receivers,
         text=text,
         html=html,
+        # Attachments are not typed correctly in the library, so we need to ignore the
+        # type hint here. Since no one has responded to the PR above to fix the other
+        # type hint issue, I'm not going to bother submitting a PR to fix this one.
+        # We define attachments as a Mapping rather than a dict so that its covariant
+        # and can accept a dict of the types that the library accepts.
+        # See: https://mypy.readthedocs.io/en/stable/common_issues.html#variance
         attachments=attachments,  # type: ignore[arg-type]
     )
 
