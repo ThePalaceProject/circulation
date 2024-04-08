@@ -2914,7 +2914,7 @@ class GenerateInventoryReports(Script):
                d.name data_source,
                ic.name collection_name,
                l.expires license_expiration,
-               DATE_PART('day', l.expires - CURRENT_DATE) days_remaining_on_license,
+               DATE_PART('day', l.expires - now()) days_remaining_on_license,
                l.checkouts_left remaining_loans,
                l.terms_concurrency allowed_concurrent_users,
                coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
@@ -2956,7 +2956,7 @@ class GenerateInventoryReports(Script):
                                                      checkouts_left,
                                                      expires,
                                                      terms_concurrency
-                                              from licenses) l on lp.id = l.license_pool_id
+                                              from licenses where status = 'available') l on lp.id = l.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
               e.id = w.presentation_edition_id and
@@ -3007,7 +3007,10 @@ class GenerateInventoryReports(Script):
                                        patrons p
                                   where p.id = h.patron_id and
                                         h.license_pool_id = lp.id and
-                                        p.library_id = :library_id
+                                        p.library_id = :library_id and
+                                        (h.end is null or
+                                        h.end > now() or
+                                        h.position > 0)
                                   group by p.library_id, lp.presentation_edition_id) lib_holds,
              identifiers i,
              (select ilc.parent_id,

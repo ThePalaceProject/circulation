@@ -50,6 +50,7 @@ from core.model.deferredtask import (
     start_next_task,
 )
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
+from core.model.licensing import LicenseStatus
 from core.model.patron import Hold, Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSAPI, OPDSImporterSettings, OPDSImportMonitor
@@ -2656,24 +2657,73 @@ class TestGenerateInventoryReports:
             collection=collection,
         )
 
-        patron = db.patron(library=library)
+        days_remaining = 10
+        expiration = utc_now() + datetime.timedelta(days=days_remaining)
+        db.license(
+            pool=licensepool,
+            status=LicenseStatus.available,
+            checkouts_left=checkouts_left,
+            terms_concurrency=terms_concurrency,
+            expires=expiration,
+        )
+        db.license(
+            pool=licensepool,
+            status=LicenseStatus.unavailable,
+            checkouts_left=1,
+            terms_concurrency=1,
+            expires=utc_now(),
+        )
 
-        hold, _ = get_one_or_create(
+        patron1 = db.patron(library=library)
+        patron2 = db.patron(library=library)
+        patron3 = db.patron(library=library)
+        patron4 = db.patron(library=library)
+
+        # this one should be counted because the end is in the future.
+        hold1, _ = get_one_or_create(
             db.session,
             Hold,
-            patron=patron,
+            patron=patron1,
             license_pool=licensepool,
+            position=1,
             start=utc_now(),
             end=utc_now() + datetime.timedelta(days=1),
         )
 
-        shared_patrons_in_hold_queue = 3
-        licensepool.patrons_in_hold_queue = shared_patrons_in_hold_queue
-        db.license(
-            pool=licensepool,
-            checkouts_left=checkouts_left,
-            terms_concurrency=terms_concurrency,
+        # this one should be counted because the end is None
+        hold2, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron2,
+            license_pool=licensepool,
+            start=utc_now(),
+            end=None,
         )
+
+        # this hold should be counted b/c the position is > 0
+        hold3, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron3,
+            license_pool=licensepool,
+            start=utc_now() - datetime.timedelta(days=1),
+            end=utc_now() - datetime.timedelta(minutes=1),
+            position=1,
+        )
+
+        # this hold should not be counted because the end is neither in the future nor unset and the position is zero
+        hold4, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron4,
+            license_pool=licensepool,
+            start=utc_now(),
+            end=utc_now() - datetime.timedelta(minutes=1),
+            position=0,
+        )
+
+        shared_patrons_in_hold_queue = 4
+        licensepool.patrons_in_hold_queue = shared_patrons_in_hold_queue
 
         assert library.id
         data = InventoryReportTaskData(
@@ -2720,12 +2770,14 @@ class TestGenerateInventoryReports:
             assert row["format"] == edition.BOOK_MEDIUM
             assert row["data_source"] == data_source
             assert row["collection_name"] == collection_name
-            assert row["license_expiration"] == ""
-            assert row["days_remaining_on_license"] == ""
+            assert float(row["days_remaining_on_license"]) == float(days_remaining)
             assert row["shared_active_loan_count"] == "0"
             assert row["library_active_loan_count"] == "0"
             assert row["remaining_loans"] == str(checkouts_left)
             assert row["allowed_concurrent_users"] == str(terms_concurrency)
+            assert (
+                expiration.strftime("%Y-%m-%d %H:%M:%S.%f") in row["license_expiration"]
+            )
 
         assert inventory_row_count == 1
 
@@ -2750,7 +2802,7 @@ class TestGenerateInventoryReports:
             assert row["data_source"] == data_source
             assert row["collection_name"] == collection_name
             assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
-            assert int(row["library_active_hold_count"]) == 1
+            assert int(row["library_active_hold_count"]) == 3
 
             assert row_count == 1
 
