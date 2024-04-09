@@ -194,7 +194,7 @@ class TestJSONFormatter:
         assert "celery" not in data
 
         # If celery isn't installed, the worker data is not included
-        monkeypatch.delitem(sys.modules, "celery")
+        monkeypatch.setitem(sys.modules, "celery", None)
         data = json.loads(formatter.format(record))
         assert "celery" not in data
 
