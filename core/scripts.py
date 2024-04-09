@@ -12,7 +12,8 @@ import unicodedata
 import uuid
 from collections.abc import Generator, Sequence
 from enum import Enum
-from typing import TextIO
+from pathlib import Path
+from typing import Any, TextIO
 
 from sqlalchemy import and_, exists, not_, or_, select, text, tuple_
 from sqlalchemy.orm import Query, Session, defer
@@ -21,6 +22,7 @@ from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
+from core.exceptions import BasePalaceException
 from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
 from core.lane import Lane
@@ -2775,6 +2777,9 @@ class SuppressWorkForLibraryScript(Script):
 class GenerateInventoryReports(Script):
     """Generate inventory reports from queued report tasks"""
 
+    # set to False when testing attachments.
+    _delete_attachments = True
+
     @classmethod
     def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
         parser = argparse.ArgumentParser()
@@ -2804,12 +2809,20 @@ class GenerateInventoryReports(Script):
 
     def process_task(self, task: DeferredTask):
         data = InventoryReportTaskData(**task.data)
-        files = []
         try:
             current_time = datetime.datetime.now()
             date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
-            attachments = {}
+            attachments: dict[str, Path] = {}
+            library = get_one(self._db, Library, id=data.library_id)
 
+            if not library:
+                raise BasePalaceException(
+                    message=f"Cannot process task: library {data.library_id} not found."
+                )
+
+            file_name_modifier = f"{library.short_name}-{date_str}"
+
+            # resolve integrations
             integrations = self._db.scalars(
                 select(IntegrationConfiguration)
                 .join(IntegrationLibraryConfiguration)
@@ -2823,30 +2836,36 @@ class GenerateInventoryReports(Script):
                     ),
                 )
             ).all()
-
             registry = LicenseProvidersRegistry()
-            data_source_names = []
+            integration_ids: list[int] = []
             for integration in integrations:
                 settings = registry[integration.protocol].settings_load(integration)
                 if not isinstance(settings, OPDSImporterSettings):
                     continue
-                data_source_names.append(settings.data_source)
+                integration_ids.append(integration.id)
 
-            for data_source_name in data_source_names:
-                formatted_ds_name = data_source_name.lower().replace(" ", "_")
-                file_name = f"palace-inventory-report-{formatted_ds_name}-{date_str}"
-                # generate csv file
-                file_path = self.generate_report(
-                    data_source_name=data_source_name,
-                    library_id=data.library_id,
-                )
-                # extract contents of files and prepare in a dictionary of email attachments
-                with open(file_path) as csv_file:
-                    attachments[f"{file_name}.csv"] = csv_file.read()
-                    files.append(csv_file)
+            # generate inventory report csv file
+            sql_params: dict[str, Any] = {
+                "library_id": library.id,
+                "integration_ids": tuple(integration_ids),
+            }
+
+            inventory_report_file_path = self.generate_inventory_report(
+                sql_params=sql_params
+            )
+
+            # generate holds report csv file
+            holds_report_file_path = self.generate_holds_report(sql_params=sql_params)
+
+            attachments[f"palace-inventory-report-{file_name_modifier}.csv"] = Path(
+                inventory_report_file_path
+            )
+            attachments[f"palace-holds-report-{file_name_modifier}.csv"] = Path(
+                holds_report_file_path
+            )
 
             self.services.email.send_email(
-                subject=f"Inventory Report {current_time}",
+                subject=f"Inventory and Holds Reports {current_time}",
                 receivers=[data.admin_email],
                 text="",
                 attachments=attachments,
@@ -2858,19 +2877,24 @@ class GenerateInventoryReports(Script):
             task.fail(failure_details=f"{e}")
         finally:
             self._db.commit()
-            for file in files:
-                os.remove(file.name)
+            if self._delete_attachments:
+                for file_path in attachments.values():
+                    os.remove(file_path)
 
-    def generate_report(self, data_source_name: str, library_id: int) -> str:
-        """Generate a csv file and return the file path"""
-        with tempfile.NamedTemporaryFile(
-            "w",
-            delete=False,
-        ) as temp:
+    def generate_inventory_report(self, sql_params: dict[str, Any]) -> str:
+        """Generate an inventory csv file and return the file path"""
+        return self.generate_csv_report(sql_params, self.inventory_report_query())
+
+    def generate_holds_report(self, sql_params: dict[str, Any]) -> str:
+        """Generate a holds report csv file and return the file path"""
+        return self.generate_csv_report(sql_params, self.holds_report_query())
+
+    def generate_csv_report(self, sql_params: dict[str, Any], query: str):
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
             writer = csv.writer(temp, delimiter=",")
             rows = self._db.execute(
-                text(self.inventory_report_query()),
-                {"library_id": library_id, "data_source_name": data_source_name},
+                text(query),
+                sql_params,
             )
             writer.writerow(rows.keys())
             writer.writerows(rows)
@@ -2885,18 +2909,15 @@ class GenerateInventoryReports(Script):
                e.language,
                e.publisher,
                e.medium as format,
+               w.audience,
+               wg.genres,
+               d.name data_source,
                ic.name collection_name,
-               DATE_PART('day', l.expires::date) - DATE_PART('day',lp.availability_time::date) as license_duration_days,
-               l.expires license_expiration_date,
-               l.checkouts_available initial_loan_count,
-               (l.checkouts_available-l.checkouts_left) consumed_loans,
+               l.expires license_expiration,
+               DATE_PART('day', l.expires - now()) days_remaining_on_license,
                l.checkouts_left remaining_loans,
                l.terms_concurrency allowed_concurrent_users,
-               coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
                coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
-               CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
-                    ELSE -1
-               END shared_active_hold_count,
                CASE WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
                     ELSE -1
                END shared_active_loan_count
@@ -2905,45 +2926,112 @@ class GenerateInventoryReports(Script):
              integration_configurations ic,
              integration_library_configurations il,
              libraries lib,
-             editions e,
-             identifiers i,
-             (select ic.parent_id,
-                      count(ic.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ic,
-                   integration_configurations i,
-                   collections c
-              where c.integration_configuration_id = i.id  and
-                    i.id = ic.parent_id group by ic.parent_id) collection_sharing,
-             licensepools lp left outer join licenses l on lp.id = l.license_pool_id
-                 left outer join (select h.license_pool_id,
-                                         p.library_id,
-                                         count(h.id) active_hold_count
-                                  from holds h,
-                                       patrons p,
-                                       libraries l
-                                  where p.id = h.patron_id and
-                                        p.library_id = l.id and
-                                        l.id = :library_id
-                                  group by p.library_id, h.license_pool_id) lib_holds on lp.id = lib_holds.license_pool_id
-                 left outer join (select ln.license_pool_id,
+             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
+                                     from genres g,
+                                     workgenres wg
+                                     where g.id = wg.genre_id
+                                     group by wg.work_id) wg on w.id = wg.work_id,
+             editions e left outer join (select lp.presentation_edition_id,
                                          p.library_id,
                                          count(ln.id) active_loan_count
                                   from loans ln,
+                                       licensepools lp,
                                        patrons p,
                                        libraries l
                                   where p.id = ln.patron_id and
                                         p.library_id = l.id and
+                                        ln.license_pool_id = lp.id and
                                         l.id = :library_id
-                                  group by p.library_id, ln.license_pool_id) lib_loans on lp.id = lib_holds.license_pool_id
+                                  group by p.library_id, lp.presentation_edition_id) lib_loans
+                                  on e.id = lib_loans.presentation_edition_id,
+             identifiers i,
+             (select ilc.parent_id,
+                      count(ilc.parent_id) > 1 is_shared_collection
+              from integration_library_configurations ilc,
+                   integration_configurations i,
+                   collections c
+              where c.integration_configuration_id = i.id  and
+                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
+             licensepools lp left outer join (select license_pool_id,
+                                                     checkouts_left,
+                                                     expires,
+                                                     terms_concurrency
+                                              from licenses where status = 'available') l on lp.id = l.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
+              e.id = w.presentation_edition_id and
               d.id = e.data_source_id and
               c.id = lp.collection_id and
               c.integration_configuration_id = ic.id and
               ic.id = il.parent_id and
               ic.id = collection_sharing.parent_id and
+              ic.id in :integration_ids and
               il.library_id = lib.id and
-              d.name = :data_source_name and
+              lib.id = :library_id
+         order by title, author
+        """
+
+    def holds_report_query(self) -> str:
+        return """
+            select
+               e.title,
+               e.author,
+               i.identifier,
+               e.language,
+               e.publisher,
+               e.medium as format,
+               w.audience,
+               wg.genres,
+               d.name data_source,
+               ic.name collection_name,
+               coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
+               CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
+                    ELSE -1
+               END shared_active_hold_count
+        from datasources d,
+             collections c,
+             integration_configurations ic,
+             integration_library_configurations il,
+             libraries lib,
+             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
+                                     from genres g,
+                                     workgenres wg
+                                     where g.id = wg.genre_id
+                                     group by wg.work_id) wg on w.id = wg.work_id,
+             editions e,
+             (select lp.presentation_edition_id,
+                                         p.library_id,
+                                         count(h.id) active_hold_count
+                                  from holds h,
+                                       licensepools lp,
+                                       patrons p
+                                  where p.id = h.patron_id and
+                                        h.license_pool_id = lp.id and
+                                        p.library_id = :library_id and
+                                        (h.end is null or
+                                        h.end > now() or
+                                        h.position > 0)
+                                  group by p.library_id, lp.presentation_edition_id) lib_holds,
+             identifiers i,
+             (select ilc.parent_id,
+                      count(ilc.parent_id) > 1 is_shared_collection
+              from integration_library_configurations ilc,
+                   integration_configurations i,
+                   collections c
+              where c.integration_configuration_id = i.id  and
+                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
+             licensepools lp
+        where lp.identifier_id = i.id and
+              e.primary_identifier_id = i.id and
+              e.id = lib_holds.presentation_edition_id and
+              e.id = w.presentation_edition_id and
+              d.id = e.data_source_id and
+              c.id = lp.collection_id and
+              c.integration_configuration_id = ic.id and
+              ic.id = il.parent_id and
+              ic.id = collection_sharing.parent_id and
+              ic.id in :integration_ids and
+              il.library_id = lib.id and
               lib.id = :library_id
          order by title, author
         """

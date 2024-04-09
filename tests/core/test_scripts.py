@@ -4,6 +4,7 @@ import csv
 import datetime
 import json
 import logging
+import os
 import random
 from dataclasses import asdict
 from io import StringIO
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from api.bibliotheca import BibliothecaAPI
 from api.enki import EnkiAPI
 from api.lanes import create_default_lanes
-from api.overdrive import OverdriveAPI
+from api.overdrive import OverdriveAPI, OverdriveSettings
 from core.classifier import Classifier
 from core.config import CannotLoadConfiguration
 from core.external_search import ExternalSearchIndex, Filter
@@ -38,7 +39,7 @@ from core.model import (
     get_one,
     get_one_or_create,
 )
-from core.model.classification import Classification, Subject
+from core.model.classification import Classification, Genre, Subject
 from core.model.customlist import CustomList
 from core.model.deferredtask import (
     DeferredTask,
@@ -49,7 +50,8 @@ from core.model.deferredtask import (
     start_next_task,
 )
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
-from core.model.patron import Patron
+from core.model.licensing import LicenseStatus
+from core.model.patron import Hold, Patron
 from core.monitor import CollectionMonitor, Monitor, ReaperMonitor
 from core.opds_import import OPDSAPI, OPDSImporterSettings, OPDSImportMonitor
 from core.scripts import (
@@ -2580,16 +2582,18 @@ class TestSuppressWorkForLibraryScript:
 class TestGenerateInventoryReports:
     def test_do_run(self, db: DatabaseTransactionFixture):
         # create some test data that we expect to be picked up in the inventory report
-        library = db.library(short_name="test")
+        library = db.library(short_name="test_library")
+        library2 = db.library(short_name="test_library2")
+        data_source = "BiblioBoard"
         settings = OPDSImporterSettings(
             include_in_inventory_report=True,
             external_account_id="http://opds.com",
-            data_source="BiblioBoard",
+            data_source=data_source,
         )
-        collection = db.collection(
-            name="BiblioBoard Test Collection", settings=settings.dict()
-        )
-        collection.libraries = [library]
+
+        collection_name = "BiblioBoard Test Collection"
+        collection = db.collection(name=collection_name, settings=settings.dict())
+        collection.libraries = [library, library2]
 
         # Configure test data we expect will not be picked up.
         no_inventory_report_settings = OPDSImporterSettings(
@@ -2602,25 +2606,49 @@ class TestGenerateInventoryReports:
         )
         collection_not_to_include.libraries = [library]
 
+        od_settings = OverdriveSettings(
+            overdrive_website_id="overdrive_id",
+            overdrive_client_key="client_key",
+            overdrive_client_secret="secret",
+            external_account_id="http://www.overdrive/id",
+        )
+        od_collection_not_to_include = db.collection(
+            name="Overdrive Test Collection",
+            data_source_name="Overdrive",
+            settings=od_settings.dict(),
+        )
+
+        od_collection_not_to_include.libraries = [library]
+
         ds = collection.data_source
         assert ds
-        title = "Leaves of Grass"
-        author = "Walt Whitman"
+        title = "展翅高飞 : Whistling Wings"
+        author = "Laura Goering"
         email = "test@email.com"
+        language = "eng"
+        publisher = "My Publisher"
         checkouts_left = 10
-        checkouts_available = 11
         terms_concurrency = 5
         edition = db.edition(data_source_name=ds.name)
+        edition.language = language
+        edition.publisher = publisher
         edition.title = title
+        edition.medium = edition.BOOK_MEDIUM
         edition.author = author
-        db.work(
+        work = db.work(
             language="eng",
             fiction=True,
             with_license_pool=False,
             data_source_name=ds.name,
             presentation_edition=edition,
             collection=collection,
+            genre="genre_z",
         )
+
+        genre, ignore = Genre.lookup(db.session, "genre_a", autocreate=True)
+        work.genres.append(genre)
+        work.audience = "young adult"
+
         licensepool = db.licensepool(
             edition=edition,
             open_access=False,
@@ -2629,12 +2657,73 @@ class TestGenerateInventoryReports:
             collection=collection,
         )
 
+        days_remaining = 10
+        expiration = utc_now() + datetime.timedelta(days=days_remaining)
         db.license(
             pool=licensepool,
-            checkouts_available=checkouts_available,
+            status=LicenseStatus.available,
             checkouts_left=checkouts_left,
             terms_concurrency=terms_concurrency,
+            expires=expiration,
         )
+        db.license(
+            pool=licensepool,
+            status=LicenseStatus.unavailable,
+            checkouts_left=1,
+            terms_concurrency=1,
+            expires=utc_now(),
+        )
+
+        patron1 = db.patron(library=library)
+        patron2 = db.patron(library=library)
+        patron3 = db.patron(library=library)
+        patron4 = db.patron(library=library)
+
+        # this one should be counted because the end is in the future.
+        hold1, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron1,
+            license_pool=licensepool,
+            position=1,
+            start=utc_now(),
+            end=utc_now() + datetime.timedelta(days=1),
+        )
+
+        # this one should be counted because the end is None
+        hold2, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron2,
+            license_pool=licensepool,
+            start=utc_now(),
+            end=None,
+        )
+
+        # this hold should be counted b/c the position is > 0
+        hold3, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron3,
+            license_pool=licensepool,
+            start=utc_now() - datetime.timedelta(days=1),
+            end=utc_now() - datetime.timedelta(minutes=1),
+            position=1,
+        )
+
+        # this hold should not be counted because the end is neither in the future nor unset and the position is zero
+        hold4, _ = get_one_or_create(
+            db.session,
+            Hold,
+            patron=patron4,
+            license_pool=licensepool,
+            start=utc_now(),
+            end=utc_now() - datetime.timedelta(minutes=1),
+            position=0,
+        )
+
+        shared_patrons_in_hold_queue = 4
+        licensepool.patrons_in_hold_queue = shared_patrons_in_hold_queue
 
         assert library.id
         data = InventoryReportTaskData(
@@ -2648,67 +2737,78 @@ class TestGenerateInventoryReports:
 
         script = GenerateInventoryReports(db.session)
         send_email_mock = create_autospec(script.services.email.container.send_email)
+        # for testing, don't delete the files associated with the attachments so we can read them after the script
+        # runs
+        script._delete_attachments = False
         script.services.email.container.send_email = send_email_mock
         script.do_run()
         send_email_mock.assert_called_once()
         args, kwargs = send_email_mock.call_args
         assert task.status == DeferredTaskStatus.SUCCESS
         assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
-        assert kwargs["subject"].__contains__("Inventory Report")
+        assert "Inventory and Holds Reports" in kwargs["subject"]
         attachments: dict = kwargs["attachments"]
 
-        assert len(attachments) == 1
-        key = [*attachments.keys()][0]
-        assert "biblioboard" in key
-        value = attachments[key]
-        assert len(value) > 0
-        csv_file = StringIO(value)
-        reader = csv.reader(csv_file, delimiter=",")
-        first_row = None
+        assert len(attachments) == 2
+        inventory_report_key = [x for x in attachments.keys() if "inventory" in x][0]
+        assert inventory_report_key
+        assert "test_library" in inventory_report_key
+        inventory_report_value = attachments[inventory_report_key]
+        assert inventory_report_value
+        inventory_report_reader = csv.DictReader(open(inventory_report_value))
+        inventory_row_count = 0
+
+        for row in inventory_report_reader:
+            inventory_row_count += 1
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert float(row["days_remaining_on_license"]) == float(days_remaining)
+            assert row["shared_active_loan_count"] == "0"
+            assert row["library_active_loan_count"] == "0"
+            assert row["remaining_loans"] == str(checkouts_left)
+            assert row["allowed_concurrent_users"] == str(terms_concurrency)
+            assert (
+                expiration.strftime("%Y-%m-%d %H:%M:%S.%f") in row["license_expiration"]
+            )
+
+        assert inventory_row_count == 1
+
+        holds_report_key = [x for x in attachments.keys() if "holds" in x][0]
+        assert holds_report_key
+        assert "test_library" in holds_report_key
+        holds_report_value = attachments[holds_report_key]
+        assert holds_report_value
+        holds_report_reader = csv.DictReader(open(holds_report_value))
         row_count = 0
 
-        for row in reader:
+        for row in holds_report_reader:
             row_count += 1
-            if not first_row:
-                first_row = row
-                row_headers = [
-                    "title",
-                    "author",
-                    "identifier",
-                    "language",
-                    "publisher",
-                    "format",
-                    "collection_name",
-                    "license_duration_days",
-                    "license_expiration_date",
-                    "initial_loan_count",
-                    "consumed_loans",
-                    "remaining_loans",
-                    "allowed_concurrent_users",
-                    "library_active_hold_count",
-                    "library_active_loan_count",
-                    "shared_active_hold_count",
-                    "shared_active_loan_count",
-                ]
-                for h in row_headers:
-                    assert h in row
-                continue
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
+            assert int(row["library_active_hold_count"]) == 3
 
-            assert row[first_row.index("title")] == title
-            assert row[first_row.index("author")] == author
-            assert row[first_row.index("shared_active_hold_count")] == "-1"
-            assert row[first_row.index("shared_active_loan_count")] == "-1"
-            assert row[first_row.index("initial_loan_count")] == str(
-                checkouts_available
-            )
-            assert row[first_row.index("consumed_loans")] == str(
-                checkouts_available - checkouts_left
-            )
-            assert row[first_row.index("allowed_concurrent_users")] == str(
-                terms_concurrency
-            )
+            assert row_count == 1
 
-            assert row_count == 2
+            # clean up files
+            for f in attachments.values():
+                os.remove(f)
 
 
 class TestDeleteOldDeferredTasks:
