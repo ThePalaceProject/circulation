@@ -163,6 +163,7 @@ module = [
     "pyld",
     "textblob.*",
     "unicodecsv",
+    "uwsgi",
     "wcag_contrast_ratio",
     "webpub_manifest_parser.*",
 ]
