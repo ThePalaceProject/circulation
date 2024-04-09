@@ -39,7 +39,7 @@ def celery_pydantic_config() -> CeleryConfiguration:
 
     The config returned will then be used to configure the `celery_app` fixture.
     """
-    return CeleryConfiguration.construct(broker_url="memory://", cm_name="test")  # type: ignore[arg-type]
+    return CeleryConfiguration.construct(broker_url="memory://")  # type: ignore[arg-type]
 
 
 @pytest.fixture(scope="session")
@@ -48,8 +48,7 @@ def celery_config(celery_pydantic_config: CeleryConfiguration) -> Mapping[str, A
 
     The config returned will then be used to configure the `celery_app` fixture.
     """
-    cm_name = celery_pydantic_config.cm_name
-    return celery_pydantic_config.dict() | task_queue_config(cm_name)
+    return celery_pydantic_config.dict() | task_queue_config()
 
 
 @pytest.fixture(scope="session")

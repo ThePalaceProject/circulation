@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.celery.job import Job
 from core.celery.task import Task
 from core.model import Collection
+from core.service.celery.celery import QueueNames
 
 
 class CollectionDeleteJob(Job):
@@ -39,6 +40,6 @@ class CollectionDeleteJob(Job):
             collection.delete()
 
 
-@shared_task(key="high", bind=True)
+@shared_task(queue=QueueNames.high, bind=True)
 def collection_delete(task: Task, collection_id: int) -> None:
     CollectionDeleteJob(task.session_maker, collection_id).run()
