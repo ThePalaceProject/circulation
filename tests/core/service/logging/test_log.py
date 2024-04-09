@@ -9,6 +9,7 @@ from functools import partial
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from freezegun import freeze_time
 from watchtower import CloudWatchLogHandler
 
@@ -20,6 +21,7 @@ from core.service.logging.log import (
     create_stream_handler,
     setup_logging,
 )
+from tests.fixtures.flask import FlaskAppFixture
 
 
 class TestJSONFormatter:
@@ -115,6 +117,49 @@ class TestJSONFormatter:
         data = json.loads(formatter.format(record))
         # The resulting data is always a Unicode string.
         assert data["message"] == expected
+
+    def test_flask_request(
+        self, log_record: LogRecordCallable, flask_app_fixture: FlaskAppFixture
+    ) -> None:
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "request" not in data
+
+        with flask_app_fixture.test_request_context("/"):
+            data = json.loads(formatter.format(record))
+            assert "request" in data
+            request = data["request"]
+            assert request["path"] == "/"
+            assert request["method"] == "GET"
+            assert "host" in request
+            assert "query" not in request
+
+        with flask_app_fixture.test_request_context(
+            "/test?query=string&foo=bar", method="POST"
+        ):
+            data = json.loads(formatter.format(record))
+            assert "request" in data
+            request = data["request"]
+            assert request["path"] == "/test"
+            assert request["method"] == "POST"
+            assert request["query"] == "query=string&foo=bar"
+
+    def test_uwsgi_worker(
+        self, log_record: LogRecordCallable, monkeypatch: MonkeyPatch
+    ) -> None:
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "uwsgi" not in data
+
+        mock_uwsgi = MagicMock()
+        monkeypatch.setitem(sys.modules, "uwsgi", mock_uwsgi)
+        mock_uwsgi.worker_id.return_value = 42
+
+        data = json.loads(formatter.format(record))
+        assert "uwsgi" in data
+        assert data["uwsgi"]["worker"] == 42
 
 
 class TestLogLoopPreventionFilter:

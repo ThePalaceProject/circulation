@@ -4,6 +4,7 @@ pytest_plugins = [
     "tests.fixtures.announcements",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
+    "tests.fixtures.flask",
     "tests.fixtures.library",
     "tests.fixtures.opds2_files",
     "tests.fixtures.opds_files",

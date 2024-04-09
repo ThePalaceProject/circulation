@@ -68,6 +68,33 @@ class JSONFormatter(logging.Formatter):
         )
         if record.exc_info:
             data["traceback"] = self.formatException(record.exc_info)
+        if record.process:
+            data["process"] = record.process
+        if record.thread:
+            data["thread"] = record.thread
+
+        # If we are running in a Flask context, we include the request data in the log
+        try:
+            from flask import request
+
+            data["request"] = {
+                "path": request.path,
+                "method": request.method,
+                "host": request.host_url,
+            }
+            if request.query_string:
+                data["request"]["query"] = request.query_string.decode()
+        except RuntimeError:
+            pass
+
+        # If we are running in uwsgi context, we include the worker id in the log
+        try:
+            import uwsgi
+
+            data["uwsgi"] = {"worker": uwsgi.worker_id()}
+        except ImportError:
+            pass
+
         return json.dumps(data)
 
 
