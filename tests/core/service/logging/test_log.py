@@ -167,7 +167,7 @@ class TestJSONFormatter:
             assert request["query"] == "query=string&foo=bar"
 
         # If flask is not installed, the request data is not included in the log.
-        monkeypatch.delitem(sys.modules, "flask", raising=False)
+        monkeypatch.setitem(sys.modules, "flask", None)
         data = json.loads(formatter.format(record))
         assert "request" not in data
 
