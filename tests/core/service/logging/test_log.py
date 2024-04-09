@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import sys
 from collections.abc import Callable, Mapping
 from functools import partial
@@ -42,6 +43,25 @@ class TestJSONFormatter:
         )
 
     @freeze_time("1990-05-05")
+    def test_format(self, log_record: LogRecordCallable):
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "host" in data
+        assert data["name"] == "some logger"
+        assert data["timestamp"] == "1990-05-05T00:00:00+00:00"
+        assert data["level"] == "DEBUG"
+        assert data["message"] == "A message"
+        assert data["filename"] == "pathname"
+        assert "traceback" not in data
+        assert data["process"] == os.getpid()
+
+        # If the record has no process, the process field is not included in the log.
+        record = log_record()
+        record.process = None
+        data = json.loads(formatter.format(record))
+        assert "process" not in data
+
     def test_format_exception(self, log_record: LogRecordCallable) -> None:
         formatter = JSONFormatter()
 
@@ -54,11 +74,7 @@ class TestJSONFormatter:
 
         record = log_record(exc_info=exc_info)
         data = json.loads(formatter.format(record))
-        assert data["name"] == "some logger"
-        assert data["timestamp"] == "1990-05-05T00:00:00+00:00"
-        assert data["level"] == "DEBUG"
-        assert data["message"] == "A message"
-        assert data["filename"] == "pathname"
+        assert "traceback" in data
         assert "ValueError: fake exception" in data["traceback"]
 
     @pytest.mark.parametrize(
