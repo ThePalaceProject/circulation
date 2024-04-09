@@ -183,26 +183,30 @@ class TestJSONFormatter:
             assert "uwsgi" in data
             assert data["uwsgi"]["worker"] == 42
 
-    def test_format_celery_worker(self, log_record: LogRecordCallable):
-        with patch(
-            "core.service.logging.log.get_current_task"
-        ) as mock_get_current_task:
-            formatter = JSONFormatter()
-            record = log_record()
+    def test_format_celery_task(
+        self, log_record: LogRecordCallable, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # If we are not in a celery task, the worker data is not included
+        formatter = JSONFormatter()
+        record = log_record()
 
-            # if we are in a celery task, we should include the task ID and task name
-            mock_get_current_task.return_value.configure_mock(
-                **{"name": "task_name", "request.id": "task_id"}
-            )
-            data = json.loads(formatter.format(record))
-            assert data["task_id"] == "task_id"
-            assert data["task_name"] == "task_name"
+        data = json.loads(formatter.format(record))
+        assert "celery" not in data
 
-            # otherwise, they should not be included
-            mock_get_current_task.return_value = None
-            data = json.loads(formatter.format(record))
-            assert "task_id" not in data
-            assert "task_name" not in data
+        # If celery isn't installed, the worker data is not included
+        monkeypatch.delitem(sys.modules, "celery")
+        data = json.loads(formatter.format(record))
+        assert "celery" not in data
+
+        # If we are in a celery task, the worker data is included
+        mock_celery = MagicMock()
+        mock_celery.current_task = MagicMock()
+        mock_celery.current_task.configure_mock(**{"name": "name", "request.id": "id"})
+        monkeypatch.setitem(sys.modules, "celery", mock_celery)
+        data = json.loads(formatter.format(record))
+        assert "celery" in data
+        assert data["celery"]["request_id"] == "id"
+        assert data["celery"]["task_name"] == "name"
 
 
 class TestLogLoopPreventionFilter:

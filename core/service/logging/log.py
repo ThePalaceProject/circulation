@@ -7,7 +7,6 @@ from collections.abc import Callable, Mapping, Sequence
 from logging import Handler
 from typing import TYPE_CHECKING, Any
 
-from celery._state import get_current_task
 from watchtower import CloudWatchLogHandler
 
 from core.service.logging.configuration import LogLevel
@@ -99,9 +98,16 @@ class JSONFormatter(logging.Formatter):
         # Handle the case where we're running in a Celery task, this information is usually captured by
         # the Celery log formatter, but we are not using that formatter for our code.
         # See https://docs.celeryq.dev/en/stable/reference/celery.app.log.html#celery.app.log.TaskFormatter
-        if task := get_current_task():
-            data["task_id"] = task.request.id
-            data["task_name"] = task.name
+        try:
+            from celery import current_task
+
+            if current_task:
+                data["celery"] = {
+                    "request_id": current_task.request.id,
+                    "task_name": current_task.name,
+                }
+        except ImportError:
+            pass
 
         return json.dumps(data)
 
