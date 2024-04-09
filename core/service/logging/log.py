@@ -70,8 +70,6 @@ class JSONFormatter(logging.Formatter):
             data["traceback"] = self.formatException(record.exc_info)
         if record.process:
             data["process"] = record.process
-        if record.thread:
-            data["thread"] = record.thread
 
         # If we are running in a Flask context, we include the request data in the log
         try:
@@ -84,7 +82,7 @@ class JSONFormatter(logging.Formatter):
             }
             if request.query_string:
                 data["request"]["query"] = request.query_string.decode()
-        except RuntimeError:
+        except (RuntimeError, ImportError):
             pass
 
         # If we are running in uwsgi context, we include the worker id in the log

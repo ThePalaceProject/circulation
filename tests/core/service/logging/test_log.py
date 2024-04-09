@@ -119,13 +119,18 @@ class TestJSONFormatter:
         assert data["message"] == expected
 
     def test_flask_request(
-        self, log_record: LogRecordCallable, flask_app_fixture: FlaskAppFixture
+        self,
+        log_record: LogRecordCallable,
+        flask_app_fixture: FlaskAppFixture,
+        monkeypatch: MonkeyPatch,
     ) -> None:
+        # Outside a Flask request context, the request data is not included in the log.
         formatter = JSONFormatter()
         record = log_record()
         data = json.loads(formatter.format(record))
         assert "request" not in data
 
+        # Inside a Flask request context, the request data is included in the log.
         with flask_app_fixture.test_request_context("/"):
             data = json.loads(formatter.format(record))
             assert "request" in data
@@ -145,14 +150,21 @@ class TestJSONFormatter:
             assert request["method"] == "POST"
             assert request["query"] == "query=string&foo=bar"
 
+        # If flask is not installed, the request data is not included in the log.
+        monkeypatch.delitem(sys.modules, "flask", raising=False)
+        data = json.loads(formatter.format(record))
+        assert "request" not in data
+
     def test_uwsgi_worker(
         self, log_record: LogRecordCallable, monkeypatch: MonkeyPatch
     ) -> None:
+        # Outside a uwsgi context, the worker id is not included in the log.
         formatter = JSONFormatter()
         record = log_record()
         data = json.loads(formatter.format(record))
         assert "uwsgi" not in data
 
+        # Inside a uwsgi context, the worker id is included in the log.
         mock_uwsgi = MagicMock()
         monkeypatch.setitem(sys.modules, "uwsgi", mock_uwsgi)
         mock_uwsgi.worker_id.return_value = 42
