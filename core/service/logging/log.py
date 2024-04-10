@@ -15,6 +15,16 @@ from core.util.datetime_helpers import from_timestamp
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
 
+try:
+    from flask import request as flask_request
+except ImportError:
+    flask_request = None  # type: ignore[assignment]
+
+try:
+    import uwsgi
+except ImportError:
+    uwsgi = None
+
 
 class JSONFormatter(logging.Formatter):
     def __init__(self) -> None:
@@ -68,6 +78,23 @@ class JSONFormatter(logging.Formatter):
         )
         if record.exc_info:
             data["traceback"] = self.formatException(record.exc_info)
+        if record.process:
+            data["process"] = record.process
+
+        # If we are running in a Flask context, we include the request data in the log
+        if flask_request:
+            data["request"] = {
+                "path": flask_request.path,
+                "method": flask_request.method,
+                "host": flask_request.host_url,
+            }
+            if flask_request.query_string:
+                data["request"]["query"] = flask_request.query_string.decode()
+
+        # If we are running in uwsgi context, we include the worker id in the log
+        if uwsgi:
+            data["uwsgi"] = {"worker": uwsgi.worker_id()}
+
         return json.dumps(data)
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import sys
 from collections.abc import Callable, Mapping
 from functools import partial
@@ -20,6 +21,7 @@ from core.service.logging.log import (
     create_stream_handler,
     setup_logging,
 )
+from tests.fixtures.flask import FlaskAppFixture
 
 
 class TestJSONFormatter:
@@ -40,6 +42,25 @@ class TestJSONFormatter:
         )
 
     @freeze_time("1990-05-05")
+    def test_format(self, log_record: LogRecordCallable):
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "host" in data
+        assert data["name"] == "some logger"
+        assert data["timestamp"] == "1990-05-05T00:00:00+00:00"
+        assert data["level"] == "DEBUG"
+        assert data["message"] == "A message"
+        assert data["filename"] == "pathname"
+        assert "traceback" not in data
+        assert data["process"] == os.getpid()
+
+        # If the record has no process, the process field is not included in the log.
+        record = log_record()
+        record.process = None
+        data = json.loads(formatter.format(record))
+        assert "process" not in data
+
     def test_format_exception(self, log_record: LogRecordCallable) -> None:
         formatter = JSONFormatter()
 
@@ -52,11 +73,7 @@ class TestJSONFormatter:
 
         record = log_record(exc_info=exc_info)
         data = json.loads(formatter.format(record))
-        assert data["name"] == "some logger"
-        assert data["timestamp"] == "1990-05-05T00:00:00+00:00"
-        assert data["level"] == "DEBUG"
-        assert data["message"] == "A message"
-        assert data["filename"] == "pathname"
+        assert "traceback" in data
         assert "ValueError: fake exception" in data["traceback"]
 
     @pytest.mark.parametrize(
@@ -115,6 +132,56 @@ class TestJSONFormatter:
         data = json.loads(formatter.format(record))
         # The resulting data is always a Unicode string.
         assert data["message"] == expected
+
+    def test_flask_request(
+        self,
+        log_record: LogRecordCallable,
+        flask_app_fixture: FlaskAppFixture,
+    ) -> None:
+        # Outside a Flask request context, the request data is not included in the log.
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "request" not in data
+
+        # Inside a Flask request context, the request data is included in the log.
+        with flask_app_fixture.test_request_context("/"):
+            data = json.loads(formatter.format(record))
+            assert "request" in data
+            request = data["request"]
+            assert request["path"] == "/"
+            assert request["method"] == "GET"
+            assert "host" in request
+            assert "query" not in request
+
+        with flask_app_fixture.test_request_context(
+            "/test?query=string&foo=bar", method="POST"
+        ):
+            data = json.loads(formatter.format(record))
+            assert "request" in data
+            request = data["request"]
+            assert request["path"] == "/test"
+            assert request["method"] == "POST"
+            assert request["query"] == "query=string&foo=bar"
+
+        # If flask is not installed, the request data is not included in the log.
+        with patch("core.service.logging.log.flask_request", None):
+            data = json.loads(formatter.format(record))
+            assert "request" not in data
+
+    def test_uwsgi_worker(self, log_record: LogRecordCallable) -> None:
+        # Outside a uwsgi context, the worker id is not included in the log.
+        formatter = JSONFormatter()
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "uwsgi" not in data
+
+        # Inside a uwsgi context, the worker id is included in the log.
+        with patch("core.service.logging.log.uwsgi") as mock_uwsgi:
+            mock_uwsgi.worker_id.return_value = 42
+            data = json.loads(formatter.format(record))
+            assert "uwsgi" in data
+            assert data["uwsgi"]["worker"] == 42
 
 
 class TestLogLoopPreventionFilter:
