@@ -26,6 +26,8 @@ class CeleryConfiguration(ServiceConfiguration):
     worker_hijack_root_logger: bool = False
     worker_log_color: bool = False
 
+    timezone: str = "US/Eastern"
+
     class Config:
         env_prefix = "PALACE_CELERY_"
 

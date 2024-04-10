@@ -48,6 +48,8 @@ ENV TZ=US/Eastern
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     mkdir /var/log/celery && \
     chown simplified:simplified /var/log/celery && \
+    mkdir /var/run/celery && \
+    chown simplified:simplified /var/run/celery && \
     touch /var/log/cron.log
 
 # Copy cron config into container
