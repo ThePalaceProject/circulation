@@ -83,17 +83,13 @@ class JSONFormatter(logging.Formatter):
 
         # If we are running in a Flask context, we include the request data in the log
         if flask_request:
-            try:
-                data["request"] = {
-                    "path": flask_request.path,
-                    "method": flask_request.method,
-                    "host": flask_request.host_url,
-                }
-                if flask_request.query_string:
-                    data["request"]["query"] = flask_request.query_string.decode()
-            except RuntimeError:
-                # We are not in a Flask context
-                pass
+            data["request"] = {
+                "path": flask_request.path,
+                "method": flask_request.method,
+                "host": flask_request.host_url,
+            }
+            if flask_request.query_string:
+                data["request"]["query"] = flask_request.query_string.decode()
 
         # If we are running in uwsgi context, we include the worker id in the log
         if uwsgi:
