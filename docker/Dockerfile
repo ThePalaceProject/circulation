@@ -46,10 +46,15 @@ FROM common AS scripts
 # Set the local timezone and setup cron
 ENV TZ=US/Eastern
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    mkdir /var/log/celery && \
+    chown simplified:simplified /var/log/celery && \
     touch /var/log/cron.log
 
 # Copy cron config into container
 COPY docker/services/cron /etc/
+
+# Setup runit
+COPY docker/runit-scripts /etc/service/
 
 VOLUME /var/log
 WORKDIR /home/simplified/circulation/bin
@@ -73,7 +78,7 @@ RUN mkdir -p /var/log/uwsgi && \
     chown simplified:simplified /var/run/uwsgi
 
 # Setup runit
-COPY docker/runit /etc/service/
+COPY docker/runit-web /etc/service/
 
 VOLUME /var/log
 WORKDIR /home/simplified/circulation

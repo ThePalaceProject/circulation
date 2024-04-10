@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+cd /var/www/circulation
+source env/bin/activate
+exec env/bin/celery -A "core.celery.worker.app" worker --uid 1000 --gid 1000 --autoscale 4,1 --hostname default@%h -Q high,default --logfile /var/log/celery/default.log
