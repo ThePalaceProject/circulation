@@ -183,9 +183,7 @@ class TestJSONFormatter:
             assert "uwsgi" in data
             assert data["uwsgi"]["worker"] == 42
 
-    def test_format_celery_task(
-        self, log_record: LogRecordCallable, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_celery_task(self, log_record: LogRecordCallable) -> None:
         # If we are not in a celery task, the worker data is not included
         formatter = JSONFormatter()
         record = log_record()
@@ -193,20 +191,13 @@ class TestJSONFormatter:
         data = json.loads(formatter.format(record))
         assert "celery" not in data
 
-        # If celery isn't installed, the worker data is not included
-        monkeypatch.setitem(sys.modules, "celery", None)
-        data = json.loads(formatter.format(record))
-        assert "celery" not in data
-
         # If we are in a celery task, the worker data is included
-        mock_celery = MagicMock()
-        mock_celery.current_task = MagicMock()
-        mock_celery.current_task.configure_mock(**{"name": "name", "request.id": "id"})
-        monkeypatch.setitem(sys.modules, "celery", mock_celery)
-        data = json.loads(formatter.format(record))
-        assert "celery" in data
-        assert data["celery"]["request_id"] == "id"
-        assert data["celery"]["task_name"] == "name"
+        with patch("core.service.logging.log.celery_task") as mock_celery:
+            mock_celery.configure_mock(**{"name": "name", "request.id": "id"})
+            data = json.loads(formatter.format(record))
+            assert "celery" in data
+            assert data["celery"]["request_id"] == "id"
+            assert data["celery"]["task_name"] == "name"
 
 
 class TestLogLoopPreventionFilter:
