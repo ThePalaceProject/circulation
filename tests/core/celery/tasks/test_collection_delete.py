@@ -1,11 +1,10 @@
-from logging import INFO
-
 from _pytest.logging import LogCaptureFixture
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from core.celery.tasks.collection_delete import CollectionDeleteJob, collection_delete
 from core.model import Collection
+from core.service.logging.configuration import LogLevel
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -33,7 +32,7 @@ def test_collection_delete_job_run(
     caplog: LogCaptureFixture,
 ):
     # A non-existent collection should log an error
-    caplog.set_level(INFO)
+    caplog.set_level(LogLevel.info)
     CollectionDeleteJob(mock_session_maker, 1).run()
     assert "Collection with id 1 not found. Unable to delete." in caplog.text
 

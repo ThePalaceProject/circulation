@@ -5,11 +5,13 @@ command line. You can use the following command:
 celery -A "core.celery.worker.app" worker
 ```
 
-Note: This file is not used in the app directly and shouldn't be imported imported anywhere.
+Note: This file is not used in the app directly and shouldn't be imported anywhere.
 Its only used to provide a global app instance for the Celery worker to use.
 """
 
 import importlib
+import logging
+from logging.handlers import WatchedFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -36,12 +38,19 @@ def import_celery_tasks() -> None:
 
 
 @setup_logging.connect
-def celery_logger_setup(
-    loglevel: int, logfile: str, format: str, colorize: bool, **kwargs: Any
-) -> None:
-    # Override the default Celery logger setup to use the logger configuration from the service container,
-    # this will likely need to be updated so that we respect some of the Celery specific configuration options.
-    ...
+def celery_logger_setup(loglevel: int, logfile: str | None, **kwargs: Any) -> None:
+    container_level = services.logging.config.level().levelno  # type: ignore[attr-defined]
+    root_logger = logging.getLogger()
+
+    # If celery requested a lower log level, then we update the root logger to use the lower level.
+    if loglevel < container_level:
+        root_logger.setLevel(loglevel)
+
+    # If celery requested a log file, then we update the root logger to also log to the file.
+    if logfile:
+        handler = WatchedFileHandler(logfile, encoding="utf-8")
+        handler.setFormatter(services.logging.json_formatter())
+        root_logger.addHandler(handler)
 
 
 services = container_instance()

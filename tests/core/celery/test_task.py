@@ -4,6 +4,7 @@ from _pytest.logging import LogCaptureFixture
 from sqlalchemy.pool import NullPool
 
 from core.celery.task import Task
+from core.service.logging.configuration import LogLevel
 
 
 def test_task_session_maker() -> None:
@@ -44,7 +45,7 @@ def test_task_services() -> None:
 
 def test_task_logger(caplog: LogCaptureFixture) -> None:
     # Task has a .log property that provides an appropriate logger.
-    caplog.set_level("INFO")
+    caplog.set_level(LogLevel.info)
     task = Task()
     task.log.info("test")
     assert "test" in caplog.text
