@@ -4,12 +4,13 @@ import celery
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
+from core.celery.session import SessionMixin
 from core.model import SessionManager
 from core.service.container import Services, container_instance
 from core.util.log import LoggerMixin
 
 
-class Task(celery.Task, LoggerMixin):
+class Task(celery.Task, LoggerMixin, SessionMixin):
     """
     Celery task implementation for Palace.
 

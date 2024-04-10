@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Generator
-from contextlib import contextmanager
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from core.celery.session import SessionMixin
 from core.util.log import LoggerMixin
 
 
-class Job(LoggerMixin, ABC):
+class Job(LoggerMixin, SessionMixin, ABC):
     """
     Base class for all our Celery jobs.
 
@@ -37,28 +36,9 @@ class Job(LoggerMixin, ABC):
         """
         self._session_maker = session_maker
 
-    @contextmanager
-    def session(self) -> Generator[Session, None, None]:
-        """
-        Starts a session and yields it to the caller. The session is closed
-        when the context manager exits.
-
-        See: https://docs.sqlalchemy.org/en/20/orm/session_basics.html#opening-and-closing-a-session
-        """
-        with self._session_maker() as session:
-            yield session
-
-    @contextmanager
-    def transaction(self) -> Generator[Session, None, None]:
-        """
-        Start a new transaction and yield a session to the caller. The transaction will be
-        committed when the context manager exits. If an exception is raised, the transaction
-        will be rolled back.
-
-        See: https://docs.sqlalchemy.org/en/20/orm/session_api.html#sqlalchemy.orm.sessionmaker.begin
-        """
-        with self._session_maker.begin() as session:
-            yield session
+    @property
+    def session_maker(self):
+        return self._session_maker
 
     @abstractmethod
     def run(self) -> None:

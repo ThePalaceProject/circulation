@@ -72,6 +72,7 @@ class CeleryFixture:
     app: Celery
     config: CeleryConfiguration
     worker: WorkController
+    session_maker: MockSessionMaker
 
 
 @pytest.fixture()
@@ -98,5 +99,9 @@ def celery_fixture(
         ),
     ):
         yield CeleryFixture(
-            container, celery_app, celery_pydantic_config, celery_worker
+            container,
+            celery_app,
+            celery_pydantic_config,
+            celery_worker,
+            mock_session_maker,
         )

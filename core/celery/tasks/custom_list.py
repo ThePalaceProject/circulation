@@ -114,13 +114,13 @@ class AutoUpdateCustomListJob(Job):
 @shared_task(queue=QueueNames.default, bind=True)
 def update_custom_list(task: Task, custom_list_id: int) -> None:
     AutoUpdateCustomListJob(
-        task.session_maker, task.services.search.index(), custom_list_id
+        task.session_maker, task.services.search.index(), custom_list_id=custom_list_id
     ).run()
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def update_custom_lists(task: Task) -> None:
-    with task.session_maker() as db:
+    with task.session() as db:
         custom_lists = db.execute(
             select(CustomList.id).where(CustomList.auto_update_enabled == True)
         ).all()
