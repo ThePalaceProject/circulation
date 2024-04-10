@@ -10,7 +10,6 @@ from functools import partial
 from unittest.mock import MagicMock, patch
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 from freezegun import freeze_time
 from watchtower import CloudWatchLogHandler
 
@@ -138,7 +137,6 @@ class TestJSONFormatter:
         self,
         log_record: LogRecordCallable,
         flask_app_fixture: FlaskAppFixture,
-        monkeypatch: MonkeyPatch,
     ) -> None:
         # Outside a Flask request context, the request data is not included in the log.
         formatter = JSONFormatter()
@@ -167,13 +165,11 @@ class TestJSONFormatter:
             assert request["query"] == "query=string&foo=bar"
 
         # If flask is not installed, the request data is not included in the log.
-        monkeypatch.setitem(sys.modules, "flask", None)
-        data = json.loads(formatter.format(record))
-        assert "request" not in data
+        with patch("core.service.logging.log.flask_request", None):
+            data = json.loads(formatter.format(record))
+            assert "request" not in data
 
-    def test_uwsgi_worker(
-        self, log_record: LogRecordCallable, monkeypatch: MonkeyPatch
-    ) -> None:
+    def test_uwsgi_worker(self, log_record: LogRecordCallable) -> None:
         # Outside a uwsgi context, the worker id is not included in the log.
         formatter = JSONFormatter()
         record = log_record()
@@ -181,13 +177,11 @@ class TestJSONFormatter:
         assert "uwsgi" not in data
 
         # Inside a uwsgi context, the worker id is included in the log.
-        mock_uwsgi = MagicMock()
-        monkeypatch.setitem(sys.modules, "uwsgi", mock_uwsgi)
-        mock_uwsgi.worker_id.return_value = 42
-
-        data = json.loads(formatter.format(record))
-        assert "uwsgi" in data
-        assert data["uwsgi"]["worker"] == 42
+        with patch("core.service.logging.log.uwsgi") as mock_uwsgi:
+            mock_uwsgi.worker_id.return_value = 42
+            data = json.loads(formatter.format(record))
+            assert "uwsgi" in data
+            assert data["uwsgi"]["worker"] == 42
 
 
 class TestLogLoopPreventionFilter:

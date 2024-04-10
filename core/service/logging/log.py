@@ -15,6 +15,16 @@ from core.util.datetime_helpers import from_timestamp
 if TYPE_CHECKING:
     from mypy_boto3_logs import CloudWatchLogsClient
 
+try:
+    from flask import request as flask_request
+except ImportError:
+    flask_request = None
+
+try:
+    import uwsgi
+except ImportError:
+    uwsgi = None
+
 
 class JSONFormatter(logging.Formatter):
     def __init__(self) -> None:
@@ -72,26 +82,22 @@ class JSONFormatter(logging.Formatter):
             data["process"] = record.process
 
         # If we are running in a Flask context, we include the request data in the log
-        try:
-            from flask import request
-
-            data["request"] = {
-                "path": request.path,
-                "method": request.method,
-                "host": request.host_url,
-            }
-            if request.query_string:
-                data["request"]["query"] = request.query_string.decode()
-        except (RuntimeError, ImportError):
-            pass
+        if flask_request:
+            try:
+                data["request"] = {
+                    "path": flask_request.path,
+                    "method": flask_request.method,
+                    "host": flask_request.host_url,
+                }
+                if flask_request.query_string:
+                    data["request"]["query"] = flask_request.query_string.decode()
+            except RuntimeError:
+                # We are not in a Flask context
+                pass
 
         # If we are running in uwsgi context, we include the worker id in the log
-        try:
-            import uwsgi
-
+        if uwsgi:
             data["uwsgi"] = {"worker": uwsgi.worker_id()}
-        except ImportError:
-            pass
 
         return json.dumps(data)
 
