@@ -4,8 +4,6 @@ import datetime
 import json
 from typing import TYPE_CHECKING
 
-from dependency_injector.wiring import Provide, inject
-
 from api.admin.problem_details import (
     CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
     CUSTOMLIST_SOURCE_COLLECTION_MISSING,
@@ -15,7 +13,6 @@ from core.lane import SearchFacets, WorkList
 from core.model.customlist import CustomList, CustomListEntry
 from core.model.library import Library
 from core.model.licensing import LicensePool
-from core.service.container import Services
 from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetail
 
@@ -84,19 +81,19 @@ class CustomListQueries(LoggerMixin):
         return True
 
     @classmethod
-    @inject
     def populate_query_pages(
         cls,
         _db: Session,
+        search: ExternalSearchIndex,
         custom_list: CustomList,
         start_page: int = 1,
         max_pages: int = 100000,
         page_size: int = 100,
         json_query: dict | None = None,
-        search: ExternalSearchIndex = Provide[Services.search.index],
     ) -> int:
         """Populate the custom list while paging through the search query results
         :param _db: The database connection
+        :param search: The search index to use
         :param custom_list: The list to be populated
         :param start_page: Offset of the search will be used from here (based on page_size)
         :param max_pages: Maximum number of pages to search through

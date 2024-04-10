@@ -67,7 +67,6 @@ def wire_container(container: Services) -> None:
             "core.metadata_layer",
             "core.model.collection",
             "core.model.work",
-            "core.query.customlist",
         ]
     )
 
