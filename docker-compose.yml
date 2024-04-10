@@ -18,7 +18,7 @@ x-cm-variables: &cm
     PALACE_PATRON_WEB_HOSTNAMES: "*"
     PALACE_BASE_URL: "http://localhost:6500"
     PALACE_CELERY_BROKER_URL: "redis://redis:6379/0"
-    PALACE_CELERY_CM_NAME: "test"
+    PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
 
     # Set up the environment variables used for testing as well
     SIMPLIFIED_TEST_DATABASE: "postgresql://palace:test@pg:5432/circ"
