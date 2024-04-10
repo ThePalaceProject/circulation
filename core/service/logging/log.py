@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 try:
     from flask import request as flask_request
 except ImportError:
-    flask_request = None
+    flask_request = None  # type: ignore[assignment]
 
 try:
     import uwsgi
