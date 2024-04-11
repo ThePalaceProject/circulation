@@ -39,7 +39,7 @@ from core.model import (
 )
 from core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWED
 from core.query.customlist import CustomListQueries
-from core.util.problem_detail import ProblemDetail
+from core.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class CustomListsController(
@@ -181,41 +181,40 @@ class CustomListsController(
                 try:
                     auto_update_query_str = json.dumps(auto_update_query)
                 except json.JSONDecodeError:
-                    raise Exception(
+                    raise ProblemDetailException(
                         INVALID_INPUT.detailed(
                             "auto_update_query is not JSON serializable"
                         )
                     )
 
                 if entries and len(entries) > 0:
-                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+                    raise ProblemDetailException(
+                        AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
+                    )
                 if deleted_entries and len(deleted_entries) > 0:
-                    raise Exception(AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES)
+                    raise ProblemDetailException(
+                        AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
+                    )
 
             if auto_update_facets is not None:
                 try:
                     auto_update_facets_str = json.dumps(auto_update_facets)
                 except json.JSONDecodeError:
-                    raise Exception(
+                    raise ProblemDetailException(
                         INVALID_INPUT.detailed(
                             "auto_update_facets is not JSON serializable"
                         )
                     )
             if auto_update is True and auto_update_query is None:
-                raise Exception(
+                raise ProblemDetailException(
                     INVALID_INPUT.detailed(
                         "auto_update_query must be present when auto_update is enabled"
                     )
                 )
-        except Exception as e:
-            auto_update_error = e.args[0] if len(e.args) else None
-
-            if not auto_update_error or type(auto_update_error) != ProblemDetail:
-                raise
-
-            # Rollback if this was a deliberate error
+        except ProblemDetailException as e:
+            # Rollback if we have a problem detail to return
             self._db.rollback()
-            return auto_update_error
+            return e.problem_detail
 
         list.updated = datetime.now()
         list.name = name
