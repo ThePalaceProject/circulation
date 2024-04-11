@@ -250,17 +250,6 @@ the logging:
       [documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html#configuring-credentials).
 - `PALACE_LOG_CLOUDWATCH_SECRET_KEY`: The secret key to use when sending logs to CloudWatch. This is optional.
 
-#### Patron `Basic Token` authentication
-
-Enables/disables patron "basic token" authentication through setting the designated environment variable to any
-(case-insensitive) value of "true"/"yes"/"on"/"1" or "false"/"no"/"off"/"0", respectively.
-If the value is the empty string or the variable is not present in the environment, it is disabled by default.
-- `SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH`
-
-```sh
-export SIMPLIFIED_ENABLE_BASIC_TOKEN_AUTH=true
-```
-
 #### Firebase Cloud Messaging
 
 For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
