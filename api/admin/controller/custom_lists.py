@@ -24,6 +24,7 @@ from api.admin.problem_details import (
 )
 from api.problem_details import CANNOT_DELETE_SHARED_LIST
 from core.app_server import load_pagination_from_request
+from core.celery.tasks.custom_list import update_custom_list
 from core.external_search import ExternalSearchIndex
 from core.feed.acquisition import OPDSAcquisitionFeed
 from core.lane import Lane, WorkList
@@ -245,6 +246,7 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
             CustomListQueries.populate_query_pages(
                 self._db, self.search_engine, list, max_pages=1
             )
+            update_custom_list.delay(list.id)
         elif (
             not is_new
             and list.auto_update_enabled
@@ -258,6 +260,7 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
                 prev_query_dict = json.loads(previous_auto_update_query)
                 if prev_query_dict != auto_update_query:
                     list.auto_update_status = CustomList.REPOPULATE
+                    update_custom_list.delay(list.id)
             except json.JSONDecodeError:
                 # Do nothing if the previous query was not valid
                 pass
