@@ -209,7 +209,6 @@ def test_create_cloudwatch_handler() -> None:
 
     handler = create_cloudwatch_handler(
         formatter=mock_formatter,
-        level=LogLevel.info,
         client=mock_client,
         group="test_group",
         stream="test_stream",
@@ -223,18 +222,18 @@ def test_create_cloudwatch_handler() -> None:
     assert handler.send_interval == 13
     assert any(isinstance(f, LogLoopPreventionFilter) for f in handler.filters)
     assert handler.formatter == mock_formatter
-    assert handler.level == logging.INFO
+    assert handler.level == logging.NOTSET
 
 
 def test_create_stream_handler() -> None:
     mock_formatter = MagicMock()
 
-    handler = create_stream_handler(formatter=mock_formatter, level=LogLevel.debug)
+    handler = create_stream_handler(formatter=mock_formatter)
 
     assert isinstance(handler, logging.StreamHandler)
     assert not any(isinstance(f, LogLoopPreventionFilter) for f in handler.filters)
     assert handler.formatter == mock_formatter
-    assert handler.level == logging.DEBUG
+    assert handler.level == logging.NOTSET
 
 
 def test_setup_logging_cloudwatch_disabled() -> None:

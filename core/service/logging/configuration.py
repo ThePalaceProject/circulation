@@ -1,4 +1,8 @@
-from enum import Enum
+from __future__ import annotations
+
+import logging
+import sys
+from enum import auto
 from typing import Any
 
 import boto3
@@ -7,12 +11,43 @@ from watchtower import DEFAULT_LOG_STREAM_NAME
 
 from core.service.configuration import ServiceConfiguration
 
+# TODO: Remove this when we drop support for Python 3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum
 
-class LogLevel(Enum):
-    debug = "DEBUG"
-    info = "INFO"
-    warning = "WARNING"
-    error = "ERROR"
+
+class LogLevel(StrEnum):
+    @staticmethod
+    def _generate_next_value_(
+        name: str, start: int, count: int, last_values: list[str]
+    ) -> str:
+        """
+        Return the upper-cased version of the member name.
+        """
+        return name.upper()
+
+    debug = auto()
+    info = auto()
+    warning = auto()
+    error = auto()
+
+    @property
+    def levelno(self) -> int:
+        return logging._nameToLevel[self.value]
+
+    @classmethod
+    def from_level(cls, level: int | str) -> LogLevel:
+        if isinstance(level, int):
+            parsed_level = logging.getLevelName(level)
+        else:
+            parsed_level = str(level).upper()
+
+        try:
+            return cls(parsed_level)
+        except ValueError:
+            raise ValueError(f"'{level}' is not a valid LogLevel") from None
 
 
 class LoggingConfiguration(ServiceConfiguration):
