@@ -1,14 +1,16 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 class SessionMixin(ABC):
     @property
     @abstractmethod
-    def session_maker(self):
+    def session_maker(self) -> sessionmaker[Session]:
         """
         The session maker to use when creating sessions.
         """

@@ -37,7 +37,7 @@ class Job(LoggerMixin, SessionMixin, ABC):
         self._session_maker = session_maker
 
     @property
-    def session_maker(self):
+    def session_maker(self) -> sessionmaker[Session]:
         return self._session_maker
 
     @abstractmethod
