@@ -199,7 +199,7 @@ class CustomListsController(
             if auto_update_facets is not None:
                 try:
                     auto_update_facets_str = json.dumps(auto_update_facets)
-                except json.JSONDecodeError:
+                except TypeError:
                     raise ProblemDetailException(
                         INVALID_INPUT.detailed(
                             "auto_update_facets is not JSON serializable"

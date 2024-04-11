@@ -1162,7 +1162,7 @@ class TestCustomListsController:
         assert custom_list.auto_update_status == CustomList.REPOPULATE
         assert [e.work_id for e in custom_list.entries] == [w1.id]
 
-    def test_auto_update_create_invalid_json(
+    def test_auto_update_create_unable_to_serialize_query(
         self,
         admin_librarian_fixture: AdminLibrarianFixture,
         db: DatabaseTransactionFixture,
@@ -1182,6 +1182,28 @@ class TestCustomListsController:
         assert isinstance(response, ProblemDetail)
         assert response.status_code == 400
         assert response.detail == "auto_update_query is not JSON serializable"
+
+    def test_auto_update_create_unable_to_serialize_facets(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        library = db.default_library()
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+            library,
+            "test list",
+            [],
+            [],
+            [],
+            id=None,
+            auto_update=True,
+            auto_update_query={"query": "foo"},
+            auto_update_facets={"foo": object()},  # type: ignore[dict-item]
+        )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 400
+        assert response.detail == "auto_update_facets is not JSON serializable"
 
     def test_auto_update_deleted_entries(
         self,
