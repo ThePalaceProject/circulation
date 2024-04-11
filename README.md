@@ -373,6 +373,12 @@ Check that there is now a web server listening on port `6500`:
 curl http://localhost:6500/
 ```
 
+You can start a celery worker with:
+
+```sh
+poetry run celery -A "core.celery.worker.app" worker --concurrency 1 --pool solo --beat
+```
+
 ### The Admin Interface
 
 #### Access

@@ -12,7 +12,8 @@ class SessionMixin(ABC):
     @abstractmethod
     def session_maker(self) -> sessionmaker[Session]:
         """
-        The session maker to use when creating sessions.
+        The session maker to use when creating sessions. Generally this should be accessed
+        via the `session` or `transaction` context managers defined below.
         """
 
     @contextmanager

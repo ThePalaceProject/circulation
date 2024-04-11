@@ -44,6 +44,9 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
         """
         Get a new session for this worker process.
 
+        This should generally be accessed via the `session` or `transaction` context managers
+        defined in `SessionMixin`.
+
         This is using a `NullPool` connection pool for workers DB connections. This means that DB
         connections are opened on demand, so we won't have long-lived connections sitting idle,
         which should reduce the load on our PG instances.

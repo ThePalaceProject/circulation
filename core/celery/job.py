@@ -38,6 +38,12 @@ class Job(LoggerMixin, SessionMixin, ABC):
 
     @property
     def session_maker(self) -> sessionmaker[Session]:
+        """
+        A session maker for the job to use when creating sessions.
+
+        This should generally be accessed via the `session` or `transaction`
+        context managers defined in `SessionMixin`.
+        """
         return self._session_maker
 
     @abstractmethod
