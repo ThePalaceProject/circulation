@@ -180,7 +180,7 @@ class CustomListsController(
             if auto_update_query is not None:
                 try:
                     auto_update_query_str = json.dumps(auto_update_query)
-                except json.JSONDecodeError:
+                except TypeError:
                     raise ProblemDetailException(
                         INVALID_INPUT.detailed(
                             "auto_update_query is not JSON serializable"

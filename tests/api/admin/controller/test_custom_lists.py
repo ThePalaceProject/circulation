@@ -36,6 +36,7 @@ from core.query.customlist import CustomListQueries
 from core.util.problem_detail import ProblemDetail
 from tests.core.util.test_flask_util import add_request_context
 from tests.fixtures.api_admin import AdminLibrarianFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.search import ExternalSearchIndexFake, SearchServiceFake
 
 
@@ -1160,3 +1161,42 @@ class TestCustomListsController:
         assert custom_list.auto_update_query == '{"query": "...changed"}'
         assert custom_list.auto_update_status == CustomList.REPOPULATE
         assert [e.work_id for e in custom_list.entries] == [w1.id]
+
+    def test_auto_update_create_invalid_json(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        library = db.default_library()
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+            library,
+            "test list",
+            [],
+            [],
+            [],
+            id=None,
+            auto_update=True,
+            auto_update_query={"foo": object()},  # type: ignore[arg-type]
+        )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 400
+        assert response.detail == "auto_update_query is not JSON serializable"
+
+    def test_auto_update_deleted_entries(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        library = db.default_library()
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+            library,
+            "test list",
+            [],
+            [],
+            [{}, {}],
+            id=None,
+            auto_update=True,
+            auto_update_query={"query": "foo"},
+        )
+        assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES
