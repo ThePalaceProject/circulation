@@ -3,6 +3,7 @@ from enum import auto
 from typing import Any
 
 from celery import Celery
+from celery.schedules import crontab
 from kombu import Exchange, Queue
 
 # TODO: Remove this when we drop support for Python 3.10
@@ -15,6 +16,23 @@ else:
 class QueueNames(StrEnum):
     high = auto()
     default = auto()
+
+
+def beat_schedule() -> dict[str, Any]:
+    """
+    Configure the Celery beat schedule.
+
+    This is a dictionary of tasks that should be run periodically. The key is the schedule name, and
+    the value is a dictionary of options for the task. The `schedule` key is required and should
+    be a timedelta object or a crontab string. The `task` key is required and should be the name
+    of the task to run.
+    """
+    return {
+        "update_custom_lists": {
+            "task": "core.celery.tasks.custom_list.update_custom_lists",
+            "schedule": crontab(minute="5"),  # Run every hour at 5 minutes past
+        }
+    }
 
 
 def task_queue_config() -> dict[str, Any]:
@@ -50,6 +68,7 @@ def celery_factory(config: dict[str, Any]) -> Celery:
     app = Celery(task_cls="core.celery.task:Task")
     app.conf.update(config)
     app.conf.update(task_queue_config())
+    app.conf.update({"beat_schedule": beat_schedule()})
     app.set_default()
 
     return app
