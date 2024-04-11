@@ -161,6 +161,14 @@ CREATE USER palace with password 'test';
 grant all privileges on database circ to palace;
 ```
 
+### Redis
+
+Redis is used as the broker for Celery. You can run Redis with docker using the following command:
+
+```sh
+docker run -d --name redis -p 6379:6379 redis
+```
+
 ### Environment variables
 
 #### Database
@@ -186,6 +194,21 @@ To let the application know which Opensearch instance to use, you can set the fo
 ```sh
 export PALACE_SEARCH_URL="http://localhost:9200"
 ```
+
+#### Celery
+
+We use [Celery](https://docs.celeryproject.org/en/stable/) to run background tasks. To configure Celery, you need to
+pass a broker URL to the application.
+
+- `PALACE_CELERY_BROKER_URL`: The URL of the broker to use for Celery. (**required**).
+    - for example:
+        ```sh
+          export PALACE_CELERY_BROKER_URL="redis://localhost:6379/0"`
+        ```
+
+We support overriding a number of other Celery settings via environment variables, but in most cases
+the defaults should be sufficient. The full list of settings can be found in
+[`service/celery/configuration.py`](core/service/celery/configuration.py).
 
 #### General
 
@@ -492,23 +515,15 @@ to send the Loan and Hold reminders to the mobile applications.
 
 ## Scheduled Jobs
 
-All jobs are scheduled via `cron`, as specified in the `docker/services/simplified_crontab` file.
-This includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
+The Palace Manager has a number of background jobs that are scheduled to run at regular intervals. This
+includes all the import and reaper jobs, as well as other necessary background tasks, such as maintaining
 the search index and feed caches.
 
-### Job Requirements
+Jobs are scheduled via a combination of `cron` and `celery`. All new jobs should use `celery` for scheduling,
+and existing jobs are being migrated to `celery` as they are updated.
 
-#### hold_notifications
-
-Requires one of [the Firebase Cloud Messaging credentials environment variables (described above)](#firebase-cloud-messaging)
-to be present and non-empty.
-In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
-
-#### loan_notifications
-
-Requires one of [the Firebase Cloud Messaging credentials environment variables (described above](#firebase-cloud-messaging)
-to be present and non-empty.
-In addition, the site-wide `PUSH_NOTIFICATIONS_STATUS` setting must be either `unset` or `true`.
+The `cron` jobs are defined in the `docker/services/simplified_crontab` file. The `celery` jobs are defined
+in the `core/celery/tasks/` module.
 
 ## Code Style
 
@@ -662,6 +677,17 @@ Only run the `test_google_analytics_provider` tests with Python 3.8 using docker
 
 ```sh
 tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+```
+
+### Environment Variables
+
+When testing Celery tasks, it can be useful to set the `PALACE_TEST_CELERY_WORKER_SHUTDOWN_TIMEOUT` environment variable
+to a higher value than the default of 30 seconds, so you are able to set breakpoints in the worker code and debug it.
+This value is interpreted as the number of seconds to wait for the worker to shut down before killing it. If you set
+this value to `none` or (empty string), timeouts will be disabled.
+
+```sh
+export PALACE_TEST_CELERY_WORKER_SHUTDOWN_TIMEOUT=""
 ```
 
 ### Coverage Reports
