@@ -3,7 +3,7 @@ from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 from requests import Response
 
 from api.circulation import CirculationAPI, FulfillmentInfo

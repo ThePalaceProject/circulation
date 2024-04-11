@@ -3,7 +3,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 from requests import RequestException
 
 from api.admin.config import Configuration as AdminConfig

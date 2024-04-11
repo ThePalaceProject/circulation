@@ -10,7 +10,7 @@ from core.config import CannotLoadConfiguration
 from core.service.configuration import ServiceConfiguration
 
 if TYPE_CHECKING:
-    from _pytest.monkeypatch import MonkeyPatch
+    from pytest import MonkeyPatch
 
 
 class MockServiceConfiguration(ServiceConfiguration):

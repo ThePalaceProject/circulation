@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, create_autospec
 
 import flask
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 from flask import Response
+from pytest import MonkeyPatch
 from werkzeug.datastructures import ImmutableMultiDict
 
 from api.admin.controller.collection_settings import CollectionSettingsController

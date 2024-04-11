@@ -7,7 +7,7 @@ from functools import partial
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 
 from api.sip.client import SIPClient
 from api.sip.dialect import Dialect

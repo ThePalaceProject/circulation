@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 
 from api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,

@@ -8,9 +8,9 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
+from pytest import MonkeyPatch
 from requests_mock import Mocker
 
 from api.discovery.opds_registration import OpdsRegistrationService

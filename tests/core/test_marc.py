@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
 from pymarc import MARCReader, Record
+from pytest import LogCaptureFixture
 
 from core.marc import Annotator, MARCExporter
 from core.model import (

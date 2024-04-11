@@ -1,5 +1,5 @@
 import pytest
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 
 from core.service.logging.configuration import LogLevel
 from core.util.log import LoggerMixin, log_elapsed_time

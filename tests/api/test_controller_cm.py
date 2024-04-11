@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, create_autospec
 
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 
 from api.authenticator import LibraryAuthenticator
 from api.circulation_manager import CirculationManager
