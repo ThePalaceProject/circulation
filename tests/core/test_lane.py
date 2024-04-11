@@ -1878,7 +1878,7 @@ class TestWorkList:
         # 'all the CustomLists from that DataSource'.
         worklist = WorkList()
         worklist.initialize(db.default_library(), list_datasource=gutenberg)
-        assert [customlist1.id, customlist2.id] == worklist.customlist_ids
+        assert {customlist1.id, customlist2.id} == set(worklist.customlist_ids)
         assert gutenberg.id == worklist.list_datasource_id
 
     def test_initialize_without_library(self, db: DatabaseTransactionFixture):
