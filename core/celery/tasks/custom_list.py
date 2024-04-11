@@ -67,9 +67,9 @@ class AutoUpdateCustomListJob(Job):
                     json_query = json.loads(custom_list.auto_update_query)
                 else:
                     return
-            except json.JSONDecodeError as e:
-                self.log.error(
-                    f"Could not decode custom list({custom_list.id}) saved query: {e}"
+            except json.JSONDecodeError:
+                self.log.exception(
+                    f"Could not decode custom list({custom_list.id}) saved query: {custom_list.auto_update_query}"
                 )
                 return
             # Update availability time as a query part that allows us to filter for new licenses

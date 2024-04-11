@@ -223,6 +223,44 @@ class TestAutoUpdateCustomListJob:
         assert custom_list.auto_update_status == CustomList.UPDATED
         assert custom_list.size == len(custom_list_fixture.works.populated_books)
 
+    def test_non_existent_list(
+        self,
+        mock_session_maker: sessionmaker,
+        custom_list_fixture: CustomListFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        mock_index = create_autospec(ExternalSearchIndex)
+        AutoUpdateCustomListJob(mock_session_maker, mock_index, 12345).run()
+        mock_index.query_works.assert_not_called()
+        assert "CustomList with id 12345 not found" in caplog.text
+
+    def test_no_auto_update(
+        self,
+        mock_session_maker: sessionmaker,
+        custom_list_fixture: CustomListFixture,
+    ):
+        mock_index = create_autospec(ExternalSearchIndex)
+        custom_list = custom_list_fixture.list()
+        custom_list.auto_update_enabled = False
+        job = AutoUpdateCustomListJob(mock_session_maker, mock_index, custom_list.id)
+        mock_update = create_autospec(job._update_list_with_new_entries)
+        job._update_list_with_new_entries = mock_update
+        mock_update.assert_not_called()
+
+    def test_bad_auto_update_json(
+        self,
+        mock_session_maker: sessionmaker,
+        custom_list_fixture: CustomListFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        mock_index = create_autospec(ExternalSearchIndex)
+        custom_list = custom_list_fixture.list()
+        bad_query = "bad json }"
+        custom_list.auto_update_query = bad_query
+        AutoUpdateCustomListJob(mock_session_maker, mock_index, custom_list.id).run()
+        assert "Could not decode custom list" in caplog.text
+        assert bad_query in caplog.text
+
 
 def test_update_custom_list(
     db: DatabaseTransactionFixture,
