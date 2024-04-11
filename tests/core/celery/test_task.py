@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 from sqlalchemy.pool import NullPool
 
 from core.celery.task import Task

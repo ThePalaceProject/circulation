@@ -1,4 +1,4 @@
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
