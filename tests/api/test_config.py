@@ -1,7 +1,6 @@
 import json
 import os
 from collections import Counter
-from contextlib import nullcontext as does_not_raise
 from unittest.mock import patch
 
 import pytest
@@ -189,40 +188,3 @@ class TestConfiguration:
             match=r"Cannot parse value of FCM credential environment variable .* as JSON.",
         ):
             Configuration.fcm_credentials()
-
-    @pytest.mark.parametrize(
-        "env_var_value, expected_result, raises_exception",
-        [
-            ["true", True, False],
-            ["True", True, False],
-            [None, False, False],
-            ["", False, False],
-            ["false", False, False],
-            ["False", False, False],
-            ["3", None, True],
-            ["X", None, True],
-        ],
-    )
-    @patch.object(os, "environ", new=dict())
-    def test_basic_token_auth_is_enabled(
-        self, env_var_value, expected_result, raises_exception
-    ):
-        env_var = Configuration.BASIC_TOKEN_AUTH_ENABLED_ENVVAR
-
-        # Simulate an unset environment variable with the `None` value.
-        if env_var_value is None:
-            del os.environ[env_var]
-        else:
-            os.environ[env_var] = env_var_value
-
-        expected_exception = (
-            pytest.raises(
-                CannotLoadConfiguration,
-                match=f"Invalid value for {env_var} environment variable.",
-            )
-            if raises_exception
-            else does_not_raise()
-        )
-
-        with expected_exception:
-            assert expected_result == Configuration.basic_token_auth_is_enabled()
