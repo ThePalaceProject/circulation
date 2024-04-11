@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
+import opensearchpy
 import pytz
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
@@ -1811,7 +1812,12 @@ class Work(Base):
     ) -> None:
         """Delete the work from both the DB and search index."""
         _db = Session.object_session(self)
-        search_index.remove_work(self)
+        try:
+            search_index.remove_work(self)
+        except opensearchpy.exceptions.NotFoundError:
+            logging.warning(
+                f"Work {self.id} not found in search index while attempting to delete it."
+            )
         _db.delete(self)
 
 
