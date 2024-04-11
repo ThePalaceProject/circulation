@@ -1176,7 +1176,7 @@ class TestCustomListsController:
             [],
             id=None,
             auto_update=True,
-            auto_update_query={"foo": object()},  # type: ignore[arg-type]
+            auto_update_query={"foo": object()},  # type: ignore[dict-item]
         )
 
         assert isinstance(response, ProblemDetail)
