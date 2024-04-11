@@ -556,7 +556,7 @@ class TestErrorHandler:
         # The exception was logged at the error level
         assert len(caplog.records) == 1
         log_record = caplog.records[0]
-        assert log_record.levelname == LogLevel.error.value
+        assert log_record.levelname == LogLevel.error
         assert "Exception in web app" in log_record.message
 
     def test_handle_error_problem_error(
@@ -581,7 +581,7 @@ class TestErrorHandler:
         # detail document had a status code of 502.
         assert len(caplog.records) == 1
         log_record = caplog.records[0]
-        assert log_record.levelname == LogLevel.warning.value
+        assert log_record.levelname == LogLevel.warning
         assert "Exception in web app" in log_record.message
 
     def test_handle_operational_error(
@@ -599,7 +599,7 @@ class TestErrorHandler:
 
         assert len(caplog.records) == 1
         log_record = caplog.records[0]
-        assert log_record.levelname == LogLevel.warning.value
+        assert log_record.levelname == LogLevel.warning
 
 
 class TestCompressibleAnnotator:

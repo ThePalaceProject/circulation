@@ -35,7 +35,6 @@ class Logging(DeclarativeContainer):
     cloudwatch_handler: Provider[Handler | None] = providers.Singleton(
         create_cloudwatch_handler,
         formatter=json_formatter,
-        level=config.level,
         client=cloudwatch_client,
         group=config.cloudwatch_group,
         stream=config.cloudwatch_stream,
@@ -44,7 +43,7 @@ class Logging(DeclarativeContainer):
     )
 
     stream_handler: Provider[Handler] = providers.Singleton(
-        create_stream_handler, formatter=json_formatter, level=config.level
+        create_stream_handler, formatter=json_formatter
     )
 
     logging = providers.Resource(

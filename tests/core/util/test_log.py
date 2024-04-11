@@ -19,7 +19,7 @@ class MockClass(LoggerMixin):
 
 
 def test_log_elapsed_time_cls(caplog: LogCaptureFixture):
-    caplog.set_level(LogLevel.info.value)
+    caplog.set_level(LogLevel.info)
 
     MockClass.test_method()
     assert len(caplog.records) == 2
@@ -27,26 +27,26 @@ def test_log_elapsed_time_cls(caplog: LogCaptureFixture):
     [first, second] = caplog.records
     assert first.name == "tests.core.util.test_log.MockClass"
     assert first.message == "Test: Starting..."
-    assert first.levelname == LogLevel.info.value
+    assert first.levelname == LogLevel.info
 
     assert second.name == "tests.core.util.test_log.MockClass"
     assert "Test: Completed. (elapsed time:" in second.message
-    assert second.levelname == LogLevel.info.value
+    assert second.levelname == LogLevel.info
 
 
 def test_log_elapsed_time_instance(caplog: LogCaptureFixture):
-    caplog.set_level(LogLevel.debug.value)
+    caplog.set_level(LogLevel.debug)
 
     MockClass().test_method_2()
     assert len(caplog.records) == 1
     [record] = caplog.records
     assert record.name == "tests.core.util.test_log.MockClass"
     assert "Test 12345: Completed. (elapsed time:" in record.message
-    assert record.levelname == LogLevel.debug.value
+    assert record.levelname == LogLevel.debug
 
 
 def test_log_elapsed_time_invalid(caplog: LogCaptureFixture):
-    caplog.set_level(LogLevel.info.value)
+    caplog.set_level(LogLevel.info)
 
     with pytest.raises(RuntimeError):
         log_elapsed_time(log_level=LogLevel.info, message_prefix="Test")(lambda: None)()

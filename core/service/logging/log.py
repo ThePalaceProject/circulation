@@ -116,7 +116,6 @@ class LogLoopPreventionFilter(logging.Filter):
 
 def create_cloudwatch_handler(
     formatter: logging.Formatter,
-    level: LogLevel,
     client: CloudWatchLogsClient,
     group: str,
     stream: str,
@@ -133,16 +132,12 @@ def create_cloudwatch_handler(
 
     handler.addFilter(LogLoopPreventionFilter())
     handler.setFormatter(formatter)
-    handler.setLevel(level.value)
     return handler
 
 
-def create_stream_handler(
-    formatter: logging.Formatter, level: LogLevel
-) -> logging.Handler:
+def create_stream_handler(formatter: logging.Formatter) -> logging.Handler:
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
-    stream_handler.setLevel(level.value)
     return stream_handler
 
 
