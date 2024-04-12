@@ -1,9 +1,12 @@
 import datetime
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
+import opensearchpy
 import pytest
 import pytz
 from psycopg2.extras import NumericRange
+from pytest import LogCaptureFixture
 from sqlalchemy import select
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
@@ -18,10 +21,11 @@ from core.model.identifier import Identifier
 from core.model.licensing import LicensePool
 from core.model.resource import Hyperlink, Representation, Resource
 from core.model.work import Work, WorkGenre, work_library_suppressions
+from core.service.logging.configuration import LogLevel
 from core.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.sample_covers import SampleCoversFixture
-from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 
 
 class TestWork:
@@ -1795,6 +1799,85 @@ class TestWork:
         assert [] == db.session.query(Work).filter(Work.id == work.id).all()
         assert 1 == len(s.removed)
         assert s.removed == [work]
+
+    @pytest.mark.parametrize(
+        "search_exception, raises, expect_success",
+        (
+            (None, None, True),
+            (opensearchpy.exceptions.NotFoundError, None, True),
+            (
+                opensearchpy.exceptions.ConnectionError,
+                opensearchpy.exceptions.ConnectionError,
+                False,
+            ),
+            (
+                opensearchpy.exceptions.TransportError,
+                opensearchpy.exceptions.TransportError,
+                False,
+            ),
+        ),
+    )
+    def test_delete_work_search_index_exceptions(
+        self,
+        caplog: LogCaptureFixture,
+        db: DatabaseTransactionFixture,
+        search_exception: type[Exception] | None,
+        raises: type[Exception] | None,
+        expect_success: bool,
+    ):
+        caplog.set_level(LogLevel.warning)
+        search_index = MagicMock()
+        search_index.remove_work.side_effect = (
+            None if search_exception is None else search_exception()
+        )
+
+        # The warning should be present only if we should succeed in
+        # spite of a search engine exception.
+        expect_warning = expect_success and search_exception is not None
+
+        # Deleting a work should show an exception for only some search exceptions.
+        exception_context = (
+            pytest.raises(raises) if raises is not None else nullcontext()
+        )
+
+        # Create a work, but don't index it. Then try to delete it.
+        work = db.work(with_license_pool=True)
+
+        with exception_context:
+            work.delete(search_index=search_index)
+
+        works_remaining = db.session.query(Work).filter(Work.id == work.id).all()
+        warning_message = (
+            f"Work {work.id} not found in search index while attempting to delete it."
+        )
+        warning_is_present = any(warning_message in msg for msg in caplog.messages)
+
+        assert len(works_remaining) == 0 if expect_success else 1
+        assert expect_warning == warning_is_present
+
+    def test_delete_work_not_in_search_end2end(
+        self,
+        caplog: LogCaptureFixture,
+        db: DatabaseTransactionFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        caplog.set_level(LogLevel.warning)
+        s = end_to_end_search_fixture.external_search_index
+
+        # Create a work, but don't index it.
+        work = db.work(with_license_pool=True)
+        # Now delete it the normal way, even though it's not in the search index.
+        work.delete(search_index=s)
+
+        warning_is_present = any(
+            f"Work {work.id} not found in search index while attempting to delete it."
+            in msg
+            for msg in caplog.messages
+        )
+
+        # Ensure work removed from the DB and error message logged.
+        assert db.session.query(Work).filter(Work.id == work.id).all() == []
+        assert warning_is_present
 
 
 class TestWorkConsolidation:
