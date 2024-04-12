@@ -35,6 +35,14 @@ def test_fcm_credentials(fcm_files_fixture: FilesFixture):
     ):
         credentials(Path("filedoesnotexist.deleteifitdoes"), None)
 
+    # Invalid JSON file.
+    fcm_file = Path(fcm_files_fixture.sample_path("not-valid-json.txt"))
+    with pytest.raises(
+        CannotLoadConfiguration,
+        match=r"Cannot parse contents of FCM credentials file .* as JSON.",
+    ):
+        credentials(fcm_file, None)
+
     # Valid JSON file.
     fcm_file = Path(fcm_files_fixture.sample_path("fcm-credentials-valid-json.json"))
     assert valid_credentials_object == credentials(fcm_file, None)
