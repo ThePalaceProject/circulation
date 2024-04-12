@@ -7,10 +7,10 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
 from dateutil import tz
 from freezegun import freeze_time
 from jwcrypto import jwe, jwk
+from pytest import LogCaptureFixture
 from sqlalchemy import delete
 
 from api.authentication.access_token import PatronJWEAccessTokenProvider

@@ -3,7 +3,7 @@ import json
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 
 from api.config import CannotLoadConfiguration
 from api.metadata.novelist import NoveListAPI, NoveListApiSettings

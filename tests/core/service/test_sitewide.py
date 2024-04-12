@@ -2,9 +2,9 @@ from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
 from coverage.annotate import os
 from pydantic.env_settings import SettingsSourceCallable
+from pytest import MonkeyPatch
 
 from core.config import CannotLoadConfiguration
 from core.service.sitewide import SitewideConfiguration

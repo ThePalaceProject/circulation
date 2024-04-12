@@ -9,7 +9,7 @@ import datetime
 from collections.abc import Generator
 from unittest.mock import MagicMock, create_autospec
 
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
 
 from core.integration.goals import Goals

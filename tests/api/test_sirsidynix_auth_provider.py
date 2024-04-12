@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
+from pytest import MonkeyPatch
 
 from api.authentication.base import PatronData
 from api.authentication.basic import LibraryIdentifierRestriction

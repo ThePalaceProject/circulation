@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, call
 
 import pytest
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection, Engine

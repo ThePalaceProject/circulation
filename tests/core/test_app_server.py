@@ -6,11 +6,11 @@ from unittest.mock import MagicMock, PropertyMock
 
 import flask
 import pytest
-from _pytest.logging import LogCaptureFixture
 from flask import Flask, Response, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
 from psycopg2 import OperationalError
+from pytest import LogCaptureFixture
 
 import core
 from api.admin.config import Configuration as AdminUiConfig

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
+from pytest import LogCaptureFixture
 from sqlalchemy.exc import NoResultFound
 
 from alembic.util import CommandError
