@@ -11,6 +11,7 @@ class SitewideConfiguration(ServiceConfiguration):
     base_url: AnyHttpUrl | None = None
     patron_web_hostnames: list[AnyHttpUrl] | Literal["*"] = []
     authentication_document_cache_time: NonNegativeInt = 3600
+    quicksight_authorized_arns: dict[str, list[str]] | None = None
 
     @validator("base_url")
     def validate_base_url(cls, v: AnyHttpUrl | None) -> AnyHttpUrl | None:

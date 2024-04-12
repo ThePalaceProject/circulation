@@ -272,7 +272,7 @@ More details in the [FCM documentation](https://firebase.google.com/docs/admin/s
 #### Quicksight Dashboards
 
 For generating quicksight dashboard links the following environment variable is required
-`QUICKSIGHT_AUTHORIZED_ARNS` - A dictionary of the format `"<dashboard name>": ["arn:aws:quicksight:...",...]`
+`PALACE_QUICKSIGHT_AUTHORIZED_ARNS` - A dictionary of the format `"<dashboard name>": ["arn:aws:quicksight:...",...]`
 where each quicksight dashboard gets treated with an arbitrary "name", and a list of "authorized arns".
 The first the "authorized arns" is always considered as the `InitialDashboardID` when creating an embed URL
 for the respective "dashboard name".

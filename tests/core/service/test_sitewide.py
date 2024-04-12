@@ -1,3 +1,4 @@
+import json
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
@@ -141,3 +142,27 @@ class TestSitewideConfiguration:
         with context:
             config = SitewideConfiguration()
             assert config.authentication_document_cache_time == expected
+
+    @pytest.mark.parametrize(
+        "quicksight_authorized_arns, expected",
+        [
+            ("invalid json", CannotLoadConfiguration),
+            (json.dumps(["a", "b"]), CannotLoadConfiguration),
+            (json.dumps({"a": "b"}), CannotLoadConfiguration),
+            (json.dumps({"a": ["b", "c"]}), {"a": ["b", "c"]}),
+        ],
+    )
+    def test_quicksight_authorized_arns(
+        self,
+        sitewide_configuration_fixture: SitewideConfigurationFixture,
+        quicksight_authorized_arns: str | None,
+        expected: dict[str, str] | None | type[Exception],
+    ):
+        sitewide_configuration_fixture.set(
+            "PALACE_QUICKSIGHT_AUTHORIZED_ARNS",
+            quicksight_authorized_arns,
+        )
+        context = sitewide_configuration_fixture.get_context_manager(expected)
+        with context:
+            config = SitewideConfiguration()
+            assert config.quicksight_authorized_arns == expected
