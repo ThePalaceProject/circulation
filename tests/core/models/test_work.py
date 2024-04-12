@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import opensearchpy
 import pytest
 import pytz
-from _pytest.logging import LogCaptureFixture
 from psycopg2.extras import NumericRange
+from pytest import LogCaptureFixture
 from sqlalchemy import select
 
 from core.classifier import Classifier, Fantasy, Romance, Science_Fiction
