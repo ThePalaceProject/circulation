@@ -2552,7 +2552,8 @@ class LoanNotificationsScript(Script):
             loan_expiration_days or self.DEFAULT_LOAN_EXPIRATION_DAYS
         )
         self.notifications = notifications or PushNotifications(
-            self.services.config.sitewide.base_url()
+            self.services.config.sitewide.base_url(),
+            self.services.fcm.app(),
         )
 
     def do_run(self):

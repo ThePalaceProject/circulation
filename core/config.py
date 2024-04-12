@@ -45,10 +45,6 @@ class Configuration(ConfigurationConstants):
     DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
 
-    # Environment variables for Firebase Cloud Messaging (FCM) service account key
-    FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE = "SIMPLIFIED_FCM_CREDENTIALS_FILE"
-    FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE = "SIMPLIFIED_FCM_CREDENTIALS_JSON"
-
     # Environment variable for Overdrive fulfillment keys
     OD_PREFIX_PRODUCTION_PREFIX = "SIMPLIFIED"
     OD_PREFIX_TESTING_PREFIX = "SIMPLIFIED_TESTING"
@@ -118,49 +114,6 @@ class Configuration(ConfigurationConstants):
         # Calling __to_string__ will hide the password.
         logging.info("Connecting to database: %s" % url_obj.__to_string__())
         return url
-
-    @classmethod
-    def fcm_credentials(cls) -> dict[str, str]:
-        """Returns a dictionary containing Firebase Cloud Messaging credentials.
-
-        Credentials are provided as a JSON string, either (1) directly in an environment
-        variable or (2) in a file that is specified in another environment variable.
-        """
-        config_json = os.environ.get(cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE, "")
-        config_file = os.environ.get(cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE, "")
-        if not config_json and not config_file:
-            raise CannotLoadConfiguration(
-                "FCM Credentials configuration environment variable not defined. "
-                f"Use either '{cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE}' "
-                f"or '{cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE}'."
-            )
-        if config_json and config_file:
-            raise CannotLoadConfiguration(
-                f"Both JSON ('{cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE}') "
-                f"and file-based ('{cls.FCM_CREDENTIALS_FILE_ENVIRONMENT_VARIABLE}') "
-                "FCM Credential environment variables are defined, but only one is allowed."
-            )
-        if config_json:
-            try:
-                return json.loads(config_json, strict=False)
-            except:
-                raise CannotLoadConfiguration(
-                    "Cannot parse value of FCM credential environment variable "
-                    f"'{cls.FCM_CREDENTIALS_JSON_ENVIRONMENT_VARIABLE}' as JSON."
-                )
-
-        # If we make it this far, we are dealing with a configuration file.
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(
-                f"The FCM credentials file ('{config_file}') does not exist."
-            )
-        with open(config_file) as f:
-            try:
-                return json.load(f)
-            except:
-                raise CannotLoadConfiguration(
-                    f"Cannot parse contents of FCM credentials file ('{config_file}') as JSON."
-                )
 
     @classmethod
     def overdrive_fulfillment_keys(cls, testing=False) -> dict[str, str]:

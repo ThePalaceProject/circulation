@@ -276,17 +276,17 @@ the logging:
 #### Firebase Cloud Messaging
 
 For Firebase Cloud Messaging (FCM) support (e.g., for notifications), `one` (and only one) of the following should be set:
-- `SIMPLIFIED_FCM_CREDENTIALS_JSON` - the JSON-format Google Cloud Platform (GCP) service account key  or
-- `SIMPLIFIED_FCM_CREDENTIALS_FILE` - the name of the file containing that key.
+- `PALACE_FCM_CREDENTIALS_JSON` - the JSON-format Google Cloud Platform (GCP) service account key  or
+- `PALACE_FCM_CREDENTIALS_FILE` - the name of the file containing that key.
 
 ```sh
-export SIMPLIFIED_FCM_CREDENTIALS_JSON='{"type":"service_account","project_id":"<id>", "private_key_id":"f8...d1", ...}'
+export PALACE_FCM_CREDENTIALS_JSON='{"type":"service_account","project_id":"<id>", "private_key_id":"f8...d1", ...}'
 ```
 
 ...or...
 
 ```sh
-export SIMPLIFIED_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
+export PALACE_FCM_CREDENTIALS_FILE="/opt/credentials/fcm_credentials.json"
 ```
 
 The FCM credentials can be downloaded once a Google Service account has been created.
