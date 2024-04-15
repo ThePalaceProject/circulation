@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 from firebase_admin import App, initialize_app
 from firebase_admin.credentials import Certificate
 
 from core.service.fcm.fcm import credentials
-
-if TYPE_CHECKING:
-    pass
 
 
 class FcmContainer(DeclarativeContainer):
