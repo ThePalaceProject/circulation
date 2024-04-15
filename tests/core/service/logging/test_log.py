@@ -183,6 +183,22 @@ class TestJSONFormatter:
             assert "uwsgi" in data
             assert data["uwsgi"]["worker"] == 42
 
+    def test_celery_task(self, log_record: LogRecordCallable) -> None:
+        # If we are not in a celery task, the worker data is not included
+        formatter = JSONFormatter()
+        record = log_record()
+
+        data = json.loads(formatter.format(record))
+        assert "celery" not in data
+
+        # If we are in a celery task, the worker data is included
+        with patch("core.service.logging.log.celery_task") as mock_celery:
+            mock_celery.configure_mock(**{"name": "name", "request.id": "id"})
+            data = json.loads(formatter.format(record))
+            assert "celery" in data
+            assert data["celery"]["request_id"] == "id"
+            assert data["celery"]["task_name"] == "name"
+
 
 class TestLogLoopPreventionFilter:
     @pytest.mark.parametrize(

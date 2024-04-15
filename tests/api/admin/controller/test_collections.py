@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import flask
 import pytest
@@ -706,7 +706,12 @@ class TestCollectionSettings:
                 collection.integration_configuration.id,
             )
 
-        with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="DELETE"),
+            patch(
+                "api.admin.controller.collection_settings.collection_delete"
+            ) as mock_delete,
+        ):
             assert collection.integration_configuration.id is not None
             response = controller.process_delete(
                 collection.integration_configuration.id
@@ -720,6 +725,10 @@ class TestCollectionSettings:
         fetched_collection = get_one(db.session, Collection, id=collection.id)
         assert fetched_collection == collection
         assert fetched_collection.marked_for_deletion is True
+
+        # The controller called collection_delete with the correct arguments, to
+        # queue up the collection for deletion in the background.
+        mock_delete.delay.assert_called_once_with(collection.id)
 
     def test_collection_delete_cant_delete_parent(
         self,

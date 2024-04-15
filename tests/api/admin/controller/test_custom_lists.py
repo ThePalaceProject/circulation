@@ -395,11 +395,17 @@ class TestCustomListsController:
             assert 400 == response.status_code
 
         # Valid auto update query request
-        with admin_librarian_fixture.request_context_with_library_and_admin(
-            "/", method="POST"
-        ), mock.patch(
-            "api.admin.controller.custom_lists.CustomListQueries"
-        ) as mock_query:
+        with (
+            admin_librarian_fixture.request_context_with_library_and_admin(
+                "/", method="POST"
+            ),
+            mock.patch(
+                "api.admin.controller.custom_lists.CustomListQueries"
+            ) as mock_query,
+            mock.patch(
+                "api.admin.controller.custom_lists.update_custom_list"
+            ) as mock_update,
+        ):
             form = ImmutableMultiDict(
                 [
                     ("name", "200List"),
@@ -433,6 +439,7 @@ class TestCustomListsController:
             )
             assert json.dumps({}) == list.auto_update_facets
             assert mock_query.populate_query_pages.call_count == 1
+            mock_update.delay.assert_called_once_with(list.id)
 
     def test_custom_list_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         data_source = DataSource.lookup(
@@ -1146,17 +1153,21 @@ class TestCustomListsController:
         admin_librarian_fixture.ctrl.db.session.commit()
 
         assert isinstance(custom_list.name, str)
-        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
-            custom_list.library,
-            custom_list.name,
-            [],
-            [],
-            [],
-            id=custom_list.id,
-            auto_update=True,
-            auto_update_query={"query": "...changed"},
-        )
+        with mock.patch(
+            "api.admin.controller.custom_lists.update_custom_list"
+        ) as mock_update:
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+                custom_list.library,
+                custom_list.name,
+                [],
+                [],
+                [],
+                id=custom_list.id,
+                auto_update=True,
+                auto_update_query={"query": "...changed"},
+            )
 
+        mock_update.delay.assert_called_once_with(custom_list.id)
         assert response.status_code == 200
         assert custom_list.auto_update_query == '{"query": "...changed"}'
         assert custom_list.auto_update_status == CustomList.REPOPULATE

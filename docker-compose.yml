@@ -17,6 +17,8 @@ x-cm-variables: &cm
     PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
     PALACE_PATRON_WEB_HOSTNAMES: "*"
     PALACE_BASE_URL: "http://localhost:6500"
+    PALACE_CELERY_BROKER_URL: "redis://redis:6379/0"
+    PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
 
     # Set up the environment variables used for testing as well
     SIMPLIFIED_TEST_DATABASE: "postgresql://palace:test@pg:5432/circ"
@@ -30,6 +32,8 @@ x-cm-variables: &cm
     minio:
       condition: service_healthy
     os:
+      condition: service_healthy
+    redis:
       condition: service_healthy
 
 x-cm-build: &cm-build
@@ -93,8 +97,19 @@ services:
     environment:
       discovery.type: "single-node"
       DISABLE_SECURITY_PLUGIN: "true"
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
     healthcheck:
       test: curl --silent http://localhost:9200 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
       interval: 30s
       timeout: 10s
       retries: 5
+
+  redis:
+    image: "redis:7"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 20s
+      retries: 3

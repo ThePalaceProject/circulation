@@ -8,6 +8,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from textwrap import dedent
 from typing import Any
 
@@ -16,7 +17,7 @@ import sqlalchemy
 from Crypto.PublicKey.RSA import import_key
 from sqlalchemy import MetaData
 from sqlalchemy.engine import Connection, Engine, Transaction
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 import core.lane
 from api.discovery.opds_registration import OpdsRegistrationService
@@ -998,6 +999,24 @@ def create_integration_library_configuration(
 ) -> IntegrationLibraryConfigurationFixture:
     fixture = IntegrationLibraryConfigurationFixture(db)
     return fixture
+
+
+class MockSessionMaker:
+    def __init__(self, session: Session):
+        self._session = session
+
+    def __call__(self) -> Session:
+        return self._session
+
+    @contextmanager
+    def begin(self) -> Generator[Session, None, None]:
+        with self._session.begin_nested():
+            yield self._session
+
+
+@pytest.fixture
+def mock_session_maker(db: DatabaseTransactionFixture) -> sessionmaker[Session]:
+    return MockSessionMaker(db.session)  # type: ignore[return-value]
 
 
 class DBStatementCounter:

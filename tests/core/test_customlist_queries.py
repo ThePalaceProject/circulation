@@ -1,5 +1,7 @@
 from unittest import mock
+from unittest.mock import create_autospec
 
+from core.external_search import ExternalSearchIndex
 from core.query.customlist import CustomListQueries
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -17,24 +19,27 @@ def page_count_property_mock(mock_page: mock.MagicMock):
 
 
 @mock.patch("core.query.customlist.SortKeyPagination")
-@mock.patch("core.query.customlist.ExternalSearchIndex")
 @mock.patch("core.query.customlist.WorkList")
 class TestCustomListQueries:
     def test_populate_query_pages_single(
-        self, mock_wl, mock_search, mock_page, db: DatabaseTransactionFixture
+        self, mock_wl, mock_page, db: DatabaseTransactionFixture
     ):
+        mock_search = create_autospec(ExternalSearchIndex)
         w1 = db.work()
         mock_wl().search.side_effect = [[w1], []]
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.auto_update_query = "{}"
 
-        assert 1 == CustomListQueries.populate_query_pages(db.session, custom_list)
+        assert 1 == CustomListQueries.populate_query_pages(
+            db.session, mock_search, custom_list
+        )
         assert mock_wl().search.call_count == 2
         assert [e.work_id for e in custom_list.entries] == [w1.id]
 
     def test_populate_query_multi_page(
-        self, mock_wl, mock_search, mock_page, db: DatabaseTransactionFixture
+        self, mock_wl, mock_page, db: DatabaseTransactionFixture
     ):
+        mock_search = create_autospec(ExternalSearchIndex)
         w1 = db.work()
         w2 = db.work()
         mock_wl().search.side_effect = [[w1], [w2], []]
@@ -43,14 +48,17 @@ class TestCustomListQueries:
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.auto_update_query = "{}"
 
-        assert 2 == CustomListQueries.populate_query_pages(db.session, custom_list)
+        assert 2 == CustomListQueries.populate_query_pages(
+            db.session, mock_search, custom_list
+        )
         assert mock_wl().search.call_count == 3
         assert next_page.call_count == 2
         assert [e.work_id for e in custom_list.entries] == [w1.id, w2.id]
 
     def test_populate_query_pages(
-        self, mock_wl, mock_search, mock_page, db: DatabaseTransactionFixture
+        self, mock_wl, mock_page, db: DatabaseTransactionFixture
     ):
+        mock_search = create_autospec(ExternalSearchIndex)
         w1 = db.work()
         w2 = db.work()
         w3 = db.work()
@@ -60,7 +68,12 @@ class TestCustomListQueries:
         custom_list.auto_update_query = "{}"
 
         assert 1 == CustomListQueries.populate_query_pages(
-            db.session, custom_list, max_pages=1, start_page=2, page_size=10
+            db.session,
+            mock_search,
+            custom_list,
+            max_pages=1,
+            start_page=2,
+            page_size=10,
         )
         # The search will be paged through from 0, but only the 2nd page onwards should be populated
         assert mock_wl().search.call_count == 2

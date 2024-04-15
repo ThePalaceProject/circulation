@@ -25,6 +25,11 @@ try:
 except ImportError:
     uwsgi = None
 
+try:
+    from celery import current_task as celery_task
+except ImportError:
+    celery_task = None
+
 
 class JSONFormatter(logging.Formatter):
     def __init__(self) -> None:
@@ -94,6 +99,15 @@ class JSONFormatter(logging.Formatter):
         # If we are running in uwsgi context, we include the worker id in the log
         if uwsgi:
             data["uwsgi"] = {"worker": uwsgi.worker_id()}
+
+        # Handle the case where we're running in a Celery task, this information is usually captured by
+        # the Celery log formatter, but we are not using that formatter in our code.
+        # See https://docs.celeryq.dev/en/stable/reference/celery.app.log.html#celery.app.log.TaskFormatter
+        if celery_task:
+            data["celery"] = {
+                "request_id": celery_task.request.id,
+                "task_name": celery_task.name,
+            }
 
         return json.dumps(data)
 

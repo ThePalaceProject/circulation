@@ -42,7 +42,9 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.timestamps_controller = TimestampsController(manager)
     manager.admin_work_controller = WorkController(manager)
     manager.admin_feed_controller = FeedController(manager)
-    manager.admin_custom_lists_controller = CustomListsController(manager)
+    manager.admin_custom_lists_controller = CustomListsController(
+        manager._db, manager.external_search, manager.annotator
+    )
     manager.admin_lanes_controller = LanesController(manager)
     manager.admin_dashboard_controller = DashboardController(manager)
     manager.admin_patron_controller = PatronController(manager)

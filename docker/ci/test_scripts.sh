@@ -18,6 +18,11 @@ timeout 240s grep -q 'Initialization complete' <(docker compose logs "$container
 # Make sure that cron is running in the scripts container
 check_service_status "$container" /etc/service/cron
 
+# Make sure that the celery worker is running in the scripts container
+check_service_status "$container" /etc/service/worker-default
+check_service_status "$container" /etc/service/worker-high
+check_service_status "$container" /etc/service/beat
+
 # Ensure the installed crontab has no problems
 check_crontab "$container"
 

@@ -8,12 +8,14 @@ from unittest.mock import MagicMock, create_autospec
 
 import boto3
 import pytest
+from celery import Celery
 
 from core.analytics import Analytics
 from core.external_search import ExternalSearchIndex
 from core.search.revision_directory import SearchRevisionDirectory
 from core.search.service import SearchServiceOpensearch1
 from core.service.analytics.container import AnalyticsContainer
+from core.service.celery.container import CeleryContainer
 from core.service.container import Services, wire_container
 from core.service.email.configuration import EmailConfiguration
 from core.service.email.container import Email
@@ -128,6 +130,20 @@ def services_email_fixture() -> ServicesEmailFixture:
     return ServicesEmailFixture(email_container, mock_emailer, sender_email)
 
 
+@dataclass
+class ServicesCeleryFixture:
+    celery_container: CeleryContainer
+    app: Celery
+
+
+@pytest.fixture
+def services_celery_fixture() -> ServicesCeleryFixture:
+    celery_container = CeleryContainer()
+    celery_mock_app = MagicMock()
+    celery_container.app.override(celery_mock_app)
+    return ServicesCeleryFixture(celery_container, celery_mock_app)
+
+
 class ServicesFixture:
     """
     Provide a real services container, with all services mocked out.
@@ -140,12 +156,14 @@ class ServicesFixture:
         search: ServicesSearchFixture,
         analytics: ServicesAnalyticsFixture,
         email: ServicesEmailFixture,
+        celery: ServicesCeleryFixture,
     ) -> None:
         self.logging_fixture = logging
         self.storage_fixture = storage
         self.search_fixture = search
         self.analytics_fixture = analytics
         self.email_fixture = email
+        self.celery_fixture = celery
 
         self.services = Services()
         self.services.logging.override(logging.logging_container)
@@ -153,6 +171,7 @@ class ServicesFixture:
         self.services.search.override(search.search_container)
         self.services.analytics.override(analytics.analytics_container)
         self.services.email.override(email.email_container)
+        self.services.celery.override(celery.celery_container)
 
         # setup basic configuration from default settings
         self.services.config.from_dict({"sitewide": SitewideConfiguration().dict()})
@@ -189,6 +208,7 @@ def services_fixture(
     services_search_fixture: ServicesSearchFixture,
     services_analytics_fixture: ServicesAnalyticsFixture,
     services_email_fixture: ServicesEmailFixture,
+    services_celery_fixture: ServicesCeleryFixture,
 ) -> Generator[ServicesFixture, None, None]:
     fixture = ServicesFixture(
         logging=services_logging_fixture,
@@ -196,6 +216,7 @@ def services_fixture(
         search=services_search_fixture,
         analytics=services_analytics_fixture,
         email=services_email_fixture,
+        celery=services_celery_fixture,
     )
     with mock_services_container(fixture.services):
         yield fixture

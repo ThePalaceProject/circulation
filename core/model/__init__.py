@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from sqlalchemy.pool import Pool
 from sqlalchemy.sql import compiler, select
 from sqlalchemy.sql.expression import literal_column, table
 
@@ -336,10 +337,14 @@ class SessionManager:
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
     @classmethod
-    def engine(cls, url=None):
+    def engine(cls, url: str | None = None, poolclass: type[Pool] | None = None):
         url = url or Configuration.database_url()
         return create_engine(
-            url, echo=DEBUG, json_serializer=json_serializer, pool_pre_ping=True
+            url,
+            echo=DEBUG,
+            json_serializer=json_serializer,
+            pool_pre_ping=True,
+            poolclass=poolclass,
         )
 
     @classmethod
