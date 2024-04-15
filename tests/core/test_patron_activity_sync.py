@@ -1,6 +1,6 @@
 from datetime import timedelta
 from typing import cast
-from unittest.mock import call, create_autospec, patch
+from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
@@ -107,9 +107,14 @@ class TestPatronActivitySync:
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
         services_fixture.set_base_url("http://test-circulation-manager")
+        mock_app = MagicMock()
+        services_fixture.services.fcm.app.override(mock_app)
+
         with patch(
             "core.jobs.patron_activity_sync.PushNotifications", autospec=True
         ) as mock_notifications:
             monitor = PatronActivitySyncNotificationScript(db.session)
         assert monitor.notifications == mock_notifications.return_value
-        mock_notifications.assert_called_once_with("http://test-circulation-manager")
+        mock_notifications.assert_called_once_with(
+            "http://test-circulation-manager", mock_app
+        )

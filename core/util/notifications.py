@@ -3,12 +3,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import firebase_admin
-from firebase_admin import credentials, messaging
+from firebase_admin import messaging
 from firebase_admin.exceptions import FirebaseError
 from firebase_admin.messaging import UnregisteredError
 from sqlalchemy.orm import Session
 
-from core.config import CannotLoadConfiguration, Configuration
+from core.config import CannotLoadConfiguration
 from core.model.constants import NotificationConstants
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.identifier import Identifier
@@ -24,7 +24,7 @@ class PushNotifications(LoggerMixin):
     def __init__(
         self,
         base_url: str | None,
-        fcm_app: firebase_admin.App | None = None,
+        fcm_app: firebase_admin.App,
         testing_mode: bool = False,
     ) -> None:
         self.base_url = base_url
@@ -32,9 +32,7 @@ class PushNotifications(LoggerMixin):
             raise CannotLoadConfiguration(
                 f"Missing required environment variable: PALACE_BASE_URL."
             )
-        self.fcm_app = fcm_app or firebase_admin.initialize_app(
-            credentials.Certificate(Configuration.fcm_credentials())
-        )
+        self.fcm_app = fcm_app
         self.testing_mode = testing_mode
 
     @classmethod

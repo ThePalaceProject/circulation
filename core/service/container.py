@@ -8,6 +8,8 @@ from core.service.celery.configuration import CeleryConfiguration
 from core.service.celery.container import CeleryContainer
 from core.service.email.configuration import EmailConfiguration
 from core.service.email.container import Email
+from core.service.fcm.configuration import FcmConfiguration
+from core.service.fcm.container import FcmContainer
 from core.service.logging.configuration import LoggingConfiguration
 from core.service.logging.container import Logging
 from core.service.search.configuration import SearchConfiguration
@@ -51,6 +53,11 @@ class Services(DeclarativeContainer):
         config=config.celery,
     )
 
+    fcm = Container(
+        FcmContainer,
+        config=config.fcm,
+    )
+
 
 def wire_container(container: Services) -> None:
     container.wire(
@@ -82,6 +89,7 @@ def create_container() -> Services:
             "search": SearchConfiguration().dict(),
             "email": EmailConfiguration().dict(),
             "celery": CeleryConfiguration().dict(),
+            "fcm": FcmConfiguration().dict(),
         }
     )
     wire_container(container)

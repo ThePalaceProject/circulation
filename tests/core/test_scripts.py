@@ -2241,6 +2241,8 @@ class TestLoanNotificationsScript:
     ):
         """Test that the constructor sets up the script correctly."""
         services_fixture.set_base_url("http://test-circulation-manager")
+        mock_app = MagicMock()
+        services_fixture.services.fcm.app.override(mock_app)
         with patch(
             "core.scripts.PushNotifications", autospec=True
         ) as mock_notifications:
@@ -2253,7 +2255,9 @@ class TestLoanNotificationsScript:
             == LoanNotificationsScript.DEFAULT_LOAN_EXPIRATION_DAYS
         )
         assert script.notifications == mock_notifications.return_value
-        mock_notifications.assert_called_once_with("http://test-circulation-manager")
+        mock_notifications.assert_called_once_with(
+            "http://test-circulation-manager", mock_app
+        )
 
         with patch(
             "core.scripts.PushNotifications", autospec=True
@@ -2266,7 +2270,9 @@ class TestLoanNotificationsScript:
         assert script.BATCH_SIZE == 100
         assert script.loan_expiration_days == [-2, 0, 220]
         assert script.notifications == mock_notifications.return_value
-        mock_notifications.assert_called_once_with("http://test-circulation-manager")
+        mock_notifications.assert_called_once_with(
+            "http://test-circulation-manager", mock_app
+        )
 
         # Make sure we get an exception if the base_url is not set.
         services_fixture.set_base_url(None)
