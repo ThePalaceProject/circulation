@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseSettings, ValidationError
+from pydantic.env_settings import SettingsError
 
 from core.config import CannotLoadConfiguration
 
@@ -52,3 +53,7 @@ class ServiceConfiguration(BaseSettings):
                 env_var_name = f"{self.__config__.env_prefix}{error_location}"
                 error_log_message += f"\n  {env_var_name}:  {error['msg']}"
             raise CannotLoadConfiguration(error_log_message) from error_exception
+        except SettingsError as settings_error:
+            # The settings failed to load, we capture the SettingsError and raise a more
+            # specific CannotLoadConfiguration error.
+            raise CannotLoadConfiguration(str(settings_error)) from settings_error

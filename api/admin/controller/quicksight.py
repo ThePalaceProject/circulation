@@ -1,45 +1,52 @@
-import logging
-
 import boto3
 import flask
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from api.admin.model.quicksight import (
     QuicksightDashboardNamesResponse,
     QuicksightGenerateUrlRequest,
     QuicksightGenerateUrlResponse,
 )
-from api.controller.circulation_manager import CirculationManagerController
 from api.problem_details import NOT_FOUND_ON_REMOTE
-from core.config import Configuration
 from core.model.admin import Admin
 from core.model.library import Library
 from core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
+from core.util.log import LoggerMixin
 from core.util.problem_detail import ProblemDetailException
 
 
-class QuickSightController(CirculationManagerController):
-    def generate_quicksight_url(self, dashboard_name) -> dict:
-        log = logging.getLogger(self.__class__.__name__)
-        admin: Admin = getattr(flask.request, "admin")
-        request_data = QuicksightGenerateUrlRequest(**flask.request.args)
+class QuickSightController(LoggerMixin):
+    def __init__(self, db: Session, authorized_arns: dict[str, list[str]] | None):
+        self._db = db
+        self._authorized_arns = authorized_arns
 
-        all_authorized_arns = Configuration.quicksight_authorized_arns()
-        if not all_authorized_arns:
-            log.error("No Quicksight ARNs were configured for this server.")
+    @property
+    def authorized_arns(self) -> dict[str, list[str]]:
+        if self._authorized_arns is None:
+            self.log.error("No Quicksight ARNs were configured for this server.")
             raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Quicksight has not been configured for this server."
                 )
             )
+        return self._authorized_arns
 
-        authorized_arns = all_authorized_arns.get(dashboard_name)
-        if not authorized_arns:
+    def dashboard_authorized_arns(self, dashboard_name: str) -> list[str]:
+        arns = self.authorized_arns.get(dashboard_name)
+        if not arns:
             raise ProblemDetailException(
                 INVALID_INPUT.detailed(
                     "The requested Dashboard ARN is not recognized by this server."
                 )
             )
+        return arns
+
+    def generate_quicksight_url(self, dashboard_name) -> dict:
+        admin: Admin = getattr(flask.request, "admin")
+        request_data = QuicksightGenerateUrlRequest(**flask.request.args)
+
+        authorized_arns = self.dashboard_authorized_arns(dashboard_name)
 
         # The first dashboard id is the primary ARN
         dashboard_arn = authorized_arns[0]
@@ -92,7 +99,7 @@ class QuickSightController(CirculationManagerController):
                 SessionTags=session_tags,
             )
         except Exception as ex:
-            log.error(f"Error while fetching the Quicksight Embed url: {ex}")
+            self.log.exception(f"Error while fetching the Quicksight Embed url: {ex}")
             raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Error while fetching the Quicksight Embed url."
@@ -100,8 +107,9 @@ class QuickSightController(CirculationManagerController):
             )
 
         embed_url = response.get("EmbedUrl")
-        if response.get("Status") // 100 != 2 or embed_url is None:
-            log.error(f"Quicksight Embed url error response {response}")
+        status = response.get("Status")
+        if status is None or embed_url is None or status // 100 != 2:
+            self.log.error(f"Quicksight Embed url error response {response}")
             raise ProblemDetailException(
                 INTERNAL_SERVER_ERROR.detailed(
                     "Error while fetching the Quicksight Embed url."
@@ -136,5 +144,6 @@ class QuickSightController(CirculationManagerController):
 
     def get_dashboard_names(self):
         """Get the named dashboard IDs defined in the configuration"""
-        config = Configuration.quicksight_authorized_arns()
-        return QuicksightDashboardNamesResponse(names=list(config.keys())).api_dict()
+        return QuicksightDashboardNamesResponse(
+            names=list(self.authorized_arns.keys())
+        ).api_dict()
