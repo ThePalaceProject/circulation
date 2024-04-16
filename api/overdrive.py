@@ -727,8 +727,11 @@ class OverdriveAPI(
 
         next_link = self.endpoint(
             self.EVENTS_ENDPOINT,
+            # From https://developer.overdrive.com/apis/search:
+            # "**Note: When you search using the lastTitleUpdateTime or
+            # lastUpdateTime parameters, your results will be automatically
+            # sorted in ascending order (and all other sort options will be ignored)."
             lastupdatetime=last_update,
-            sort="popularity:desc",
             limit=self.PAGE_SIZE_LIMIT,
             collection_token=self.collection_token,
         )
@@ -2012,17 +2015,39 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
 
 class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
     """Monitor the Overdrive collection for newly added titles.
-
     This catches any new titles that slipped through the cracks of the
-    RecentOverdriveCollectionMonitor.
+    RecentOverdriveCollectionMonitor.  This monitor queries for all titles
+    ordered by dateAdded in reverse chronological order.  However,
+    according to Overdrive (see https://ebce-lyrasis.atlassian.net/browse/PP-1002),
+    the dateAdded value is will not necessarily be in reverse chronological order.
+    If the collection this is being search is a consortial account and a title that
+    is present in a linked Advantage account has been added to the consortial collection
+    the dateAdded value will reflect the date it was added to the Advantage account. However,
+    it's position in the list will reflect the date it was added to the consortial account.
+    So ugly, but Overdrive insists this is the expected behavior.
+
+    To mitigate the possibility of missing new titles,  we can count the number of consecutive
+    titles with a dateAdded that is out of scope.  If we exceed that threshold, only then do
+    we stop processing.
     """
 
     SERVICE_NAME = "Overdrive New Title Monitor"
     OVERLAP = datetime.timedelta(days=7)
     DEFAULT_START_TIME = OverdriveCirculationMonitor.NEVER
+    MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 1000
+
+    def __init__(
+        self,
+        _db,
+        collection,
+        api_class=OverdriveAPI,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
+        super().__init__(_db, collection, api_class, analytics)
+        self._consecutive_items_out_of_scope = 0
 
     def recently_changed_ids(self, start, cutoff):
-        """Ignore the dates and return all IDs."""
+        """Ignore the dates and return all IDs ordered by dateAdded in reverse chronological order."""
         return self.api.all_ids()
 
     def should_stop(self, start, api_description, is_changed):
@@ -2044,13 +2069,34 @@ class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
             self.log.error("Got invalid date: %s", date_added)
             return False
 
+        date_out_of_scope = date_added < start
         self.log.info(
-            "Date added: %s, start time: %s, result %s",
-            date_added,
-            start,
-            date_added < start,
+            f"Date added: {date_added}, start time: {start}, date out of scope: {date_out_of_scope}"
         )
-        return date_added < start
+
+        if date_out_of_scope:
+            self._consecutive_items_out_of_scope += 1
+            if (
+                self._consecutive_items_out_of_scope
+                > self.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES
+            ):
+                self.log.info(
+                    f"Max consecutive out of scope date threshold of {self.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES} "
+                    f"breached! We should stop now."
+                )
+                return True
+
+        else:
+            # reset consecutive counter
+            if self._consecutive_items_out_of_scope > 0:
+                self.log.info(
+                    f"We encountered a title that was added within our scope that followed a title that was out "
+                    f"of scope. Resetting counter from {self._consecutive_items_out_of_scope} consecutive items "
+                    f"back to zero."
+                )
+                self._consecutive_items_out_of_scope = 0
+
+        return False
 
 
 class OverdriveCollectionReaper(IdentifierSweepMonitor):

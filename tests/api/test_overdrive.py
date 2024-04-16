@@ -3141,6 +3141,10 @@ class TestNewTitlesOverdriveCollectionMonitor:
             db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
 
+        # for this test, we will not count consecutive out of scope dates: if one
+        # title is out of scope, we should stop.
+        NewTitlesOverdriveCollectionMonitor.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 0
+
         m = monitor.should_stop
 
         # If the monitor has never run before, we need to keep going
@@ -3164,6 +3168,54 @@ class TestNewTitlesOverdriveCollectionMonitor:
         )
         assert True == m(
             start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, object()
+        )
+
+    def test_should_stop_with_consecutive_data_threshold_gt_zero(
+        self, overdrive_api_fixture: OverdriveAPIFixture, caplog
+    ):
+        caplog.set_level(logging.INFO)
+
+        db = overdrive_api_fixture.db
+        monitor = NewTitlesOverdriveCollectionMonitor(
+            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+        )
+
+        # for this test, we will count consecutive out of scope date
+        NewTitlesOverdriveCollectionMonitor.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 1
+
+        m = monitor.should_stop
+
+        start = datetime_utc(2018, 1, 1)
+
+        # in scope - should continue
+        in_scope_properties = {"date_added": "2019-07-12T11:06:38.157+01:00"}
+        assert False == m(start, in_scope_properties, object())
+
+        assert "Date added: 2019-07-12 11:06:38.157000+01:00" in caplog.messages[-1]
+
+        # out of scope but counter threshold not yet exceeded: should continue
+        out_of_scope_properties = {"date_added": "2017-07-12T11:06:38.157-04:00"}
+        assert not m(start, out_of_scope_properties, object())
+
+        assert "Date added: 2017-07-12 11:06:38.157000-04:00" in caplog.messages[-1]
+
+        # in scope - should continue, expect reset
+        assert not m(start, in_scope_properties, object())
+
+        assert (
+            "We encountered a title that was added within our scope that "
+            "followed a title that was out of scope"
+        ) in caplog.messages[-1]
+
+        # out of scope but counter threshold not yet exceeded: should continue
+        assert not m(start, out_of_scope_properties, object())
+
+        # second out of scope:  threshold exceeded:  should stop
+        assert m(start, out_of_scope_properties, object())
+
+        assert (
+            "Max consecutive out of scope date threshold of 1 breached!"
+            in caplog.messages[-1]
         )
 
 
