@@ -125,5 +125,7 @@ def update_custom_lists(task: Task) -> None:
             select(CustomList.id).where(CustomList.auto_update_enabled == True)
         ).all()
 
+    task.log.info(f"Updating {len(custom_lists)} custom lists.")
+
     for custom_list in custom_lists:
         update_custom_list.delay(custom_list.id)

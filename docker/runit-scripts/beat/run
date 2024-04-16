@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+# Set the working directory to the root of the project
 cd /var/www/circulation
 source env/bin/activate
+
+# Make sure the log directory exists and is writable
+mkdir -p /var/log/celery
+chown 1000:adm /var/log/celery
+
+# Make sure the run directory exists and is writable
+mkdir -p /var/run/celery
+chown 1000:1000 /var/run/celery
+
+# Start the celery beat process
 exec env/bin/celery -A "core.celery.worker.app" beat --uid 1000 --gid 1000 --logfile /var/log/celery/beat.log -s /var/run/celery/beat-schedule
