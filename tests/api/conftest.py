@@ -25,6 +25,7 @@ pytest_plugins = [
     "tests.fixtures.api_overdrive_files",
     "tests.fixtures.api_routes",
     "tests.fixtures.authenticator",
+    "tests.fixtures.celery",
     "tests.fixtures.csv_files",
     "tests.fixtures.database",
     "tests.fixtures.files",

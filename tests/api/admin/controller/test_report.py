@@ -7,6 +7,7 @@ from core.model import create
 from core.model.admin import Admin, AdminRole
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.celery import CeleryFixture
 
 
 class ReportControllerFixture(AdminControllerFixture):
@@ -23,7 +24,7 @@ def report_fixture(
 
 class TestReportController:
     def test_generate_inventory_and_hold_reports(
-        self, report_fixture: ReportControllerFixture
+        self, report_fixture: ReportControllerFixture, celery_fixture: CeleryFixture
     ):
         ctrl = report_fixture.manager.admin_report_controller
         db = report_fixture.ctrl.db
