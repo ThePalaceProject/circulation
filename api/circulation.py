@@ -15,6 +15,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
 from sqlalchemy.orm import Query
+from sqlalchemy.orm.scoping import ScopedSession
 
 from api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -61,8 +62,9 @@ from core.model import (
     get_one,
 )
 from core.model.integration import IntegrationConfiguration
+from core.service.logging.configuration import LogLevel
 from core.util.datetime_helpers import utc_now
-from core.util.log import LoggerMixin
+from core.util.log import LoggerMixin, log_elapsed_time
 from core.util.problem_detail import ProblemDetail
 
 
@@ -1459,19 +1461,24 @@ class CirculationAPI(LoggerMixin):
         :return: A 2-tuple (loans, holds) containing `HoldInfo` and
             `LoanInfo` objects.
         """
-        log = self.log
 
-        class PatronActivityThread(Thread):
+        class PatronActivityThread(Thread, LoggerMixin):
             def __init__(
                 self,
-                api: PatronActivityCirculationAPI[
-                    BaseCirculationApiSettings, BaseSettings
+                db: Session,
+                api_cls: type[
+                    PatronActivityCirculationAPI[
+                        BaseCirculationApiSettings, BaseSettings
+                    ]
                 ],
-                patron: Patron,
+                collection_id: int | None,
+                patron_id: int | None,
                 pin: str,
             ) -> None:
-                self.api = api
-                self.patron = patron
+                self.db = db
+                self.api_cls = api_cls
+                self.collection_id = collection_id
+                self.patron_id = patron_id
                 self.pin = pin
                 self.activity: Iterable[LoanInfo | HoldInfo] | None = None
                 self.exception: Exception | None = None
@@ -1480,31 +1487,65 @@ class CirculationAPI(LoggerMixin):
                 ] | tuple[None, None, None] | None = None
                 super().__init__()
 
+            @property
+            def details(self) -> str:
+                return f"Api: {self.api_cls.__name__} / Collection {self.collection_id} / Patron {self.patron_id}"
+
+            @property
+            def patron(self) -> Patron | None:
+                if self.patron_id is None:
+                    self.log.error(f"No patron ID provided. ({self.details})")
+                    return None
+                patron = get_one(self.db, Patron, id=self.patron_id)
+                if patron is None:
+                    self.log.error(
+                        f"Patron with ID {self.patron_id} not found. ({self.details})"
+                    )
+                return patron
+
+            @property
+            def collection(self) -> Collection | None:
+                if self.collection_id is None:
+                    self.log.error(f"No collection ID provided. ({self.details})")
+                    return None
+                collection = get_one(self.db, Collection, id=self.collection_id)
+                if collection is None:
+                    self.log.error(
+                        f"Collection with ID {self.collection_id} not found. ({self.details})"
+                    )
+                return collection
+
+            @log_elapsed_time(log_level=LogLevel.debug)
             def run(self) -> None:
-                before = time.time()
                 try:
-                    self.activity = self.api.patron_activity(self.patron, self.pin)
+                    patron = self.patron
+                    if patron is None:
+                        return
+
+                    collection = self.collection
+                    if collection is None:
+                        return
+                    api = self.api_cls(self.db, collection)
+                    self.activity = list(api.patron_activity(patron, self.pin))
+
                 except Exception as e:
                     self.exception = e
                     self.trace = sys.exc_info()
-                after = time.time()
-                log.debug(
-                    "Synced %s in %.2f sec", self.api.__class__.__name__, after - before
-                )
-
-                # While testing we are in a Session scope
-                # we need to only close this if api._db is a flask_scoped_session.
-                if getattr(self.api, "_db", None) and type(self.api._db) != Session:
-                    # Since we are in a Thread using a flask_scoped_session
-                    # we can assume a new Session was opened due to the thread activity.
-                    # We must close this session to avoid connection pool leaks
-                    self.api._db.close()
+                finally:
+                    # In tests we don't have a scoped session here, however when this
+                    # code is run normally we need to remove the session from the thread.
+                    if isinstance(self.db, ScopedSession):
+                        self.db.remove()
 
         threads = []
         before = time.time()
         for api in list(self.api_for_collection.values()):
             if isinstance(api, PatronActivityCirculationAPI):
-                thread = PatronActivityThread(api, patron, pin)
+                api_cls = type(api)
+                collection_id = api.collection_id
+                thread = PatronActivityThread(
+                    self._db, api_cls, collection_id, patron.id, pin
+                )
                 threads.append(thread)
         for thread in threads:
             thread.start()
@@ -1520,7 +1561,7 @@ class CirculationAPI(LoggerMixin):
                 complete = False
                 self.log.error(
                     "%s errored out: %s",
-                    thread.api.__class__.__name__,
+                    thread.api_cls.__name__,
                     thread.exception,
                     exc_info=thread.trace,
                 )
