@@ -190,7 +190,7 @@ def test_job_run(
     job.run()
     send_email_mock.assert_called_once()
     args, kwargs = send_email_mock.call_args
-    assert kwargs["receivers"] == [email]  # type:ignore[unreachable]
+    assert kwargs["receivers"] == [email]
     assert "Inventory and Holds Reports" in kwargs["subject"]
     attachments: dict = kwargs["attachments"]
 

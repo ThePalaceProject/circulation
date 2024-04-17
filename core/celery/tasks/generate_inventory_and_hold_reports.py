@@ -42,18 +42,19 @@ class GenerateInventoryAndHoldsReportsJob(Job):
 
     def run(self) -> None:
         with self.transaction() as session:
+            library = get_one(session, Library, id=self.library_id)
+
+            if not library:
+                self.log.error(
+                    f"Cannot generate inventory and holds report for library (id={self.library_id}): "
+                    f"library not found."
+                )
+                return
+
             try:
                 current_time = datetime.now()
                 date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
                 attachments: dict[str, Path] = {}
-                library = get_one(session, Library, id=self.library_id)
-
-                if not library:
-                    self.log.error(
-                        f"Cannot generate inventory and holds report for library (id={self.library_id}): "
-                        f"library not found."
-                    )
-                    return
 
                 file_name_modifier = f"{library.short_name}-{date_str}"
 
@@ -120,15 +121,19 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     for file_path in attachments.values():
                         os.remove(file_path)
 
-    def generate_inventory_report(self, _db, sql_params: dict[str, Any]) -> str:
+    def generate_inventory_report(
+        self, _db: Session, sql_params: dict[str, Any]
+    ) -> str:
         """Generate an inventory csv file and return the file path"""
         return self.generate_csv_report(_db, sql_params, self.inventory_report_query())
 
-    def generate_holds_report(self, _db, sql_params: dict[str, Any]) -> str:
+    def generate_holds_report(self, _db: Session, sql_params: dict[str, Any]) -> str:
         """Generate a holds report csv file and return the file path"""
         return self.generate_csv_report(_db, sql_params, self.holds_report_query())
 
-    def generate_csv_report(self, _db, sql_params: dict[str, Any], query: str):
+    def generate_csv_report(
+        self, _db: Session, sql_params: dict[str, Any], query: str
+    ) -> str:
         with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
             writer = csv.writer(temp, delimiter=",")
             rows = _db.execute(
