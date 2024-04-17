@@ -1,27 +1,23 @@
 import argparse
-import csv
 import datetime
 import logging
 import os
 import random
 import sys
-import tempfile
 import traceback
 import unicodedata
 import uuid
 from collections.abc import Generator, Sequence
 from enum import Enum
-from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
-from sqlalchemy import and_, exists, not_, or_, select, text, tuple_
+from sqlalchemy import and_, exists, or_, select, tuple_
 from sqlalchemy.orm import Query, Session, defer
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.coverage import CollectionCoverageProviderJob, CoverageProviderProgress
-from core.exceptions import BasePalaceException
 from core.external_search import ExternalSearchIndex, Filter
 from core.integration.goals import Goals
 from core.lane import Lane
@@ -35,7 +31,6 @@ from core.model import (
     Edition,
     Identifier,
     IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
     Library,
     LicensePool,
     LicensePoolDeliveryMechanism,
@@ -51,22 +46,11 @@ from core.model import (
     production_session,
 )
 from core.model.classification import Classification
-from core.model.deferredtask import (
-    DeferredTask,
-    DeferredTaskType,
-    InventoryReportTaskData,
-    start_next_task,
-)
 from core.model.devicetokens import DeviceToken, DeviceTokenTypes
 from core.model.listeners import site_configuration_has_changed
 from core.model.patron import Loan
 from core.monitor import CollectionMonitor, ReaperMonitor
-from core.opds_import import (
-    OPDSAPI,
-    OPDSImporter,
-    OPDSImporterSettings,
-    OPDSImportMonitor,
-)
+from core.opds_import import OPDSAPI, OPDSImporter, OPDSImportMonitor
 from core.search.coverage_provider import SearchIndexCoverageProvider
 from core.search.coverage_remover import RemovesSearchCoverage
 from core.service.container import Services, container_instance
@@ -2704,332 +2688,6 @@ class SuppressWorkForLibraryScript(Script):
         )
 
         self._db.commit()
-
-
-class GenerateInventoryReports(Script):
-    """Generate inventory reports from queued report tasks"""
-
-    # set to False when testing attachments.
-    _delete_attachments = True
-
-    @classmethod
-    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
-        parser = argparse.ArgumentParser()
-        if _db is None:
-            raise ValueError("No database session provided.")
-
-        return parser
-
-    @classmethod
-    def parse_command_line(
-        cls, _db: Session | None = None, cmd_args: list[str] | None = None
-    ):
-        parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
-
-    def do_run(self, cmd_args: list[str] | None = None) -> None:
-        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
-
-        while True:
-            task = start_next_task(self._db, DeferredTaskType.INVENTORY_REPORT)
-            if not task:
-                break
-
-            self.process_task(task)
-
-        self.remove_old_tasks()
-
-    def process_task(self, task: DeferredTask):
-        data = InventoryReportTaskData(**task.data)
-        try:
-            current_time = datetime.datetime.now()
-            date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
-            attachments: dict[str, Path] = {}
-            library = get_one(self._db, Library, id=data.library_id)
-
-            if not library:
-                raise BasePalaceException(
-                    message=f"Cannot process task: library {data.library_id} not found."
-                )
-
-            file_name_modifier = f"{library.short_name}-{date_str}"
-
-            # resolve integrations
-            integrations = self._db.scalars(
-                select(IntegrationConfiguration)
-                .join(IntegrationLibraryConfiguration)
-                .where(
-                    IntegrationLibraryConfiguration.library_id == data.library_id,
-                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
-                    not_(
-                        IntegrationConfiguration.settings_dict.contains(
-                            {"include_in_inventory_report": False}
-                        )
-                    ),
-                )
-            ).all()
-            registry = LicenseProvidersRegistry()
-            integration_ids: list[int] = []
-            for integration in integrations:
-                settings = registry[integration.protocol].settings_load(integration)
-                if not isinstance(settings, OPDSImporterSettings):
-                    continue
-                integration_ids.append(integration.id)
-
-            # generate inventory report csv file
-            sql_params: dict[str, Any] = {
-                "library_id": library.id,
-                "integration_ids": tuple(integration_ids),
-            }
-
-            inventory_report_file_path = self.generate_inventory_report(
-                sql_params=sql_params
-            )
-
-            # generate holds report csv file
-            holds_report_file_path = self.generate_holds_report(sql_params=sql_params)
-
-            attachments[f"palace-inventory-report-{file_name_modifier}.csv"] = Path(
-                inventory_report_file_path
-            )
-            attachments[f"palace-holds-report-{file_name_modifier}.csv"] = Path(
-                holds_report_file_path
-            )
-
-            self.services.email.send_email(
-                subject=f"Inventory and Holds Reports {current_time}",
-                receivers=[data.admin_email],
-                text="",
-                attachments=attachments,
-            )
-            task.complete()
-        except Exception as e:
-            # log error
-            self.log.error(f"Failed to process task: {task}", e)
-            task.fail(failure_details=f"{e}")
-        finally:
-            self._db.commit()
-            if self._delete_attachments:
-                for file_path in attachments.values():
-                    os.remove(file_path)
-
-    def generate_inventory_report(self, sql_params: dict[str, Any]) -> str:
-        """Generate an inventory csv file and return the file path"""
-        return self.generate_csv_report(sql_params, self.inventory_report_query())
-
-    def generate_holds_report(self, sql_params: dict[str, Any]) -> str:
-        """Generate a holds report csv file and return the file path"""
-        return self.generate_csv_report(sql_params, self.holds_report_query())
-
-    def generate_csv_report(self, sql_params: dict[str, Any], query: str):
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
-            writer = csv.writer(temp, delimiter=",")
-            rows = self._db.execute(
-                text(query),
-                sql_params,
-            )
-            writer.writerow(rows.keys())
-            writer.writerows(rows)
-        return temp.name
-
-    def inventory_report_query(self) -> str:
-        return """
-            select
-               e.title,
-               e.author,
-               i.identifier,
-               e.language,
-               e.publisher,
-               e.medium as format,
-               w.audience,
-               wg.genres,
-               d.name data_source,
-               ic.name collection_name,
-               l.expires license_expiration,
-               DATE_PART('day', l.expires - now()) days_remaining_on_license,
-               l.checkouts_left remaining_loans,
-               l.terms_concurrency allowed_concurrent_users,
-               coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
-               CASE WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
-                    ELSE -1
-               END shared_active_loan_count
-        from datasources d,
-             collections c,
-             integration_configurations ic,
-             integration_library_configurations il,
-             libraries lib,
-             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
-                                     from genres g,
-                                     workgenres wg
-                                     where g.id = wg.genre_id
-                                     group by wg.work_id) wg on w.id = wg.work_id,
-             editions e left outer join (select lp.presentation_edition_id,
-                                         p.library_id,
-                                         count(ln.id) active_loan_count
-                                  from loans ln,
-                                       licensepools lp,
-                                       patrons p,
-                                       libraries l
-                                  where p.id = ln.patron_id and
-                                        p.library_id = l.id and
-                                        ln.license_pool_id = lp.id and
-                                        l.id = :library_id
-                                  group by p.library_id, lp.presentation_edition_id) lib_loans
-                                  on e.id = lib_loans.presentation_edition_id,
-             identifiers i,
-             (select ilc.parent_id,
-                      count(ilc.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ilc,
-                   integration_configurations i,
-                   collections c
-              where c.integration_configuration_id = i.id  and
-                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
-             licensepools lp left outer join (select license_pool_id,
-                                                     checkouts_left,
-                                                     expires,
-                                                     terms_concurrency
-                                              from licenses where status = 'available') l on lp.id = l.license_pool_id
-        where lp.identifier_id = i.id and
-              e.primary_identifier_id = i.id and
-              e.id = w.presentation_edition_id and
-              d.id = e.data_source_id and
-              c.id = lp.collection_id and
-              c.integration_configuration_id = ic.id and
-              ic.id = il.parent_id and
-              ic.id = collection_sharing.parent_id and
-              ic.id in :integration_ids and
-              il.library_id = lib.id and
-              lib.id = :library_id
-         order by title, author
-        """
-
-    def holds_report_query(self) -> str:
-        return """
-            select
-               e.title,
-               e.author,
-               i.identifier,
-               e.language,
-               e.publisher,
-               e.medium as format,
-               w.audience,
-               wg.genres,
-               d.name data_source,
-               ic.name collection_name,
-               coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
-               CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
-                    ELSE -1
-               END shared_active_hold_count
-        from datasources d,
-             collections c,
-             integration_configurations ic,
-             integration_library_configurations il,
-             libraries lib,
-             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
-                                     from genres g,
-                                     workgenres wg
-                                     where g.id = wg.genre_id
-                                     group by wg.work_id) wg on w.id = wg.work_id,
-             editions e,
-             (select lp.presentation_edition_id,
-                                         p.library_id,
-                                         count(h.id) active_hold_count
-                                  from holds h,
-                                       licensepools lp,
-                                       patrons p
-                                  where p.id = h.patron_id and
-                                        h.license_pool_id = lp.id and
-                                        p.library_id = :library_id and
-                                        (h.end is null or
-                                        h.end > now() or
-                                        h.position > 0)
-                                  group by p.library_id, lp.presentation_edition_id) lib_holds,
-             identifiers i,
-             (select ilc.parent_id,
-                      count(ilc.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ilc,
-                   integration_configurations i,
-                   collections c
-              where c.integration_configuration_id = i.id  and
-                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
-             licensepools lp
-        where lp.identifier_id = i.id and
-              e.primary_identifier_id = i.id and
-              e.id = lib_holds.presentation_edition_id and
-              e.id = w.presentation_edition_id and
-              d.id = e.data_source_id and
-              c.id = lp.collection_id and
-              c.integration_configuration_id = ic.id and
-              ic.id = il.parent_id and
-              ic.id = collection_sharing.parent_id and
-              ic.id in :integration_ids and
-              il.library_id = lib.id and
-              lib.id = :library_id
-         order by title, author
-        """
-
-    def remove_old_tasks(self):
-        """Remove inventory generation tasks older than 30 days"""
-        self._db.query(DeferredTask)
-        thirty_days_ago = utc_now() - datetime.timedelta(days=30)
-        tasks = (
-            self._db.query(DeferredTask)
-            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
-            .filter(DeferredTask.processing_end_time < thirty_days_ago)
-        )
-        for task in tasks:
-            self._db.delete(task)
-
-
-class DeleteOldDeferredTasks(Script):
-    """Delete old deferred tasks."""
-
-    @classmethod
-    def arg_parser(cls, _db: Session | None) -> argparse.ArgumentParser:  # type: ignore[override]
-        parser = argparse.ArgumentParser()
-        if _db is None:
-            raise ValueError("No database session provided.")
-
-        return parser
-
-    @classmethod
-    def parse_command_line(
-        cls, _db: Session | None = None, cmd_args: list[str] | None = None
-    ):
-        parser = cls.arg_parser(_db)
-        return parser.parse_known_args(cmd_args)[0]
-
-    def do_run(self, cmd_args: list[str] | None = None) -> None:
-        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
-        self.remove_old_tasks()
-
-    def remove_old_tasks(self):
-        """Remove inventory generation tasks older than 30 days"""
-        self._db.query(DeferredTask)
-        days = 30
-        thirty_days_ago = utc_now() - datetime.timedelta(days=days)
-        tasks = (
-            self._db.query(DeferredTask)
-            .filter(DeferredTask.task_type == DeferredTaskType.INVENTORY_REPORT)
-            .filter(DeferredTask.processing_end_time < thirty_days_ago)
-        )
-
-        tasks_removed = 0
-
-        for task in tasks:
-            self._db.delete(task)
-            tasks_removed += 1
-
-        self._db.commit()
-        if tasks_removed > 0:
-            self.log.info(
-                f"Successfully removed {tasks_removed} task{ 's' if tasks_removed > 1 else ''} "
-                f"that were completed over {days} days ago."
-            )
-        else:
-            self.log.info(
-                f"There were no deferred tasks that were completed over {days} ago to be removed."
-            )
 
 
 class MockStdin:
