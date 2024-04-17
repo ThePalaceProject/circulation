@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from api.integration.registry.license_providers import LicenseProvidersRegistry
 from core.celery.job import Job
 from core.celery.task import Task
-from core.exceptions import BasePalaceException
 from core.integration.goals import Goals
 from core.model import (
     IntegrationConfiguration,
@@ -44,16 +43,17 @@ class GenerateInventoryAndHoldsReportsJob(Job):
     def run(self) -> None:
         with self.transaction() as session:
             try:
-                current_time = datetime.datetime.now()
+                current_time = datetime.now()
                 date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
                 attachments: dict[str, Path] = {}
                 library = get_one(session, Library, id=self.library_id)
 
                 if not library:
-                    raise BasePalaceException(
-                        message=f"Cannot generate inventory and holds report for library (id={self.library_id}):  "
-                        f" library not found."
+                    self.log.error(
+                        f"Cannot generate inventory and holds report for library (id={self.library_id}): "
+                        f"library not found."
                     )
+                    return
 
                 file_name_modifier = f"{library.short_name}-{date_str}"
 

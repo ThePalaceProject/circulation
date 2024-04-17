@@ -1,7 +1,7 @@
 import csv
 import os
-from datetime import datetime
-from unittest.mock import create_autospec, patch
+from datetime import timedelta
+from unittest.mock import create_autospec
 
 from pytest import LogCaptureFixture
 from sqlalchemy.orm import sessionmaker
@@ -9,10 +9,12 @@ from sqlalchemy.orm import sessionmaker
 from api.overdrive import OverdriveSettings
 from core.celery.tasks.generate_inventory_and_hold_reports import (
     GenerateInventoryAndHoldsReportsJob,
+    generate_inventory_and_hold_reports,
 )
 from core.model import Genre, Hold, get_one_or_create
 from core.model.licensing import LicenseStatus
 from core.opds_import import OPDSImporterSettings
+from core.service.container import container_instance
 from core.service.logging.configuration import LogLevel
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
@@ -38,17 +40,12 @@ def test_job_run(
 
     # create some test data that we expect to be picked up in the inventory report
     library = db.library(short_name="test_library")
-    library2 = db.library(short_name="test_library2")
     data_source = "BiblioBoard"
-    settings = OPDSImporterSettings(
-        include_in_inventory_report=True,
-        external_account_id="http://opds.com",
-        data_source=data_source,
-    )
-
     collection_name = "BiblioBoard Test Collection"
-    collection = db.collection(name=collection_name, settings=settings.dict())
-    collection.libraries = [library, library2]
+    collection = create_test_opds_collection(collection_name, data_source, db, library)
+    library2 = db.library(short_name="test_library2")
+    # add another library
+    collection.libraries.append(library2)
 
     # Configure test data we expect will not be picked up.
     no_inventory_report_settings = OPDSImporterSettings(
@@ -112,7 +109,7 @@ def test_job_run(
     )
 
     days_remaining = 10
-    expiration = utc_now() + datetime.timedelta(days=days_remaining)
+    expiration = utc_now() + timedelta(days=days_remaining)
     db.license(
         pool=licensepool,
         status=LicenseStatus.available,
@@ -141,7 +138,7 @@ def test_job_run(
         license_pool=licensepool,
         position=1,
         start=utc_now(),
-        end=utc_now() + datetime.timedelta(days=1),
+        end=utc_now() + timedelta(days=1),
     )
 
     # this one should be counted because the end is None
@@ -160,8 +157,8 @@ def test_job_run(
         Hold,
         patron=patron3,
         license_pool=licensepool,
-        start=utc_now() - datetime.timedelta(days=1),
-        end=utc_now() - datetime.timedelta(minutes=1),
+        start=utc_now() - timedelta(days=1),
+        end=utc_now() - timedelta(minutes=1),
         position=1,
     )
 
@@ -172,7 +169,7 @@ def test_job_run(
         patron=patron4,
         license_pool=licensepool,
         start=utc_now(),
-        end=utc_now() - datetime.timedelta(minutes=1),
+        end=utc_now() - timedelta(minutes=1),
         position=0,
     )
 
@@ -257,16 +254,26 @@ def test_job_run(
             os.remove(f)
 
 
+def create_test_opds_collection(collection_name, data_source, db, library):
+    settings = OPDSImporterSettings(
+        include_in_inventory_report=True,
+        external_account_id="http://opds.com",
+        data_source=data_source,
+    )
+    collection = db.collection(name=collection_name, settings=settings.dict())
+    collection.libraries = [library]
+    return collection
+
+
 def test_generate_inventory_and_hold_reports_task(
     db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
 ):
     library = db.library(short_name="test_library")
+    # there must be at least one opds collection associated with the library for this to work
+    create_test_opds_collection("c1", "d1", db, library)
     GenerateInventoryAndHoldsReportsJob._delete_attachments = True
-
-    with patch(
-        "core.service.container.container_instance.container.email"
-    ) as mock_email:
-        test_generate_inventory_and_hold_reports_task.delay(
-            library.id, "test@email"
-        ).wait()
-    assert mock_email.assert_called_once()
+    services = container_instance()
+    send_email_mock = create_autospec(services.email.container.send_email)
+    services.email.container.send_email = send_email_mock
+    generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
+    send_email_mock.assert_called_once()
