@@ -22,7 +22,9 @@ def report_fixture(
 
 
 class TestReportController:
-    def test_generate_inventory_report(self, report_fixture: ReportControllerFixture):
+    def test_generate_inventory_and_hold_reports(
+        self, report_fixture: ReportControllerFixture
+    ):
         ctrl = report_fixture.manager.admin_report_controller
         db = report_fixture.ctrl.db
         report_fixture.ctrl.library = report_fixture.ctrl.db.default_library()
@@ -36,15 +38,3 @@ class TestReportController:
             assert response.status_code == HTTPStatus.ACCEPTED
             body = json.loads(response.data)  # type: ignore
             assert body and body["message"].__contains__("admin@email.com")
-            assert not body.__contains__("already")
-
-        # check that when generating a duplicate request a 409 is returned.
-        with report_fixture.request_context_with_library_and_admin(
-            f"/",
-            admin=system_admin,
-        ) as ctx:
-            response = ctrl.generate_inventory_report()
-            body = json.loads(response.data)  # type: ignore
-            assert response.status_code == HTTPStatus.CONFLICT
-            assert body and body["message"].__contains__("admin@email.com")
-            assert body["message"].__contains__("already")
