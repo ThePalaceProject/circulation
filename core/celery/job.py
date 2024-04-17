@@ -14,7 +14,7 @@ class Job(LoggerMixin, SessionMixin, ABC):
 
     This class provides a few helper methods for our jobs to use, such as
     a logger and a session context manager. This class  is and should remain
-    runable outside the context of a Celery worker. That way we are able to
+    runnable outside the context of a Celery worker. That way we are able to
     test our jobs fully outside the Celery worker.
 
     This class purposefully does not open a SqlAlchemy session for the job,
