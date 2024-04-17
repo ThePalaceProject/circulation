@@ -543,7 +543,6 @@ from core.model.coverage import (
 from core.model.credential import Credential
 from core.model.customlist import CustomList, CustomListEntry
 from core.model.datasource import DataSource
-from core.model.deferredtask import DeferredTask
 from core.model.devicetokens import DeviceToken
 from core.model.discovery_service_registration import DiscoveryServiceRegistration
 from core.model.edition import Edition
