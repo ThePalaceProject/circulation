@@ -230,7 +230,7 @@ class Admin(Base, HasSessionCache):
     def generate_reset_password_token(self, secret_key: str) -> str:
         serializer = URLSafeTimedSerializer(secret_key)
 
-        return serializer.dumps(self.email, salt=self.password_hashed)  # type: ignore[return-value]
+        return serializer.dumps(self.email, salt=self.password_hashed)
 
     @staticmethod
     def validate_reset_password_token_and_fetch_admin(
