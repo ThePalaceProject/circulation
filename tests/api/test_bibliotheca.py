@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, cast
 from unittest import mock
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from pymarc import parse_xml_to_array
@@ -25,7 +25,13 @@ from api.bibliotheca import (
     ItemListParser,
     PatronCirculationParser,
 )
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    CirculationAPI,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+    PatronActivityThread,
+)
 from api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -462,7 +468,11 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.api.queue_response(
             200, content=bibliotheca_fixture.files.sample_data("checkouts.xml")
         )
-        circulation.sync_bookshelf(patron, "dummy pin")
+
+        with patch.object(
+            PatronActivityThread, "api", return_value=bibliotheca_fixture.api
+        ):
+            circulation.sync_bookshelf(patron, "dummy pin")
 
         # The patron should have two loans and two holds.
         l1, l2 = patron.loans
