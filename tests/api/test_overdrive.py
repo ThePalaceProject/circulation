@@ -2188,8 +2188,9 @@ class TestOverdriveAPI:
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
 
         # Load the mock API data
-        with open("tests/api/files/overdrive/no_drm_fulfill.json") as fp:
-            api_data = json.load(fp)
+        api_data = json.loads(
+            overdrive_api_fixture.data.sample_data("no_drm_fulfill.json")
+        )
 
         # Mock out the flow
         od_api.get_loan = MagicMock(return_value=api_data["loan"])
