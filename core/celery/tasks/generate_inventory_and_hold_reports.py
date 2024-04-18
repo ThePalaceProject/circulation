@@ -23,22 +23,24 @@ from core.model import (
 )
 from core.opds_import import OPDSImporterSettings
 from core.service.celery.celery import QueueNames
-from core.service.container import Services, container_instance
+from core.service.container import container_instance
+from core.service.email.email import SendEmailCallable
 
 
 class GenerateInventoryAndHoldsReportsJob(Job):
-    _delete_attachments = True
-
     def __init__(
-        self, session_maker: sessionmaker[Session], library_id: int, email_address: str
+        self,
+        session_maker: sessionmaker[Session],
+        library_id: int,
+        email_address: str,
+        send_email: SendEmailCallable,
+        delete_attachments: bool = True,
     ):
         super().__init__(session_maker)
         self.library_id = library_id
         self.email_address = email_address
-
-    @property
-    def services(self) -> Services:
-        return container_instance()
+        self.delete_attachments = delete_attachments
+        self.send_email = send_email
 
     def run(self) -> None:
         with self.transaction() as session:
@@ -102,22 +104,14 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     holds_report_file_path
                 )
 
-                self.services.email.send_email(
+                self.send_email(
                     subject=f"Inventory and Holds Reports {current_time}",
                     receivers=[self.email_address],
                     text="",
                     attachments=attachments,
                 )
-            except Exception as e:
-                # log error
-                self.log.error(
-                    f"Failed to send inventory and loans reports to "
-                    f"{self.email_address} for {library.name} ({self.library_id})",
-                    e,
-                )
-                return
             finally:
-                if self._delete_attachments:
+                if self.delete_attachments:
                     for file_path in attachments.values():
                         os.remove(file_path)
 
@@ -287,6 +281,10 @@ class GenerateInventoryAndHoldsReportsJob(Job):
 def generate_inventory_and_hold_reports(
     task: Task, library_id: int, email_address: str
 ) -> None:
+    services = container_instance()
     GenerateInventoryAndHoldsReportsJob(
-        task.session_maker, library_id=library_id, email_address=email_address
+        task.session_maker,
+        library_id=library_id,
+        email_address=email_address,
+        send_email=services.email.container.send_email,
     ).run()

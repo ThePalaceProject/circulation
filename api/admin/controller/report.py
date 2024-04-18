@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from core.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
 )
-from core.model import Library
+from core.model import Library, MediaTypes
 from core.model.admin import Admin
 from core.problem_details import INTERNAL_SERVER_ERROR
 from core.util.log import LoggerMixin
@@ -28,7 +28,7 @@ class ReportController(LoggerMixin):
             assert admin.id
             assert library.id
 
-            generate_inventory_and_hold_reports.delay(
+            task = generate_inventory_and_hold_reports.delay(
                 email_address=admin.email, library_id=library.id
             )
 
@@ -37,8 +37,12 @@ class ReportController(LoggerMixin):
                 f"finish depending on current server load. The completed reports will be sent to {admin.email}."
             )
 
-            self.log.info(msg)
-            return Response(json.dumps(dict(message=msg)), HTTPStatus.ACCEPTED)
+            self.log.info(msg + f"(Task Request Id: {task.id})")
+            return Response(
+                json.dumps(dict(message=msg)),
+                HTTPStatus.ACCEPTED,
+                mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
+            )
         except Exception as e:
             msg = f"failed to generate inventory report request: {e}"
             self.log.error(msg=msg, exc_info=e)

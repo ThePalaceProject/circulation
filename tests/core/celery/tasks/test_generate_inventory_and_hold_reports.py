@@ -11,27 +11,34 @@ from core.celery.tasks.generate_inventory_and_hold_reports import (
     GenerateInventoryAndHoldsReportsJob,
     generate_inventory_and_hold_reports,
 )
-from core.model import Genre, Hold, get_one_or_create
+from core.model import Genre, Hold, Library, get_one_or_create
 from core.model.licensing import LicenseStatus
 from core.opds_import import OPDSImporterSettings
-from core.service.container import container_instance
 from core.service.logging.configuration import LogLevel
 from core.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 def test_job_run(
     db: DatabaseTransactionFixture,
     mock_session_maker: sessionmaker,
+    services_fixture: ServicesFixture,
     caplog: LogCaptureFixture,
 ):
     email = "test@email.com"
 
     # A non-existent collection should log an error
     caplog.set_level(LogLevel.info)
+    send_email_mock = create_autospec(
+        services_fixture.services.email.container.send_email
+    )
     GenerateInventoryAndHoldsReportsJob(
-        mock_session_maker, library_id=1, email_address=email
+        mock_session_maker,
+        library_id=1,
+        email_address=email,
+        send_email=send_email_mock,
     ).run()
     assert (
         f"Cannot generate inventory and holds report for library (id=1): library not found."
@@ -178,18 +185,19 @@ def test_job_run(
 
     assert library.id
 
-    job = GenerateInventoryAndHoldsReportsJob(
-        mock_session_maker, library.id, email_address=email
-    )
-
-    send_email_mock = create_autospec(job.services.email.container.send_email)
     # for testing, don't delete the files associated with the attachments so we can read them after the script
     # runs
-    GenerateInventoryAndHoldsReportsJob._delete_attachments = False
-    job.services.email.container.send_email = send_email_mock
+    job = GenerateInventoryAndHoldsReportsJob(
+        mock_session_maker,
+        library.id,
+        email_address=email,
+        send_email=send_email_mock,
+        delete_attachments=False,
+    )
+
     job.run()
     send_email_mock.assert_called_once()
-    args, kwargs = send_email_mock.call_args
+    kwargs = send_email_mock.call_args.kwargs
     assert kwargs["receivers"] == [email]
     assert "Inventory and Holds Reports" in kwargs["subject"]
     attachments: dict = kwargs["attachments"]
@@ -200,11 +208,10 @@ def test_job_run(
     assert "test_library" in inventory_report_key
     inventory_report_value = attachments[inventory_report_key]
     assert inventory_report_value
-    inventory_report_reader = csv.DictReader(open(inventory_report_value))
-    inventory_row_count = 0
+    inventory_report_csv = list(csv.DictReader(open(inventory_report_value)))
 
-    for row in inventory_report_reader:
-        inventory_row_count += 1
+    assert len(inventory_report_csv) == 1
+    for row in inventory_report_csv:
         assert row["title"] == title
         assert row["author"] == author
         assert row["identifier"]
@@ -221,8 +228,6 @@ def test_job_run(
         assert row["remaining_loans"] == str(checkouts_left)
         assert row["allowed_concurrent_users"] == str(terms_concurrency)
         assert expiration.strftime("%Y-%m-%d %H:%M:%S.%f") in row["license_expiration"]
-
-    assert inventory_row_count == 1
 
     holds_report_key = [x for x in attachments.keys() if "holds" in x][0]
     assert holds_report_key
@@ -254,7 +259,12 @@ def test_job_run(
             os.remove(f)
 
 
-def create_test_opds_collection(collection_name, data_source, db, library):
+def create_test_opds_collection(
+    collection_name: str,
+    data_source: str,
+    db: DatabaseTransactionFixture,
+    library: Library,
+):
     settings = OPDSImporterSettings(
         include_in_inventory_report=True,
         external_account_id="http://opds.com",
@@ -266,14 +276,16 @@ def create_test_opds_collection(collection_name, data_source, db, library):
 
 
 def test_generate_inventory_and_hold_reports_task(
-    db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+    celery_fixture: CeleryFixture,
 ):
     library = db.library(short_name="test_library")
     # there must be at least one opds collection associated with the library for this to work
     create_test_opds_collection("c1", "d1", db, library)
-    GenerateInventoryAndHoldsReportsJob._delete_attachments = True
-    services = container_instance()
-    send_email_mock = create_autospec(services.email.container.send_email)
-    services.email.container.send_email = send_email_mock
+    send_email_mock = create_autospec(
+        services_fixture.services.email.container.send_email
+    )
+    services_fixture.services.email.container.send_email = send_email_mock
     generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
     send_email_mock.assert_called_once()
