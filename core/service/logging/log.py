@@ -85,6 +85,8 @@ class JSONFormatter(logging.Formatter):
             data["traceback"] = self.formatException(record.exc_info)
         if record.process:
             data["process"] = record.process
+        if record.thread:
+            data["thread"] = record.thread
 
         # If we are running in a Flask context, we include the request data in the log
         if flask_request:
