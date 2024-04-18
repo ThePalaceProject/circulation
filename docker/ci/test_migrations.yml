@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  webapp-old:
+    image: "ghcr.io/thepalaceproject/circ-webapp:sha-54fa9ef"
+
+    environment:
+      SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+      PALACE_SEARCH_URL: "http://os:9200"
+
+    depends_on:
+      pg:
+        condition: service_healthy
+      os:
+        condition: service_healthy
+
+    ports:
+      - "6500:80"
