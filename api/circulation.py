@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import datetime
 import logging
-import sys
-import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from threading import Thread
-from types import TracebackType
 from typing import Any, Literal, TypeVar
 
 import flask
@@ -765,6 +762,80 @@ class PatronActivityCirculationAPI(
         ...
 
 
+PatronActivityCirculationApiType = PatronActivityCirculationAPI[
+    BaseCirculationApiSettings, BaseSettings
+]
+
+
+T = TypeVar("T")
+
+
+class PatronActivityThread(Thread, LoggerMixin):
+    def __init__(
+        self,
+        db: Session,
+        api_cls: type[PatronActivityCirculationApiType],
+        collection_id: int | None,
+        patron_id: int | None,
+        pin: str,
+    ) -> None:
+        self.db = db
+        self.api_cls = api_cls
+        self.collection_id = collection_id
+        self.patron_id = patron_id
+        self.pin = pin
+        self.activity: list[LoanInfo | HoldInfo] | None = None
+        self.error = False
+        super().__init__()
+
+    @property
+    def details(self) -> str:
+        return f"Api '{self.api_cls.__name__}' / Collection '{self.collection_id}' / Patron '{self.patron_id}'"
+
+    def load_from_db(self, identifier: int | None, model: type[T]) -> T | None:
+        if identifier is None:
+            self.log.error(f"No {model.__name__} ID provided. ({self.details})")
+            return None
+        loaded_model = get_one(self.db, model, id=identifier)
+        if loaded_model is None:
+            self.log.error(
+                f"{model.__name__} with ID {identifier} not found. ({self.details})"
+            )
+        return loaded_model
+
+    @property
+    def patron(self) -> Patron | None:
+        return self.load_from_db(self.patron_id, Patron)
+
+    @property
+    def collection(self) -> Collection | None:
+        return self.load_from_db(self.collection_id, Collection)
+
+    def api(self, collection: Collection) -> PatronActivityCirculationApiType:
+        return self.api_cls(self.db, collection)
+
+    @log_elapsed_time(log_level=LogLevel.debug)
+    def run(self) -> None:
+        try:
+            patron = self.patron
+            if patron is None:
+                return
+
+            collection = self.collection
+            if collection is None:
+                return
+            api = self.api(collection)
+            self.activity = list(api.patron_activity(patron, self.pin))
+        except:
+            self.log.exception(f"Error fetching patron activity. ({self.details})")
+            self.error = True
+        finally:
+            # In tests we don't have a scoped session here, however when this
+            # code is run normally we need to remove the session from the thread.
+            if isinstance(self.db, ScopedSession):
+                self.db.remove()
+
+
 class CirculationAPI(LoggerMixin):
     """Implement basic circulation logic and abstract away the details
     between different circulation APIs behind generic operations like
@@ -1450,6 +1521,9 @@ class CirculationAPI(LoggerMixin):
 
         return True
 
+    @log_elapsed_time(
+        message_prefix="patron_activity sync", log_level=LogLevel.debug, skip_start=True
+    )
     def patron_activity(
         self, patron: Patron, pin: str
     ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
@@ -1461,84 +1535,7 @@ class CirculationAPI(LoggerMixin):
         :return: A 2-tuple (loans, holds) containing `HoldInfo` and
             `LoanInfo` objects.
         """
-
-        class PatronActivityThread(Thread, LoggerMixin):
-            def __init__(
-                self,
-                db: Session,
-                api_cls: type[
-                    PatronActivityCirculationAPI[
-                        BaseCirculationApiSettings, BaseSettings
-                    ]
-                ],
-                collection_id: int | None,
-                patron_id: int | None,
-                pin: str,
-            ) -> None:
-                self.db = db
-                self.api_cls = api_cls
-                self.collection_id = collection_id
-                self.patron_id = patron_id
-                self.pin = pin
-                self.activity: Iterable[LoanInfo | HoldInfo] | None = None
-                self.exception: Exception | None = None
-                self.trace: tuple[
-                    type[BaseException], BaseException, TracebackType
-                ] | tuple[None, None, None] | None = None
-                super().__init__()
-
-            @property
-            def details(self) -> str:
-                return f"Api: {self.api_cls.__name__} / Collection {self.collection_id} / Patron {self.patron_id}"
-
-            @property
-            def patron(self) -> Patron | None:
-                if self.patron_id is None:
-                    self.log.error(f"No patron ID provided. ({self.details})")
-                    return None
-                patron = get_one(self.db, Patron, id=self.patron_id)
-                if patron is None:
-                    self.log.error(
-                        f"Patron with ID {self.patron_id} not found. ({self.details})"
-                    )
-                return patron
-
-            @property
-            def collection(self) -> Collection | None:
-                if self.collection_id is None:
-                    self.log.error(f"No collection ID provided. ({self.details})")
-                    return None
-                collection = get_one(self.db, Collection, id=self.collection_id)
-                if collection is None:
-                    self.log.error(
-                        f"Collection with ID {self.collection_id} not found. ({self.details})"
-                    )
-                return collection
-
-            @log_elapsed_time(log_level=LogLevel.debug)
-            def run(self) -> None:
-                try:
-                    patron = self.patron
-                    if patron is None:
-                        return
-
-                    collection = self.collection
-                    if collection is None:
-                        return
-                    api = self.api_cls(self.db, collection)
-                    self.activity = list(api.patron_activity(patron, self.pin))
-
-                except Exception as e:
-                    self.exception = e
-                    self.trace = sys.exc_info()
-                finally:
-                    # In tests we don't have a scoped session here, however when this
-                    # code is run normally we need to remove the session from the thread.
-                    if isinstance(self.db, ScopedSession):
-                        self.db.remove()
-
         threads = []
-        before = time.time()
         for api in list(self.api_for_collection.values()):
             if isinstance(api, PatronActivityCirculationAPI):
                 api_cls = type(api)
@@ -1555,16 +1552,10 @@ class CirculationAPI(LoggerMixin):
         holds: list[HoldInfo] = []
         complete = True
         for thread in threads:
-            if thread.exception:
+            if thread.error:
                 # Something went wrong, so we don't have a complete
                 # picture of the patron's loans.
                 complete = False
-                self.log.error(
-                    "%s errored out: %s",
-                    thread.api_cls.__name__,
-                    thread.exception,
-                    exc_info=thread.trace,
-                )
             if thread.activity:
                 for i in thread.activity:
                     if not isinstance(i, (LoanInfo, HoldInfo)):
@@ -1579,8 +1570,6 @@ class CirculationAPI(LoggerMixin):
                     elif isinstance(i, HoldInfo):
                         holds.append(i)
 
-        after = time.time()
-        self.log.debug("Full sync took %.2f sec", after - before)
         return loans, holds, complete
 
     def local_loans(self, patron: Patron) -> Query[Loan]:
