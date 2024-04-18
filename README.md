@@ -62,23 +62,6 @@ If you do not yet have Homebrew, you can install it by running the following:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-While you're at it, go ahead and install the following required dependencies:
-
-```sh
-brew install pkg-config libffi
-brew install libjpeg
-```
-
-The version of libxmlsec1 (v1.3) that ships with brew is currently not compatible with the python
-xmlsec package that we use (for more details see
-[this xmlsec issue](https://github.com/xmlsec/python-xmlsec/issues/163)). In order to install a
-compatible version of libxmlsec1, you can use the following command:
-
-```sh
-brew tap jonathangreen/xmlsec
-brew install libxmlsec1@1.2
-```
-
 #### Linux
 
 Most distributions will offer Python packages. On Arch Linux, the following command is sufficient:
