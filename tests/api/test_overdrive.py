@@ -14,7 +14,13 @@ import pytest
 from requests import Response
 from sqlalchemy.orm.exc import StaleDataError
 
-from api.circulation import CirculationAPI, FulfillmentInfo, HoldInfo, LoanInfo
+from api.circulation import (
+    CirculationAPI,
+    FulfillmentInfo,
+    HoldInfo,
+    LoanInfo,
+    PatronActivityThread,
+)
 from api.circulation_exceptions import (
     CannotFulfill,
     CannotHold,
@@ -59,6 +65,7 @@ from core.model import (
     LicensePoolDeliveryMechanism,
     Measurement,
     MediaTypes,
+    Patron,
     Representation,
     RightsStatus,
     Subject,
@@ -124,6 +131,10 @@ class OverdriveAPIFixture:
     def sample_json(self, filename):
         data = self.data.sample_data(filename)
         return data, json.loads(data)
+
+    def sync_bookshelf(self, patron: Patron):
+        with patch.object(PatronActivityThread, "api", return_value=self.api):
+            return self.circulation.sync_bookshelf(patron, "dummy pin")
 
 
 @pytest.fixture(scope="function")
@@ -2603,9 +2614,7 @@ class TestSyncBookshelf:
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
 
         patron = db.patron()
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
 
         # All four loans in the sample data were created.
         assert isinstance(loans, list)
@@ -2645,9 +2654,7 @@ class TestSyncBookshelf:
         patron.last_loan_activity_sync = None
         overdrive_api_fixture.api.queue_response(200, content=loans_data)
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
         assert isinstance(loans, list)
         assert 4 == len(loans)
         assert loans.sort() == patron.loans.sort()
@@ -2678,9 +2685,7 @@ class TestSyncBookshelf:
 
         # Sync with Overdrive, and the loan not present in the sample
         # data is removed.
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
 
         assert isinstance(loans, list)
         assert 4 == len(loans)
@@ -2708,9 +2713,7 @@ class TestSyncBookshelf:
         overdrive_api_fixture.api.queue_response(200, content=loans_data)
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
 
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        overdrive_api_fixture.sync_bookshelf(patron)
         assert 5 == len(patron.loans)
         assert gutenberg_loan in patron.loans
 
@@ -2726,9 +2729,7 @@ class TestSyncBookshelf:
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
         patron = db.patron()
 
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
         # All four loans in the sample data were created.
         assert isinstance(holds, list)
         assert 4 == len(holds)
@@ -2738,9 +2739,7 @@ class TestSyncBookshelf:
         patron.last_loan_activity_sync = None
         overdrive_api_fixture.api.queue_response(200, content=loans_data)
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
         assert isinstance(holds, list)
         assert 4 == len(holds)
         assert sorted(holds) == sorted(patron.holds)
@@ -2766,9 +2765,7 @@ class TestSyncBookshelf:
         overdrive_api_fixture.api.queue_response(200, content=holds_data)
 
         # The hold not present in the sample data has been removed
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        loans, holds = overdrive_api_fixture.sync_bookshelf(patron)
         assert isinstance(holds, list)
         assert 4 == len(holds)
         assert holds == patron.holds
@@ -2799,9 +2796,7 @@ class TestSyncBookshelf:
 
         # overdrive_api_fixture.api doesn't know about the hold, but it was not
         # destroyed, because it came from a different collection.
-        loans, holds = overdrive_api_fixture.circulation.sync_bookshelf(
-            patron, "dummy pin"
-        )
+        overdrive_api_fixture.sync_bookshelf(patron)
         assert 5 == len(patron.holds)
         assert overdrive_hold in patron.holds
 
