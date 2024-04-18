@@ -24,11 +24,6 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Apt Packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install --yes libxmlsec1-dev libxml2-dev
-
     - name: Update pip
       run: |
         pip install --upgrade pip
