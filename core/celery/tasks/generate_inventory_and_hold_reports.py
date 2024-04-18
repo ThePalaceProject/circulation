@@ -23,7 +23,6 @@ from core.model import (
 )
 from core.opds_import import OPDSImporterSettings
 from core.service.celery.celery import QueueNames
-from core.service.container import container_instance
 from core.service.email.email import SendEmailCallable
 
 
@@ -281,10 +280,9 @@ class GenerateInventoryAndHoldsReportsJob(Job):
 def generate_inventory_and_hold_reports(
     task: Task, library_id: int, email_address: str
 ) -> None:
-    services = container_instance()
     GenerateInventoryAndHoldsReportsJob(
         task.session_maker,
         library_id=library_id,
         email_address=email_address,
-        send_email=services.email.container.send_email,
+        send_email=task.services.email.send_email,
     ).run()

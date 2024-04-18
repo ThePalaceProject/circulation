@@ -55,15 +55,9 @@ def test_job_run(
     collection.libraries.append(library2)
 
     # Configure test data we expect will not be picked up.
-    no_inventory_report_settings = OPDSImporterSettings(
-        include_in_inventory_report=False,
-        external_account_id="http://opds.com",
-        data_source="AnotherOpdsDataSource",
+    create_test_opds_collection(
+        "Another Test Collection", "AnotherOpdsDataSource", db, library, False
     )
-    collection_not_to_include = db.collection(
-        name="Another Test Collection", settings=no_inventory_report_settings.dict()
-    )
-    collection_not_to_include.libraries = [library]
 
     od_settings = OverdriveSettings(
         overdrive_website_id="overdrive_id",
@@ -261,9 +255,10 @@ def create_test_opds_collection(
     data_source: str,
     db: DatabaseTransactionFixture,
     library: Library,
+    include_in_inventory_report: bool = True,
 ):
     settings = OPDSImporterSettings(
-        include_in_inventory_report=True,
+        include_in_inventory_report=include_in_inventory_report,
         external_account_id="http://opds.com",
         data_source=data_source,
     )
@@ -280,9 +275,12 @@ def test_generate_inventory_and_hold_reports_task(
     library = db.library(short_name="test_library")
     # there must be at least one opds collection associated with the library for this to work
     create_test_opds_collection("c1", "d1", db, library)
-    send_email_mock = create_autospec(
-        services_fixture.services.email.container.send_email
-    )
-    services_fixture.services.email.container.send_email = send_email_mock
     generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
-    send_email_mock.assert_called_once()
+    services_fixture.email_fixture.mock_emailer.send.assert_called_once()
+    assert (
+        "Inventory and Holds Reports"
+        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["subject"]
+    )
+    assert services_fixture.email_fixture.mock_emailer.send.call_args.kwargs[
+        "receivers"
+    ] == ["test@email"]
