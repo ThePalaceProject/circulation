@@ -234,11 +234,10 @@ def test_job_run(
     assert "test_library" in holds_report_key
     holds_report_value = attachments[holds_report_key]
     assert holds_report_value
-    holds_report_reader = csv.DictReader(open(holds_report_value))
-    row_count = 0
+    holds_report_csv = list(csv.DictReader(open(holds_report_value)))
+    assert len(holds_report_csv) == 1
 
-    for row in holds_report_reader:
-        row_count += 1
+    for row in holds_report_csv:
         assert row["title"] == title
         assert row["author"] == author
         assert row["identifier"]
@@ -252,11 +251,9 @@ def test_job_run(
         assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
         assert int(row["library_active_hold_count"]) == 3
 
-        assert row_count == 1
-
-        # clean up files
-        for f in attachments.values():
-            os.remove(f)
+    # clean up files
+    for f in attachments.values():
+        os.remove(f)
 
 
 def create_test_opds_collection(
