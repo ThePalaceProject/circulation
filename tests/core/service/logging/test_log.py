@@ -61,6 +61,24 @@ class TestJSONFormatter:
         data = json.loads(formatter.format(record))
         assert "process" not in data
 
+    def test_format_thread(self, log_record: LogRecordCallable) -> None:
+        formatter = JSONFormatter()
+        record = log_record()
+
+        # Since we are in the main thread, the thread field is not included in the log.
+        data = json.loads(formatter.format(record))
+        assert "thread" not in data
+
+        # If the thread is None we also don't include it in the log.
+        record.thread = None
+        data = json.loads(formatter.format(record))
+        assert "thread" not in data
+
+        # But if we are not in the main thread, the thread field is included in the log.
+        record.thread = 12
+        data = json.loads(formatter.format(record))
+        assert data["thread"] == 12
+
     def test_format_exception(self, log_record: LogRecordCallable) -> None:
         formatter = JSONFormatter()
 
