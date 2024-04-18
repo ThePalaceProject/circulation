@@ -33,9 +33,6 @@ RUN install_clean \
       libpcre3-dev \
       # needed for psycopg2
       libpq-dev \
-      # needed for xmlsec
-      libxmlsec1-dev \
-      libxmlsec1-openssl \
       tzdata \
       pkg-config && \
     curl -sSL https://install.python-poetry.org | POETRY_HOME="/opt/poetry" python3 - --yes --version $POETRY_VERSION && \
@@ -53,7 +50,7 @@ RUN useradd -ms /bin/bash -U simplified && \
     mkdir /var/log/simplified
 
 WORKDIR /var/www/circulation
-COPY --chown=simplified:simplified poetry.lock poetry.toml pyproject.toml /var/www/circulation/
+COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulation/
 
 # Setup virtualenv and install our python dependencies.
 # What we install is based on the poetry.lock file in the repo at the time this
@@ -72,6 +69,5 @@ RUN python3 -m venv env && \
     rm -Rf /root/.cache && \
     rm pyproject.toml && \
     rm poetry.lock && \
-    rm poetry.toml && \
     rm -rf /root/.cache && \
     /bd_build/cleanup.sh

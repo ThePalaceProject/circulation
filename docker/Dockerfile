@@ -17,7 +17,7 @@ COPY docker/startup /etc/my_init.d/
 COPY --chmod=644 docker/services/logrotate /etc/
 
 # Copy our poetry files into the image and install our dependencies.
-COPY --chown=simplified:simplified poetry.lock poetry.toml pyproject.toml /var/www/circulation/
+COPY --chown=simplified:simplified poetry.lock pyproject.toml /var/www/circulation/
 RUN . env/bin/activate && \
     poetry install --only main,pg --sync --no-root
 

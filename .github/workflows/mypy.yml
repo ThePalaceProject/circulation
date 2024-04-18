@@ -23,11 +23,6 @@ jobs:
           cache: true
           cache-restore-only: true
 
-      - name: Install OS Packages 🧰
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libxmlsec1-dev libxml2-dev
-
       - name: Install Python Packages 📦
         run: poetry install --without ci --no-root
 
