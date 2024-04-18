@@ -2,7 +2,7 @@
 import datetime
 from datetime import timedelta
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
@@ -17,6 +17,7 @@ from api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    PatronActivityThread,
 )
 from api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -1441,21 +1442,23 @@ class TestCirculationAPI:
         data = api_bibliotheca_files_fixture.sample_data("checkouts.xml")
         mock_bibliotheca.queue_response(200, content=data)
 
-        loans, holds, complete = circulation.patron_activity(
-            circulation_api.patron, "1234"
-        )
+        with patch.object(PatronActivityThread, "api", return_value=mock_bibliotheca):
+            loans, holds, complete = circulation.patron_activity(
+                circulation_api.patron, "1234"
+            )
         assert 2 == len(loans)
         assert 2 == len(holds)
-        assert True == complete
+        assert complete is True
 
         mock_bibliotheca.queue_response(500, content="Error")
 
-        loans, holds, complete = circulation.patron_activity(
-            circulation_api.patron, "1234"
-        )
+        with patch.object(PatronActivityThread, "api", return_value=mock_bibliotheca):
+            loans, holds, complete = circulation.patron_activity(
+                circulation_api.patron, "1234"
+            )
         assert 0 == len(loans)
         assert 0 == len(holds)
-        assert False == complete
+        assert complete is False
 
     def test_can_fulfill_without_loan(self, circulation_api: CirculationAPIFixture):
         """Can a title can be fulfilled without an active loan?  It depends on
