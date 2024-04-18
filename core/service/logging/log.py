@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import socket
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from logging import Handler
 from typing import TYPE_CHECKING, Any
@@ -34,6 +35,7 @@ class JSONFormatter(logging.Formatter):
         if len(fqdn) > len(hostname):
             hostname = fqdn
         self.hostname = hostname
+        self.main_thread_id = threading.main_thread().ident
 
     def format(self, record: logging.LogRecord) -> str:
         def ensure_str(s: Any) -> Any:
@@ -80,6 +82,8 @@ class JSONFormatter(logging.Formatter):
             data["traceback"] = self.formatException(record.exc_info)
         if record.process:
             data["process"] = record.process
+        if record.thread and record.thread != self.main_thread_id:
+            data["thread"] = record.thread
 
         # If we are running in a Flask context, we include the request data in the log
         if flask_request:
