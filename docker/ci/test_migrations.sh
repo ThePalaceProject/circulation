@@ -76,9 +76,13 @@ success() {
   echo -e "${GREEN}Success:${RESET} ${MESSAGE}"
 }
 
+stderr_echo() {
+  echo "$@" 1>&2
+}
+
 # Run a docker-compose command
 compose_cmd() {
-  echo "++ docker compose $*" >&2
+  stderr_echo "++ docker compose $*"
   docker compose -f docker-compose.yml -f docker/ci/test_migrations.yml --progress quiet "$@"
 }
 
@@ -88,7 +92,7 @@ run_in_container()
 {
   local CONTAINER_NAME=$1
   shift 1
-  echo "+ $*" >&2
+  stderr_echo "+ $*"
   compose_cmd run --build --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
 }
 
