@@ -81,14 +81,16 @@ success() {
 
 debug_echo() {
   if [[ $DEBUG_ECHO_ENABLED -eq 1 ]]; then
-    echo "$@"
+    printf "%q " "$@"
+    printf "\n"
   fi
 }
 
 # Run a docker-compose command
 compose_cmd() {
-  debug_echo "++ docker compose $*"
-  docker compose -f docker-compose.yml -f docker/ci/test_migrations.yml --progress quiet "$@"
+  args=(docker compose -f docker-compose.yml -f docker/ci/test_migrations.yml --progress quiet)
+  debug_echo "++" "${args[@]}" "$@"
+  "${args[@]}" "$@"
 }
 
 # Run a command in a particular container using docker-compose
@@ -97,7 +99,7 @@ run_in_container()
 {
   local CONTAINER_NAME=$1
   shift 1
-  debug_echo "+ $*"
+  debug_echo "+" "$@"
   compose_cmd run --build --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
 }
 
@@ -118,8 +120,8 @@ error_and_cleanup() {
 # Run an alembic migration command in a container
 run_migrations() {
   local CONTAINER_NAME=$1
-  local ALEMBIC_CMD=$2
-  run_in_container "${CONTAINER_NAME}" "alembic ${ALEMBIC_CMD}"
+  shift 1
+  run_in_container "${CONTAINER_NAME}" "alembic" "$@"
   exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     error_and_cleanup "Running database migrations failed." $exit_code
@@ -130,7 +132,7 @@ run_migrations() {
 check_db() {
   local CONTAINER_NAME=$1
   local DETAILED_ERROR=$2
-  run_in_container "${CONTAINER_NAME}" "alembic check"
+  run_in_container "${CONTAINER_NAME}" alembic check
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     error_and_cleanup "Database is out of sync! ${DETAILED_ERROR}" $exit_code
@@ -190,20 +192,20 @@ gh_endgroup
 
 # Migrate up to the current commit and check if the database is in sync
 gh_group "Testing upgrade migrations"
-run_migrations "webapp" "upgrade head"
-check_db "webapp" "A new migration is required or a up migration is broken."
+run_migrations "webapp" upgrade head
+check_db "webapp" "A new migration is required or an up migration is broken."
 gh_endgroup
 
 # Migrate down to the first migration and check if the database is in sync
 gh_group "Testing downgrade migrations"
-run_migrations "webapp" "downgrade ${first_migration_id}"
+run_migrations "webapp" downgrade "${first_migration_id}"
 check_db "webapp-old" "A down migration is broken."
 gh_endgroup
 
 # Migrate back up once more to make sure that the database is still in sync
 gh_group "Testing upgrade migrations a second time"
-run_migrations "webapp" "upgrade head"
-check_db "webapp" "A up migration is likely broken."
+run_migrations "webapp" upgrade head
+check_db "webapp" "An up migration is likely broken."
 gh_endgroup
 
 echo ""
