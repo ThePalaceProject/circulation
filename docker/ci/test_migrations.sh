@@ -36,44 +36,54 @@ GREEN='\033[1;32m'       # Green
 # Keeps track of whether we are in a group or not
 IN_GROUP=0
 
+# Functions to interact with GitHub Actions
+# https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions
 gh_command() {
   local COMMAND=$1
   local MESSAGE=${2:-""}
   echo "::${COMMAND}::${MESSAGE}"
 }
 
+# Create a group of log lines
+# https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
 gh_group() {
   local MESSAGE=$1
   gh_command group "$MESSAGE"
   IN_GROUP=1
-#  set -x
 }
 
+# End a group of log lines
 gh_endgroup() {
   if [[ $IN_GROUP -eq 1 ]]; then
-#    set +x
     gh_command endgroup
     IN_GROUP=0
   fi
 }
 
+# Log an error message
+# Note: if this is called in a group, the group will be closed before the error message is logged.
 gh_error() {
   gh_endgroup
   local MESSAGE=$1
   gh_command error "$MESSAGE"
 }
 
+# Log a success message
+# Note: if this is called in a group, the group will be closed before the success message is logged.
 success() {
   gh_endgroup
   local MESSAGE=$1
   echo -e "${GREEN}Success:${RESET} ${MESSAGE}"
 }
 
+# Run a docker-compose command
 compose_cmd() {
   echo "++ docker compose $*" >&2
   docker compose -f docker-compose.yml -f docker/ci/test_migrations.yml --progress quiet "$@"
 }
 
+# Run a command in a particular container using docker-compose
+# The command is run in a bash shell with the palace virtualenv activated
 run_in_container()
 {
   local CONTAINER_NAME=$1
@@ -82,10 +92,12 @@ run_in_container()
   compose_cmd run --build --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
 }
 
+# Cleanup any running containers
 cleanup() {
   compose_cmd down
 }
 
+# Cleanup any running containers and exit with an error message
 error_and_cleanup() {
   local MESSAGE=$1
   local EXIT_CODE=$2
@@ -94,6 +106,7 @@ error_and_cleanup() {
   exit "$EXIT_CODE"
 }
 
+# Run an alembic migration command in a container
 run_migrations() {
   local CONTAINER_NAME=$1
   local ALEMBIC_CMD=$2
@@ -104,6 +117,7 @@ run_migrations() {
   fi
 }
 
+# Check if the database is in sync with the model
 check_db() {
   local CONTAINER_NAME=$1
   local DETAILED_ERROR=$2
@@ -115,8 +129,7 @@ check_db() {
   success "Database is in sync."
 }
 
-# Find all the info we need about the first migration in the git history
-# including its id, the file it was added in, and the commit it was added in.
+# Find all the info we need about the first migration in the git history.
 gh_group "Finding first migration"
 first_migration_id=$(run_in_container "webapp" alembic history -r'base:base+1' -v | head -n 1 | cut -d ' ' -f2)
 if [[ -z $first_migration_id ]]; then
@@ -128,7 +141,6 @@ if [[ -z $first_migration_file ]]; then
   error_and_cleanup "Could not find first migration file." 1
 fi
 
-# Find the git commit where the first migration file was added
 first_migration_commit=$(git log --follow --format=%H --reverse "${first_migration_file}" | head -n 1)
 if [[ -z $first_migration_commit ]]; then
   error_and_cleanup "Could not find first migration commit hash." 1
