@@ -36,6 +36,9 @@ GREEN='\033[1;32m'       # Green
 # Keeps track of whether we are in a group or not
 IN_GROUP=0
 
+# Allow a command to run without echoing its output
+DEBUG_ECHO_ENABLED=1
+
 # Functions to interact with GitHub Actions
 # https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions
 gh_command() {
@@ -76,13 +79,15 @@ success() {
   echo -e "${GREEN}Success:${RESET} ${MESSAGE}"
 }
 
-stderr_echo() {
-  echo "$@" 1>&2
+debug_echo() {
+  if [[ $DEBUG_ECHO_ENABLED -eq 1 ]]; then
+    echo "$@"
+  fi
 }
 
 # Run a docker-compose command
 compose_cmd() {
-  stderr_echo "++ docker compose $*"
+  debug_echo "++ docker compose $*"
   docker compose -f docker-compose.yml -f docker/ci/test_migrations.yml --progress quiet "$@"
 }
 
@@ -92,7 +97,7 @@ run_in_container()
 {
   local CONTAINER_NAME=$1
   shift 1
-  stderr_echo "+ $*"
+  debug_echo "+ $*"
   compose_cmd run --build --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
 }
 
@@ -135,7 +140,11 @@ check_db() {
 
 # Find all the info we need about the first migration in the git history.
 gh_group "Finding first migration"
+run_in_container "webapp" alembic history -r'base:base+1' -v
+# Debug echo is disabled since we are capturing the output of the command
+DEBUG_ECHO_ENABLED=0
 first_migration_id=$(run_in_container "webapp" alembic history -r'base:base+1' -v | head -n 1 | cut -d ' ' -f2)
+DEBUG_ECHO_ENABLED=1
 if [[ -z $first_migration_id ]]; then
   error_and_cleanup "Could not find first migration id." 1
 fi
