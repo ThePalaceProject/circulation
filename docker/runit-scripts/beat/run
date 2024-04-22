@@ -14,4 +14,4 @@ mkdir -p /var/run/celery
 chown 1000:1000 /var/run/celery
 
 # Start the celery beat process
-exec env/bin/celery -A "core.celery.worker.app" beat --uid 1000 --gid 1000 --logfile /var/log/celery/beat.log -s /var/run/celery/beat-schedule
+exec env/bin/celery -A "palace.manager.celery.app" beat --uid 1000 --gid 1000 --logfile /var/log/celery/beat.log -s /var/run/celery/beat-schedule

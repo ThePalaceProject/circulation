@@ -8,12 +8,16 @@ Create Date: 2024-03-18 01:34:28.381129+00:00
 from functools import cache
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm.session import Session
 
-from alembic import op
-from core.model import Identifier, get_one
-from core.model.time_tracking import _isbn_for_identifier, _title_for_identifier
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.time_tracking import (
+    _isbn_for_identifier,
+    _title_for_identifier,
+)
+from palace.manager.sqlalchemy.util import get_one
 
 # revision identifiers, used by Alembic.
 revision = "3e43ed59f256"

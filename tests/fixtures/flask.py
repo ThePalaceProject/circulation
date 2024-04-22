@@ -10,8 +10,10 @@ from flask.ctx import RequestContext
 from flask_babel import Babel
 from werkzeug.datastructures import ImmutableMultiDict
 
-from api.util.flask import PalaceFlask
-from core.model import Admin, AdminRole, Library, get_one_or_create
+from palace.manager.api.util.flask import PalaceFlask
+from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

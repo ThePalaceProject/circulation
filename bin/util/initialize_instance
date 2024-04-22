@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 """Initialize an instance of the Circulation Manager"""
-import os
-import sys
+from pathlib import Path
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-from scripts import InstanceInitializationScript
+# Load the alembic configuration relative to this script
+from palace.manager.scripts import InstanceInitializationScript
 
-InstanceInitializationScript().run()
+alembic_ini = Path(__file__).parent.parent.parent / "alembic.ini"
+
+InstanceInitializationScript(config_file=alembic_ini).run()

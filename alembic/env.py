@@ -1,9 +1,9 @@
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
-from core.config import Configuration
+from palace.manager.core.config import Configuration
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -19,9 +19,8 @@ if config.config_file_name is not None and config.attributes.get(
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-from core.model import LOCK_ID_DB_INIT, Base, pg_advisory_lock
+from palace.manager.sqlalchemy.model.base import Base
+from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, pg_advisory_lock
 
 target_metadata = Base.metadata
 
@@ -29,15 +28,6 @@ target_metadata = Base.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-
-
-# Import the models not included in models/__init__.py
-# This is required for autogenerate to work correctly
-from api.saml.metadata.federations.model import (  # noqa: autoflake
-    SAMLFederatedIdentityProvider,
-    SAMLFederation,
-)
-from core.lane import Lane, LaneGenre  # noqa: autoflake
 
 
 def run_migrations_offline() -> None:

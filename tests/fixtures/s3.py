@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.service.storage.s3 import MultipartS3ContextManager, S3Service
+from palace.manager.service.storage.s3 import MultipartS3ContextManager, S3Service
 
 if sys.version_info >= (3, 11):
     from typing import Self

@@ -7,12 +7,8 @@ filling in a gap in the data provided by Bibliotheca:
 
 bin/repair/add_classification --identifier-type="Bibliotheca ID" --subject-type="schema:audience" --subject-identifier="Children" hzb1oz9
 """
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-from core.scripts import AddClassificationScript
+
+from palace.manager.core.scripts import AddClassificationScript
 
 AddClassificationScript().run()

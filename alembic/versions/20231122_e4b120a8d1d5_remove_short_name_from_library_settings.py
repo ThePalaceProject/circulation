@@ -6,8 +6,9 @@ Create Date: 2023-11-22 16:28:55.759169+00:00
 
 """
 from alembic import op
-from core.migration.util import migration_logger
-from core.model import json_serializer
+
+from palace.manager.sqlalchemy.session import json_serializer
+from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "e4b120a8d1d5"

@@ -72,4 +72,4 @@ repos:
           - scan
 
 # Exclude test files, since they may be intentionally malformed
-exclude: ^tests/(core|api)/files/
+exclude: ^tests/files/

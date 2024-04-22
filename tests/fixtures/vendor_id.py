@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from core.model import IntegrationConfiguration, Library, create
-from core.model.discovery_service_registration import (
+from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStatus,
 )
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.util import create
 from tests.fixtures.database import (
     DatabaseTransactionFixture,
     IntegrationConfigurationFixture,

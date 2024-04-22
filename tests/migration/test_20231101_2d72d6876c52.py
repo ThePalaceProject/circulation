@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
-from core.model import json_serializer
+from palace.manager.sqlalchemy.session import json_serializer
 from tests.migration.conftest import (
     CreateConfigSetting,
     CreateExternalIntegration,

@@ -1,19 +1,14 @@
 #!/usr/bin/env python
 """Update the circulation manager server with new books from
 OPDS import collections."""
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
 
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 
-from api.odl2 import ODL2Importer
-from core.opds2_import import RWPMManifestParser
-from core.opds_schema import ODL2SchemaValidation
-from core.scripts import RunCollectionMonitorScript
+from palace.manager.api.odl2 import ODL2Importer
+from palace.manager.core.opds2_import import RWPMManifestParser
+from palace.manager.core.opds_schema import ODL2SchemaValidation
+from palace.manager.core.scripts import RunCollectionMonitorScript
 
 import_script = RunCollectionMonitorScript(
     ODL2SchemaValidation,

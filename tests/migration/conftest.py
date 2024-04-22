@@ -11,15 +11,14 @@ import pytest
 import pytest_alembic
 from pytest_alembic.config import Config
 
-from core.model import json_serializer
+from palace.manager.sqlalchemy.session import json_serializer
 from tests.fixtures.database import ApplicationFixture, DatabaseFixture
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
+    import alembic.config
     from pytest_alembic import MigrationContext
     from sqlalchemy.engine import Connection, Engine
-
-    import alembic.config
 
 
 pytest_plugins = [

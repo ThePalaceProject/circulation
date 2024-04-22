@@ -2,13 +2,9 @@
 """Re-index any Works whose entries in the search index have become
 out of date.
 """
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..")
-sys.path.append(os.path.abspath(package_dir))
-from core.scripts import RunWorkCoverageProviderScript
-from core.search.coverage_provider import SearchIndexCoverageProvider
+
+from palace.manager.core.scripts import RunWorkCoverageProviderScript
+from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
 
 RunWorkCoverageProviderScript(SearchIndexCoverageProvider).run()

@@ -191,7 +191,7 @@ pass a broker URL to the application.
 
 We support overriding a number of other Celery settings via environment variables, but in most cases
 the defaults should be sufficient. The full list of settings can be found in
-[`service/celery/configuration.py`](core/service/celery/configuration.py).
+[`service/celery/configuration.py`](src/palace/manager/service/celery/configuration.py).
 
 #### General
 
@@ -359,7 +359,7 @@ curl http://localhost:6500/
 You can start a celery worker with:
 
 ```sh
-poetry run celery -A "core.celery.worker.app" worker --concurrency 1 --pool solo --beat
+poetry run celery -A "palace.manager.celery.app" worker --concurrency 1 --pool solo --beat
 ```
 
 ### The Admin Interface

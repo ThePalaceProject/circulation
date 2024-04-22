@@ -2,23 +2,23 @@ from typing import Optional
 
 import pytest
 
-from api.authentication.base import AuthenticationProviderType
-from api.integration.registry.patron_auth import PatronAuthRegistry
-from api.millenium_patron import MilleniumPatronAPI
-from api.saml.provider import SAMLWebSSOAuthenticationProvider
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.sip import SIP2AuthenticationProvider
-from core.integration.goals import Goals
-from core.model import Library
-from core.model.integration import (
+from palace.manager.api.authentication.base import AuthenticationProviderType
+from palace.manager.api.millenium_patron import MilleniumPatronAPI
+from palace.manager.api.saml.provider import SAMLWebSSOAuthenticationProvider
+from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
+from palace.manager.api.sip import SIP2AuthenticationProvider
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
+from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from tests.api.saml.saml_strings import CORRECT_XML_WITH_ONE_SP
+from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import (
     IntegrationConfigurationFixture,
     IntegrationLibraryConfigurationFixture,
 )
+from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
 
 AuthProviderFixture = tuple[
     IntegrationConfiguration, Optional[IntegrationLibraryConfiguration]

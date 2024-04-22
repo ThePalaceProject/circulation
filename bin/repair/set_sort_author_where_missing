@@ -5,12 +5,8 @@ Contributors, but no .sort_author.
 This is a data repair script that should not need to be run
 regularly.
 """
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-from scripts import FillInAuthorScript
+
+from palace.manager.scripts import FillInAuthorScript
 
 FillInAuthorScript().run()

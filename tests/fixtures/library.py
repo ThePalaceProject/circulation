@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.configuration.library import LibrarySettings
-from core.model import Library
+from palace.manager.integration.configuration.library import LibrarySettings
+from palace.manager.sqlalchemy.model.library import Library
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture

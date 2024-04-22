@@ -3,8 +3,8 @@ import datetime
 import pytest
 from sqlalchemy.orm import Session
 
-from core.model import Library
-from core.model.announcements import Announcement, AnnouncementData
+from palace.manager.sqlalchemy.model.announcements import Announcement, AnnouncementData
+from palace.manager.sqlalchemy.model.library import Library
 
 
 class AnnouncementFixture:

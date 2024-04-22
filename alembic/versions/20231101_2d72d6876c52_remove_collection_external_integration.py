@@ -9,13 +9,15 @@ from collections import deque
 from dataclasses import dataclass
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from alembic import op
-from api.integration.registry.license_providers import LicenseProvidersRegistry
-from core.integration.base import HasChildIntegrationConfiguration
-from core.migration.util import migration_logger
-from core.model import json_serializer
+from palace.manager.integration.base import HasChildIntegrationConfiguration
+from palace.manager.integration.registry.license_providers import (
+    LicenseProvidersRegistry,
+)
+from palace.manager.sqlalchemy.session import json_serializer
+from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "2d72d6876c52"

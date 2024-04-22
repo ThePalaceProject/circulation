@@ -6,14 +6,14 @@ import pytest
 from opensearchpy import OpenSearch
 from pydantic import AnyHttpUrl
 
-from core.external_search import ExternalSearchIndex
-from core.model import Work
-from core.search.coverage_provider import SearchIndexCoverageProvider
-from core.search.service import SearchServiceOpensearch1
-from core.service.configuration import ServiceConfiguration
-from core.service.container import Services, wire_container
-from core.service.search.container import Search
-from core.util.log import LoggerMixin
+from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
+from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.service import SearchServiceOpensearch1
+from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.container import Services, wire_container
+from palace.manager.service.search.container import Search
+from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.log import LoggerMixin
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFake

@@ -1,0 +1,130 @@
+#!/bin/bash
+#
+# Ensures that Palace Manager scripts don't run
+# if they've already been started elsewhere. It takes the filename of a
+# script as an argument, and should be used to run all Library Simplified
+# scripts, since it creates and checks again a particular PIDFILE.
+#
+# This file should be placed in your Palace Manager's
+# /bin directory. It assumes your PALACE_DIR is /var/www/circulation
+# unless you set the environment variable otherwise.
+
+# Process an optional delay in starting the script. This parameter takes
+# the maximum number of minutes to delay (using sleep) the start of the script
+# to be run. This allows us to stagger script start times in cron so all the
+# scripts don't hit the database at the same time.
+# example: bin/run -d 12 script
+# Will delay starting the script between 0 - 12 minutes
+while getopts ":d:" opt; do
+  case $opt in
+    d)
+      DELAY=$((RANDOM % OPTARG))
+      sleep $((DELAY * 60))
+      # Fix parameter order for rest of script.
+      shift
+      shift
+      ;;
+    :)
+      echo "Option -$OPTARG requires an argument."
+      exit 127
+      ;;
+    *) echo "unknown arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# This is the full script as entered and may include a directory name
+# relative to Library Simplified directory/circulation/bin.
+SCRIPT_PATH="$1"
+
+if [[ -z "$SCRIPT_PATH" ]]; then
+  echo "No script provided."
+  exit 126
+fi
+
+# Grab the script name for logging purposes.
+SCRIPT_NAME=$(basename "$SCRIPT_PATH")
+
+# Shift so any remaining arguments can be passed to the script itself.
+shift
+
+piddir=/var/run/simplified
+pidfile=$piddir/$SCRIPT_NAME.pid
+logdir=/var/log/simplified
+logfile=$logdir/$SCRIPT_NAME.log
+
+# Assume this run file is in bin/
+# unless the Library Simplified directory has been set as an environment
+# variable $PALACE_DIR
+if [[ -z "$PALACE_DIR" ]]; then
+  PALACE_DIR=$(dirname "$0")
+fi
+
+create_dir () {
+  local dir="$1"
+
+  if [[ ! -d $dir ]]; then
+    if [[ $UID -ne 0 ]]; then
+      # for non-root users
+      sudo mkdir -p "$dir" && sudo chown "$USER" "$dir"
+    else
+      # for root
+      mkdir -p "$dir"
+    fi
+  fi
+}
+
+create_pidfile () {
+  local pid="$1"
+  local pidfile="$2"
+
+  echo "$pid" > "$pidfile"
+  if [[ $? -ne 0 ]]; then
+    echo "Could not create PID file"
+    exit 1
+  fi
+  echo "$SCRIPT_NAME PIDFILE created: $pidfile"
+}
+
+# Create a directory for Library Simplified PID files
+create_dir $piddir
+
+# Check that the script exists.
+FULL_SCRIPT_PATH=$PALACE_DIR/bin/$SCRIPT_PATH
+if [[ ! -f $FULL_SCRIPT_PATH ]]; then
+  echo "$SCRIPT_PATH wasn't found in $PALACE_DIR/bin"
+  exit 1
+fi
+
+# Confirm that process isn't still running && create PID file
+if [[ -f $pidfile ]]; then
+  pid=$(cat "$pidfile")
+  ps -p "$pid" > /dev/null 2>&1
+  if [[ $? -eq 0 ]]; then
+    # Last recorded PID was found in running processes
+    echo "$SCRIPT_NAME is already running"
+    exit 1
+  else
+    # Last recorded PID not running
+    create_pidfile $$ "$pidfile"
+  fi
+else
+  # No PID file; assume script not running
+  create_pidfile $$ "$pidfile"
+fi
+
+# Create a log file for this script if one doesn't exist
+create_dir $logdir
+if [[ ! -f $logfile ]]; then
+    touch "$logfile"
+fi
+
+# Run the script and append its output to its log file.
+echo "Running $SCRIPT_NAME (PID: $$)"
+source "$PALACE_DIR"/env/bin/activate && \
+  $FULL_SCRIPT_PATH "$@" >> "$logfile" 2>&1
+
+# When it's done, remove the PID file.
+rm "$pidfile"
+exit 0

@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from core.util.log import LoggerMixin
+from palace.manager.util.log import LoggerMixin
 
 
 class MockAPIServerRequest:
