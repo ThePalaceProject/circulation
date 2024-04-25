@@ -589,7 +589,7 @@ to test with the tox `-e` flag.
 
 ### Factors
 
-When running tox without an environment specified, it tests `circulation` and `core` using all supported Python versions
+When running tox without an environment specified, it tests using all supported Python versions
 with service dependencies running in docker containers.
 
 #### Python version
@@ -602,10 +602,10 @@ with service dependencies running in docker containers.
 All of these environments are tested by default when running tox. To test one specific environment you can use the `-e`
 flag.
 
-Test Python 3.8
+Test Python 3.10
 
 ```sh
-tox -e py38
+tox -e py310
 ```
 
 You need to have the Python versions you are testing against installed on your local system. `tox` searches the system
@@ -614,13 +614,6 @@ looking for it will give an `InterpreterNotFound` errror.
 
 [Pyenv](#pyenv) is a useful tool to install multiple Python versions, if you need to install
 missing Python versions in your system for local testing.
-
-#### Module
-
-| Factor      | Module            |
-| ----------- | ----------------- |
-| core        | core tests        |
-| api         | api tests         |
 
 #### Docker
 
@@ -632,10 +625,10 @@ on the Github Actions CI server. `tox-docker` is automatically included when ins
 The docker functionality is included in a `docker` factor that can be added to the environment. To run an environment
 with a particular factor you add it to the end of the environment.
 
-Test with Python 3.8 using docker containers for the services.
+Test with Python 3.10 using docker containers for the services.
 
 ```sh
-tox -e "py38-{api,core}-docker"
+tox -e "py310-docker"
 ```
 
 ### Local services
@@ -654,7 +647,7 @@ export SIMPLIFIED_TEST_DATABASE="postgresql://simplified_test:test@localhost:900
 export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
 
 # Run tox
-tox -e "py38-{api,core}"
+tox -e "py310"
 ```
 
 ### Override `pytest` arguments
@@ -662,10 +655,10 @@ tox -e "py38-{api,core}"
 If you wish to pass additional arguments to `pytest` you can do so through `tox`. Every argument passed after a `--` to
 the `tox` command line will the passed to `pytest`, overriding the default.
 
-Only run the `test_google_analytics_provider` tests with Python 3.8 using docker.
+Only run the `service` tests with Python 3.11 using docker.
 
 ```sh
-tox -e "py38-api-docker" -- tests/api/test_google_analytics_provider.py
+tox -e "py311-docker" -- tests/manager/service
 ```
 
 ### Environment Variables
