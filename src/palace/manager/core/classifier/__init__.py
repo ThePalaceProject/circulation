@@ -13,7 +13,6 @@
 import logging
 import re
 from collections import Counter
-from importlib.resources import files
 
 from sqlalchemy.orm.session import Session
 

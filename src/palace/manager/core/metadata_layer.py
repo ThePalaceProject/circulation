@@ -1856,17 +1856,19 @@ class Metadata:
         for identifier in self.recommendations:
             by_type[identifier.type].append(identifier.identifier)
 
-        self.recommendations = []
+        recommendations = set()
         for type, identifiers in list(by_type.items()):
             existing_identifiers = (
                 _db.query(Identifier)
                 .filter(Identifier.type == type)
                 .filter(Identifier.identifier.in_(identifiers))
             )
-            self.recommendations += existing_identifiers.all()
+            recommendations.update(existing_identifiers.all())
 
-        if self.primary_identifier in self.recommendations:
-            self.recommendations.remove(identifier_data)
+        if self.primary_identifier in recommendations:
+            recommendations.remove(self.primary_identifier)
+
+        self.recommendations = list(recommendations)
 
 
 class CSVFormatError(csv.Error):
