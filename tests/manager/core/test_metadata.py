@@ -1014,9 +1014,20 @@ class TestMetadata:
         metadata.filter_recommendations(db.session)
         [result] = metadata.recommendations
         # The IdentifierData has been replaced by a bonafide Identifier.
-        assert True == isinstance(result, Identifier)
-        # The genuwine article.
+        assert isinstance(result, Identifier)
+        # The genuine article.
         assert known_identifier == result
+
+        # Recommendations are filtered to make sure the primary identifier is not recommended.
+        primary_identifier = db.identifier()
+        metadata = Metadata(DataSource.OVERDRIVE, primary_identifier=primary_identifier)
+        metadata.recommendations = [
+            known_identifier_data,
+            unknown_identifier,
+            primary_identifier,
+        ]
+        metadata.filter_recommendations(db.session)
+        assert [known_identifier] == metadata.recommendations
 
     def test_metadata_can_be_deepcopied(self):
         # Check that we didn't put something in the metadata that

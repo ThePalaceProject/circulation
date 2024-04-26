@@ -143,14 +143,6 @@ def is_corporate_name(display_name):
     return False
 
 
-def is_one_name(human_name):
-    """Examples: 'Pope Francis', 'Prince'."""
-    if name.first and not name.last:
-        return True
-
-    return False
-
-
 def display_name_to_sort_name(display_name):
     """
     Take the "First Name Last Name"-formatted display_name, and convert it

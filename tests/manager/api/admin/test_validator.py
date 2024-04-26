@@ -1,11 +1,6 @@
-import pytest
 from werkzeug.datastructures import MultiDict
 
-import palace.manager.sqlalchemy.util
 from palace.manager.api.admin.validator import Validator
-from tests.manager.api.admin.dummy_validator.dummy_validator import (
-    DummyAuthenticationProviderValidator,
-)
 
 
 class MockValidations:
@@ -249,25 +244,3 @@ class TestValidator:
         # You can make specific URLs go through even if they
         # wouldn't normally pass.
         assert True == m("Not a URL", ["Not a URL", "Also not a URL"])
-
-
-class PatronAuthenticationValidatorFactoryTest:
-    @pytest.mark.parametrize(
-        "name,protocol",
-        [
-            ("validator_using_class_name", "tests.admin.fixtures.dummy_validator"),
-            (
-                "validator_using_factory_method",
-                "tests.admin.fixtures.dummy_validator_factory",
-            ),
-        ],
-    )
-    def test_create_can_create(self, name, protocol):
-        # Arrange
-        factory = PatronAuthenticationValidatorFactory()
-
-        # Act
-        result = palace.manager.sqlalchemy.util.create(protocol)
-
-        # Assert
-        assert isinstance(result, DummyAuthenticationProviderValidator)
