@@ -35,7 +35,7 @@ while getopts ":d:" opt; do
 done
 
 # This is the full script as entered and may include a directory name
-# relative to Library Simplified directory/circulation/bin.
+# relative to circulation/bin.
 SCRIPT_PATH="$1"
 
 if [[ -z "$SCRIPT_PATH" ]]; then
@@ -54,11 +54,11 @@ pidfile=$piddir/$SCRIPT_NAME.pid
 logdir=/var/log/simplified
 logfile=$logdir/$SCRIPT_NAME.log
 
-# Assume this run file is in bin/
-# unless the Library Simplified directory has been set as an environment
-# variable $PALACE_DIR
+# Assume this run file is in bin/ unless the Palace directory has been set
+# as an environment variable $PALACE_DIR. If it hasn't been set, we'll
+# assume the main Palace directory is one level up from the bin directory.
 if [[ -z "$PALACE_DIR" ]]; then
-  PALACE_DIR=$(dirname "$0")
+  PALACE_DIR=$(dirname "$(dirname "$(readlink -f "$0")")")
 fi
 
 create_dir () {
