@@ -8,15 +8,15 @@ from opensearch_dsl import MultiSearch, Search
 from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
-from core.external_search import ExternalSearchIndex
-from core.model.work import Work
-from core.search.revision import SearchSchemaRevision
-from core.search.revision_directory import SearchRevisionDirectory
-from core.search.service import (
+from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.search.revision_directory import SearchRevisionDirectory
+from palace.manager.search.service import (
     SearchService,
     SearchServiceFailedDocument,
     SearchWritePointer,
 )
+from palace.manager.sqlalchemy.model.work import Work
 
 
 class SearchServiceFailureMode(Enum):

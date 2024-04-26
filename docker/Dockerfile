@@ -23,6 +23,9 @@ RUN . env/bin/activate && \
 
 COPY --chown=simplified:simplified . /var/www/circulation
 
+RUN . env/bin/activate && \
+    poetry install --only-root
+
 ###############################################################################
 ## Circ-exec Image
 ###############################################################################

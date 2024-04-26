@@ -1,16 +1,11 @@
 #!/usr/bin/env python
 """Adds SAML federation metadata to `samlfederations` table."""
 
-import os
-import sys
 from contextlib import closing
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-
-from api.saml.metadata.federations import incommon
-from core.model import SAMLFederation, production_session
+from palace.manager.api.saml.metadata.federations import incommon
+from palace.manager.sqlalchemy.model.saml import SAMLFederation
+from palace.manager.sqlalchemy.session import production_session
 
 with closing(production_session()) as db:
     incommon_federation = (

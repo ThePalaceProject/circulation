@@ -6,12 +6,14 @@ import flask
 import pytest
 from werkzeug.exceptions import MethodNotAllowed
 
-from api import routes
-from api.controller.circulation_manager import CirculationManagerController
-from tests.api.mockapi.circulation import MockCirculationManager
+from palace.manager.api import routes
+from palace.manager.api.controller.circulation_manager import (
+    CirculationManagerController,
+)
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+from tests.mocks.circulation import MockCirculationManager
 
 
 class MockApp:

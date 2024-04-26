@@ -6,16 +6,17 @@ Create Date: 2024-01-24 23:51:13.464107+00:00
 
 """
 from alembic import op
-from api.integration.registry.metadata import MetadataRegistry
-from core.integration.base import HasLibraryIntegrationConfiguration
-from core.migration.migrate_external_integration import (
+
+from palace.manager.integration.base import HasLibraryIntegrationConfiguration
+from palace.manager.integration.registry.metadata import MetadataRegistry
+from palace.manager.util.migration.helpers import pg_update_enum
+from palace.manager.util.migration.migrate_external_integration import (
     _migrate_external_integration,
     _migrate_library_settings,
     get_configuration_settings,
     get_integrations,
     get_library_for_integration,
 )
-from core.migration.util import pg_update_enum
 
 # revision identifiers, used by Alembic.
 revision = "993729d4bf97"

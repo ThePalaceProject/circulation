@@ -8,8 +8,8 @@ from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
-from core.model import SessionManager
-from scripts import InstanceInitializationScript
+from palace.manager.scripts import InstanceInitializationScript
+from palace.manager.sqlalchemy.session import SessionManager
 from tests.fixtures.database import ApplicationFixture
 from tests.fixtures.services import mock_services_container
 

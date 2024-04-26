@@ -8,37 +8,36 @@ from typing import Any
 
 import flask
 import pytest
+from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
-from api.adobe_vendor_id import AuthdataUtility
-from api.app import app
-from api.circulation_manager import CirculationManager
-from api.controller.circulation_manager import CirculationManagerController
-from api.integration.registry.patron_auth import PatronAuthRegistry
-from api.lanes import create_default_lanes
-from api.simple_authentication import SimpleAuthenticationProvider
-from api.util.flask import PalaceFlask
-from core.configuration.library import LibrarySettings
-from core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
-from core.integration.goals import Goals
-from core.lane import Lane
-from core.model import (
-    Collection,
-    Library,
-    Patron,
-    Session,
-    Work,
-    create,
-    get_one_or_create,
+from palace.manager.api.adobe_vendor_id import AuthdataUtility
+from palace.manager.api.app import app
+from palace.manager.api.circulation_manager import CirculationManager
+from palace.manager.api.controller.circulation_manager import (
+    CirculationManagerController,
 )
-from core.model.integration import (
+from palace.manager.api.lanes import create_default_lanes
+from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
+from palace.manager.api.util.flask import PalaceFlask
+from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
+from palace.manager.integration.configuration.library import LibrarySettings
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from core.util import base64
-from tests.api.mockapi.circulation import MockCirculationManager
+from palace.manager.sqlalchemy.model.lane import Lane
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.util import create, get_one_or_create
+from palace.manager.util import base64
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+from tests.mocks.circulation import MockCirculationManager
 from tests.mocks.search import ExternalSearchIndexFake
 
 

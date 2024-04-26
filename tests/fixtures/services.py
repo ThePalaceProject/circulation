@@ -10,28 +10,28 @@ import boto3
 import pytest
 from celery import Celery
 
-from core.analytics import Analytics
-from core.external_search import ExternalSearchIndex
-from core.search.revision_directory import SearchRevisionDirectory
-from core.search.service import SearchServiceOpensearch1
-from core.service.analytics.container import AnalyticsContainer
-from core.service.celery.container import CeleryContainer
-from core.service.container import Services, wire_container
-from core.service.email.configuration import EmailConfiguration
-from core.service.email.container import Email
-from core.service.logging.container import Logging
-from core.service.logging.log import setup_logging
-from core.service.search.container import Search
-from core.service.sitewide import SitewideConfiguration
-from core.service.storage.container import Storage
-from core.service.storage.s3 import S3Service
+from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.revision_directory import SearchRevisionDirectory
+from palace.manager.search.service import SearchServiceOpensearch1
+from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.analytics.container import AnalyticsContainer
+from palace.manager.service.celery.container import CeleryContainer
+from palace.manager.service.container import Services, wire_container
+from palace.manager.service.email.configuration import EmailConfiguration
+from palace.manager.service.email.container import Email
+from palace.manager.service.logging.container import Logging
+from palace.manager.service.logging.log import setup_logging
+from palace.manager.service.search.container import Search
+from palace.manager.service.sitewide import SitewideConfiguration
+from palace.manager.service.storage.container import Storage
+from palace.manager.service.storage.s3 import S3Service
 
 
 @contextmanager
 def mock_services_container(
     services_container: Services,
 ) -> Generator[None, None, None]:
-    from core.service import container
+    from palace.manager.service import container
 
     container._container_instance = services_container
     yield

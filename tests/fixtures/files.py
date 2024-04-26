@@ -1,34 +1,9 @@
-import os
 from pathlib import Path
-from typing import TextIO
 
 import pytest
 
-
-class ResourcesFilesFixture:
-    """A fixture providing access to resource files."""
-
-    """These are files that are served by the CM in production, and aren't test suite specific."""
-
-    def __init__(self):
-        self._base_path = Path(__file__).parent.parent.parent
-        self._resource_path = os.path.join(self._base_path, "resources", "images")
-
-    def sample_data(self, filename) -> bytes:
-        with open(self.sample_path(filename), "rb") as fh:
-            return fh.read()
-
-    def sample_text(self, filename) -> str:
-        with open(self.sample_path(filename)) as fh:
-            return fh.read()
-
-    def sample_path(self, filename) -> str:
-        return os.path.join(self._resource_path, filename)
-
-
-@pytest.fixture(scope="session")
-def resources_files_fixture() -> ResourcesFilesFixture:
-    return ResourcesFilesFixture()
+from palace.manager.sqlalchemy.model.resource import Representation
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class FilesFixture:
@@ -36,41 +11,72 @@ class FilesFixture:
 
     def __init__(self, directory: str):
         self._base_path = Path(__file__).parent.parent
-        self._resource_path = os.path.join(self._base_path, "core", "files", directory)
+        self.directory = self._base_path / "files" / directory
 
     def sample_data(self, filename) -> bytes:
-        with open(self.sample_path(filename), "rb") as fh:
-            return fh.read()
+        return self.sample_path(filename).read_bytes()
 
     def sample_text(self, filename) -> str:
-        with open(self.sample_path(filename)) as fh:
-            return fh.read()
+        return self.sample_path(filename).read_text()
 
-    def sample_path(self, filename) -> str:
-        return os.path.join(self._resource_path, filename)
+    def sample_path(self, filename) -> Path:
+        return self.directory / filename
 
-    def sample_fd(self, filename) -> TextIO:
-        return open(self.sample_path(filename))
+    def sample_path_str(self, filename) -> str:
+        return str(self.sample_path(filename))
 
 
-class APIFilesFixture:
-    """A fixture providing access to API test files."""
+class BibliothecaFilesFixture(FilesFixture):
+    """A fixture providing access to Bibliotheca files."""
 
-    def __init__(self, directory: str):
-        self._base_path = Path(__file__).parent.parent
-        self._resource_path = os.path.join(self._base_path, "api", "files", directory)
+    def __init__(self):
+        super().__init__("bibliotheca")
 
-    @property
-    def directory(self) -> str:
-        return self._resource_path
+    @staticmethod
+    def files() -> "BibliothecaFilesFixture":
+        return BibliothecaFilesFixture()
 
-    def sample_data(self, filename) -> bytes:
-        with open(self.sample_path(filename), "rb") as fh:
-            return fh.read()
 
-    def sample_text(self, filename) -> str:
-        with open(self.sample_path(filename)) as fh:
-            return fh.read()
+@pytest.fixture()
+def bibliotheca_files_fixture() -> BibliothecaFilesFixture:
+    """A fixture providing access to Bibliotecha files."""
+    return BibliothecaFilesFixture()
 
-    def sample_path(self, filename) -> str:
-        return os.path.join(self._resource_path, filename)
+
+class OPDSFilesFixture(FilesFixture):
+    """A fixture providing access to OPDS files."""
+
+    def __init__(self):
+        super().__init__("opds")
+
+
+@pytest.fixture()
+def opds_files_fixture() -> OPDSFilesFixture:
+    """A fixture providing access to OPDS files."""
+    return OPDSFilesFixture()
+
+
+class SampleCoversFixture(FilesFixture):
+    """A fixture providing access to sample cover images."""
+
+    def __init__(self, db: DatabaseTransactionFixture):
+        super().__init__("covers")
+        self.db = db
+
+    def sample_cover_path(self, name: str) -> str:
+        """The path to the sample cover with the given filename."""
+        return str(self.sample_path(name))
+
+    def sample_cover_representation(self, name: str) -> Representation:
+        """A Representation of the sample cover with the given filename."""
+        representation, _ = self.db.representation(
+            media_type="image/png", content=self.sample_data(name)
+        )
+        return representation
+
+
+@pytest.fixture()
+def sample_covers_fixture(
+    db: DatabaseTransactionFixture,
+) -> SampleCoversFixture:
+    return SampleCoversFixture(db)

@@ -19,46 +19,47 @@ from sqlalchemy import MetaData
 from sqlalchemy.engine import Connection, Engine, Transaction
 from sqlalchemy.orm import Session, sessionmaker
 
-import core.lane
-from api.discovery.opds_registration import OpdsRegistrationService
-from api.integration.registry.discovery import DiscoveryRegistry
-from core.classifier import Classifier
-from core.config import Configuration
-from core.configuration.library import LibrarySettings
-from core.integration.goals import Goals
-from core.model import (
+from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
+from palace.manager.core.classifier import Classifier
+from palace.manager.core.config import Configuration
+from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.configuration.library import LibrarySettings
+from palace.manager.integration.goals import Goals
+from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.classification import (
     Classification,
-    Collection,
-    Contributor,
-    CoverageRecord,
-    Credential,
-    CustomList,
-    DataSource,
-    DeliveryMechanism,
-    Edition,
     Genre,
-    Hyperlink,
-    Identifier,
-    Library,
-    LicensePool,
-    MediaTypes,
-    Patron,
-    Representation,
-    RightsStatus,
-    SessionManager,
     Subject,
-    Work,
-    WorkCoverageRecord,
-    create,
-    get_one_or_create,
 )
-from core.model.integration import (
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.sqlalchemy.model.coverage import CoverageRecord, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.customlist import CustomList
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
-from core.model.licensing import License, LicensePoolDeliveryMechanism, LicenseStatus
-from core.opds_import import OPDSAPI
-from core.util.datetime_helpers import utc_now
+from palace.manager.sqlalchemy.model.lane import Lane
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    License,
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+    LicenseStatus,
+    RightsStatus,
+)
+from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.session import SessionManager
+from palace.manager.sqlalchemy.util import create, get_one_or_create
+from palace.manager.util.datetime_helpers import utc_now
 
 
 class ApplicationFixture:
@@ -115,9 +116,9 @@ class DatabaseFixture:
     @staticmethod
     def _load_core_model_classes():
         # Load all the core model classes so that they are registered with the ORM.
-        import core.model
+        import palace.manager.sqlalchemy.model
 
-        importlib.reload(core.model)
+        importlib.reload(palace.manager.sqlalchemy.model)
 
     @classmethod
     def create(cls) -> DatabaseFixture:
@@ -564,7 +565,7 @@ class DatabaseTransactionFixture:
         library = library or self.default_library()
         lane, is_new = create(
             self.session,
-            core.lane.Lane,
+            Lane,
             library=library,
             parent=parent,
             display_name=display_name,

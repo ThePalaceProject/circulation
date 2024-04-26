@@ -6,24 +6,20 @@ from typing import Any
 import pytest
 from pytest import MonkeyPatch
 
-from api.circulation import LoanInfo
-from api.odl import ODLAPI, BaseODLAPI
-from api.odl2 import ODL2API
-from core.model import (
-    Collection,
-    Library,
-    License,
-    LicensePool,
-    Loan,
-    Patron,
-    Representation,
-    Work,
-)
-from core.util.http import HTTP
-from tests.core.mock import MockRequestsResponse
+from palace.manager.api.circulation import LoanInfo
+from palace.manager.api.odl import ODLAPI, BaseODLAPI
+from palace.manager.api.odl2 import ODL2API
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import License, LicensePool
+from palace.manager.sqlalchemy.model.patron import Loan, Patron
+from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.http import HTTP
 from tests.fixtures.api_odl import ODL2APIFilesFixture, ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import APIFilesFixture
+from tests.fixtures.files import FilesFixture
+from tests.mocks.mock import MockRequestsResponse
 
 
 class MonkeyPatchedODLFixture:
@@ -76,7 +72,7 @@ class ODLTestFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        files: APIFilesFixture,
+        files: FilesFixture,
         patched: MonkeyPatchedODLFixture,
     ):
         self.db = db
@@ -269,7 +265,7 @@ class ODL2TestFixture(ODLTestFixture):
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        files: APIFilesFixture,
+        files: FilesFixture,
         patched: MonkeyPatchedODLFixture,
     ):
         super().__init__(db, files, patched)

@@ -2,9 +2,13 @@ import pytest
 from pytest_alembic import MigrationContext
 from sqlalchemy.engine import Engine
 
-from api.integration.registry.catalog_services import CatalogServicesRegistry
-from core.integration.base import integration_settings_load
-from core.marc import MARCExporter, MarcExporterLibrarySettings, MarcExporterSettings
+from palace.manager.core.marc import (
+    MARCExporter,
+    MarcExporterLibrarySettings,
+    MarcExporterSettings,
+)
+from palace.manager.integration.base import integration_settings_load
+from palace.manager.integration.registry.catalog_services import CatalogServicesRegistry
 from tests.migration.conftest import (
     CreateConfigSetting,
     CreateExternalIntegration,

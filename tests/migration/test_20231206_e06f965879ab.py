@@ -6,8 +6,8 @@ from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection, Engine
 
-from core.service.container import container_instance
-from core.service.storage.s3 import S3Service
+from palace.manager.service.container import container_instance
+from palace.manager.service.storage.s3 import S3Service
 from tests.migration.conftest import (
     CreateCoverageRecord,
     CreateIdentifier,

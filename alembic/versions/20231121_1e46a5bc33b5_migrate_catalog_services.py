@@ -7,15 +7,16 @@ Create Date: 2023-11-21 17:48:04.535064+00:00
 """
 
 from alembic import op
-from core.marc import MARCExporter
-from core.migration.migrate_external_integration import (
+
+from palace.manager.core.marc import MARCExporter
+from palace.manager.util.migration.helpers import pg_update_enum
+from palace.manager.util.migration.migrate_external_integration import (
     _migrate_external_integration,
     _migrate_library_settings,
     get_configuration_settings,
     get_integrations,
     get_library_for_integration,
 )
-from core.migration.util import pg_update_enum
 
 # revision identifiers, used by Alembic.
 revision = "1e46a5bc33b5"

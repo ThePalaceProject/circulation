@@ -10,14 +10,14 @@ import uuid
 from collections.abc import Callable
 
 import sqlalchemy as sa
+from alembic import op
 from jwcrypto import jwk
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection
 
-from alembic import op
-from core.migration.util import migration_logger
-from core.util.datetime_helpers import utc_now
-from core.util.string_helpers import random_key
+from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.migration.helpers import migration_logger
+from palace.manager.util.string_helpers import random_key
 
 # revision identifiers, used by Alembic.
 revision = "fc3c9ccf0ad8"

@@ -1,12 +1,8 @@
 #!/usr/bin/env python
 """Make sure all Overdrive books have bibliographic coverage."""
-import os
-import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-from api.overdrive import OverdriveBibliographicCoverageProvider
-from core.scripts import RunCoverageProviderScript
+
+from palace.manager.api.overdrive import OverdriveBibliographicCoverageProvider
+from palace.manager.core.scripts import RunCoverageProviderScript
 
 RunCoverageProviderScript(OverdriveBibliographicCoverageProvider).run()

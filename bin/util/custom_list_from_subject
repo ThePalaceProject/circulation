@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 """Maintain a CustomList containing all books classified under certain subjects."""
-import os
 import sys
 
-bin_dir = os.path.split(__file__)[0]
-package_dir = os.path.join(bin_dir, "..", "..")
-sys.path.append(os.path.abspath(package_dir))
-from core.external_list import ClassificationBasedMembershipManager
-from core.model import DataSource
-from core.scripts import CustomListManagementScript
+from palace.manager.core.external_list import ClassificationBasedMembershipManager
+from palace.manager.core.scripts import CustomListManagementScript
+from palace.manager.sqlalchemy.model.datasource import DataSource
 
 if len(sys.argv) < 6:
     print(

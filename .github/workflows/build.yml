@@ -168,15 +168,11 @@ jobs:
         run: docker compose down
 
   unit-test:
-    name: Unit tests (${{ matrix.module }})
+    name: Unit tests
     runs-on: ubuntu-latest
     needs: [build]
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        module: ["api", "core"]
 
     steps:
       - uses: actions/checkout@v4
@@ -199,7 +195,7 @@ jobs:
           bash -c "
             source env/bin/activate &&
             poetry install --without ci --no-root --sync &&
-            pytest --no-cov tests/${{ matrix.module }}
+            pytest --no-cov tests/manager
           "
         env:
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
@@ -252,9 +248,9 @@ jobs:
 
       - name: Create version file
         run: |
-          echo "__version__ = '$(dunamai from git --style semver)'" >> core/_version.py
-          echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> core/_version.py
-          echo "__branch__ = '$(dunamai from git --format {branch})'" >> core/_version.py
+          echo "__version__ = '$(dunamai from git --style semver)'" >> src/palace/manager/_version.py
+          echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> src/palace/manager/_version.py
+          echo "__branch__ = '$(dunamai from git --format {branch})'" >> src/palace/manager/_version.py
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3

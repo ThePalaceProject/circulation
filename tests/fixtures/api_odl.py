@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from jinja2 import Template
 
-from api.odl import BaseODLImporter, ODLImporter
-from api.odl2 import ODL2API, ODL2Importer
-from core.coverage import CoverageFailure
-from core.model import Edition, LicensePool, Work
-from core.model.resource import HttpResponseTuple
-from tests.fixtures.files import APIFilesFixture
+from palace.manager.api.odl import BaseODLImporter, ODLImporter
+from palace.manager.api.odl2 import ODL2API, ODL2Importer
+from palace.manager.core.coverage import CoverageFailure
+from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
+from palace.manager.sqlalchemy.model.work import Work
+from tests.fixtures.files import FilesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -81,7 +83,7 @@ class LicenseInfoHelper:
         return json.dumps(output)
 
 
-class ODLAPIFilesFixture(APIFilesFixture):
+class ODLAPIFilesFixture(FilesFixture):
     """A fixture providing access to ODL files."""
 
     def __init__(self):
@@ -94,7 +96,7 @@ def api_odl_files_fixture() -> ODLAPIFilesFixture:
     return ODLAPIFilesFixture()
 
 
-class ODL2APIFilesFixture(APIFilesFixture):
+class ODL2APIFilesFixture(FilesFixture):
     """A fixture providing access to ODL2 files."""
 
     def __init__(self):
@@ -161,7 +163,7 @@ class OdlImportTemplatedFixture:
         self,
         odl_mock_get: MockGet,
         importer: BaseODLImporter,
-        files_fixture: APIFilesFixture,
+        files_fixture: FilesFixture,
         feed_template: str,
     ):
         self.mock_get = odl_mock_get
@@ -188,7 +190,7 @@ class OdlImportTemplatedFixture:
         return self.importer.import_from_feed(feed)
 
     def get_templated_feed(
-        self, files: APIFilesFixture, filename: str, licenses: list[LicenseHelper]
+        self, files: FilesFixture, filename: str, licenses: list[LicenseHelper]
     ) -> str:
         """Get the test ODL feed with specific licensing information.
 

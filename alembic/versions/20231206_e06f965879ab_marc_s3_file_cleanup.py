@@ -8,8 +8,9 @@ Create Date: 2023-12-06 16:04:36.936466+00:00
 from urllib.parse import unquote, urlparse
 
 from alembic import op
-from core.migration.util import migration_logger
-from core.service.container import container_instance
+
+from palace.manager.service.container import container_instance
+from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "e06f965879ab"

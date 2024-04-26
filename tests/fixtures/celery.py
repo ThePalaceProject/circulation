@@ -8,10 +8,10 @@ import pytest
 from celery import Celery
 from celery.worker import WorkController
 
-from core.celery.task import Task
-from core.service.celery.celery import task_queue_config
-from core.service.celery.configuration import CeleryConfiguration
-from core.service.celery.container import CeleryContainer
+from palace.manager.celery.task import Task
+from palace.manager.service.celery.celery import task_queue_config
+from palace.manager.service.celery.configuration import CeleryConfiguration
+from palace.manager.service.celery.container import CeleryContainer
 from tests.fixtures.database import MockSessionMaker
 from tests.fixtures.services import ServicesFixture
 
@@ -57,13 +57,13 @@ def celery_parameters() -> Mapping[str, Any]:
 
     The dict returned will be used as parameters when instantiating `~celery.Celery`.
     """
-    return {"task_cls": "core.celery.task:Task"}
+    return {"task_cls": "palace.manager.celery.task:Task"}
 
 
 @pytest.fixture(scope="session")
 def celery_includes() -> Sequence[str]:
     """Include modules when a worker starts."""
-    return ("core.celery.worker",)
+    return ("palace.manager.celery.app",)
 
 
 @dataclass

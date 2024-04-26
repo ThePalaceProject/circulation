@@ -3,11 +3,11 @@ from contextlib import contextmanager
 import flask
 import pytest
 
-from api.admin.controller import setup_admin_controllers
-from api.app import initialize_admin
-from api.circulation_manager import CirculationManager
-from core.model import create
-from core.model.admin import Admin, AdminRole
+from palace.manager.api.admin.controller import setup_admin_controllers
+from palace.manager.api.app import initialize_admin
+from palace.manager.api.circulation_manager import CirculationManager
+from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
+from palace.manager.sqlalchemy.util import create
 from tests.fixtures.api_controller import ControllerFixture, WorkSpec
 
 
