@@ -9,6 +9,8 @@ class Celery(celery.Celery):
         The default implementation is repetitive for our use case, because all our tasks
         live in the `palace.manager.celery.tasks` module. This method removes that prefix
         from the task name to make it more readable.
+
+        See: https://docs.celeryq.dev/en/stable/userguide/tasks.html#changing-the-automatic-naming-behavior
         """
         module = module.removeprefix("palace.manager.celery.tasks.")
         return super().gen_task_name(name, module)
