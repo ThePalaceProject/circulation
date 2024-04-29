@@ -2,9 +2,10 @@ import sys
 from enum import auto
 from typing import Any
 
-from celery import Celery
 from celery.schedules import crontab
 from kombu import Exchange, Queue
+
+from palace.manager.celery.celery import Celery
 
 # TODO: Remove this when we drop support for Python 3.10
 if sys.version_info >= (3, 11):
@@ -29,7 +30,7 @@ def beat_schedule() -> dict[str, Any]:
     """
     return {
         "update_custom_lists": {
-            "task": "palace.manager.celery.tasks.custom_list.update_custom_lists",
+            "task": "custom_list.update_custom_lists",
             "schedule": crontab(minute="5"),  # Run every hour at 5 minutes past
         }
     }
