@@ -22,6 +22,7 @@ check_service_status "$container" /etc/service/cron
 check_service_status "$container" /etc/service/worker-default
 check_service_status "$container" /etc/service/worker-high
 check_service_status "$container" /etc/service/beat
+check_service_status "$container" /etc/service/celery-cloudwatch
 
 # Ensure the installed crontab has no problems
 check_crontab "$container"
