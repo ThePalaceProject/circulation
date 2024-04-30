@@ -259,7 +259,8 @@ class TestCloudwatch:
         caplog: pytest.LogCaptureFixture,
     ):
         cloudwatch = cloudwatch_camera.create_cloudwatch()
-        mock_put_metric_data = cloudwatch.cloudwatch_client.put_metric_data
+        assert cloudwatch.cloudwatch_client is not None
+        mock_put_metric_data = cloudwatch_camera.client.return_value.put_metric_data
         mock_put_metric_data.return_value = {
             "ResponseMetadata": {"HTTPStatusCode": 200}
         }
