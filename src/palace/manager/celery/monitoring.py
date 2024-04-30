@@ -16,7 +16,6 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
-    from mypy_boto3_cloudwatch import CloudWatchClient
     from mypy_boto3_cloudwatch.type_defs import DimensionTypeDef, MetricDatumTypeDef
 
 
@@ -115,7 +114,6 @@ class Cloudwatch(Polaroid):
     def __init__(
         self,
         *args: Any,
-        cloudwatch_client: CloudWatchClient | None = None,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
@@ -123,9 +121,7 @@ class Cloudwatch(Polaroid):
         region = self.app.conf.get("cloudwatch_statistics_region")
         dryrun = self.app.conf.get("cloudwatch_statistics_dryrun")
         self.cloudwatch_client = (
-            boto3.client("cloudwatch", region_name=region)
-            if cloudwatch_client is None and not dryrun
-            else cloudwatch_client
+            boto3.client("cloudwatch", region_name=region) if not dryrun else None
         )
         self.manager_name = self.app.conf.get("broker_transport_options", {}).get(
             "global_keyprefix"
@@ -133,7 +129,7 @@ class Cloudwatch(Polaroid):
         self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
         self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
         self.queues = {
-            str(queue.name): QueueStats() for queue in self.app.conf["task_queues"]
+            str(queue.name): QueueStats() for queue in self.app.conf.get("task_queues")
         }
 
     def on_shutter(self, state: State) -> None:

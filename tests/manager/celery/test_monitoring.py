@@ -1,39 +1,39 @@
-from unittest.mock import MagicMock, create_autospec
+from functools import partial
+from unittest.mock import MagicMock, create_autospec, patch
 
-from celery.events.state import Task
+import pytest
+from celery.events.state import State, Task
+from freezegun import freeze_time
 
-from palace.manager.celery.monitoring import QueueStats, TaskStats
+from palace.manager.celery.celery import Celery
+from palace.manager.celery.monitoring import Cloudwatch, QueueStats, TaskStats
 
 
 class TestTaskStats:
     def test_update(self):
-        mock_task_1 = create_autospec(Task)
-        mock_task_1.succeeded = True
-        mock_task_1.failed = False
-        mock_task_1.runtime = 1.0
-
-        mock_task_2 = create_autospec(Task)
-        mock_task_2.succeeded = False
-        mock_task_2.failed = True
-        mock_task_2.runtime = None
-
-        mock_task_3 = create_autospec(Task)
-        mock_task_3.succeeded = True
-        mock_task_3.failed = False
-        mock_task_3.runtime = 2.0
-
+        mock_task = create_autospec(Task)
         stats = TaskStats()
-        stats.update(mock_task_1)
+
+        mock_task.succeeded = True
+        mock_task.failed = False
+        mock_task.runtime = 1.0
+        stats.update(mock_task)
         assert stats.failed == 0
         assert stats.succeeded == 1
         assert stats.runtime == [1.0]
 
-        stats.update(mock_task_2)
+        mock_task.succeeded = False
+        mock_task.failed = True
+        mock_task.runtime = None
+        stats.update(mock_task)
         assert stats.failed == 1
         assert stats.succeeded == 1
         assert stats.runtime == [1.0]
 
-        stats.update(mock_task_3)
+        mock_task.succeeded = True
+        mock_task.failed = False
+        mock_task.runtime = 2.0
+        stats.update(mock_task)
         assert stats.failed == 1
         assert stats.succeeded == 2
         assert stats.runtime == [1.0, 2.0]
@@ -148,3 +148,105 @@ class TestQueueStats:
         [metric] = stats.metrics(timestamp, dimensions)
         assert metric["MetricName"] == "QueueWaiting"
         assert metric["Value"] == 0
+
+
+class CloudwatchCameraFixture:
+    def __init__(self, boto_client: MagicMock):
+        self.app = create_autospec(Celery)
+        self.configure_app()
+        self.app.tasks = {
+            "task1": MagicMock(),
+            "task2": MagicMock(),
+            "celery.built_in": MagicMock(),
+        }
+        self.client = boto_client
+        self.state = create_autospec(State)
+        self.state.tasks = {
+            "task1": self.mock_task(),
+            "task2": self.mock_task(),
+        }
+        self.create_cloudwatch = partial(Cloudwatch, state=self.state, app=self.app)
+
+    def mock_queue(self, name: str) -> MagicMock:
+        queue = MagicMock()
+        queue.name = name
+        return queue
+
+    def mock_task(self) -> MagicMock:
+        return MagicMock(spec=Task)
+
+    def configure_app(
+        self,
+        region: str = "region",
+        dry_run: bool = False,
+        manager_name: str = "manager",
+        namespace: str = "namespace",
+        upload_size: int = 100,
+        queues: list[str] | None = None,
+    ) -> None:
+        queues = queues or ["queue1", "queue2"]
+        self.app.conf = {
+            "cloudwatch_statistics_region": region,
+            "cloudwatch_statistics_dryrun": dry_run,
+            "broker_transport_options": {"global_keyprefix": manager_name},
+            "cloudwatch_statistics_namespace": namespace,
+            "cloudwatch_statistics_upload_size": upload_size,
+            "task_queues": [self.mock_queue(queue) for queue in queues],
+        }
+
+
+@pytest.fixture
+def cloudwatch_camera():
+    with patch("boto3.client") as boto_client:
+        yield CloudwatchCameraFixture(boto_client)
+
+
+class TestCloudwatch:
+    def test__init__(self, cloudwatch_camera: CloudwatchCameraFixture):
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        assert cloudwatch.logger is not None
+        assert cloudwatch.logger.name == "palace.manager.celery.monitoring.Cloudwatch"
+        assert cloudwatch.cloudwatch_client == cloudwatch_camera.client.return_value
+        cloudwatch_camera.client.assert_called_once_with(
+            "cloudwatch", region_name="region"
+        )
+        assert cloudwatch.manager_name == "manager"
+        assert cloudwatch.namespace == "namespace"
+        assert cloudwatch.upload_size == 100
+        assert cloudwatch.queues == {"queue1": QueueStats(), "queue2": QueueStats()}
+
+    def test__init__dryrun(self, cloudwatch_camera: CloudwatchCameraFixture):
+        cloudwatch_camera.configure_app(dry_run=True)
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        assert cloudwatch.cloudwatch_client is None
+
+    def test_on_shutter(self, cloudwatch_camera: CloudwatchCameraFixture):
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        mock_publish = create_autospec(cloudwatch.publish)
+        cloudwatch.publish = mock_publish
+        with freeze_time("2021-01-01"):
+            cloudwatch.on_shutter(cloudwatch_camera.state)
+        mock_publish.assert_called_once()
+        [tasks, queues, time] = mock_publish.call_args.args
+
+        assert tasks == {"task1": TaskStats(), "task2": TaskStats()}
+        assert queues == {"queue1": QueueStats(), "queue2": QueueStats()}
+        assert time.isoformat() == "2021-01-01T00:00:00+00:00"
+
+    def test_on_shutter_error(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        cloudwatch_camera.app.tasks = {"task1": MagicMock()}
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        mock_publish = create_autospec(cloudwatch.publish)
+        cloudwatch.publish = mock_publish
+        cloudwatch.on_shutter(cloudwatch_camera.state)
+        mock_publish.assert_called_once()
+        [tasks, queues, time] = mock_publish.call_args.args
+
+        assert tasks == {"task1": TaskStats()}
+        assert queues == {"queue1": QueueStats(), "queue2": QueueStats()}
+        assert time is not None
+        assert "Error processing task" in caplog.text
