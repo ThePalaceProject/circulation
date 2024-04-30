@@ -16,6 +16,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
+    from mypy_boto3_cloudwatch.literals import StandardUnitType
     from mypy_boto3_cloudwatch.type_defs import DimensionTypeDef, MetricDatumTypeDef
 
 
@@ -24,14 +25,24 @@ def metric_dimensions(dimensions: dict[str, str]) -> Sequence[DimensionTypeDef]:
 
 
 def value_metric(
-    metric_name: str, value: int, timestamp: datetime, dimensions: dict[str, str]
+    metric_name: str,
+    value: int,
+    timestamp: datetime,
+    dimensions: dict[str, str],
+    unit: StandardUnitType = "Count",
 ) -> MetricDatumTypeDef:
+    """
+    Format a metric for a single value into the format expected by Cloudwatch.
+
+    See Boto3 documentation:
+    https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/cloudwatch/client/put_metric_data.html
+    """
     return {
         "MetricName": metric_name,
         "Value": value,
         "Timestamp": timestamp.isoformat(),
         "Dimensions": metric_dimensions(dimensions),
-        "Unit": "Count",
+        "Unit": unit,
     }
 
 
@@ -40,7 +51,15 @@ def statistic_metric(
     values: Sequence[float],
     timestamp: datetime,
     dimensions: dict[str, str],
+    unit: StandardUnitType = "Seconds",
 ) -> MetricDatumTypeDef:
+    """
+    Format a metric for multiple values into the format expected by Cloudwatch. This
+    includes the statistic values for the maximum, minimum, sum, and sample count.
+
+    See Boto3 documentation:
+    https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/cloudwatch/client/put_metric_data.html
+    """
     return {
         "MetricName": metric_name,
         "StatisticValues": {
@@ -51,12 +70,17 @@ def statistic_metric(
         },
         "Timestamp": timestamp.isoformat(),
         "Dimensions": metric_dimensions(dimensions),
-        "Unit": "Seconds",
+        "Unit": unit,
     }
 
 
 @dataclass
 class TaskStats:
+    """
+    Tracks the number of tasks that have succeeded, failed, and how long they took to run
+    for a specific task, so we can report this out to Cloudwatch metrics.
+    """
+
     succeeded: int = 0
     failed: int = 0
     runtime: list[float] = field(default_factory=list)
@@ -87,6 +111,11 @@ class TaskStats:
 
 @dataclass
 class QueueStats(LoggerMixin):
+    """
+    Tracks the number of tasks queued for a specific queue, so we can
+    report this out to Cloudwatch metrics.
+    """
+
     queued: set[str] = field(default_factory=set)
 
     def update(self, task: Task) -> None:
@@ -109,6 +138,13 @@ class QueueStats(LoggerMixin):
 
 
 class Cloudwatch(Polaroid):
+    """
+    Implements a Celery custom camera that sends task and queue statistics to Cloudwatch.
+
+    See Celery documentation for more information on custom cameras:
+    https://docs.celeryq.dev/en/stable/userguide/monitoring.html#custom-camera
+    """
+
     clear_after = True  # clear after flush (incl, state.event_count).
 
     def __init__(
