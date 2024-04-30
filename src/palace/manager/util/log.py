@@ -91,6 +91,10 @@ def elapsed_time_logging(
 class LoggerMixin:
     """Mixin that adds a logger with a standardized name"""
 
+    @staticmethod
+    def logger_for_cls(cls: type[object]) -> logging.Logger:
+        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
     @classmethod
     @functools.cache
     def logger(cls) -> logging.Logger:
@@ -100,7 +104,7 @@ class LoggerMixin:
         This is cached so that we don't create a new logger every time
         it is called.
         """
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+        return cls.logger_for_cls(cls)
 
     @property
     def log(self) -> logging.Logger:
