@@ -153,6 +153,9 @@ class Cloudwatch(Polaroid):
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
+        # We use logger_for_cls instead of just inheriting from LoggerMixin
+        # because the base class Polaroid already defines a logger attribute,
+        # which conflicts with the logger() method in LoggerMixin.
         self.logger = LoggerMixin.logger_for_cls(self.__class__)
         region = self.app.conf.get("cloudwatch_statistics_region")
         dryrun = self.app.conf.get("cloudwatch_statistics_dryrun")
