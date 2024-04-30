@@ -31,6 +31,9 @@ class CeleryConfiguration(ServiceConfiguration):
 
     timezone: str = "US/Eastern"
 
+    # These settings are specific to the custom event reporting we are doing
+    # to send Celery task and queue statistics to Cloudwatch. You can see
+    # how they are used in `palace.manager.celery.monitoring.Cloudwatch`.
     cloudwatch_statistics_dryrun: bool = False
     cloudwatch_statistics_namespace: str = "Celery"
     cloudwatch_statistics_region: str = "us-west-2"
