@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 import string
 from collections import Counter
-from collections.abc import Iterable
-from typing import Any
+from collections.abc import Generator, Iterable, Sequence
+from typing import Any, SupportsIndex, TypeVar
 
 import sqlalchemy
 from money import Money
@@ -568,7 +568,12 @@ def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
     return element
 
 
-def chunks(lst, chunk_size, start_index=0):
+T = TypeVar("T")
+
+
+def chunks(
+    lst: Sequence[T], chunk_size: int, start_index: int = 0
+) -> Generator[Sequence[T], None, None]:
     """Yield successive n-sized chunks from lst."""
     length = len(lst)
 

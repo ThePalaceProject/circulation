@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Generator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import boto3
 from boto3.exceptions import Boto3Error
@@ -11,6 +11,7 @@ from botocore.exceptions import BotoCoreError
 from celery.events.snapshot import Polaroid
 from celery.events.state import State, Task
 
+from palace.manager.util import chunks
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 
@@ -64,7 +65,8 @@ class TaskStats:
     def update(self, task: Task) -> None:
         if task.succeeded:
             self.succeeded += 1
-            self.runtime.append(task.runtime)
+            if task.runtime:
+                self.runtime.append(task.runtime)
         if task.failed:
             self.failed += 1
 
@@ -89,13 +91,12 @@ class QueueStats(LoggerMixin):
     queued: set[str] = field(default_factory=set)
 
     def update(self, task: Task) -> None:
+        self.log.debug("Task: %r", task)
         if task.uuid in self.queued:
-            self.log.debug("Task %s already in queue. %r", task.uuid, task)
             if task.started:
                 self.log.debug("Task %s started.", task.uuid)
                 self.queued.remove(task.uuid)
         else:
-            self.log.debug("Task %s not in queue. %r", task.uuid, task)
             if task.sent and not task.started:
                 self.log.debug("Task %s queued.", task.uuid)
                 self.queued.add(task.uuid)
@@ -106,9 +107,6 @@ class QueueStats(LoggerMixin):
         return [
             value_metric("QueueWaiting", len(self.queued), timestamp, dimensions),
         ]
-
-
-T = TypeVar("T")
 
 
 class Cloudwatch(Polaroid):
@@ -159,13 +157,6 @@ class Cloudwatch(Polaroid):
 
         self.publish(tasks, self.queues, timestamp)
 
-    @staticmethod
-    def chunks(
-        input_sequence: Sequence[T], size: int
-    ) -> Generator[Sequence[T], None, None]:
-        for offset in range(0, len(input_sequence), size):
-            yield input_sequence[offset : offset + size]
-
     def publish(
         self,
         tasks: dict[str, TaskStats],
@@ -187,7 +178,7 @@ class Cloudwatch(Polaroid):
                 )
             )
 
-        for chunk in self.chunks(metric_data, self.upload_size):
+        for chunk in chunks(metric_data, self.upload_size):
             self.logger.info("Sending %d metrics to Cloudwatch.", len(chunk))
             if self.cloudwatch_client is not None:
                 try:

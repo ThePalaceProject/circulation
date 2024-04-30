@@ -117,7 +117,7 @@ def _parse_binary_expression(
         right_argument = tokens[2]
         expression = expression_type(operator_type, left_argument, right_argument)
 
-        for tokens_chunk in chunks(tokens, 2, 3):
+        for tokens_chunk in chunks(tokens, 2, 3):  # type: ignore
             operator_type = tokens_chunk[0]
             right_argument = tokens_chunk[1]
             expression = expression_type(operator_type, expression, right_argument)
