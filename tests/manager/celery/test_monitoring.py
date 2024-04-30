@@ -2,11 +2,13 @@ from functools import partial
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from boto3.exceptions import Boto3Error
 from celery.events.state import State, Task
 from freezegun import freeze_time
 
 from palace.manager.celery.celery import Celery
 from palace.manager.celery.monitoring import Cloudwatch, QueueStats, TaskStats
+from palace.manager.service.logging.configuration import LogLevel
 
 
 class TestTaskStats:
@@ -250,3 +252,52 @@ class TestCloudwatch:
         assert queues == {"queue1": QueueStats(), "queue2": QueueStats()}
         assert time is not None
         assert "Error processing task" in caplog.text
+
+    def test_publish(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        mock_put_metric_data = cloudwatch.cloudwatch_client.put_metric_data
+        mock_put_metric_data.return_value = {
+            "ResponseMetadata": {"HTTPStatusCode": 200}
+        }
+        timestamp = MagicMock()
+        tasks = {"task1": TaskStats(succeeded=2, failed=5, runtime=[3.5, 2.2])}
+        queues = {"queue1": QueueStats(queued={"uuid1", "uuid2"})}
+
+        cloudwatch.publish(tasks, queues, timestamp)
+        mock_put_metric_data.assert_called_once()
+        kwargs = mock_put_metric_data.call_args.kwargs
+        assert kwargs["Namespace"] == "namespace"
+        expected = [
+            *tasks["task1"].metrics(
+                timestamp, {"TaskName": "task1", "Manager": "manager"}
+            ),
+            *queues["queue1"].metrics(
+                timestamp, {"QueueName": "queue1", "Manager": "manager"}
+            ),
+        ]
+
+        assert kwargs["MetricData"] == expected
+
+        # If chunking is enabled, put_metric_data should be called multiple times. Once for each chunk.
+        cloudwatch.upload_size = 1
+        mock_put_metric_data.reset_mock()
+        cloudwatch.publish(tasks, queues, timestamp)
+        assert mock_put_metric_data.call_count == len(expected)
+
+        # If there is an error, it should be logged.
+        mock_put_metric_data.side_effect = Boto3Error("Boom")
+        cloudwatch.publish(tasks, queues, timestamp)
+        assert "Error sending metrics to Cloudwatch." in caplog.text
+
+        # If dry run is enabled, no metrics should be sent and a log message should be generated.
+        caplog.clear()
+        caplog.set_level(LogLevel.info)
+        cloudwatch.cloudwatch_client = None
+        mock_put_metric_data.reset_mock()
+        cloudwatch.publish(tasks, queues, timestamp)
+        mock_put_metric_data.assert_not_called()
+        assert "Dry run enabled. Not sending metrics to Cloudwatch." in caplog.text
