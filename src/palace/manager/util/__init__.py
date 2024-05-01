@@ -16,60 +16,6 @@ from sqlalchemy.sql.functions import func
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
 
-def batch(iterable, size=1):
-    """Split up `iterable` into batches of size `size`."""
-
-    l = len(iterable)
-    for start in range(0, l, size):
-        yield iterable[start : min(start + size, l)]
-
-
-def fast_query_count(query):
-    """Counts the results of a query without using super-slow subquery"""
-
-    statement = query.selectable
-    table = statement.froms[0]
-    distinct_columns = statement._distinct_on
-    new_columns = [func.count()]
-    if statement._distinct and isinstance(distinct_columns, (list, tuple)):
-        # When using distinct to select from the db, the distinct
-        # columns need to be incorporated into the count itself.
-        new_columns = [func.count(distinct(func.concat(*distinct_columns)))]
-
-    count_q = select().with_only_columns(new_columns).select_from(table).order_by(None)
-    count = query.session.execute(count_q).scalar()
-
-    if query._limit_clause is not None and query._limit_clause.value < count:
-        return query._limit_clause.value
-
-    return count
-
-
-def slugify(text, length_limit=None):
-    """Takes a string and turns it into a slug.
-
-    :Example:
-
-    >>> slugify('Some (???) Title Somewhere')
-    some-title-somewhere
-    >>> slugify('Sly & the Family Stone')
-    sly-and-the-family-stone
-    >>> slugify('Happy birthday!', length_limit=4)
-    happ
-    """
-    slug = re.sub(r"[.!@#'$,?\(\)]", "", text.lower())
-    slug = re.sub("&", " and ", slug)
-    slug = re.sub(" {2,}", " ", slug)
-
-    slug = "-".join(slug.split(" "))
-    while "--" in slug:
-        slug = re.sub("--", "-", slug)
-
-    if length_limit:
-        slug = slug[:length_limit]
-    return str(slug)
-
-
 class MetadataSimilarity:
     """Estimate how similar two bits of metadata are."""
 
@@ -579,39 +525,6 @@ def chunks(
 
     for i in range(start_index, length, chunk_size):
         yield lst[i : i + chunk_size]
-
-
-def ansible_boolean(
-    value: str | bool | None,
-    label: str | None = None,
-    default: bool | None = None,
-) -> bool:
-    """Map Ansible "truthy" and "falsy" values to a Python boolean.
-
-    :param value: The value from which to map.
-    :param label: Optional name or label associated with the value.
-    :param default: Default result if value is empty string or None.
-    """
-    _value_label = f"Value of '{label}'" if label else "Value"
-    if default is not None and not isinstance(default, bool):
-        raise TypeError("'default' must be a boolean, when specified.")
-    if isinstance(value, bool):
-        return value
-    if value is None or value == "":
-        if default is not None:
-            return default
-        raise ValueError(
-            f"{_value_label} must be non-null and non-empty if no default is specified."
-        )
-    if not isinstance(value, str):
-        raise TypeError(f"{_value_label} must be a string or boolean.")
-
-    if value.upper() in ("TRUE", "T", "ON", "YES", "Y", "1"):
-        return True
-    if value.upper() in ("FALSE", "F", "OFF", "NO", "N", "0"):
-        return False
-
-    raise ValueError(f"{_value_label} does not map to True or False.")
 
 
 class ValuesMeta(type):
