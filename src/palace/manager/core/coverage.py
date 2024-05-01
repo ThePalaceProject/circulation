@@ -23,7 +23,6 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.worker_pools import DatabaseJob
 
 
 class CoverageFailure:
@@ -1372,20 +1371,6 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
             return work
         work.set_presentation_ready(exclude_search=self.EXCLUDE_SEARCH_INDEX)
         return identifier
-
-
-class CollectionCoverageProviderJob(DatabaseJob):
-    def __init__(self, collection, provider_class, progress, **provider_kwargs):
-        self.collection = collection
-        self.progress = progress
-        self.provider_class = provider_class
-        self.provider_kwargs = provider_kwargs
-
-    def run(self, _db, **kwargs):
-        collection = _db.merge(self.collection)
-        provider = self.provider_class(collection, **self.provider_kwargs)
-        provider.run_once(self.progress)
-        provider.finalize_timestampdata(self.progress)
 
 
 class BibliographicCoverageProvider(CollectionCoverageProvider):

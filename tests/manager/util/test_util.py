@@ -8,20 +8,14 @@ from decimal import Decimal
 import pytest
 from money import Money
 
-from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util import (
     Bigrams,
     MetadataSimilarity,
     MoneyUtility,
     TitleProcessor,
-    ansible_boolean,
     english_bigrams,
-    fast_query_count,
-    slugify,
 )
 from palace.manager.util.median import median
-from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class DummyAuthor:
@@ -379,63 +373,6 @@ class TestMedian:
         assert 290 == median(test_set)
 
 
-class TestFastQueryCount:
-    def test_no_distinct(self, db: DatabaseTransactionFixture):
-        identifier = db.identifier()
-        qu = db.session.query(Identifier)
-        assert 1 == fast_query_count(qu)
-
-    def test_distinct(self, db: DatabaseTransactionFixture):
-        e1 = db.edition(title="The title", authors="Author 1")
-        e2 = db.edition(title="The title", authors="Author 1")
-        e3 = db.edition(title="The title", authors="Author 2")
-        e4 = db.edition(title="Another title", authors="Author 1")
-
-        # Without the distinct clause, a query against Edition will
-        # return four editions.
-        qu = db.session.query(Edition)
-        assert qu.count() == fast_query_count(qu)
-
-        # If made distinct on Edition.author, the query will return only
-        # two editions.
-        qu2 = qu.distinct(Edition.author)
-        assert qu2.count() == fast_query_count(qu2)
-
-        # If made distinct on Edition.title _and_ Edition.author,
-        # the query will return three editions.
-        qu3 = qu.distinct(Edition.title, Edition.author)
-        assert qu3.count() == fast_query_count(qu3)
-
-    def test_limit(self, db: DatabaseTransactionFixture):
-        for x in range(4):
-            db.identifier()
-
-        qu = db.session.query(Identifier)
-        assert qu.count() == fast_query_count(qu)
-
-        qu2 = qu.limit(2)
-        assert qu2.count() == fast_query_count(qu2)
-
-        qu3 = qu.limit(6)
-        assert qu3.count() == fast_query_count(qu3)
-
-
-class TestSlugify:
-    def test_slugify(self):
-        # text are slugified.
-        assert "hey-im-a-feed" == slugify("Hey! I'm a feed!!")
-        assert "you-and-me-n-every_feed" == slugify("You & Me n Every_Feed")
-        assert "money-honey" == slugify("Money $$$       Honey")
-        assert "some-title-somewhere" == slugify("Some (???) Title Somewhere")
-        assert "sly-and-the-family-stone" == slugify("sly & the family stone")
-
-        # The results can be pared down according to length restrictions.
-        assert "happ" == slugify("Happy birthday", length_limit=4)
-
-        # Slugified text isn't altered
-        assert "already-slugified" == slugify("already-slugified")
-
-
 class TestMoneyUtility:
     @pytest.mark.parametrize(
         "expected_amount, input_amount, money_amount, money_currency",
@@ -478,65 +415,3 @@ class TestMoneyUtility:
     def test_parsing_bad_value_raises_valueerror(self, bad_value):
         with pytest.raises(ValueError):
             MoneyUtility.parse(bad_value)
-
-
-class TestAnsibleBoolean:
-    _truthy_values = ["TRUE", "T", "ON", "YES", "Y", "1"]
-    _falsy_values = ["FALSE", "F", "OFF", "NO", "N", "0"]
-    # Values are case-insensitive.
-    TRUTHY = [True] + _truthy_values + [v.lower() for v in _truthy_values]
-    FALSY = [False] + _falsy_values + [v.lower() for v in _falsy_values]
-    MISSING = [None, ""]
-
-    @pytest.mark.parametrize(
-        "expected_result, example_values, default_value",
-        [
-            [True, TRUTHY, False],
-            [True, TRUTHY, True],
-            [True, TRUTHY, None],
-            [True, MISSING, True],
-            [False, FALSY, False],
-            [False, FALSY, True],
-            [False, FALSY, None],
-            [False, MISSING, False],
-        ],
-    )
-    def test_ansible_boolean_true_or_false(
-        self, expected_result, example_values, default_value
-    ):
-        for value in example_values:
-            assert expected_result == ansible_boolean(value, default=default_value)
-            assert expected_result == ansible_boolean(
-                value, default=default_value, label="some label"
-            )
-
-    @pytest.mark.parametrize(
-        "example_value, default_value, expected_exception, expected_message",
-        [
-            ["TRUE", "", TypeError, "'default' must be a boolean, when specified"],
-            ["TRUE", "X", TypeError, "'default' must be a boolean, when specified"],
-            ["TRUE", 0, TypeError, "'default' must be a boolean, when specified"],
-            ["TRUE", "TRUE", TypeError, "'default' must be a boolean, when specified"],
-            [1, None, TypeError, "must be a string"],
-            [3.3, None, TypeError, "must be a string"],
-            ["!", None, ValueError, "does not map to True or False"],
-            ["x", None, ValueError, "does not map to True or False"],
-            [
-                None,
-                None,
-                ValueError,
-                "must be non-null and non-empty if no default is specified",
-            ],
-            [
-                "",
-                None,
-                ValueError,
-                "must be non-null and non-empty if no default is specified",
-            ],
-        ],
-    )
-    def test_ansible_boolean_exceptions(
-        self, example_value, default_value, expected_exception, expected_message
-    ):
-        with pytest.raises(expected_exception, match=expected_message):
-            ansible_boolean(example_value, default=default_value)

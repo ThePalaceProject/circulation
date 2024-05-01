@@ -10,7 +10,6 @@ from freezegun import freeze_time
 from sqlalchemy.orm import Session
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.enki import EnkiAPI
 from palace.manager.api.lanes import create_default_lanes
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.classifier import Classifier
@@ -42,7 +41,6 @@ from palace.manager.core.scripts import (
     RunMonitorScript,
     RunMultipleMonitorsScript,
     RunReaperMonitorsScript,
-    RunThreadedCollectionCoverageProviderScript,
     RunWorkCoverageProviderScript,
     Script,
     SearchIndexCoverageRemover,
@@ -79,14 +77,10 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.notifications import PushNotifications
-from palace.manager.util.worker_pools import DatabasePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
 from tests.fixtures.services import ServicesFixture
-from tests.mocks.mock import (
-    AlwaysSuccessfulCollectionCoverageProvider,
-    AlwaysSuccessfulWorkCoverageProvider,
-)
+from tests.mocks.mock import AlwaysSuccessfulWorkCoverageProvider
 
 
 class TestScript:
@@ -710,73 +704,6 @@ class TestRunCoverageProviderScript:
         assert datetime_utc(2016, 5, 1) == parsed.cutoff_time
         assert [identifier] == parsed.identifiers
         assert identifier.type == parsed.identifier_type
-
-
-class TestRunThreadedCollectionCoverageProviderScript:
-    def test_run(self, db: DatabaseTransactionFixture):
-        provider = AlwaysSuccessfulCollectionCoverageProvider
-        script = RunThreadedCollectionCoverageProviderScript(
-            provider, worker_size=2, _db=db.session
-        )
-
-        # If there are no collections for the provider, run does nothing.
-        # Pass a mock pool that will raise an error if it's used.
-        pool = object()
-        collection = db.collection(protocol=EnkiAPI.label())
-
-        # Run exits without a problem because the pool is never touched.
-        script.run(pool=pool)
-
-        # Create some identifiers that need coverage.
-        collection = db.collection()
-        ed1, lp1 = db.edition(collection=collection, with_license_pool=True)
-        ed2, lp2 = db.edition(collection=collection, with_license_pool=True)
-        ed3 = db.edition()
-
-        [id1, id2, id3] = [e.primary_identifier for e in (ed1, ed2, ed3)]
-
-        # Set a timestamp for the provider.
-        timestamp = Timestamp.stamp(
-            db.session,
-            provider.SERVICE_NAME,
-            Timestamp.COVERAGE_PROVIDER_TYPE,
-            collection=collection,
-        )
-        original_timestamp = timestamp.finish
-        db.session.commit()
-
-        pool = DatabasePool(2, script.session_factory)
-        script.run(pool=pool)
-        db.session.commit()
-
-        # The expected number of workers and jobs have been created.
-        assert 2 == len(pool.workers)
-        assert 1 == pool.job_total
-
-        # All relevant identifiers have been given coverage.
-        source = DataSource.lookup(db.session, provider.DATA_SOURCE_NAME)
-        identifiers_missing_coverage = Identifier.missing_coverage_from(
-            db.session,
-            provider.INPUT_IDENTIFIER_TYPES,
-            source,
-        )
-        assert [id3] == identifiers_missing_coverage.all()
-
-        record1, was_registered1 = provider.register(id1)
-        record2, was_registered2 = provider.register(id2)
-        assert CoverageRecord.SUCCESS == record1.status
-        assert CoverageRecord.SUCCESS == record2.status
-        assert (False, False) == (was_registered1, was_registered2)
-
-        # The timestamp for the provider has been updated.
-        new_timestamp = Timestamp.value(
-            db.session,
-            provider.SERVICE_NAME,
-            Timestamp.COVERAGE_PROVIDER_TYPE,
-            collection,
-        )
-        assert new_timestamp != original_timestamp
-        assert new_timestamp > original_timestamp
 
 
 class TestRunWorkCoverageProviderScript:
