@@ -1,6 +1,9 @@
 import csv
+import io
 import os
+import zipfile
 from datetime import timedelta
+from typing import IO
 from unittest.mock import create_autospec
 
 from pytest import LogCaptureFixture
@@ -199,58 +202,73 @@ def test_job_run(
     assert "Inventory and Holds Reports" in kwargs["subject"]
     attachments: dict = kwargs["attachments"]
 
-    assert len(attachments) == 2
-    inventory_report_key = [x for x in attachments.keys() if "inventory" in x][0]
-    assert inventory_report_key
-    assert "test_library" in inventory_report_key
-    inventory_report_value = attachments[inventory_report_key]
-    assert inventory_report_value
-    inventory_report_csv = list(csv.DictReader(open(inventory_report_value)))
+    assert len(attachments) == 1
+    reports_zip = list(attachments.values())[0]
+    with zipfile.ZipFile(reports_zip, mode="r") as archive:
+        entry_list = archive.namelist()
+        assert len(entry_list) == 2
+        for entry in entry_list:
+            open_file = archive.open(entry)
+            if "inventory" in entry:
+                inventory_report_zip_entry = open_file
+            elif "holds" in entry:
+                holds_report_zip_entry = open_file
 
-    assert len(inventory_report_csv) == 1
-    for row in inventory_report_csv:
-        assert row["title"] == title
-        assert row["author"] == author
-        assert row["identifier"]
-        assert row["language"] == language
-        assert row["publisher"] == publisher
-        assert row["audience"] == "young adult"
-        assert row["genres"] == "genre_a,genre_z"
-        assert row["format"] == edition.BOOK_MEDIUM
-        assert row["data_source"] == data_source
-        assert row["collection_name"] == collection_name
-        assert float(row["days_remaining_on_license"]) == float(days_remaining)
-        assert row["shared_active_loan_count"] == "0"
-        assert row["library_active_loan_count"] == "0"
-        assert row["remaining_loans"] == str(checkouts_left)
-        assert row["allowed_concurrent_users"] == str(terms_concurrency)
-        assert expiration.strftime("%Y-%m-%d %H:%M:%S.%f") in row["license_expiration"]
+        assert inventory_report_zip_entry
+        assert "test_library" in inventory_report_zip_entry.name
+        inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
 
-    holds_report_key = [x for x in attachments.keys() if "holds" in x][0]
-    assert holds_report_key
-    assert "test_library" in holds_report_key
-    holds_report_value = attachments[holds_report_key]
-    assert holds_report_value
-    holds_report_csv = list(csv.DictReader(open(holds_report_value)))
-    assert len(holds_report_csv) == 1
+        assert len(inventory_report_csv) == 1
+        for row in inventory_report_csv:
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert float(row["days_remaining_on_license"]) == float(days_remaining)
+            assert row["shared_active_loan_count"] == "0"
+            assert row["library_active_loan_count"] == "0"
+            assert row["remaining_loans"] == str(checkouts_left)
+            assert row["allowed_concurrent_users"] == str(terms_concurrency)
+            assert (
+                expiration.strftime("%Y-%m-%d %H:%M:%S.%f") in row["license_expiration"]
+            )
 
-    for row in holds_report_csv:
-        assert row["title"] == title
-        assert row["author"] == author
-        assert row["identifier"]
-        assert row["language"] == language
-        assert row["publisher"] == publisher
-        assert row["audience"] == "young adult"
-        assert row["genres"] == "genre_a,genre_z"
-        assert row["format"] == edition.BOOK_MEDIUM
-        assert row["data_source"] == data_source
-        assert row["collection_name"] == collection_name
-        assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
-        assert int(row["library_active_hold_count"]) == 3
+        assert holds_report_zip_entry
+        assert "test_library" in holds_report_zip_entry.name
+        assert holds_report_zip_entry
+        holds_report_csv = zip_csv_entry_to_dict(holds_report_zip_entry)
+        assert len(holds_report_csv) == 1
+
+        for row in holds_report_csv:
+            assert row["title"] == title
+            assert row["author"] == author
+            assert row["identifier"]
+            assert row["language"] == language
+            assert row["publisher"] == publisher
+            assert row["audience"] == "young adult"
+            assert row["genres"] == "genre_a,genre_z"
+            assert row["format"] == edition.BOOK_MEDIUM
+            assert row["data_source"] == data_source
+            assert row["collection_name"] == collection_name
+            assert int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
+            assert int(row["library_active_hold_count"]) == 3
 
     # clean up files
     for f in attachments.values():
         os.remove(f)
+
+
+def zip_csv_entry_to_dict(zip_entry: IO[bytes]):
+    buffer = io.BytesIO(zip_entry.read())
+    wrapper = io.TextIOWrapper(buffer, encoding="UTF-8")
+    csv_dict = list(csv.DictReader(wrapper))
+    return csv_dict
 
 
 def create_test_opds_collection(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import os
 import tempfile
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,10 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 )
                 return
 
+            self.log.info(
+                f"Starting inventory and holds report job for {library.name}({library.short_name})."
+            )
+
             try:
                 current_time = datetime.now()
                 date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
@@ -98,18 +103,34 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     session, sql_params=sql_params
                 )
 
-                attachments[f"palace-inventory-report-{file_name_modifier}.csv"] = Path(
-                    inventory_report_file_path
-                )
-                attachments[f"palace-holds-report-{file_name_modifier}.csv"] = Path(
-                    holds_report_file_path
-                )
+                with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
+                        archive.write(
+                            filename=holds_report_file_path,
+                            arcname=f"palace-holds-report-for-library-{file_name_modifier}.csv",
+                        )
+                        archive.write(
+                            filename=inventory_report_file_path,
+                            arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
+                        )
 
+                self.log.debug(f"Zip file written to {tmp.name}")
+                # clean up report files now that they have been written to the zipfile
+                for f in [inventory_report_file_path, holds_report_file_path]:
+                    os.remove(f)
+
+                attachments[
+                    f"palace-inventory-and-holds-reports-for-{file_name_modifier}.zip"
+                ] = Path(tmp.name)
                 self.send_email(
                     subject=f"Inventory and Holds Reports {current_time}",
                     receivers=[self.email_address],
                     text="",
                     attachments=attachments,
+                )
+
+                self.log.info(
+                    f"Emailed inventory and holds reports for {library.name}({library.short_name})."
                 )
             finally:
                 if self.delete_attachments:
@@ -137,6 +158,8 @@ class GenerateInventoryAndHoldsReportsJob(Job):
             )
             writer.writerow(rows.keys())
             writer.writerows(rows)
+
+        self.log.debug(f"temp file written to {temp.name}")
         return temp.name
 
     @staticmethod
