@@ -311,7 +311,7 @@ class OverdriveAPI(
     METADATA_ENDPOINT = (
         "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
     )
-    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&sort=%(sort)s&limit=%(limit)s"
+    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
     AVAILABILITY_ENDPOINT = "%(host)s/v2/collections/%(collection_token)s/products/%(product_id)s/availability"
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
