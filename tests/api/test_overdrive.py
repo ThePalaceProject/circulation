@@ -2233,6 +2233,16 @@ class TestOverdriveAPI:
         assert fulfill.content_link_redirect is True
         assert fulfill.content_link == "https://example.org/epub-redirect"
 
+    def test_no_recently_changed_books(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        with patch.object(
+            overdrive_api_fixture.api, "_get_book_list_page"
+        ) as get_book_list:
+            get_book_list.return_value = ([], None)
+            result = overdrive_api_fixture.api.recently_changed_ids(utc_now(), None)
+            assert [i for i in result] == []
+
 
 class TestOverdriveAPICredentials:
     def test_patron_correct_credentials_for_multiple_overdrive_collections(
