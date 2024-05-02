@@ -312,7 +312,7 @@ class OverdriveAPI(
     METADATA_ENDPOINT = (
         "%(host)s/v1/collections/%(collection_token)s/products/%(item_id)s/metadata"
     )
-    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&sort=%(sort)s&limit=%(limit)s"
+    EVENTS_ENDPOINT = "%(host)s/v1/collections/%(collection_token)s/products?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
     AVAILABILITY_ENDPOINT = "%(host)s/v2/collections/%(collection_token)s/products/%(product_id)s/availability"
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
@@ -2037,14 +2037,8 @@ class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
     DEFAULT_START_TIME = OverdriveCirculationMonitor.NEVER
     MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 1000
 
-    def __init__(
-        self,
-        _db,
-        collection,
-        api_class=OverdriveAPI,
-        analytics: Analytics = Provide[Services.analytics.analytics],
-    ):
-        super().__init__(_db, collection, api_class, analytics)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._consecutive_items_out_of_scope = 0
 
     def recently_changed_ids(self, start, cutoff):
