@@ -2036,14 +2036,8 @@ class NewTitlesOverdriveCollectionMonitor(OverdriveCirculationMonitor):
     DEFAULT_START_TIME = OverdriveCirculationMonitor.NEVER
     MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 1000
 
-    def __init__(
-        self,
-        _db,
-        collection,
-        api_class=OverdriveAPI,
-        analytics: Analytics = Provide[Services.analytics.analytics],
-    ):
-        super().__init__(_db, collection, api_class, analytics)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._consecutive_items_out_of_scope = 0
 
     def recently_changed_ids(self, start, cutoff):
