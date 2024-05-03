@@ -5,4 +5,4 @@
 from palace.manager.core.jobs.integration_test import IntegrationTest
 from palace.manager.sqlalchemy.session import production_session
 
-IntegrationTest(production_session(initialize_data=False)).run()
+IntegrationTest(production_session()).run()

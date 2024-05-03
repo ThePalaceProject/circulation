@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine, event, literal_column, select, table, text
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import Pool
 
@@ -19,6 +19,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.key import Key
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir
 
 DEBUG = False
@@ -37,16 +38,30 @@ def json_serializer(*args, **kwargs) -> str:
     return json.dumps(*args, default=json_encoder, **kwargs)
 
 
-class SessionManager:
+class SessionManager(LoggerMixin):
     # A function that calculates recursively equivalent identifiers
     # is also defined in SQL.
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
     @classmethod
     def engine(
-        cls, url: str | None = None, poolclass: type[Pool] | None = None
+        cls,
+        url: str | None = None,
+        poolclass: type[Pool] | None = None,
+        application_name: str | None = None,
     ) -> Engine:
         url = url or Configuration.database_url()
+        url_obj = make_url(url)
+        if application_name is not None:
+            if "application_name" in url_obj.query.keys():
+                cls.logger().warning(
+                    "Overwriting existing application_name in database URL "
+                    f"({url_obj.render_as_string(hide_password=True)}) with {application_name}"
+                )
+            url = url_obj.set(
+                query={**url_obj.query, "application_name": application_name}
+            ).render_as_string(hide_password=False)
+
         return create_engine(
             url,
             echo=DEBUG,
@@ -63,8 +78,8 @@ class SessionManager:
         return session
 
     @classmethod
-    def sessionmaker(cls):
-        bind_obj = cls.engine()
+    def sessionmaker(cls, application_name: str | None = None):
+        bind_obj = cls.engine(application_name=application_name)
         session_factory = sessionmaker(bind=bind_obj)
         cls.setup_event_listener(session_factory)
         return session_factory
@@ -76,8 +91,8 @@ class SessionManager:
         Base.metadata.create_all(engine)
 
     @classmethod
-    def session(cls, url, initialize_data=True, initialize_schema=True):
-        engine = cls.engine(url)
+    def session(cls, url: str | None = None, application_name: str | None = None):
+        engine = cls.engine(url, application_name=application_name)
         connection = engine.connect()
         return cls.session_from_connection(connection)
 
@@ -164,10 +179,10 @@ class SessionManager:
         return session
 
 
-def production_session(initialize_data=True) -> Session:
+def production_session() -> Session:
     url = Configuration.database_url()
     if url.startswith('"'):
         url = url[1:]
     logging.debug("Database url: %s", url)
-    _db = SessionManager.session(url, initialize_data=initialize_data)
+    _db = SessionManager.session(url, application_name="scripts")
     return _db
