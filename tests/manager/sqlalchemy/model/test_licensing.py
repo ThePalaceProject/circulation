@@ -265,7 +265,7 @@ class TestRightsStatus:
         pytest.raises(IntegrityError, db.session.commit)
 
 
-class TestLicenseFixture:
+class LicenseTestFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
         self.pool = db.licensepool(None)
@@ -327,12 +327,12 @@ class TestLicenseFixture:
 
 
 @pytest.fixture(scope="function")
-def licenses(db: DatabaseTransactionFixture) -> TestLicenseFixture:
-    return TestLicenseFixture(db)
+def licenses(db: DatabaseTransactionFixture) -> LicenseTestFixture:
+    return LicenseTestFixture(db)
 
 
 class TestLicense:
-    def test_loan_to(self, licenses: TestLicenseFixture):
+    def test_loan_to(self, licenses: LicenseTestFixture):
         # Verify that loaning a license also loans its pool.
         pool = licenses.pool
         license = licenses.perpetual
@@ -379,7 +379,7 @@ class TestLicense:
         is_inactive,
         total_remaining_loans,
         currently_available_loans,
-        licenses: TestLicenseFixture,
+        licenses: LicenseTestFixture,
     ):
         license = getattr(licenses, license_type)
         assert is_perpetual == license.is_perpetual
@@ -402,7 +402,7 @@ class TestLicense:
         ],
     )
     def test_license_checkout(
-        self, license_type, left, available, licenses: TestLicenseFixture
+        self, license_type, left, available, licenses: LicenseTestFixture
     ):
         license = getattr(licenses, license_type)
         license.checkout()
@@ -460,14 +460,14 @@ class TestLicense:
         ],
     )
     def test_license_checkin(
-        self, license_params, left, available, licenses: TestLicenseFixture
+        self, license_params, left, available, licenses: LicenseTestFixture
     ):
         l = licenses.db.license(licenses.pool, **license_params)
         l.checkin()
         assert left == l.checkouts_left
         assert available == l.checkouts_available
 
-    def test_best_available_license(self, licenses: TestLicenseFixture):
+    def test_best_available_license(self, licenses: LicenseTestFixture):
         next_week = utc_now() + datetime.timedelta(days=7)
         time_limited_2 = licenses.db.license(
             licenses.pool,

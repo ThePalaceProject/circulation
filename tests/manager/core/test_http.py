@@ -10,7 +10,7 @@ from tests.manager.util.test_mock_web_server import MockAPIServer, MockAPIServer
 
 
 @dataclass
-class TestHttpFixture:
+class HttpTestFixture:
     server: MockAPIServer
     request_with_timeout: Callable[..., requests.Response]
 
@@ -21,13 +21,13 @@ def test_http_fixture(mock_web_server: MockAPIServer):
     request_with_timeout = functools.partial(
         HTTP.request_with_timeout, timeout=1, backoff_factor=0
     )
-    return TestHttpFixture(
+    return HttpTestFixture(
         server=mock_web_server, request_with_timeout=request_with_timeout
     )
 
 
 class TestHTTP:
-    def test_retries_unspecified(self, test_http_fixture: TestHttpFixture):
+    def test_retries_unspecified(self, test_http_fixture: HttpTestFixture):
         for i in range(1, 7):
             response = MockAPIServerResponse()
             response.content = b"Ouch."
@@ -44,7 +44,7 @@ class TestHTTP:
         assert request.path == "/test"
         assert request.method == "GET"
 
-    def test_retries_none(self, test_http_fixture: TestHttpFixture):
+    def test_retries_none(self, test_http_fixture: HttpTestFixture):
         response = MockAPIServerResponse()
         response.content = b"Ouch."
         response.status_code = 502
@@ -60,7 +60,7 @@ class TestHTTP:
         assert request.path == "/test"
         assert request.method == "GET"
 
-    def test_retries_3(self, test_http_fixture: TestHttpFixture):
+    def test_retries_3(self, test_http_fixture: HttpTestFixture):
         response0 = MockAPIServerResponse()
         response0.content = b"Ouch."
         response0.status_code = 502
