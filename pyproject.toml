@@ -314,6 +314,9 @@ addopts = [
     "--numprocesses=auto",
     "--strict-markers",
 ]
+filterwarnings = [
+    "error::pytest.PytestWarning",
+]
 markers = [
     "minio: mark test as requiring minio",
     "opensearch: mark test as requiring opensearch",
