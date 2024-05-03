@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import csv
-import os
 import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from tempfile import _TemporaryFileWrapper
 from typing import Any
 
 from celery import shared_task
@@ -59,108 +59,107 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 f"Starting inventory and holds report job for {library.name}({library.short_name})."
             )
 
-            try:
-                current_time = datetime.now()
-                date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
-                attachments: dict[str, Path] = {}
+            current_time = datetime.now()
+            date_str = current_time.strftime("%Y-%m-%d_%H:%M:%s")
 
-                file_name_modifier = f"{library.short_name}-{date_str}"
+            file_name_modifier = f"{library.short_name}-{date_str}"
 
-                # resolve integrations
-                integrations = session.scalars(
-                    select(IntegrationConfiguration)
-                    .join(IntegrationLibraryConfiguration)
-                    .where(
-                        IntegrationLibraryConfiguration.library_id == self.library_id,
-                        IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
-                        not_(
-                            IntegrationConfiguration.settings_dict.contains(
-                                {"include_in_inventory_report": False}
-                            )
-                        ),
+            # resolve integrations
+            integrations = session.scalars(
+                select(IntegrationConfiguration)
+                .join(IntegrationLibraryConfiguration)
+                .where(
+                    IntegrationLibraryConfiguration.library_id == self.library_id,
+                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                    not_(
+                        IntegrationConfiguration.settings_dict.contains(
+                            {"include_in_inventory_report": False}
+                        )
+                    ),
+                )
+            ).all()
+            registry = LicenseProvidersRegistry()
+            integration_ids: list[int] = []
+            for integration in integrations:
+                settings = registry[integration.protocol].settings_load(integration)
+                if not isinstance(settings, OPDSImporterSettings):
+                    continue
+                integration_ids.append(integration.id)
+
+            # generate inventory report csv file
+            sql_params: dict[str, Any] = {
+                "library_id": library.id,
+                "integration_ids": tuple(integration_ids),
+            }
+
+            with tempfile.NamedTemporaryFile(
+                delete=self.delete_attachments
+            ) as report_zip:
+                zip_path = Path(report_zip.name)
+
+                with (
+                    self.create_temp_file() as inventory_report_file,
+                    self.create_temp_file() as holds_report_file,
+                ):
+                    self.generate_csv_report(
+                        session,
+                        csv_file=inventory_report_file,
+                        sql_params=sql_params,
+                        query=self.inventory_report_query(),
                     )
-                ).all()
-                registry = LicenseProvidersRegistry()
-                integration_ids: list[int] = []
-                for integration in integrations:
-                    settings = registry[integration.protocol].settings_load(integration)
-                    if not isinstance(settings, OPDSImporterSettings):
-                        continue
-                    integration_ids.append(integration.id)
 
-                # generate inventory report csv file
-                sql_params: dict[str, Any] = {
-                    "library_id": library.id,
-                    "integration_ids": tuple(integration_ids),
-                }
+                    self.generate_csv_report(
+                        session,
+                        csv_file=holds_report_file,
+                        sql_params=sql_params,
+                        query=self.holds_report_query(),
+                    )
 
-                inventory_report_file_path = self.generate_inventory_report(
-                    session, sql_params=sql_params
-                )
-
-                # generate holds report csv file
-                holds_report_file_path = self.generate_holds_report(
-                    session, sql_params=sql_params
-                )
-
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as archive:
+                    with zipfile.ZipFile(
+                        zip_path, "w", zipfile.ZIP_DEFLATED
+                    ) as archive:
                         archive.write(
-                            filename=holds_report_file_path,
+                            filename=holds_report_file.name,
                             arcname=f"palace-holds-report-for-library-{file_name_modifier}.csv",
                         )
                         archive.write(
-                            filename=inventory_report_file_path,
+                            filename=inventory_report_file.name,
                             arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
                         )
 
-                self.log.debug(f"Zip file written to {tmp.name}")
-                # clean up report files now that they have been written to the zipfile
-                for f in [inventory_report_file_path, holds_report_file_path]:
-                    os.remove(f)
+                    self.send_email(
+                        subject=f"Inventory and Holds Reports {current_time}",
+                        receivers=[self.email_address],
+                        text="",
+                        attachments={
+                            f"palace-inventory-and-holds-reports-for-{file_name_modifier}.zip": zip_path
+                        },
+                    )
 
-                attachments[
-                    f"palace-inventory-and-holds-reports-for-{file_name_modifier}.zip"
-                ] = Path(tmp.name)
-                self.send_email(
-                    subject=f"Inventory and Holds Reports {current_time}",
-                    receivers=[self.email_address],
-                    text="",
-                    attachments=attachments,
-                )
+                    self.log.debug(f"Zip file written to {zip_path}")
+                    self.log.info(
+                        f"Emailed inventory and holds reports for {library.name}({library.short_name})."
+                    )
 
-                self.log.info(
-                    f"Emailed inventory and holds reports for {library.name}({library.short_name})."
-                )
-            finally:
-                if self.delete_attachments:
-                    for file_path in attachments.values():
-                        os.remove(file_path)
-
-    def generate_inventory_report(
-        self, _db: Session, sql_params: dict[str, Any]
-    ) -> str:
-        """Generate an inventory csv file and return the file path"""
-        return self.generate_csv_report(_db, sql_params, self.inventory_report_query())
-
-    def generate_holds_report(self, _db: Session, sql_params: dict[str, Any]) -> str:
-        """Generate a holds report csv file and return the file path"""
-        return self.generate_csv_report(_db, sql_params, self.holds_report_query())
+    def create_temp_file(self) -> _TemporaryFileWrapper[str]:
+        return tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
 
     def generate_csv_report(
-        self, _db: Session, sql_params: dict[str, Any], query: str
-    ) -> str:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp:
-            writer = csv.writer(temp, delimiter=",")
-            rows = _db.execute(
-                text(query),
-                sql_params,
-            )
-            writer.writerow(rows.keys())
-            writer.writerows(rows)
-
-        self.log.debug(f"temp file written to {temp.name}")
-        return temp.name
+        self,
+        _db: Session,
+        csv_file: _TemporaryFileWrapper[str],
+        sql_params: dict[str, Any],
+        query: str,
+    ) -> None:
+        writer = csv.writer(csv_file, delimiter=",")
+        rows = _db.execute(
+            text(query),
+            sql_params,
+        )
+        writer.writerow(rows.keys())
+        writer.writerows(rows)
+        csv_file.flush()
+        self.log.debug(f"report written to {csv_file.name}")
 
     @staticmethod
     def inventory_report_query() -> str:
