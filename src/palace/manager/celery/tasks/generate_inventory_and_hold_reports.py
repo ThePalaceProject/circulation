@@ -5,8 +5,7 @@ import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from tempfile import _TemporaryFileWrapper
-from typing import Any
+from typing import IO, Any
 
 from celery import shared_task
 from sqlalchemy import not_, select, text
@@ -141,13 +140,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                         f"Emailed inventory and holds reports for {library.name}({library.short_name})."
                     )
 
-    def create_temp_file(self) -> _TemporaryFileWrapper[str]:
-        return tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8")
+    def create_temp_file(self) -> IO[str]:
+        return tempfile.NamedTemporaryFile("w", encoding="utf-8")
 
     def generate_csv_report(
         self,
         _db: Session,
-        csv_file: _TemporaryFileWrapper[str],
+        csv_file: IO[str],
         sql_params: dict[str, Any],
         query: str,
     ) -> None:
