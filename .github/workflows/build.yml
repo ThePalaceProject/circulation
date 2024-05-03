@@ -195,7 +195,7 @@ jobs:
           bash -c "
             source env/bin/activate &&
             poetry install --without ci --no-root --sync &&
-            pytest --no-cov tests/manager
+            pytest --no-cov tests
           "
         env:
           BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}

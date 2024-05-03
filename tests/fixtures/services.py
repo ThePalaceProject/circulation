@@ -201,7 +201,7 @@ class ServicesFixture:
         self.services.unwire()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def services_fixture(
     services_logging_fixture: ServicesLoggingFixture,
     services_storage_fixture: ServicesStorageFixture,

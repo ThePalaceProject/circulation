@@ -83,7 +83,6 @@ class ControllerFixture:
         self,
         db: DatabaseTransactionFixture,
         services_fixture: ServicesFixture,
-        setup_cm: bool,
     ):
         self.db = db
         self.app = app
@@ -102,11 +101,10 @@ class ControllerFixture:
         self.search_index = ExternalSearchIndexFake()
         self.services_fixture.services.search.index.override(self.search_index)
 
-        if setup_cm:
-            # NOTE: Any reference to self._default_library below this
-            # point in this method will cause the tests in
-            # TestScopedSession to hang.
-            app.manager = self.circulation_manager_setup()
+        # NOTE: Any reference to self._default_library below this
+        # point in this method will cause the tests in
+        # TestScopedSession to hang.
+        app.manager = self.circulation_manager_setup()
 
     @contextmanager
     def wired_container(self):
@@ -259,19 +257,7 @@ def controller_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
     time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, services_fixture, setup_cm=True)
-    time_now = datetime.datetime.now()
-    time_diff = time_now - time_then
-    logging.info("controller init took %s", time_diff)
-    yield fixture
-
-
-@pytest.fixture(scope="function")
-def controller_fixture_without_cm(
-    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-):
-    time_then = datetime.datetime.now()
-    fixture = ControllerFixture(db, services_fixture, setup_cm=False)
+    fixture = ControllerFixture(db, services_fixture)
     time_now = datetime.datetime.now()
     time_diff = time_now - time_then
     logging.info("controller init took %s", time_diff)
@@ -315,7 +301,7 @@ class CirculationControllerFixture(ControllerFixture):
     def __init__(
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
-        super().__init__(db, services_fixture, setup_cm=True)
+        super().__init__(db, services_fixture)
         self.works = []
         self.add_works(self.BOOKS)
 

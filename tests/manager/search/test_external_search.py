@@ -1979,12 +1979,6 @@ class TestFeaturedFacets:
                 debug=True,
             )
 
-        def assert_featured(description, worklist, facets, expect):
-            # Generate a list of featured works for the given `worklist`
-            # and compare that list against `expect`.
-            actual = works(worklist, facets)
-            fixture.assert_works(description, expect, actual)
-
         worklist = WorkList()
         worklist.initialize(transaction.default_library())
         facets = FeaturedFacets(1, random_seed=Filter.DETERMINISTIC)
@@ -2006,12 +2000,11 @@ class TestFeaturedFacets:
         )
         # The featured work appears above the non-featured work,
         # even though it's lower quality and is not available.
-        assert_featured(
-            "Works from WorkList based on CustomList",
-            best_sellers,
-            facets,
-            [data.featured_on_list, data.not_featured_on_list],
-        )
+        expect = [data.featured_on_list, data.not_featured_on_list]
+        # Generate a list of featured works for the given `worklist`
+        # and compare that list against `expect`.
+        actual = works(best_sellers, facets)
+        fixture.assert_works("Works from WorkList based on CustomList", expect, actual)
 
         # By changing the minimum_featured_quality you can control
         # at what point a work is considered 'featured' -- at which
@@ -2040,34 +2033,45 @@ class TestFeaturedFacets:
         assert data.featured_on_list in last_two
 
         # Up to this point we've been avoiding the random element,
-        # but we can introduce that now by passing in a numeric seed.
-        # In normal usage, the current time is used as the seed.
+        # but we can introduce that now by letting the random_seed
+        # parameter be None.
         #
         # The random element is relatively small, so it mainly acts
         # to rearrange works whose scores were similar before.
         #
-        # The order of the works when using random depends on 4 things:
-        # - The seed
-        # - The id (work_id)
-        # - The index name
-        # - The shard id
-        # If any of those change the order of works in this result may change,
-        # and hence the order of works in this assert must also change
-        # E.g. If the index version changes from v5 to v6, this may affect the order of works queried
-        # Keeping everything else the same, the order of works will remain reproducible across test runs
-        random_facets = FeaturedFacets(1, random_seed=43)
-        assert_featured(
-            "Works permuted by a random seed",
-            worklist,
-            random_facets,
-            [
-                data.hq_available_2,
-                data.hq_available,
-                data.default_quality,
-                data.hq_not_available,
-                data.not_featured_on_list,
-                data.featured_on_list,
-            ],
+        # In this test we have two groups of works -- one group is
+        # high-quality and available, the other group is low-quality.
+        # With the random element in play, the high-quality works will
+        # be randomly permuted among themselves, and the low-quality
+        # works will be randomly permuted among themselves.
+        # However, the high-quality works will always show up before
+        # the low-quality works.
+        random_facets = FeaturedFacets(1)
+        expect_high_quality = [
+            data.hq_available_2,
+            data.hq_available,
+        ]
+        expect_low_quality = [
+            data.default_quality,
+            data.hq_not_available,
+            data.not_featured_on_list,
+            data.featured_on_list,
+        ]
+        # Generate a list of featured works for the given `worklist`
+        # and compare that list against `expect`.
+        actual_random = works(worklist, random_facets)
+        assert len(actual_random) == 6
+        fixture.assert_works(
+            "Works permuted by a random seed (high quality)",
+            expect_high_quality,
+            actual_random[:2],
+            should_be_ordered=False,
+        )
+        fixture.assert_works(
+            "Works permuted by a random seed (low quality)",
+            expect_low_quality,
+            actual_random[2:],
+            should_be_ordered=False,
         )
 
 

@@ -17,7 +17,7 @@ class ProfileFixture(ControllerFixture):
     def __init__(
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
-        super().__init__(db, services_fixture, setup_cm=True)
+        super().__init__(db, services_fixture)
         # Nothing will happen to this patron. This way we can verify
         # that a patron can only see/modify their own profile.
         self.other_patron = db.patron()

@@ -3,10 +3,7 @@ from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
-from palace.manager.core.config import Configuration
-from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import (
     get_one,
     numericrange_to_tuple,
@@ -46,24 +43,6 @@ class TestDatabaseInterface:
         constraint = not_(Edition.title.in_(titles))
         result = get_one(db.session, Edition, constraint=constraint)
         assert None == result
-
-    def test_initialize_data_does_not_reset_timestamp(
-        self, db: DatabaseTransactionFixture
-    ):
-        # initialize_data() has already been called, so the database is
-        # initialized and the 'site configuration changed' Timestamp has
-        # been set. Calling initialize_data() again won't change the
-        # date on the timestamp.
-        timestamp = get_one(
-            db.session,
-            Timestamp,
-            collection=None,
-            service=Configuration.SITE_CONFIGURATION_CHANGED,
-        )
-        assert timestamp is not None
-        old_timestamp = timestamp.finish
-        SessionManager.initialize_data(db.session)
-        assert old_timestamp == timestamp.finish
 
 
 class TestNumericRangeConversion:

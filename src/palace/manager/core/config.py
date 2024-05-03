@@ -41,7 +41,6 @@ class Configuration(ConfigurationConstants):
     log = logging.getLogger("Configuration file loader")
 
     # Environment variables that contain URLs to the database
-    DATABASE_TEST_ENVIRONMENT_VARIABLE = "SIMPLIFIED_TEST_DATABASE"
     DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE = "SIMPLIFIED_PRODUCTION_DATABASE"
 
     # Environment variable for Overdrive fulfillment keys
@@ -72,46 +71,26 @@ class Configuration(ConfigurationConstants):
 
     @classmethod
     def database_url(cls):
-        """Find the database URL configured for this site.
-
-        For compatibility with old configurations, we will look in the
-        site configuration first.
-
-        If it's not there, we will look in the appropriate environment
-        variable.
-        """
-
-        # To avoid expensive mistakes, test and production databases
-        # are always configured with separate keys. The TESTING variable
-        # controls which database is used, and it's set by the
-        # package_setup() function called in every component's
-        # tests/__init__.py.
-        test = os.environ.get("TESTING", False)
-        if test:
-            environment_variable = cls.DATABASE_TEST_ENVIRONMENT_VARIABLE
-        else:
-            environment_variable = cls.DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE
-
-        url = os.environ.get(environment_variable)
+        """Find the database URL configured for this site."""
+        url = os.environ.get(cls.DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE)
         if not url:
             raise CannotLoadConfiguration(
                 "Database URL was not defined in environment variable (%s)."
-                % environment_variable
+                % cls.DATABASE_PRODUCTION_ENVIRONMENT_VARIABLE
             )
 
-        url_obj = None
         try:
             url_obj = make_url(url)
         except ArgumentError as e:
-            # Improve the error message by giving a guide as to what's
-            # likely to work.
+            # Improve the error message by giving a guide as to what's likely to work.
             raise ArgumentError(
                 "Bad format for database URL (%s). Expected something like postgresql://[username]:[password]@[hostname]:[port]/[database name]"
                 % url
             )
 
-        # Calling __to_string__ will hide the password.
-        logging.info("Connecting to database: %s" % url_obj.__to_string__())
+        logging.info(
+            "Connecting to database: %s" % url_obj.render_as_string(hide_password=True)
+        )
         return url
 
     @classmethod

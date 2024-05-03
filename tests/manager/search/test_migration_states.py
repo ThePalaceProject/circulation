@@ -29,32 +29,24 @@ class TestMigrationStates:
         self, external_search_fixture: ExternalSearchFixture
     ):
         fx = external_search_fixture
-        db = fx.db
         index = fx.index
         service = fx.service
 
-        # Ensure we are in the initial state, no test indices and pointer available
-        prefix = fx.search_config.index_prefix
-        all_indices = fx.client.indices.get("*")
-        for index_name in all_indices.keys():
-            if prefix in index_name:
-                fx.client.indices.delete(index_name)
-
-        # We cannot make any requests before we intitialize
+        # We cannot make any requests before we initialize
         with pytest.raises(Exception) as raised:
             index.query_works("")
         assert "index_not_found" in str(raised.value)
 
-        # When a new sytem comes up the first code to run is the InstanceInitailization script
+        # When a new sytem comes up the first code to run is the InstanceInitialization script
         # This preps the DB and the search indices/pointers
         InstanceInitializationScript().initialize_search_indexes()
 
         # Ensure we have created the index and pointers
-        new_index_name = index._revision.name_for_index(prefix)
-        empty_index_name = service._empty(prefix)
+        new_index_name = index._revision.name_for_index(fx.index_prefix)
+        empty_index_name = service._empty(fx.index_prefix)
         all_indices = fx.client.indices.get("*")
 
-        assert prefix in new_index_name
+        assert fx.index_prefix in new_index_name
         assert new_index_name in all_indices.keys()
         assert empty_index_name in all_indices.keys()
         assert fx.client.indices.exists_alias(

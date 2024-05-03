@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from contextlib import contextmanager
 
 import pytest
 from opensearchpy import OpenSearch
@@ -14,14 +15,13 @@ from palace.manager.service.container import Services, wire_container
 from palace.manager.service.search.container import Search
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
-from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.database import DatabaseTransactionFixture, TestIdFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFake
 
 
 class SearchTestConfiguration(ServiceConfiguration):
     url: AnyHttpUrl
-    index_prefix: str = "test_index"
     timeout: int = 20
     maxsize: int = 25
 
@@ -38,41 +38,31 @@ class ExternalSearchFixture(LoggerMixin):
     to ensure that it works well overall, with a realistic index.
     """
 
-    def __init__(self, db: DatabaseTransactionFixture, services: Services):
+    def __init__(
+        self, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
+    ):
         self.search_config = SearchTestConfiguration()
         self.services_container = services
+        self.index_prefix = test_id.id
 
         # Set up our testing search instance in the services container
         self.search_container = Search()
-        self.search_container.config.from_dict(self.search_config.dict())
+        search_config_dict = self.search_config.dict()
+        search_config_dict["index_prefix"] = self.index_prefix
+        self.search_container.config.from_dict(search_config_dict)
         self.services_container.search.override(self.search_container)
 
-        self._indexes_created: list[str] = []
         self.db = db
         self.client: OpenSearch = services.search.client()
         self.service: SearchServiceOpensearch1 = services.search.service()
         self.index: ExternalSearchIndex = services.search.index()
-        self._indexes_created = []
 
         # Make sure the services container is wired up with the newly created search container
         wire_container(self.services_container)
 
-    def record_index(self, name: str):
-        self.log.info(f"Recording index {name} for deletion")
-        self._indexes_created.append(name)
-
     def close(self):
-        for index in self._indexes_created:
-            try:
-                self.log.info(f"Deleting index {index}")
-                self.client.indices.delete(index)
-            except Exception as e:
-                self.log.info(f"Failed to delete index {index}: {e}")
-
-        # Force test index deletion
-        self.client.indices.delete("test_index*")
-        self.log.info("Waiting for operations to complete.")
-        self.client.indices.refresh()
+        # Delete our index prefix
+        self.client.indices.delete(f"{self.index_prefix}*")
 
         # Unwire the services container
         self.services_container.unwire()
@@ -90,19 +80,30 @@ class ExternalSearchFixture(LoggerMixin):
         work.set_presentation_ready()
         return work
 
-    def init_indices(self):
-        self.index.initialize_indices()
+    @classmethod
+    @contextmanager
+    def fixture(
+        cls, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
+    ):
+        fixture = cls(db, services, test_id)
+        try:
+            yield fixture
+        finally:
+            fixture.close()
 
 
 @pytest.fixture(scope="function")
 def external_search_fixture(
-    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+    function_test_id: TestIdFixture,
 ) -> Generator[ExternalSearchFixture, None, None]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
-    fixture = ExternalSearchFixture(db, services_fixture.services)
-    yield fixture
-    fixture.close()
+    with ExternalSearchFixture.fixture(
+        db, services_fixture.services, function_test_id
+    ) as fixture:
+        yield fixture
 
 
 class EndToEndSearchFixture:
@@ -237,9 +238,11 @@ class EndToEndSearchFixture:
             count = self.external_search_index.count_works(filter)
             assert count == len(expect)
 
-    def close(self):
-        for index in self.external_search_index.search_service().indexes_created():
-            self.external_search.record_index(index)
+    @classmethod
+    @contextmanager
+    def fixture(cls, search_fixture: ExternalSearchFixture):
+        fixture = cls(search_fixture)
+        yield fixture
 
 
 @pytest.fixture(scope="function")
@@ -247,9 +250,8 @@ def end_to_end_search_fixture(
     external_search_fixture: ExternalSearchFixture,
 ) -> Generator[EndToEndSearchFixture, None, None]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    fixture = EndToEndSearchFixture(external_search_fixture)
-    yield fixture
-    fixture.close()
+    with EndToEndSearchFixture.fixture(external_search_fixture) as fixture:
+        yield fixture
 
 
 class ExternalSearchFixtureFake:
@@ -269,15 +271,20 @@ class ExternalSearchFixtureFake:
         self.services.unwire()
         self.services.search.reset_override()
 
+    @classmethod
+    @contextmanager
+    def fixture(cls, db: DatabaseTransactionFixture, services: Services):
+        fixture = cls(db, services)
+        try:
+            yield fixture
+        finally:
+            fixture.close()
+
 
 @pytest.fixture(scope="function")
 def external_search_fake_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> Generator[ExternalSearchFixtureFake, None, None]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
-    fixture = ExternalSearchFixtureFake(
-        db=db,
-        services=services_fixture.services,
-    )
-    yield fixture
-    fixture.close()
+    with ExternalSearchFixtureFake.fixture(db, services_fixture.services) as fixture:
+        yield fixture
