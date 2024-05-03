@@ -84,8 +84,7 @@ class Configuration(ConfigurationConstants):
         except ArgumentError as e:
             # Improve the error message by giving a guide as to what's likely to work.
             raise ArgumentError(
-                "Bad format for database URL (%s). Expected something like postgresql://[username]:[password]@[hostname]:[port]/[database name]"
-                % url
+                "Bad format for database URL. Expected something like postgresql://[username]:[password]@[hostname]:[port]/[database name]"
             )
 
         logging.info(
