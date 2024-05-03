@@ -1400,44 +1400,27 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
 
 
 class TestWhereAreMyBooksScript:
-    @pytest.mark.skip(
-        reason="This test currently freezes inside pytest and has to be killed with SIGKILL."
-    )
     def test_overall_structure(
         self,
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
         # Verify that run() calls the methods we expect.
-
-        class Mock(MockWhereAreMyBooks):
-            """Used to verify that the correct methods are called."""
-
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.delete_cached_feeds_called = False
-                self.checked_libraries = []
-                self.explained_collections = []
-
-            def check_library(self, library):
-                self.checked_libraries.append(library)
-
-            def delete_cached_feeds(self):
-                self.delete_cached_feeds_called = True
-
-            def explain_collection(self, collection):
-                self.explained_collections.append(collection)
+        script = MockWhereAreMyBooks(
+            _db=db.session, search=end_to_end_search_fixture.external_search_index
+        )
+        mock_check_library = create_autospec(script.check_library)
+        script.check_library = mock_check_library
+        mock_explain_collection = create_autospec(script.explain_collection)
+        script.explain_collection = mock_explain_collection
 
         # If there are no libraries in the system, that's a big problem.
-        script = Mock(db.session)
         script.run()
         assert [
             "There are no libraries in the system -- that's a problem.",
             "\n",
         ] == script.output
-
-        # We still run the other checks, though.
-        assert True == script.delete_cached_feeds_called
+        script.output = []
 
         # Make some libraries and some collections, and try again.
         library1 = db.default_library()
@@ -1446,17 +1429,17 @@ class TestWhereAreMyBooksScript:
         collection1 = db.default_collection()
         collection2 = db.collection()
 
-        script = Mock(db.session)
         script.run()
 
         # Every library in the collection was checked.
-        assert {library1, library2} == set(script.checked_libraries)
-
-        # delete_cached_feeds() was called.
-        assert True == script.delete_cached_feeds_called
+        mock_check_library.assert_has_calls(
+            [call(library1), call(library2)], any_order=True
+        )
 
         # Every collection in the database was explained.
-        assert {collection1, collection2} == set(script.explained_collections)
+        mock_explain_collection.assert_has_calls(
+            [call(collection1), call(collection2)], any_order=True
+        )
 
         # There only output were the newlines after the five method
         # calls. All other output happened inside the methods we
@@ -1466,9 +1449,9 @@ class TestWhereAreMyBooksScript:
         # Finally, verify the ability to use the command line to limit
         # the check to specific collections. (This isn't terribly useful
         # since checks now run very quickly.)
-        script = Mock(db.session)
+        mock_explain_collection.reset_mock()
         script.run(cmd_args=["--collection=%s" % collection2.name])
-        assert [collection2] == script.explained_collections
+        mock_explain_collection.assert_called_once_with(collection2)
 
     def test_check_library(
         self,
