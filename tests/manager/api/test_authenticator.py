@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import re
 from collections.abc import Callable
 from decimal import Decimal
@@ -1020,11 +1019,7 @@ class TestLibraryAuthenticator:
 
         # We're about to call url_for, so we must create an
         # application context.
-        os.environ["AUTOINITIALIZE"] = "False"
         from palace.manager.api.app import app
-
-        self.app = app
-        del os.environ["AUTOINITIALIZE"]
 
         # Set up configuration settings for links.
         library_settings.terms_of_service = "http://terms.com"  # type: ignore[assignment]
@@ -1091,7 +1086,7 @@ class TestLibraryAuthenticator:
             finish=announcement_fixture.yesterday,
         )
 
-        with self.app.test_request_context("/"):
+        with app.test_request_context("/"):
             url = authenticator.authentication_document_url()
             assert url.endswith("/%s/authentication_document" % library.short_name)
 
