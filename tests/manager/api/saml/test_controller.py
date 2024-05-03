@@ -228,9 +228,7 @@ class TestSAMLController:
 
         query = urlencode(params)
 
-        with controller_fixture.app.test_request_context(
-            "http://circulationmanager.org/saml_authenticate?" + query
-        ):
+        with controller_fixture.app.test_request_context("/saml_authenticate?" + query):
             request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
 
             # Act
@@ -424,9 +422,7 @@ class TestSAMLController:
 
         controller = SAMLController(controller_fixture.app.manager, authenticator)
 
-        with controller_fixture.app.test_request_context(
-            "http://circulationmanager.org/saml_callback", data=data
-        ):
+        with controller_fixture.app.test_request_context("/saml_callback", data=data):
             # Act
             result = controller.saml_authentication_callback(
                 request, controller_fixture.db.session

@@ -84,19 +84,6 @@ if TYPE_CHECKING:
     from tests.fixtures.time import Time
 
 
-@pytest.fixture
-def mock_web_server():
-    """A test fixture that yields a usable mock web server for the lifetime of the test."""
-    _server = MockAPIServer("127.0.0.1", 10256)
-    _server.start()
-    logging.info(f"starting mock web server on {_server.address()}:{_server.port()}")
-    yield _server
-    logging.info(
-        f"shutting down mock web server on {_server.address()}:{_server.port()}"
-    )
-    _server.stop()
-
-
 class OverdriveFilesFixture(FilesFixture):
     """A fixture providing access to Overdrive files."""
 

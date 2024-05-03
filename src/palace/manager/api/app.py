@@ -1,5 +1,4 @@
 import logging
-import os
 
 import flask_babel
 from flask import request
@@ -17,7 +16,7 @@ from palace.manager.api.util.profilers import (
     PalaceXrayProfiler,
 )
 from palace.manager.core.app_server import ErrorHandler
-from palace.manager.service.container import Services, container_instance
+from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.flask_sqlalchemy_session import flask_scoped_session
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.sqlalchemy.session import SessionManager
@@ -66,24 +65,19 @@ def initialize_admin(_db: Session | None = None):
     ).value
 
 
-def initialize_circulation_manager(container: Services):
-    if os.environ.get("AUTOINITIALIZE") == "False":
-        # It's the responsibility of the importing code to set app.manager
-        # appropriately.
-        pass
-    else:
-        if getattr(app, "manager", None) is None:
-            try:
-                app.manager = CirculationManager(app._db)
-            except Exception:
-                logging.exception("Error instantiating circulation manager!")
-                raise
-            # Make sure that any changes to the database (as might happen
-            # on initial setup) are committed before continuing.
-            app.manager._db.commit()
+def initialize_circulation_manager():
+    if getattr(app, "manager", None) is None:
+        try:
+            app.manager = CirculationManager(app._db)
+        except Exception:
+            logging.exception("Error instantiating circulation manager!")
+            raise
+        # Make sure that any changes to the database (as might happen
+        # on initial setup) are committed before continuing.
+        app.manager._db.commit()
 
-            # setup the cache data object
-            CachedData.initialize(app._db)
+        # setup the cache data object
+        CachedData.initialize(app._db)
 
 
 def initialize_database():
@@ -113,6 +107,6 @@ def initialize_application() -> PalaceFlask:
         app.register_error_handler(Exception, error_handler.handle)
 
         # Initialize the circulation manager
-        initialize_circulation_manager(container)
+        initialize_circulation_manager()
         initialize_admin()
     return app

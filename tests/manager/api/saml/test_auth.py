@@ -310,7 +310,6 @@ class TestSAMLAuthenticationManager:
     ):
         # Arrange
         identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
-        service_provider_host_name = "opds.hilbertteam.net"
 
         identity_providers = [
             copy(identity_provider) for identity_provider in IDENTITY_PROVIDERS
@@ -350,10 +349,6 @@ class TestSAMLAuthenticationManager:
                 "onelogin.saml2.response.OneLogin_Saml2_Utils.validate_sign",
                 validate_mock,
             ):
-                controller_fixture.app.config[
-                    "SERVER_NAME"
-                ] = service_provider_host_name
-
                 with controller_fixture.app.test_request_context(
                     "/SAML2/POST", data={"SAMLResponse": saml_response}
                 ):
