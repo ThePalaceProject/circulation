@@ -1,28 +1,79 @@
 import logging
+import multiprocessing
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 from io import StringIO
-from multiprocessing import Process
+from pathlib import Path
 from unittest.mock import MagicMock, Mock
 
+import pytest
 from pytest_alembic import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
+from typing_extensions import Self
 
 from palace.manager.scripts import InstanceInitializationScript
 from palace.manager.sqlalchemy.session import SessionManager
-from tests.fixtures.database import ApplicationFixture
-from tests.fixtures.services import mock_services_container
+from tests.fixtures.database import DatabaseFixture
+from tests.fixtures.services import ServicesFixture, mock_services_container
 
 
-def _run_script() -> None:
+class InstanceInitScriptFixture:
+    def __init__(
+        self,
+        function_database: DatabaseFixture,
+        services_fixture: ServicesFixture,
+        alembic_config_path: Path,
+    ):
+        self.database = function_database
+        self.services = services_fixture
+        self.alembic_config_path = alembic_config_path
+
+    def script(self) -> InstanceInitializationScript:
+        with self.database.patch_engine():
+            return InstanceInitializationScript(
+                config_file=self.alembic_config_path,
+            )
+
+    @classmethod
+    @contextmanager
+    def fixture(
+        cls,
+        function_database: DatabaseFixture,
+        services_fixture: ServicesFixture,
+        alembic_config_path: Path,
+    ) -> Generator[Self, None, None]:
+        fixture = cls(function_database, services_fixture, alembic_config_path)
+        yield fixture
+
+
+@pytest.fixture
+def instance_init_script_fixture(
+    function_database: DatabaseFixture,
+    services_fixture: ServicesFixture,
+    alembic_config_path: Path,
+) -> Generator[InstanceInitScriptFixture, None, None]:
+    with InstanceInitScriptFixture.fixture(
+        function_database, services_fixture, alembic_config_path
+    ) as fixture:
+        yield fixture
+
+
+def _run_script(config_path: Path, db_url: str) -> None:
     try:
         # Capturing the log output
         stream = StringIO()
         logging.basicConfig(stream=stream, level=logging.INFO, force=True)
 
+        def engine_factory() -> Engine:
+            return SessionManager.engine(db_url)
+
         mock_services = MagicMock()
-        with mock_services_container(mock_services):
-            script = InstanceInitializationScript()
+        with (mock_services_container(mock_services),):
+            script = InstanceInitializationScript(
+                config_file=config_path, engine_factory=engine_factory
+            )
             script.run()
 
         # Set our exit code to the number of upgrades we ran
@@ -34,17 +85,27 @@ def _run_script() -> None:
         sys.exit(-1)
 
 
-def test_locking(alembic_runner: MigrationContext, alembic_engine: Engine) -> None:
+def test_locking(
+    alembic_runner: MigrationContext,
+    alembic_config_path: Path,
+    instance_init_script_fixture: InstanceInitScriptFixture,
+) -> None:
     # Migrate to the initial revision
     alembic_runner.migrate_down_to("base")
+    db_url = instance_init_script_fixture.database.database_name.url
 
     # Spawn three processes, that will all try to migrate to head
     # at the same time. One of them should do the migration, and
     # the other two should wait, then do no migration since it
     # has already been done.
-    p1 = Process(target=_run_script)
-    p2 = Process(target=_run_script)
-    p3 = Process(target=_run_script)
+    mp_ctx = multiprocessing.get_context("spawn")
+    process_kwargs = {
+        "config_path": alembic_config_path,
+        "db_url": db_url,
+    }
+    p1 = mp_ctx.Process(target=_run_script, kwargs=process_kwargs)
+    p2 = mp_ctx.Process(target=_run_script, kwargs=process_kwargs)
+    p3 = mp_ctx.Process(target=_run_script, kwargs=process_kwargs)
 
     p1.start()
     p2.start()
@@ -67,17 +128,17 @@ def test_locking(alembic_runner: MigrationContext, alembic_engine: Engine) -> No
     assert exit_codes[2] == 0
 
 
-def test_initialize(application: ApplicationFixture) -> None:
+def test_initialize(instance_init_script_fixture: InstanceInitScriptFixture) -> None:
+    # Drop any existing schema
+    instance_init_script_fixture.database.drop_existing_schema()
+
     # Run the script and make sure we create the alembic_version table
-
-    application.drop_existing_schema()
-
-    engine = SessionManager.engine()
+    engine = instance_init_script_fixture.database.engine
     inspector = inspect(engine)
     assert "alembic_version" not in inspector.get_table_names()
     assert len(inspector.get_table_names()) == 0
 
-    script = InstanceInitializationScript()
+    script = instance_init_script_fixture.script()
     script.initialize_database = Mock(wraps=script.initialize_database)
     script.migrate_database = Mock(wraps=script.migrate_database)
     script.run()
@@ -97,7 +158,10 @@ def test_initialize(application: ApplicationFixture) -> None:
     assert script.migrate_database.call_count == 1
 
 
-def test_migrate(alembic_runner: MigrationContext) -> None:
+def test_migrate(
+    alembic_runner: MigrationContext,
+    instance_init_script_fixture: InstanceInitScriptFixture,
+) -> None:
     # Run the script and make sure we create the alembic_version table
     # Migrate to the initial revision
     alembic_runner.migrate_down_to("base")
@@ -106,7 +170,7 @@ def test_migrate(alembic_runner: MigrationContext) -> None:
     assert alembic_runner.current == "base"
     assert alembic_runner.current != alembic_runner.heads[0]
 
-    script = InstanceInitializationScript()
+    script = instance_init_script_fixture.script()
     script.initialize_database = Mock(wraps=script.initialize_database)
     script.migrate_database = Mock(wraps=script.migrate_database)
     script.run()

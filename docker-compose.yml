@@ -22,7 +22,7 @@ x-cm-variables: &cm
     PALACE_CELERY_CLOUDWATCH_STATISTICS_DRYRUN: "true"
 
     # Set up the environment variables used for testing as well
-    SIMPLIFIED_TEST_DATABASE: "postgresql://palace:test@pg:5432/circ"
+    PALACE_TEST_DATABASE_URL: "postgresql://palace:test@pg:5432/circ"
     PALACE_TEST_SEARCH_URL: "http://os:9200"
     PALACE_TEST_MINIO_ENDPOINT_URL: "http://minio:9000"
     PALACE_TEST_MINIO_USER: "palace"

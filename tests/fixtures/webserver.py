@@ -124,12 +124,12 @@ class MockAPIServer(LoggerMixin):
 
     def __init__(self, address: str, port: int):
         self._address = address
-        self._port = port
         self._server = MockAPIInternalServer(
-            (self._address, self._port), bind_and_activate=True
+            (self._address, port), bind_and_activate=True
         )
         self._server.mock_api_server = self
         self._server_thread = threading.Thread(target=self._server.serve_forever)
+        self._port = self._server.socket.getsockname()[1]
         self._responses = {}
         self._requests = []
 
@@ -180,7 +180,7 @@ class MockAPIServer(LoggerMixin):
 @pytest.fixture
 def mock_web_server() -> Generator[MockAPIServer, None, None]:
     """A test fixture that yields a usable mock web server for the lifetime of the test."""
-    _server = MockAPIServer("127.0.0.1", 10256)
+    _server = MockAPIServer("127.0.0.1", 0)
     _server.start()
     yield _server
     _server.stop()

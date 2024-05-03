@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
 from pydantic.json import pydantic_encoder
 from sqlalchemy import create_engine, event, literal_column, select, table, text
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import Pool
 
@@ -44,7 +43,9 @@ class SessionManager:
     RECURSIVE_EQUIVALENTS_FUNCTION = "recursive_equivalents.sql"
 
     @classmethod
-    def engine(cls, url: str | None = None, poolclass: type[Pool] | None = None):
+    def engine(
+        cls, url: str | None = None, poolclass: type[Pool] | None = None
+    ) -> Engine:
         url = url or Configuration.database_url()
         return create_engine(
             url,
@@ -62,18 +63,8 @@ class SessionManager:
         return session
 
     @classmethod
-    def sessionmaker(cls, url=None, session=None):
-        if not (url or session):
-            url = Configuration.database_url()
-        if url:
-            bind_obj = cls.engine(url)
-        elif session:
-            bind_obj = session.get_bind()
-            if not os.environ.get("TESTING"):
-                # If a factory is being created from a session in test mode,
-                # use the same Connection for all of the tests so objects can
-                # be accessed. Otherwise, bind against an Engine object.
-                bind_obj = bind_obj.engine
+    def sessionmaker(cls):
+        bind_obj = cls.engine()
         session_factory = sessionmaker(bind=bind_obj)
         cls.setup_event_listener(session_factory)
         return session_factory

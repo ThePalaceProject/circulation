@@ -86,7 +86,7 @@ Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` opt
 
 *Required.* The URL of the production PostgreSQL database for the application.
 
-### `SIMPLIFIED_TEST_DATABASE`
+### `PALACE_TEST_DATABASE_URL`
 
 *Optional.* The URL of a PostgreSQL database for tests. This optional variable allows unit tests to be run in the
 container.

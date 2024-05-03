@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -12,7 +12,7 @@ from typing import Any
 from alembic import command, config
 from alembic.util import CommandError
 from sqlalchemy import inspect, select
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -486,13 +486,19 @@ class InstanceInitializationScript:
     remain idempotent.
     """
 
-    def __init__(self, config_file: Path | None = None) -> None:
+    def __init__(
+        self,
+        config_file: Path | None = None,
+        engine_factory: Callable[[], Engine] = SessionManager.engine,
+    ) -> None:
         self._log: logging.Logger | None = None
         self._container = container_instance()
 
         # Call init_resources() to initialize the logging configuration.
         self._container.init_resources()
         self._config_file = config_file
+
+        self._engine_factory = engine_factory
 
     @property
     def log(self) -> logging.Logger:
@@ -568,7 +574,7 @@ class InstanceInitializationScript:
         instance of the script is running at a time. This prevents multiple
         instances from trying to initialize the database at the same time.
         """
-        engine = SessionManager.engine()
+        engine = self._engine_factory()
         with engine.begin() as connection:
             with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
                 self.initialize(connection)

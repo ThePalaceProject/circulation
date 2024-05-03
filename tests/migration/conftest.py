@@ -12,7 +12,7 @@ import pytest_alembic
 from pytest_alembic.config import Config
 
 from palace.manager.sqlalchemy.session import json_serializer
-from tests.fixtures.database import ApplicationFixture, DatabaseFixture
+from tests.fixtures.database import DatabaseFixture
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
@@ -21,60 +21,41 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection, Engine
 
 
-pytest_plugins = [
-    "tests.fixtures.services",
-]
-
-
-@pytest.fixture(scope="function")
-def application(
-    services_fixture: ServicesFixture,
-) -> Generator[ApplicationFixture, None, None]:
-    app = ApplicationFixture.create()
-    yield app
-    app.close()
-
-
-@pytest.fixture(scope="function")
-def database(application: ApplicationFixture) -> Generator[DatabaseFixture, None, None]:
-    # This is very similar to the normal database fixture and uses the same object,
-    # but because these tests are done outside a transaction, we need this fixture
-    # to have function scope, so the database schema is completely reset between
-    # tests.
-    db = DatabaseFixture.create()
-    yield db
-    db.close()
+@pytest.fixture
+def alembic_config_path() -> Path:
+    return Path(__file__).parent.parent.parent.absolute() / "alembic.ini"
 
 
 @pytest.fixture
-def alembic_config() -> Config:
+def alembic_config(alembic_config_path: Path) -> Config:
     """
     Use an explicit path to the alembic config file. This lets us run pytest
     from a different directory than the root of the project.
     """
-    return Config(
-        config_options={
-            "file": str(Path(__file__).parent.parent.parent.absolute() / "alembic.ini")
-        }
-    )
+    return Config(config_options={"file": str(alembic_config_path)})
 
 
 @pytest.fixture
-def alembic_engine(database: DatabaseFixture) -> Engine:
+def alembic_engine(function_database: DatabaseFixture) -> Engine:
     """
     Override this fixture to provide pytest-alembic powered tests with a database handle.
     """
-    return database._engine
+    return function_database.engine
 
 
 @pytest.fixture
 def alembic_runner(
     alembic_config: dict[str, Any] | alembic.config.Config | Config,
     alembic_engine: Engine,
+    services_fixture: ServicesFixture,
 ) -> Generator[MigrationContext, None, None]:
     """
     Override this fixture to make sure that we stamp head. Since this is how out database
     is initialized. The normal fixtures assume you start from an empty database.
+
+    This fixture also includes the services_fixture fixture which is used to mock out
+    the services container. This is done because some of the migrations require the services
+    container to be initialized.
     """
     config = Config.from_raw_config(alembic_config)
     with pytest_alembic.runner(config=config, engine=alembic_engine) as runner:

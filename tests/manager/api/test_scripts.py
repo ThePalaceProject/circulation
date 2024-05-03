@@ -541,18 +541,18 @@ class TestInstanceInitializationScript:
 
     def test_run_locks_database(self, db: DatabaseTransactionFixture):
         # The script locks the database with a PostgreSQL advisory lock
-        with patch("palace.manager.scripts.SessionManager") as session_manager:
-            with patch("palace.manager.scripts.pg_advisory_lock") as advisory_lock:
-                script = InstanceInitializationScript()
-                script.initialize = MagicMock()
-                script.run()
+        with patch("palace.manager.scripts.pg_advisory_lock") as advisory_lock:
+            mock_engine_factory = MagicMock()
+            script = InstanceInitializationScript(engine_factory=mock_engine_factory)
+            script.initialize = MagicMock()
+            script.run()
 
-                advisory_lock.assert_called_once_with(
-                    session_manager.engine().begin().__enter__(),
-                    LOCK_ID_DB_INIT,
-                )
-                advisory_lock().__enter__.assert_called_once()
-                advisory_lock().__exit__.assert_called_once()
+            advisory_lock.assert_called_once_with(
+                mock_engine_factory().begin().__enter__(),
+                LOCK_ID_DB_INIT,
+            )
+            advisory_lock().__enter__.assert_called_once()
+            advisory_lock().__exit__.assert_called_once()
 
     def test_initialize(self, db: DatabaseTransactionFixture):
         # Test that the script inspects the database and initializes or migrates the database
@@ -738,7 +738,7 @@ class TestLocalAnalyticsExportScript:
         output = StringIO()
         cmd_args = ["--start=20190820", "--end=20190827"]
         exporter = MockLocalAnalyticsExporter()
-        script = LocalAnalyticsExportScript()
+        script = LocalAnalyticsExportScript(_db=db.session)
         script.do_run(output=output, cmd_args=cmd_args, exporter=exporter)
         assert "test" == output.getvalue()
         assert ["20190820", "20190827"] == exporter.called_with
@@ -746,8 +746,8 @@ class TestLocalAnalyticsExportScript:
 
 class TestGenerateShortTokenScript:
     @pytest.fixture
-    def script(self):
-        return GenerateShortTokenScript()
+    def script(self, db: DatabaseTransactionFixture):
+        return GenerateShortTokenScript(_db=db.session)
 
     @pytest.fixture
     def output(self):

@@ -636,19 +636,26 @@ tox -e "py310-docker"
 If you already have elastic search or postgres running locally, you can run them instead by setting the
 following environment variables:
 
-- `SIMPLIFIED_TEST_DATABASE`
+- `PALACE_TEST_DATABASE_URL`
 - `PALACE_TEST_SEARCH_URL`
 
 Make sure the ports and usernames are updated to reflect the local configuration.
 
 ```sh
 # Set environment variables
-export SIMPLIFIED_TEST_DATABASE="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
-export SIMPLIFIED_TEST_OPENSEARCH="http://localhost:9200"
+export PALACE_TEST_DATABASE_URL="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
+export PALACE_TEST_SEARCH_URL="http://localhost:9200"
 
 # Run tox
 tox -e "py310"
 ```
+
+The tests assume that they have permission to create and drop databases. They connect to the
+provided database URL and create a new database for each test run. If the user does not have permission
+to create and drop databases, the tests will fail. You can disable this behavior by setting the
+`PALACE_TEST_DATABASE_CREATE_DATABASE` environment variable to `false`.
+
+```sh
 
 ### Override `pytest` arguments
 
@@ -752,16 +759,10 @@ This profiler uses [PyInstrument](https://pyinstrument.readthedocs.io/en/latest/
 PyInstrument can also be used to profile the test suite. This can be useful to identify slow tests, or to identify
 performance regressions.
 
-To profile the core test suite, run the following command:
+To profile the test suite, run the following command:
 
 ```sh
-pyinstrument -m pytest --no-cov tests/core/
-```
-
-To profile the API test suite, run the following command:
-
-```sh
-pyinstrument -m pytest --no-cov tests/api/
+pyinstrument -m pytest --no-cov -n 0 tests
 ```
 
 #### Environment Variables

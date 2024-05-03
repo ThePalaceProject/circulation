@@ -35,7 +35,6 @@ class SearchServiceFake(SearchService):
     _failing: SearchServiceFailureMode
     _search_client: Search
     _multi_search_client: MultiSearch
-    _indexes_created: list[str]
     _document_submission_attempts: list[dict]
 
     def __init__(self):
@@ -46,7 +45,6 @@ class SearchServiceFake(SearchService):
         self._write_pointer: SearchWritePointer | None = None
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
-        self._indexes_created = []
         self._document_submission_attempts = []
 
     @property
@@ -56,9 +54,6 @@ class SearchServiceFake(SearchService):
     @property
     def document_submission_attempts(self) -> list[dict]:
         return self._document_submission_attempts
-
-    def indexes_created(self) -> list[str]:
-        return self._indexes_created
 
     def _fail_if_necessary(self):
         if self._failing == SearchServiceFailureMode.FAIL_ENTIRELY:
@@ -106,7 +101,6 @@ class SearchServiceFake(SearchService):
 
     def create_empty_index(self) -> None:
         self._fail_if_necessary()
-        self._indexes_created.append(f"{self.base_name}-empty")
         return None
 
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
@@ -122,7 +116,6 @@ class SearchServiceFake(SearchService):
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._indexes_created.append(revision.name_for_index(self.base_name))
         return None
 
     def index_is_populated(self, revision: SearchSchemaRevision) -> bool:

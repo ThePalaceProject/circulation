@@ -2,30 +2,35 @@ from __future__ import annotations
 
 import importlib
 import logging
-import os
 import shutil
 import tempfile
 import time
 import uuid
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
+from functools import cached_property
 from textwrap import dedent
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import sqlalchemy
 from Crypto.PublicKey.RSA import import_key
-from sqlalchemy import MetaData
-from sqlalchemy.engine import Connection, Engine, Transaction
+from pydantic import PostgresDsn
+from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
+from typing_extensions import Self
 
 from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.service.configuration import ServiceConfiguration
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -60,102 +65,314 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import create, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.services import ServicesFixture
 
 
-class ApplicationFixture:
-    """The ApplicationFixture is a representation of the state that must be set up in order to run the application for
-    testing."""
+class TestIdFixture:
+    """
+    This fixture creates a unique test id. This ID is suitable for initializing shared resources.
+    For example - database name, opensearch index name, etc.
+    """
+
+    def __init__(self, worker_id: str, prefix: str):
+        # worker_id comes from the pytest-xdist fixture
+        self._worker_id = worker_id
+
+        # This flag indicates that the tests are running in parallel mode.
+        self.parallel = worker_id != "master"
+
+        # We create a unique run id for each test run. The dashes are
+        # replaced with underscores to make it a valid identifier for
+        # in PostgreSQL.
+        self.run_id = str(uuid.uuid4()).replace("-", "_")
+
+        self._prefix = prefix
+
+    @cached_property
+    def id(self) -> str:
+        # The test id is a combination of the prefix, worker id and run id.
+        # This is the ID that should be used to create unique resources.
+        return f"{self._prefix}_{self._worker_id}_{self.run_id}"
+
+
+@pytest.fixture(scope="session")
+def session_test_id(worker_id: str) -> TestIdFixture:
+    """
+    This is a session scoped fixture that provides a unique test id. Since session scoped fixtures
+    are created only once per worker, per test run, this fixture provides a unique test ID that is
+    stable for the worker for the entire test run.
+
+    This is useful when initializing session scoped shared resources like databases, opensearch indexes, etc.
+    """
+    return TestIdFixture(worker_id, "session")
+
+
+@pytest.fixture(scope="function")
+def function_test_id(worker_id: str) -> TestIdFixture:
+    """
+    This is a function scoped fixture that provides a unique test id. Since function scoped fixtures
+    are created for each test function, this fixture provides a unique test ID that for each test function.
+
+    This is useful when initializing function scoped shared resources.
+    """
+
+    return TestIdFixture(worker_id, "function")
+
+
+class DatabaseTestConfiguration(ServiceConfiguration):
+    url: PostgresDsn
+    create_database: bool = True
+
+    class Config:
+        env_prefix = "PALACE_TEST_DATABASE_"
+
+
+class DatabaseCreationFixture:
+    """
+    Uses the configured database URL to create a unique database for each test run. The database
+    is dropped after the test run is complete.
+
+    Database creation can be disabled by setting the `create_database` flag to False in the configuration.
+    In this case the database URL is used as is.
+    """
+
+    def __init__(self, test_id: TestIdFixture):
+        self.test_id = test_id
+        config = DatabaseTestConfiguration()
+        if not config.create_database and self.test_id.parallel:
+            raise BasePalaceException(
+                "Database creation is disabled, but tests are running in parallel mode. "
+                "This is not supported. Please enable database creation or run tests in serial mode."
+            )
+        self.create_database = config.create_database
+        self._config_url = make_url(config.url)
+
+    @cached_property
+    def database_name(self) -> str:
+        """
+        Returns the name of the database that the test should use.
+        """
+
+        if not self.create_database:
+            if self._config_url.database is None:
+                raise BasePalaceException(
+                    "Database name is required when database creation is disabled."
+                )
+            return self._config_url.database
+
+        return self.test_id.id
+
+    @cached_property
+    def url(self) -> str:
+        """
+        Returns the Postgres URL for the database that the test should use. This URL
+        includes credentials and the database name, so it has everything needed to
+        connect to the database.
+        """
+
+        return str(self._config_url.set(database=self.database_name))
+
+    @contextmanager
+    def _db_connection(self) -> Generator[Connection, None, None]:
+        """
+        Databases need to be created and dropped outside a transaction. This method
+        provides a connection to database URL provided in the configuration that is not
+        wrapped in a transaction.
+        """
+
+        engine = create_engine(self._config_url, isolation_level="AUTOCOMMIT")
+        connection = engine.connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+            engine.dispose()
+
+    def _create_db(self) -> None:
+        if not self.create_database:
+            return
+
+        with self._db_connection() as connection:
+            user = self._config_url.username
+            connection.execute(text(f"CREATE DATABASE {self.database_name}"))
+            connection.execute(
+                text(f"GRANT ALL PRIVILEGES ON DATABASE {self.database_name} TO {user}")
+            )
+
+    def _drop_db(self) -> None:
+        if not self.create_database:
+            return
+
+        with self._db_connection() as connection:
+            connection.execute(text(f"DROP DATABASE {self.database_name}"))
+
+    @contextmanager
+    def patch_database_url(self) -> Generator[None, None, None]:
+        """
+        This method patches the database URL, so any code that uses it will use the worker specific database.
+        """
+        with patch.object(Configuration, "database_url", return_value=self.url):
+            yield
 
     @classmethod
-    def drop_existing_schema(cls):
-        engine = SessionManager.engine()
-        metadata_obj = MetaData()
-        metadata_obj.reflect(bind=engine)
-        metadata_obj.drop_all(engine)
-        metadata_obj.clear()
+    @contextmanager
+    def fixture(cls, test_id: TestIdFixture) -> Generator[Self, None, None]:
+        db_name_fixture = cls(test_id)
+        db_name_fixture._create_db()
+        try:
+            yield db_name_fixture
+        finally:
+            db_name_fixture._drop_db()
 
-    @classmethod
-    def create(cls):
-        # This will make sure we always connect to the test database.
-        os.environ["TESTING"] = "true"
 
-        # Drop any existing schema. It will be recreated when the database is initialized.
-        _cls = cls()
-        _cls.drop_existing_schema()
-        return _cls
+@pytest.fixture(scope="session")
+def database_creation(
+    session_test_id: TestIdFixture,
+) -> Generator[DatabaseCreationFixture, None, None]:
+    """
+    This is a session scoped fixture that provides a unique database for each worker in the test run.
+    """
+    with DatabaseCreationFixture.fixture(session_test_id) as fixture:
+        yield fixture
 
-    def close(self):
-        if "TESTING" in os.environ:
-            del os.environ["TESTING"]
+
+@pytest.fixture(scope="function")
+def function_database_creation(
+    function_test_id: TestIdFixture,
+) -> Generator[DatabaseCreationFixture, None, None]:
+    """
+    This is a function scoped fixture that provides a unique database for each test function.
+
+    This is resource intensive, so it should only be used when necessary. It is helpful
+    when testing database interactions that cannot be tested in a transaction. Such as
+    instance initialization, schema migrations, etc.
+    """
+    with DatabaseCreationFixture.fixture(function_test_id) as fixture:
+        if not fixture.create_database:
+            raise BasePalaceException(
+                "Cannot provide a function scoped database when database creation is disabled."
+            )
+        with fixture.patch_database_url():
+            yield fixture
 
 
 class DatabaseFixture:
-    """The DatabaseFixture stores a reference to the database."""
+    """
+    The DatabaseFixture initializes the database schema and creates a connection to the database
+    that should be used in the tests.
+    """
 
-    _engine: Engine
-    _connection: Connection
+    def __init__(self, database_name: DatabaseCreationFixture) -> None:
+        self.database_name = database_name
+        self.engine = self.engine_factory()
+        self.connection = self.engine.connect()
 
-    def __init__(self, engine: Engine, connection: Connection):
-        self._engine = engine
-        self._connection = connection
+    def engine_factory(self) -> Engine:
+        return SessionManager.engine(self.database_name.url)
 
-    @staticmethod
-    def _get_database_connection() -> tuple[Engine, Connection]:
-        url = Configuration.database_url()
-        engine = SessionManager.engine(url)
-        connection = engine.connect()
-        return engine, connection
+    def drop_existing_schema(self) -> None:
+        metadata_obj = MetaData()
+        metadata_obj.reflect(bind=self.engine)
+        metadata_obj.drop_all(self.engine)
+        metadata_obj.clear()
 
-    @staticmethod
-    def _initialize_database(connection: Connection):
-        SessionManager.initialize_schema(connection)
-        with Session(connection) as session:
+    def _initialize_database(self) -> None:
+        SessionManager.initialize_schema(self.connection)
+        with Session(self.connection) as session:
             # Initialize the database with default data
             SessionManager.initialize_data(session)
 
     @staticmethod
-    def _load_core_model_classes():
-        # Load all the core model classes so that they are registered with the ORM.
+    def _load_model_classes():
+        """
+        Make sure that all the model classes are loaded, so that they are registered with the
+        ORM when we are creating the schema.
+        """
         import palace.manager.sqlalchemy.model
 
         importlib.reload(palace.manager.sqlalchemy.model)
 
-    @classmethod
-    def create(cls) -> DatabaseFixture:
-        cls._load_core_model_classes()
-        engine, connection = cls._get_database_connection()
-        cls._initialize_database(connection)
-        return DatabaseFixture(engine, connection)
-
-    def close(self):
+    def _close(self):
         # Destroy the database connection and engine.
-        self._connection.close()
-        self._engine.dispose()
+        self.connection.close()
+        self.engine.dispose()
 
-    @property
-    def connection(self) -> Connection:
-        return self._connection
+    @contextmanager
+    def patch_engine(self) -> Generator[None, None, None]:
+        """
+        This method patches the SessionManager to use the engine provided by this fixture.
+
+        This is useful when the tests need to access the engine directly. It patches the SessionManager
+        to use the engine provided by this fixture and patches the engine so that code that calls
+        dispose() on the engine does not actually dispose it, since it is used by this fixture.
+        """
+        with patch.object(self.engine, "dispose"), patch.object(
+            SessionManager, "engine", return_value=self.engine
+        ):
+            yield
+
+    @contextmanager
+    def patch_engine_error(self) -> Generator[None, None, None]:
+        """
+        This method patches the SessionManager to raise an exception when the engine is accessed.
+        This is useful when the tests should not be accessing the engine directly.
+        """
+        with patch.object(
+            SessionManager,
+            "engine",
+            side_effect=BasePalaceException(
+                "Engine needs to be accessed from fixture within tests."
+            ),
+        ):
+            yield
+
+    @classmethod
+    @contextmanager
+    def fixture(
+        cls, database_name: DatabaseCreationFixture
+    ) -> Generator[Self, None, None]:
+        db_fixture = cls(database_name)
+        db_fixture.drop_existing_schema()
+        db_fixture._load_model_classes()
+        db_fixture._initialize_database()
+        try:
+            yield db_fixture
+        finally:
+            db_fixture._close()
+
+
+@pytest.fixture(scope="session")
+def database(
+    database_creation: DatabaseCreationFixture,
+) -> Generator[DatabaseFixture, None, None]:
+    """
+    This is a session scoped fixture that provides a unique database engine and connection
+    for each worker in the test run.
+    """
+    with DatabaseFixture.fixture(database_creation) as db:
+        yield db
+
+
+@pytest.fixture(scope="function")
+def function_database(
+    function_database_creation: DatabaseCreationFixture,
+) -> Generator[DatabaseFixture, None, None]:
+    """
+    This is a function scoped fixture that provides a unique database engine and connection
+    for each test. This is resource intensive, so it should only be used when necessary.
+    """
+    with DatabaseFixture.fixture(function_database_creation) as db:
+        with db.patch_engine_error():
+            yield db
 
 
 class DatabaseTransactionFixture:
     """A fixture representing a single transaction. The transaction is automatically rolled back."""
 
-    _database: DatabaseFixture
-    _default_library: Library | None
-    _default_collection: Collection | None
-    _session: Session
-    _transaction: Transaction
-    _counter: int
-    _isbns: list[str]
-
-    def __init__(
-        self, database: DatabaseFixture, session: Session, transaction: Transaction
-    ):
+    def __init__(self, database: DatabaseFixture, services: ServicesFixture):
         self._database = database
-        self._session = session
-        self._transaction = transaction
-        self._default_library = None
-        self._default_collection = None
+        self._default_library: Library | None = None
+        self._default_collection: Collection | None = None
         self._counter = 2000
         self._isbns = [
             "9780674368279",
@@ -163,6 +380,9 @@ class DatabaseTransactionFixture:
             "9781936460236",
             "9780316075978",
         ]
+        self._services = services
+        self._session = SessionManager.session_from_connection(database.connection)
+        self._transaction = database.connection.begin_nested()
 
     def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
@@ -176,15 +396,18 @@ class DatabaseTransactionFixture:
         collection.libraries.append(library)
         return library
 
-    @staticmethod
-    def create(database: DatabaseFixture) -> DatabaseTransactionFixture:
-        # Create a new connection to the database.
-        session = SessionManager.session_from_connection(database.connection)
+    @classmethod
+    @contextmanager
+    def fixture(
+        cls, database: DatabaseFixture, services: ServicesFixture
+    ) -> Generator[Self, None, None]:
+        db = cls(database, services)
+        try:
+            yield db
+        finally:
+            db._close()
 
-        transaction = database.connection.begin_nested()
-        return DatabaseTransactionFixture(database, session, transaction)
-
-    def close(self):
+    def _close(self):
         # Close the session.
         self._session.close()
 
@@ -871,6 +1094,20 @@ class DatabaseTransactionFixture:
         return credential
 
 
+@pytest.fixture(scope="function")
+def db(
+    database_creation: DatabaseCreationFixture,
+    database: DatabaseFixture,
+    services_fixture: ServicesFixture,
+) -> Generator[DatabaseTransactionFixture, None, None]:
+    with DatabaseTransactionFixture.fixture(database, services_fixture) as db:
+        with (
+            database.patch_engine_error(),
+            database_creation.patch_database_url(),
+        ):
+            yield db
+
+
 class TemporaryDirectoryConfigurationFixture:
     """A fixture that configures the Configuration system to use a temporary directory.
     The directory is cleaned up when the fixture is closed."""
@@ -904,29 +1141,6 @@ def temporary_directory_configuration() -> (
     fix = TemporaryDirectoryConfigurationFixture.create()
     yield fix
     fix.close()
-
-
-@pytest.fixture(scope="session")
-def application() -> Iterable[ApplicationFixture]:
-    app = ApplicationFixture.create()
-    yield app
-    app.close()
-
-
-@pytest.fixture(scope="session")
-def database(application: ApplicationFixture) -> Iterable[DatabaseFixture]:
-    db = DatabaseFixture.create()
-    yield db
-    db.close()
-
-
-@pytest.fixture(scope="function")
-def db(
-    database: DatabaseFixture,
-) -> Generator[DatabaseTransactionFixture, None, None]:
-    tr = DatabaseTransactionFixture.create(database)
-    yield tr
-    tr.close()
 
 
 class IntegrationConfigurationFixture:

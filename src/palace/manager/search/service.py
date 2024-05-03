@@ -111,10 +111,6 @@ class SearchService(ABC):
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
-    def indexes_created(self) -> list[str]:
-        """A log of all the indexes that have been created by this client service."""
-
-    @abstractmethod
     def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
         """Return True if the index for the given base name and revision has been populated."""
 
@@ -172,7 +168,6 @@ class SearchServiceOpensearch1(SearchService):
         self._search = Search(using=self._client)
         self._base_revision_name = base_revision_name
         self._multi_search = MultiSearch(using=self._client)
-        self._indexes_created: list[str] = []
 
         # Documents are not allowed to automatically create indexes.
         # AWS OpenSearch only accepts the "flat" format
@@ -183,9 +178,6 @@ class SearchServiceOpensearch1(SearchService):
     @property
     def base_revision_name(self) -> str:
         return self._base_revision_name
-
-    def indexes_created(self) -> list[str]:
-        return self._indexes_created
 
     def write_pointer(self) -> SearchWritePointer | None:
         try:
@@ -207,7 +199,6 @@ class SearchServiceOpensearch1(SearchService):
             index_name = self._empty(self.base_revision_name)
             self._logger.debug(f"creating empty index {index_name}")
             self._client.indices.create(index=index_name)
-            self._indexes_created.append(index_name)
         except RequestError as e:
             if e.error == "resource_already_exists_exception":
                 return
@@ -261,7 +252,6 @@ class SearchServiceOpensearch1(SearchService):
                 index=index_name,
                 body=revision.mapping_document().serialize(),
             )
-            self._indexes_created.append(index_name)
         except RequestError as e:
             if e.error == "resource_already_exists_exception":
                 return
