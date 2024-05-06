@@ -1847,13 +1847,13 @@ protobuf = ">=4.21.6"
 
 [[package]]
 name = "html-sanitizer"
-version = "2.4.1"
+version = "2.4.2"
 description = "HTML sanitizer"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "html_sanitizer-2.4.1-py3-none-any.whl", hash = "sha256:5fb1dfa951cb9b4a13f8a1c69059908ac231f9e9e99b84874d16948dcac9ff04"},
-    {file = "html_sanitizer-2.4.1.tar.gz", hash = "sha256:752ea75b3f5d93b431038810376df1fbef6ce0854c18b23aa9e03b048f1af435"},
+    {file = "html_sanitizer-2.4.2-py3-none-any.whl", hash = "sha256:484a6ec99b3aa233224e942f94f085dbf0c0427a07b2679263797c0bba8e5e81"},
+    {file = "html_sanitizer-2.4.2.tar.gz", hash = "sha256:a80a2de4a71c747f7c1d44244415518ec780ae053ac5f8bbc2fec05003989c94"},
 ]
 
 [package.dependencies]
@@ -2280,7 +2280,6 @@ files = [
     {file = "lxml-5.2.1-cp37-cp37m-musllinux_1_2_x86_64.whl", hash = "sha256:9e2addd2d1866fe112bc6f80117bcc6bc25191c5ed1bfbcf9f1386a884252ae8"},
     {file = "lxml-5.2.1-cp37-cp37m-win32.whl", hash = "sha256:f51969bac61441fd31f028d7b3b45962f3ecebf691a510495e5d2cd8c8092dbd"},
     {file = "lxml-5.2.1-cp37-cp37m-win_amd64.whl", hash = "sha256:b0b58fbfa1bf7367dde8a557994e3b1637294be6cf2169810375caf8571a085c"},
-    {file = "lxml-5.2.1-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:3e183c6e3298a2ed5af9d7a356ea823bccaab4ec2349dc9ed83999fd289d14d5"},
     {file = "lxml-5.2.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:804f74efe22b6a227306dd890eecc4f8c59ff25ca35f1f14e7482bbce96ef10b"},
     {file = "lxml-5.2.1-cp38-cp38-manylinux_2_12_i686.manylinux2010_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:08802f0c56ed150cc6885ae0788a321b73505d2263ee56dad84d200cab11c07a"},
     {file = "lxml-5.2.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0f8c09ed18ecb4ebf23e02b8e7a22a05d6411911e6fabef3a36e4f371f4f2585"},
