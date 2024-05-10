@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import datetime
-import logging
 import sys
 import uuid
 from typing import Any
@@ -28,6 +27,7 @@ from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -35,7 +35,7 @@ else:
     from typing_extensions import Self
 
 
-class AuthdataUtility:
+class AuthdataUtility(LoggerMixin):
 
     """Generate authdata JWTs as per the Vendor ID Service spec:
     https://docs.google.com/document/d/1j8nWPVmy95pJ_iU4UTC-QgHK2QhDUSdQ0OQTFR2NE_0
@@ -94,10 +94,6 @@ class AuthdataUtility:
 
         # This is used to encode both JWTs and short client tokens.
         self.secret = secret
-
-        self.log = logging.getLogger(
-            f"{self.__class__.__module__}.{self.__class__.__name__}"
-        )
 
         self.short_token_signer = HMACAlgorithm(HMACAlgorithm.SHA256)
         self.short_token_signing_key = self.short_token_signer.prepare_key(self.secret)

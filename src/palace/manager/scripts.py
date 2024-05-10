@@ -69,6 +69,7 @@ from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, get_one, pg_advisory_lock
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
+from palace.manager.util.log import LoggerMixin
 
 
 class Script(CoreScript):
@@ -475,7 +476,7 @@ class CompileTranslationsScript(Script):
         os.system("pybabel compile -f -d translations")
 
 
-class InstanceInitializationScript:
+class InstanceInitializationScript(LoggerMixin):
     """An idempotent script to initialize an instance of the Circulation Manager.
 
     This script is intended for use in servers, Docker containers, etc,
@@ -491,7 +492,6 @@ class InstanceInitializationScript:
         config_file: Path | None = None,
         engine_factory: Callable[[], Engine] = SessionManager.engine,
     ) -> None:
-        self._log: logging.Logger | None = None
         self._container = container_instance()
 
         # Call init_resources() to initialize the logging configuration.
@@ -499,14 +499,6 @@ class InstanceInitializationScript:
         self._config_file = config_file
 
         self._engine_factory = engine_factory
-
-    @property
-    def log(self) -> logging.Logger:
-        if self._log is None:
-            self._log = logging.getLogger(
-                f"{self.__module__}.{self.__class__.__name__}"
-            )
-        return self._log
 
     @staticmethod
     def _get_alembic_config(
