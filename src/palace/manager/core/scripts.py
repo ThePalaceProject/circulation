@@ -2388,9 +2388,9 @@ class RebuildSearchIndexScript(RunWorkCoverageProviderScript, RemovesSearchCover
     """Completely delete the search index and recreate it."""
 
     def __init__(self, *args, **kwargs):
-        search = kwargs.get("search_index_client", None)
-        self.search: ExternalSearchIndex = search or self.services.search.index()
+        search = kwargs.pop("search_index_client", None)
         super().__init__(SearchIndexCoverageProvider, *args, **kwargs)
+        self.search: ExternalSearchIndex = search or self.services.search.index()
 
     def do_run(self):
         self.search.clear_search_documents()
