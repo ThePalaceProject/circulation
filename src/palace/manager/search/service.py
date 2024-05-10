@@ -101,37 +101,26 @@ class SearchService(ABC):
         """Get the writer pointer, if it exists."""
 
     @abstractmethod
-    def create_empty_index(self) -> None:
-        """Atomically create the empty index for the given base name."""
-
-    @abstractmethod
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         """Atomically set the read pointer to the index for the given revision and base name."""
-
-    @abstractmethod
-    def read_pointer_set_empty(self) -> None:
-        """Atomically set the read pointer to the empty index for the base name."""
 
     @abstractmethod
     def index_create(self, revision: SearchSchemaRevision) -> None:
         """Atomically create an index for the given base name and revision."""
 
     @abstractmethod
-    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
-        """Return True if the index for the given base name and revision has been populated."""
-
-    @abstractmethod
-    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
-        """Set an index as populated."""
-
-    @abstractmethod
     def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         """Set the schema mappings for the given index."""
 
     @abstractmethod
+    def index_submit_document(
+        self, document: dict[str, Any], refresh: bool = False
+    ) -> None:
+        """Submit a search document to the given index."""
+
+    @abstractmethod
     def index_submit_documents(
         self,
-        pointer: str,
         documents: Sequence[SearchDocument],
     ) -> list[SearchServiceFailedDocument]:
         """Submit search documents to the given index."""
@@ -145,7 +134,7 @@ class SearchService(ABC):
         """Synchronously refresh the service and wait for changes to be completed."""
 
     @abstractmethod
-    def index_clear_documents(self, pointer: str) -> None:
+    def index_clear_documents(self) -> None:
         """Clear all search documents in the given index."""
 
     @abstractmethod
@@ -157,12 +146,8 @@ class SearchService(ABC):
         """Return the underlying search client."""
 
     @abstractmethod
-    def index_remove_document(self, pointer: str, id: int) -> None:
+    def index_remove_document(self, doc_id: int) -> None:
         """Remove a specific document from the given index."""
-
-    @abstractmethod
-    def is_pointer_empty(self, pointer: str) -> bool:
-        """Check to see if a pointer points to an empty index"""
 
 
 class SearchServiceOpensearch1(SearchService, LoggerMixin):
@@ -197,16 +182,6 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         except NotFoundError:
             return None
 
-    def create_empty_index(self) -> None:
-        try:
-            index_name = self._empty(self.base_revision_name)
-            self.log.debug(f"creating empty index {index_name}")
-            self._client.indices.create(index=index_name)
-        except RequestError as e:
-            if e.error == "resource_already_exists_exception":
-                return
-            raise e
-
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         alias_name = self.read_pointer_name()
         target_index = revision.name_for_index(self.base_revision_name)
@@ -217,34 +192,6 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             ]
         }
         self.log.debug(f"setting read pointer {alias_name} to index {target_index}")
-        self._client.indices.update_aliases(body=action)
-
-    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
-        alias_name = revision.name_for_indexed_pointer(self.base_revision_name)
-        target_index = revision.name_for_index(self.base_revision_name)
-        action = {
-            "actions": [
-                {"remove": {"index": "*", "alias": alias_name}},
-                {"add": {"index": target_index, "alias": alias_name}},
-            ]
-        }
-        self.log.debug(
-            f"creating 'indexed' flag alias {alias_name} for index {target_index}"
-        )
-        self._client.indices.update_aliases(body=action)
-
-    def read_pointer_set_empty(self) -> None:
-        alias_name = self.read_pointer_name()
-        target_index = self._empty(self.base_revision_name)
-        action = {
-            "actions": [
-                {"remove": {"index": "*", "alias": alias_name}},
-                {"add": {"index": target_index, "alias": alias_name}},
-            ]
-        }
-        self.log.debug(
-            f"setting read pointer {alias_name} to empty index {target_index}"
-        )
         self._client.indices.update_aliases(body=action)
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
@@ -260,11 +207,6 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
                 return
             raise e
 
-    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
-        return self._client.indices.exists_alias(
-            name=revision.name_for_indexed_pointer(self.base_revision_name)
-        )
-
     def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
         index_name = revision.name_for_index(self.base_revision_name)
@@ -277,11 +219,23 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             script = dict(script=dict(lang="painless", source=body))
             if not name.startswith("simplified"):
                 name = revision.script_name(name)
-            self._client.put_script(name, script)  # type: ignore [misc] ## Seems the types aren't up to date
+            self._client.put_script(name, body=script)
+
+    def index_submit_document(
+        self, document: dict[str, Any], refresh: bool = False
+    ) -> None:
+        _id = document.pop("_id")
+        self._client.index(
+            index=self.write_pointer_name(),
+            body=document,
+            require_alias=True,
+            refresh=refresh,
+        )
 
     def index_submit_documents(
-        self, pointer: str, documents: Sequence[SearchDocument]
+        self, documents: Sequence[SearchDocument]
     ) -> list[SearchServiceFailedDocument]:
+        pointer = self.write_pointer_name()
         self.log.info(f"submitting documents to index {pointer}")
 
         # Specifically override the target in all documents to the target pointer
@@ -317,9 +271,11 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
         return error_results
 
-    def index_clear_documents(self, pointer: str) -> None:
+    def index_clear_documents(self) -> None:
         self._client.delete_by_query(
-            index=pointer, body={"query": {"match_all": {}}}, wait_for_completion=True
+            index=self.write_pointer_name(),
+            body={"query": {"match_all": {}}},
+            wait_for_completion=True,
         )
 
     def refresh(self) -> None:
@@ -366,12 +322,5 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
     def write_pointer_name(self) -> str:
         return f"{self.base_revision_name}-search-write"
 
-    @staticmethod
-    def _empty(base_name: str) -> str:
-        return f"{base_name}-empty"
-
-    def index_remove_document(self, pointer: str, id: int) -> None:
-        self._client.delete(index=pointer, id=id, doc_type="_doc")
-
-    def is_pointer_empty(self, pointer: str) -> bool:
-        return pointer == self._empty(self.base_revision_name)
+    def index_remove_document(self, doc_id: int) -> None:
+        self._client.delete(index=self.write_pointer_name(), id=doc_id, doc_type="_doc")

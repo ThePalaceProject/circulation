@@ -1,19 +1,7 @@
-from palace.manager.search.document import LONG, SearchMappingDocument
-from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.search.document import LONG
 from palace.manager.search.service import SearchDocument
 from tests.fixtures.search import ExternalSearchFixture
-
-
-class BasicMutableRevision(SearchSchemaRevision):
-    SEARCH_VERSION = 0
-
-    def __init__(self, version: int):
-        self.SEARCH_VERSION = version
-        super().__init__()
-        self.document = SearchMappingDocument()
-
-    def mapping_document(self) -> SearchMappingDocument:
-        return self.document
+from tests.mocks.search import MockSearchSchemaRevision
 
 
 class TestService:
@@ -21,24 +9,12 @@ class TestService:
     Tests to verify that the Opensearch service implementation has the semantics we expect.
     """
 
-    def test_create_empty_idempotent(
-        self, external_search_fixture: ExternalSearchFixture
-    ):
-        """Creating the empty index is idempotent."""
-        service = external_search_fixture.service
-        service.create_empty_index()
-        service.create_empty_index()
-
-        indices = external_search_fixture.client.indices.client.indices
-        assert indices is not None
-        assert indices.exists(f"{external_search_fixture.index_prefix}-empty")
-
     def test_create_index_idempotent(
         self, external_search_fixture: ExternalSearchFixture
     ):
         """Creating any index is idempotent."""
         service = external_search_fixture.service
-        revision = BasicMutableRevision(23)
+        revision = MockSearchSchemaRevision(23)
         service.index_create(revision)
         service.index_create(revision)
 
@@ -61,26 +37,16 @@ class TestService:
     def test_read_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the read pointer works."""
         service = external_search_fixture.service
-        revision = BasicMutableRevision(23)
+        revision = MockSearchSchemaRevision(23)
         service.index_create(revision)
 
         service.read_pointer_set(revision)
         assert service.read_pointer() == f"{external_search_fixture.index_prefix}-v23"
 
-    def test_read_pointer_set_empty(
-        self, external_search_fixture: ExternalSearchFixture
-    ):
-        """Setting the read pointer to the empty index works."""
-        service = external_search_fixture.service
-        service.create_empty_index()
-
-        service.read_pointer_set_empty()
-        assert service.read_pointer() == f"{external_search_fixture.index_prefix}-empty"
-
     def test_write_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the write pointer works."""
         service = external_search_fixture.service
-        revision = BasicMutableRevision(23)
+        revision = MockSearchSchemaRevision(23)
         service.index_create(revision)
 
         service.write_pointer_set(revision)
@@ -94,7 +60,7 @@ class TestService:
     ):
         """Populating an index is idempotent."""
         service = external_search_fixture.service
-        revision = BasicMutableRevision(23)
+        revision = MockSearchSchemaRevision(23)
 
         mappings = revision.mapping_document()
         mappings.properties["x"] = LONG
@@ -126,12 +92,8 @@ class TestService:
 
         service.index_create(revision)
 
-        service.index_submit_documents(
-            f"{external_search_fixture.index_prefix}-v23", documents
-        )
-        service.index_submit_documents(
-            f"{external_search_fixture.index_prefix}-v23", documents
-        )
+        service.index_submit_documents(documents)
+        service.index_submit_documents(documents)
 
         indices = external_search_fixture.client.indices.client.indices
         assert indices is not None

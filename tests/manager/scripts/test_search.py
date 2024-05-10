@@ -1,88 +1,56 @@
 from __future__ import annotations
 
-import random
+from unittest.mock import MagicMock, patch
 
-from palace.manager.core.metadata_layer import TimestampData
-from palace.manager.scripts.search import (
-    RebuildSearchIndexScript,
-    SearchIndexCoverageRemover,
-)
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
+from palace.manager.scripts.search import RebuildSearchIndexScript
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import ExternalSearchFixtureFake
+from tests.fixtures.services import ServicesFixture
 
 
 class TestRebuildSearchIndexScript:
-    def test_do_run(
+    @patch("palace.manager.scripts.search.search_reindex")
+    def test_do_run_no_args(
         self,
+        mock_search_reindex: MagicMock,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
+        services_fixture: ServicesFixture,
     ):
-        index = external_search_fake_fixture.external_search
-        work = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
-        wcr = WorkCoverageRecord
-        decoys = [wcr.QUALITY_OPERATION, wcr.SUMMARY_OPERATION]
+        # If we are called with no arguments, we default to asynchronously rebuilding the search index.
+        RebuildSearchIndexScript(db.session).do_run()
+        mock_search_reindex.s.return_value.delay.assert_called_once_with()
+        # But we don't delete the index before rebuilding.
+        services_fixture.search_fixture.index_mock.clear_search_documents.assert_not_called()
 
-        # Set up some coverage records.
-        for operation in decoys + [wcr.UPDATE_SEARCH_INDEX_OPERATION]:
-            for w in (work, work2):
-                wcr.add_for(w, operation, status=random.choice(wcr.ALL_STATUSES))
+    @patch("palace.manager.scripts.search.search_reindex")
+    def test_do_run_blocking(
+        self, mock_search_reindex: MagicMock, db: DatabaseTransactionFixture
+    ):
+        # If we are called with the --blocking argument, we rebuild the search index synchronously.
+        RebuildSearchIndexScript(db.session, cmd_args=["--blocking"]).do_run()
+        mock_search_reindex.s.return_value.assert_called_once_with()
 
-        coverage_qu = db.session.query(wcr).filter(
-            wcr.operation == wcr.UPDATE_SEARCH_INDEX_OPERATION
-        )
-        original_coverage = [x.id for x in coverage_qu]
+    @patch("palace.manager.scripts.search.search_reindex")
+    def test_do_run_delete(
+        self,
+        mock_search_reindex: MagicMock,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # If we are called with the --delete argument, we clear the index before rebuilding.
+        RebuildSearchIndexScript(db.session, cmd_args=["--delete"]).do_run()
+        services_fixture.search_fixture.index_mock.clear_search_documents.assert_called_once_with()
+        mock_search_reindex.s.return_value.delay.assert_called_once_with()
 
-        # Run the script.
-        script = RebuildSearchIndexScript(db.session, search_index_client=index)
-        [progress] = script.do_run()
+    @patch("palace.manager.scripts.search.get_migrate_search_chain")
+    def test_do_run_migration(
+        self, mock_get_migrate_search_chain: MagicMock, db: DatabaseTransactionFixture
+    ):
+        # If we are called with the --migration argument, we treat the reindex as completing a migration.
+        RebuildSearchIndexScript(db.session, cmd_args=["--migration"]).do_run()
+        mock_get_migrate_search_chain.return_value.delay.assert_called_once_with()
 
-        # The mock methods were called with the values we expect.
-        assert {work.id, work2.id} == set(
-            map(
-                lambda d: d["_id"], external_search_fake_fixture.service.documents_all()
-            )
-        )
-
-        # The script returned a list containing a single
-        # CoverageProviderProgress object containing accurate
-        # information about what happened (from the CoverageProvider's
-        # point of view).
-        assert (
-            "Items processed: 2. Successes: 2, transient failures: 0, persistent failures: 0"
-            == progress.achievements
-        )
-
-        # The old WorkCoverageRecords for the works were deleted. Then
-        # the CoverageProvider did its job and new ones were added.
-        new_coverage = [x.id for x in coverage_qu]
-        assert 2 == len(new_coverage)
-        assert set(new_coverage) != set(original_coverage)
-
-
-class TestSearchIndexCoverageRemover:
-    SERVICE_NAME = "Search Index Coverage Remover"
-
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        work = db.work()
-        work2 = db.work()
-        wcr = WorkCoverageRecord
-        decoys = [wcr.QUALITY_OPERATION, wcr.SUMMARY_OPERATION]
-
-        # Set up some coverage records.
-        for operation in decoys + [wcr.UPDATE_SEARCH_INDEX_OPERATION]:
-            for w in (work, work2):
-                wcr.add_for(w, operation, status=random.choice(wcr.ALL_STATUSES))
-
-        # Run the script.
-        script = SearchIndexCoverageRemover(db.session)
-        result = script.do_run()
-        assert isinstance(result, TimestampData)
-        assert "Coverage records deleted: 2" == result.achievements
-
-        # UPDATE_SEARCH_INDEX_OPERATION records have been removed.
-        # No other records are affected.
-        for w in (work, work2):
-            remaining = [x.operation for x in w.coverage_records]
-            assert sorted(remaining) == sorted(decoys)
+        # We can also combine --blocking and --migration.
+        RebuildSearchIndexScript(
+            db.session, cmd_args=["--migration", "--blocking"]
+        ).do_run()
+        mock_get_migrate_search_chain.return_value.assert_called_once_with()

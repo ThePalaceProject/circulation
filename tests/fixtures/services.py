@@ -88,7 +88,7 @@ def services_search_fixture() -> ServicesSearchFixture:
     search_container = Search()
     client_mock = create_autospec(boto3.client)
     service_mock = create_autospec(SearchServiceOpensearch1)
-    revision_directory_mock = create_autospec(SearchRevisionDirectory.create)
+    revision_directory_mock = create_autospec(SearchRevisionDirectory)
     index_mock = create_autospec(ExternalSearchIndex)
     search_container.client.override(client_mock)
     search_container.service.override(service_mock)

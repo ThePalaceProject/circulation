@@ -9,6 +9,9 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
+from palace.manager.celery.tasks.search import get_migrate_search_chain
+from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.search.service import SearchService, SearchWritePointer
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, pg_advisory_lock
@@ -56,7 +59,7 @@ class InstanceInitializationScript(LoggerMixin):
         alembic_conf = self._get_alembic_config(connection, self._config_file)
         command.upgrade(alembic_conf, "head")
 
-    def initialize_database(self, connection: Connection) -> None:
+    def initialize_database_schema(self, connection: Connection) -> None:
         """
         Initialize the database, creating tables, loading default data and then
         stamping the most recent migration as the current state of the DB.
@@ -71,11 +74,7 @@ class InstanceInitializationScript(LoggerMixin):
         alembic_conf = self._get_alembic_config(connection, self._config_file)
         command.stamp(alembic_conf, "head")
 
-    def initialize_search_indexes(self) -> bool:
-        search = self._container.search.index()
-        return search.initialize_indices()
-
-    def initialize(self, connection: Connection):
+    def initialize_database(self, connection: Connection) -> None:
         """Initialize the database if necessary."""
         inspector = inspect(connection)
         if inspector.has_table("alembic_version"):
@@ -91,10 +90,63 @@ class InstanceInitializationScript(LoggerMixin):
                 )
         else:
             self.log.info("Database schema does not exist. Initializing.")
-            self.initialize_database(connection)
+            self.initialize_database_schema(connection)
             self.log.info("Initialization complete.")
 
-        self.initialize_search_indexes()
+    @classmethod
+    def create_search_index(
+        cls, service: SearchService, revision: SearchSchemaRevision
+    ) -> None:
+        # Initialize a new search index by creating the index, setting the mapping,
+        # and setting the read and write pointers.
+        service.index_create(revision)
+        service.index_set_mapping(revision)
+        service.write_pointer_set(revision)
+
+        if not service.read_pointer():
+            # A read pointer does not exist. We set it to the most recent.
+            cls.logger().info(
+                f"Index read pointer unset. Setting to the latest (v{revision.version})."
+            )
+            service.read_pointer_set(revision)
+
+    @classmethod
+    def migrate_search(
+        cls,
+        service: SearchService,
+        revision: SearchSchemaRevision,
+        write_pointer: SearchWritePointer,
+    ) -> None:
+        # The revision is not the most recent. We need to create a new index.
+        # and start reindexing our data into it asynchronously. When the reindex
+        # is complete, we will switch the read pointer to the new index.
+        cls.logger().info(f"Creating a new index for revision (v{revision.version}).")
+        cls.create_search_index(service, revision)
+        task = get_migrate_search_chain().apply_async()
+        cls.logger().info(
+            f"Task queued to indexing data into new search index (Task ID: {task.id})."
+        )
+
+    def initialize_search(self) -> None:
+        service = self._container.search.service()
+        revision_directory = self._container.search.revision_directory()
+        revision = revision_directory.highest()
+        write_pointer = service.write_pointer()
+
+        if write_pointer is None:
+            # A write pointer does not exist. This is a fresh index.
+            self.log.info("Search index does not exist. Creating a new index.")
+            self.create_search_index(service, revision)
+        elif write_pointer.version != revision.version:
+            self.log.info(
+                f"Search index is out-of-date ({service.base_revision_name} v{write_pointer.version})."
+            )
+            self.migrate_search(service, revision, write_pointer)
+        else:
+            self.log.info(
+                f"Search index is up-to-date ({service.base_revision_name} v{revision.version})."
+            )
+        self.log.info("Search initialization complete.")
 
     def run(self) -> None:
         """
@@ -108,6 +160,7 @@ class InstanceInitializationScript(LoggerMixin):
         engine = self._engine_factory()
         with engine.begin() as connection:
             with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
-                self.initialize(connection)
+                self.initialize_database(connection)
+                self.initialize_search()
 
         engine.dispose()

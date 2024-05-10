@@ -338,9 +338,9 @@ class TestWhereAreMyBooksScript:
     ):
         # This work is not presentation-ready.
         work = db.work(with_license_pool=True)
-        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.presentation_ready = False
-        script = MockWhereAreMyBooks(
+        end_to_end_search_fixture.populate_search_index()
+        MockWhereAreMyBooks(
             _db=db.session, search=end_to_end_search_fixture.external_search_index
         )
         self.check_explanation(
@@ -357,11 +357,12 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but no delivery mechanisms.
         work = db.work(with_license_pool=True)
-        end_to_end_search_fixture.external_search_index.initialize_indices()
         for lpdm in work.license_pools[0].delivery_mechanisms:
             db.session.delete(lpdm)
+        end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
             no_delivery_mechanisms=1,
+            in_search_index=1,
             db=db,
             end_to_end_search_fixture=end_to_end_search_fixture,
         )
@@ -373,8 +374,8 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but it's suppressed.
         work = db.work(with_license_pool=True)
-        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.license_pools[0].suppressed = True
+        end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
             suppressed=1,
             db=db,
@@ -388,8 +389,8 @@ class TestWhereAreMyBooksScript:
     ):
         # This work has a license pool, but no licenses owned.
         work = db.work(with_license_pool=True)
-        end_to_end_search_fixture.external_search_index.initialize_indices()
         work.license_pools[0].licenses_owned = 0
+        end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
             not_owned=1,
             db=db,
@@ -401,14 +402,10 @@ class TestWhereAreMyBooksScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        search = end_to_end_search_fixture.external_search_index
         work = db.work(with_license_pool=True)
         work.presentation_ready = True
 
-        docs = search.start_migration()
-        assert docs is not None
-        docs.add_documents(search.create_search_documents_from_works([work]))
-        docs.finish()
+        end_to_end_search_fixture.populate_search_index()
 
         # This search index will always claim there is one result.
         self.check_explanation(

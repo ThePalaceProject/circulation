@@ -1,6 +1,5 @@
 import pytest
 
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.customlist import (
     CustomList,
     CustomListEntry,
@@ -10,6 +9,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import WorkExternalIndexingFixture
 
 
 class TestCustomList:
@@ -48,17 +48,11 @@ class TestCustomList:
         )
         assert custom_list == result
 
-    def assert_reindexing_scheduled(self, work):
-        """Assert that the given work has exactly one WorkCoverageRecord, which
-        indicates that it needs to have its search index updated.
-        """
-        [needs_reindex] = work.coverage_records
-        assert (
-            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == needs_reindex.operation
-        )
-        assert WorkCoverageRecord.REGISTERED == needs_reindex.status
-
-    def test_add_entry(self, db: DatabaseTransactionFixture):
+    def test_add_entry(
+        self,
+        db: DatabaseTransactionFixture,
+        work_external_indexing: WorkExternalIndexingFixture,
+    ):
         custom_list = db.customlist(num_entries=0)[0]
         now = utc_now()
 
@@ -76,7 +70,6 @@ class TestCustomList:
 
         # An edition with a work can create an entry.
         work = db.work()
-        work.coverage_records = []
         worked_entry, is_new = custom_list.add_entry(work.presentation_edition)
         assert True == is_new
         assert work == worked_entry.work
@@ -85,11 +78,10 @@ class TestCustomList:
         assert 2 == custom_list.size
 
         # When this happens, the work is scheduled for reindexing.
-        self.assert_reindexing_scheduled(work)
+        assert work_external_indexing.is_queued(work)
 
         # A work can create an entry.
         work = db.work(with_open_access_download=True)
-        work.coverage_records = []
         work_entry, is_new = custom_list.add_entry(work)
         assert True == is_new
         assert work.presentation_edition == work_entry.edition
@@ -98,7 +90,7 @@ class TestCustomList:
         assert 3 == custom_list.size
 
         # When this happens, the work is scheduled for reindexing.
-        self.assert_reindexing_scheduled(work)
+        assert work_external_indexing.is_queued(work)
 
         # Annotations can be passed to the entry.
         annotated_edition = db.edition()
@@ -273,13 +265,16 @@ class TestCustomList:
         assert entry3 == entry1
         assert False == is_new3
 
-    def test_remove_entry(self, db: DatabaseTransactionFixture):
+    def test_remove_entry(
+        self,
+        db: DatabaseTransactionFixture,
+        work_external_indexing: WorkExternalIndexingFixture,
+    ):
         custom_list, editions = db.customlist(num_entries=3)
         [first, second, third] = editions
         now = utc_now()
 
         # An entry is removed if its edition is passed in.
-        first.work.coverage_records = []
         custom_list.remove_entry(first)
         assert 2 == len(custom_list.entries)
         assert {second, third} == {entry.edition for entry in custom_list.entries}
@@ -288,8 +283,8 @@ class TestCustomList:
         assert 2 == custom_list.size
 
         # The editon's work has been scheduled for reindexing.
-        self.assert_reindexing_scheduled(first.work)
-        first.work.coverage_records = []
+        assert work_external_indexing.is_queued(first.work)
+        work_external_indexing.clear()
 
         # An entry is also removed if any of its equivalent editions
         # are passed in.
@@ -321,7 +316,7 @@ class TestCustomList:
 
         # The 'removed' edition's work does not need to be reindexed
         # because it wasn't on the list to begin with.
-        assert [] == first.work.coverage_records
+        assert not work_external_indexing.is_queued(first.work)
 
     def test_entries_for_work(self, db: DatabaseTransactionFixture):
         custom_list, editions = db.customlist(num_entries=2)

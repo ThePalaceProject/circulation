@@ -31,5 +31,4 @@ class Search(DeclarativeContainer):
     index: Provider[ExternalSearchIndex] = providers.Singleton(
         ExternalSearchIndex,
         service=service,
-        revision_directory=revision_directory,
     )

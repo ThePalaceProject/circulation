@@ -30,10 +30,6 @@ class SearchRevisionDirectory:
     def create() -> "SearchRevisionDirectory":
         return SearchRevisionDirectory(SearchRevisionDirectory._create_revisions())
 
-    @staticmethod
-    def empty() -> "SearchRevisionDirectory":
-        return SearchRevisionDirectory({})
-
     @property
     def available(self) -> Mapping[int, SearchSchemaRevision]:
         return self._available

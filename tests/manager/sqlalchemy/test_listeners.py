@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable
 from unittest.mock import patch
 
 import pytest
 
 from palace.manager.core.config import Configuration
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
-from palace.manager.sqlalchemy.model.coverage import Timestamp, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import WorkExternalIndexingFixture
 
 
 class TestSiteConfigurationHasChanged:
@@ -122,59 +124,43 @@ def _set_property(object, value, property_name):
 
 class TestListeners:
     @pytest.mark.parametrize(
-        "name,status_property_setter",
+        "status_property_setter",
         [
-            (
-                "works_when_open_access_property_changes",
+            pytest.param(
                 functools.partial(_set_property, property_name="open_access"),
+                id="works_when_open_access_property_changes",
             ),
         ],
     )
-    def test_licensepool_storage_status_change(
+    def test_licensepool_status_change(
         self,
-        db,
-        name,
-        status_property_setter,
+        db: DatabaseTransactionFixture,
+        work_external_indexing: WorkExternalIndexingFixture,
+        status_property_setter: Callable[..., None],
     ):
-        # Arrange
         work = db.work(with_license_pool=True)
         [pool] = work.license_pools
 
-        # Clear out any WorkCoverageRecords created as the work was initialized.
-        work.coverage_records = []
-
-        # Act
         # Change the field
         status_property_setter(pool, True)
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # Then verify that if the field is 'set' to its existing value, this doesn't happen.
-        # pool.self_hosted = True
         status_property_setter(pool, True)
+        assert not work_external_indexing.is_queued(work, clear=True)
 
-        # Assert
-        assert 1 == len(work.coverage_records)
-        assert work.id == work.coverage_records[0].work_id
-        assert (
-            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-            == work.coverage_records[0].operation
-        )
-        assert WorkCoverageRecord.REGISTERED == work.coverage_records[0].status
-
-    def test_work_suppressed_for_library(self, db: DatabaseTransactionFixture):
+    def test_work_suppressed_for_library(
+        self,
+        db: DatabaseTransactionFixture,
+        work_external_indexing: WorkExternalIndexingFixture,
+    ):
         work = db.work(with_license_pool=True)
         library = db.library()
 
-        # Clear out any WorkCoverageRecords created as the work was initialized.
-        work.coverage_records = []
-
-        # Act
+        # Suppress the work for the library
         work.suppressed_for.append(library)
+        assert work_external_indexing.is_queued(work, clear=True)
 
-        # Assert
-        assert 1 == len(work.coverage_records)
-        assert work.id == work.coverage_records[0].work_id
-        assert (
-            WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-            == work.coverage_records[0].operation
-        )
-        assert WorkCoverageRecord.REGISTERED == work.coverage_records[0].status
+        # Unsuppress the work for the library
+        work.suppressed_for.remove(library)
+        assert work_external_indexing.is_queued(work, clear=True)

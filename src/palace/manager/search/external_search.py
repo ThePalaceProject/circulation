@@ -5,7 +5,7 @@ import json
 import re
 import time
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -36,13 +36,12 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.facets import FacetConstants
 from palace.manager.core.metadata_layer import IdentifierData
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.search.migrator import (
-    SearchDocumentReceiver,
-    SearchMigrationInProgress,
-    SearchMigrator,
-)
 from palace.manager.search.revision_directory import SearchRevisionDirectory
-from palace.manager.search.service import SearchDocument, SearchService
+from palace.manager.search.service import (
+    SearchDocument,
+    SearchService,
+    SearchServiceFailedDocument,
+)
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -64,53 +63,16 @@ class ExternalSearchIndex(LoggerMixin):
     def __init__(
         self,
         service: SearchService,
-        revision_directory: SearchRevisionDirectory,
-        version: int | None = None,
     ) -> None:
-        """Constructor
-
-        :param revision_directory Override the directory of revisions that will be used. If this isn't provided,
-               the default directory will be used.
-        :param version The specific revision that will be used. If not specified, the highest version in the
-               revision directory will be used.
-        """
+        """Constructor"""
         self._search_service = service
-
-        # Locate the revision of the search index that we're going to use.
-        # This will fail fast if the requested version isn't available.
-        self._revision_directory = revision_directory
-        if version:
-            self._revision = self._revision_directory.find(version)
-        else:
-            self._revision = self._revision_directory.highest()
-
-        # Get references to the read and write pointers.
-        self._search_read_pointer = self._search_service.read_pointer_name()
-        self._search_write_pointer = self._search_service.write_pointer_name()
 
     def search_service(self) -> SearchService:
         """Get the underlying search service."""
         return self._search_service
 
-    def start_migration(self) -> SearchMigrationInProgress | None:
-        """Update to the latest schema, indexing the given works."""
-        migrator = SearchMigrator(
-            revisions=self._revision_directory,
-            service=self._search_service,
-        )
-        return migrator.migrate(
-            base_name=self._search_service.base_revision_name,
-            version=self._revision.version,
-        )
-
-    def start_updating_search_documents(self) -> SearchDocumentReceiver:
-        """Start submitting search documents for whatever is the current write pointer."""
-        return SearchDocumentReceiver(
-            pointer=self._search_write_pointer, service=self._search_service
-        )
-
     def clear_search_documents(self) -> None:
-        self._search_service.index_clear_documents(pointer=self._search_write_pointer)
+        self._search_service.index_clear_documents()
 
     def create_search_doc(self, query_string, filter, pagination, debug):
         if filter and filter.search_type == "json":
@@ -125,7 +87,6 @@ class ExternalSearchIndex(LoggerMixin):
         if filter is not None and filter.min_score is not None:
             search = search.extra(min_score=filter.min_score)
 
-        fields = None
         if debug:
             # Don't restrict the fields at all -- get everything.
             # This makes it easy to investigate everything about the
@@ -253,54 +214,25 @@ class ExternalSearchIndex(LoggerMixin):
         )
         return qu.count()
 
-    def create_search_documents_from_works(
-        self, works: Iterable[Work]
-    ) -> Sequence[SearchDocument]:
-        """Create search documents for all the given works."""
-        if not works:
-            # There's nothing to do. Don't bother making any requests
-            # to the search index.
-            return []
-
-        time1 = time.time()
-        needs_add = []
-        for work in works:
-            needs_add.append(work)
-
-        # Add/update any works that need adding/updating.
-        docs = Work.to_search_documents(needs_add)
-        time2 = time.time()
-
-        self.log.info(
-            "Created %i search documents in %.2f seconds" % (len(docs), time2 - time1)
-        )
-        return docs
-
-    def remove_work(self, work):
+    def remove_work(self, work: Work | int) -> None:
         """Remove the search document for `work` from the search index."""
-        self._search_service.index_remove_document(
-            pointer=self._search_read_pointer, id=work.id
-        )
+        if isinstance(work, Work):
+            if work.id is None:
+                self.log.warning("Work has no ID, unable to remove. %r", work)
+                return
+            work = work.id
 
-    def initialize_indices(self) -> bool:
-        """Attempt to initialize the indices and pointers for a first time run"""
-        service = self.search_service()
-        read_pointer = service.read_pointer()
-        if not read_pointer or service.is_pointer_empty(read_pointer):
-            # A read pointer does not exist, or points to the empty index
-            # This means either this is a new deployment or the first time
-            # the new opensearch code was deployed.
-            # In both cases doing a migration to the latest version is safe.
-            migration = self.start_migration()
-            if migration is not None:
-                migration.finish()
-            else:
-                self.log.warning(
-                    "Read pointer was set to empty, but no migration was available."
-                )
-                return False
+        self._search_service.index_remove_document(doc_id=work)
 
-        return True
+    def add_document(self, document: SearchDocument) -> None:
+        """Add a document to the search index."""
+        self._search_service.index_submit_document(document=document)
+
+    def add_documents(
+        self, documents: Sequence[SearchDocument]
+    ) -> list[SearchServiceFailedDocument]:
+        """Add multiple documents to the search index."""
+        return self._search_service.index_submit_documents(documents=documents)
 
 
 class SearchBase:

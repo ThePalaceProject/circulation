@@ -1,11 +1,9 @@
 import json
 import re
-import time
 import uuid
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 from opensearch_dsl import Q
@@ -23,15 +21,10 @@ from opensearch_dsl.query import (
 from opensearch_dsl.query import Query as opensearch_dsl_query
 from opensearch_dsl.query import Range, Term, Terms
 from psycopg2.extras import NumericRange
-from sqlalchemy.sql import Delete as sqlaDelete
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import ContributorData, IdentifierData
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
-from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
-from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
     Filter,
@@ -43,13 +36,11 @@ from palace.manager.search.external_search import (
     SortKeyPagination,
     WorkSearchResult,
 )
-from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.v5 import SearchV5
-from palace.manager.sqlalchemy.model.classification import Genre, Subject
+from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -62,7 +53,7 @@ from palace.manager.sqlalchemy.model.lane import (
 )
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import get_one_or_create, numericrange_to_tuple
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.cache import CachedData
 from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -130,6 +121,85 @@ class TestExternalSearch:
         assert isinstance(pagination, Pagination)
         assert pagination.offset == default.offset
         assert pagination.size == default.size
+
+    def test_remove_work(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        moby_duck = db.work(title="Moby Duck", with_open_access_download=True)
+        moby_dick = db.work(title="Moby Dick", with_open_access_download=True)
+        client = end_to_end_search_fixture.external_search.client
+        index = end_to_end_search_fixture.external_search_index
+        end_to_end_search_fixture.populate_search_index()
+
+        end_to_end_search_fixture.expect_results([moby_duck, moby_dick], "Moby")
+
+        index.remove_work(moby_dick)
+        index.remove_work(moby_duck.id)
+
+        # Refresh search index so we can query the changes
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([], "Moby")
+
+        # If we try to remove a work with no id, we log a warning
+        work_no_id = Work()
+        index.remove_work(work_no_id)
+        assert "Work has no ID" in caplog.text
+
+    def test_add_document(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        client = end_to_end_search_fixture.external_search.client
+        index = end_to_end_search_fixture.external_search_index
+
+        butterfly = db.work(
+            title="Nietzsche's Butterfly", with_open_access_download=True
+        )
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([], "Butterfly")
+        index.add_document(butterfly.to_search_document())
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([butterfly], "Butterfly")
+
+    def test_add_documents(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        client = end_to_end_search_fixture.external_search.client
+        index = end_to_end_search_fixture.external_search_index
+
+        butterfly = db.work(
+            title="Nietzsche's Butterfly", with_open_access_download=True
+        )
+        chaos = db.work(title="Chaos", with_open_access_download=True)
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([], "")
+        index.add_documents([w.to_search_document() for w in [butterfly, chaos]])
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([butterfly, chaos], "")
+
+    def test_clear_search_documents(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        client = end_to_end_search_fixture.external_search.client
+        index = end_to_end_search_fixture.external_search_index
+
+        work = db.work(with_open_access_download=True)
+        end_to_end_search_fixture.populate_search_index()
+        client.indices.refresh()
+
+        end_to_end_search_fixture.expect_results([work], "")
+
+        index.clear_search_documents()
+        client.indices.refresh()
+        end_to_end_search_fixture.expect_results([], "")
 
 
 class TestSearchV5:
@@ -423,9 +493,6 @@ class TestExternalSearchWithWorks:
         transaction = fixture.external_search.db
         session = transaction.session
 
-        migration = fixture.external_search_index.start_migration()
-        assert migration is not None
-        migration.finish()
         data = self._populate_works(fixture)
         fixture.populate_search_index()
 
@@ -1008,18 +1075,6 @@ class TestExternalSearchWithWorks:
         # Case-insensitive genre search, genre is saved as 'Fantasy'
         expect([data.lincoln_vampire], "fantasy")
 
-    def test_remove_work(self, end_to_end_search_fixture: EndToEndSearchFixture):
-        client = end_to_end_search_fixture.external_search.client
-        data = self._populate_works(end_to_end_search_fixture)
-        end_to_end_search_fixture.populate_search_index()
-        end_to_end_search_fixture.external_search_index.remove_work(data.moby_dick)
-        end_to_end_search_fixture.external_search_index.remove_work(data.moby_duck)
-
-        # Immediately querying never works, the search index needs to refresh its cache/index/data
-        client.indices.refresh()
-
-        end_to_end_search_fixture.expect_results([], "Moby")
-
 
 class TestFacetFiltersData:
     becoming: Work
@@ -1064,14 +1119,6 @@ class TestFacetFilters:
 
         data = self._populate_works(fixture)
         fixture.populate_search_index()
-
-        # Add all the works created in the setup to the search index.
-        SearchIndexCoverageProvider(
-            session, search_index_client=fixture.external_search_index
-        ).run_once_and_update_timestamp()
-
-        # Sleep to give the index time to catch up.
-        time.sleep(1)
 
         def expect(availability, collection, works):
             facets = Facets(
@@ -4637,11 +4684,9 @@ class TestBulkUpdate:
         w3 = db.work()
         index = external_search_fake_fixture.external_search
 
-        docs = index.start_updating_search_documents()
-        failures = docs.add_documents(
-            index.create_search_documents_from_works([w1, w2, w3])
+        failures = index.add_documents(
+            Work.to_search_documents(db.session, [w1.id, w2.id, w3.id])
         )
-        docs.finish()
 
         # All three works are regarded as successes, because their
         # state was successfully mirrored to the index.
@@ -4659,11 +4704,9 @@ class TestBulkUpdate:
         # If a work stops being presentation-ready, it is kept in the
         # index.
         w2.presentation_ready = False
-        docs = index.start_updating_search_documents()
-        failures = docs.add_documents(
-            index.create_search_documents_from_works([w1, w2, w3])
+        failures = index.add_documents(
+            Work.to_search_documents(db.session, [w1.id, w2.id, w3.id])
         )
-        docs.finish()
         assert {w1.id, w2.id, w3.id} == set(
             map(
                 lambda d: d["_id"], external_search_fake_fixture.service.documents_all()
@@ -4687,9 +4730,8 @@ class TestSearchErrors:
         work = transaction.work()
         work.set_presentation_ready()
 
-        docs = search.external_search.start_updating_search_documents()
-        failures = docs.add_documents(
-            search.external_search.create_search_documents_from_works([work])
+        failures = search.external_search.add_documents(
+            Work.to_search_documents(transaction.session, [work.id])
         )
         assert 1 == len(failures)
         assert work.id == failures[0].id
@@ -4714,9 +4756,8 @@ class TestSearchErrors:
         work = transaction.work()
         work.set_presentation_ready()
 
-        docs = search.external_search.start_updating_search_documents()
-        failures = docs.add_documents(
-            search.external_search.create_search_documents_from_works([work])
+        failures = search.external_search.add_documents(
+            Work.to_search_documents(transaction.session, [work.id])
         )
         assert 1 == len(failures)
         assert work.id == failures[0].id
@@ -4746,288 +4787,6 @@ class TestWorkSearchResult:
 
         # Any other attributes are delegated to the Work.
         assert work.sort_title == result.sort_title
-
-
-class TestSearchIndexCoverageProvider:
-    def test_operation(
-        self,
-        db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
-    ):
-        index = external_search_fake_fixture.external_search
-        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
-        assert WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION == provider.operation
-
-    def test_to_search_document(self, db: DatabaseTransactionFixture):
-        """Test the output of the to_search_document method."""
-        customlist, editions = db.customlist()
-        library = db.library()
-
-        works = [
-            db.work(
-                authors=[db.contributor()],
-                with_license_pool=True,
-                genre="history",
-            ),
-            editions[0].work,
-        ]
-
-        work1: Work = works[0]
-        work2: Work = works[1]
-        work2.suppressed_for.append(library)
-
-        work1.target_age = NumericRange(lower=18, upper=22, bounds="()")
-        work2.target_age = NumericRange(lower=18, upper=99, bounds="[]")
-
-        genre1, is_new = Genre.lookup(db.session, "Psychology")
-        genre2, is_new = Genre.lookup(db.session, "Cooking")
-        subject1 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject1")
-        subject1.genre = genre1
-        subject2 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject2")
-        subject2.genre = genre2
-
-        db.session.flush()
-
-        search_docs = Work.to_search_documents(works)
-
-        search_doc_work1 = list(
-            filter(lambda x: x["work_id"] == work1.id, search_docs)
-        )[0]
-        search_doc_work2 = list(
-            filter(lambda x: x["work_id"] == work2.id, search_docs)
-        )[0]
-
-        def compare(doc: dict[str, Any], work: Work) -> None:
-            assert doc["_id"] == work.id
-            assert doc["work_id"] == work.id
-            assert doc["title"] == work.title
-            assert doc["sort_title"] == work.sort_title
-            assert doc["subtitle"] == work.subtitle
-            assert doc["series"] == work.series
-            assert doc["series_position"] == work.series_position
-            assert doc["language"] == work.language
-            assert doc["author"] == work.author
-            assert doc["sort_author"] == work.sort_author
-            assert doc["medium"] == work.presentation_edition.medium
-            assert doc["publisher"] == work.publisher
-            assert doc["imprint"] == work.imprint
-            assert (
-                doc["permanent_work_id"] == work.presentation_edition.permanent_work_id
-            )
-            assert doc["presentation_ready"] == work.presentation_ready
-            assert doc["last_update_time"] == work.last_update_time
-            assert doc["fiction"] == "Fiction" if work.fiction else "Nonfiction"
-            assert doc["audience"] == work.audience
-            assert doc["summary"] == work.summary_text
-            assert doc["quality"] == work.quality
-            assert doc["rating"] == work.rating
-            assert doc["popularity"] == work.popularity
-
-            if work.suppressed_for:
-                assert doc["suppressed_for"] == [l.id for l in work.suppressed_for]
-            else:
-                assert doc["suppressed_for"] is None
-
-            if work.license_pools:
-                assert len(doc["licensepools"]) == len(work.license_pools)
-                for idx, pool in enumerate(work.license_pools):
-                    actual = doc["licensepools"][idx]
-                    assert actual["licensepool_id"] == pool.id
-                    assert actual["data_source_id"] == pool.data_source_id
-                    assert actual["collection_id"] == pool.collection_id
-                    assert actual["open_access"] == pool.open_access
-                    assert actual["suppressed"] == pool.suppressed
-            else:
-                assert doc["licensepools"] is None
-
-            if work.custom_list_entries:
-                assert len(doc["customlists"]) == len(work.custom_list_entries)
-                for idx, custom_list in enumerate(work.custom_list_entries):
-                    actual = doc["customlists"][idx]
-                    assert actual["list_id"] == custom_list.list_id
-                    assert actual["featured"] == custom_list.featured
-            else:
-                assert doc["customlists"] is None
-
-            if work.presentation_edition.contributions:
-                assert len(doc["contributors"]) is len(
-                    work.presentation_edition.contributions
-                )
-                for idx, contribution in enumerate(
-                    work.presentation_edition.contributions
-                ):
-                    actual = doc["contributors"][idx]
-                    assert actual["sort_name"] == contribution.contributor.sort_name
-                    assert (
-                        actual["display_name"] == contribution.contributor.display_name
-                    )
-                    assert actual["lc"] == contribution.contributor.lc
-                    assert actual["viaf"] == contribution.contributor.viaf
-                    assert actual["role"] == contribution.role
-            else:
-                assert doc["contributors"] is None
-
-            if work.identifiers:  # type: ignore[attr-defined]
-                assert len(doc["identifiers"]) == len(work.identifiers)  # type: ignore[attr-defined]
-                for idx, identifier in enumerate(work.identifiers):  # type: ignore[attr-defined]
-                    actual = doc["identifiers"][idx]
-                    assert actual["type"] == identifier.type
-                    assert actual["identifier"] == identifier.identifier
-            else:
-                assert doc["identifiers"] is None
-
-            if work.classifications:  # type: ignore[attr-defined]
-                assert len(doc["classifications"]) == len(work.classifications)  # type: ignore[attr-defined]
-            else:
-                assert doc["classifications"] is None
-
-            if work.work_genres:
-                assert len(doc["genres"]) == len(work.work_genres)
-                for idx, genre in enumerate(work.work_genres):
-                    actual = doc["genres"][idx]
-                    assert actual["name"] == genre.genre.name
-                    assert actual["term"] == genre.genre.id
-                    assert actual["weight"] == genre.affinity
-            else:
-                assert doc["genres"] is None
-
-            lower, upper = numericrange_to_tuple(work.target_age)
-            assert doc["target_age"]["lower"] == lower
-            assert doc["target_age"]["upper"] == upper
-
-        compare(search_doc_work1, work1)
-        compare(search_doc_work2, work2)
-
-    def test_to_search_documents_with_missing_data(
-        self, db: DatabaseTransactionFixture
-    ):
-        # Missing edition relationship
-        work: Work = db.work(with_license_pool=True)
-        work.presentation_edition_id = None
-        [result] = Work.to_search_documents([work])
-        assert result["identifiers"] is None
-
-        # Missing just some attributes
-        work = db.work(with_license_pool=True)
-        work.presentation_edition.title = None
-        work.target_age = None
-        [result] = Work.to_search_documents([work])
-        assert result["title"] is None
-        target_age = result["target_age"]
-        assert isinstance(target_age, dict)
-        assert target_age["lower"] is None
-
-    def test_success(
-        self,
-        db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
-    ):
-        work = db.work()
-        work.set_presentation_ready()
-        index = external_search_fake_fixture.external_search
-        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
-        results = provider.process_batch([work])
-
-        # We got one success and no failures.
-        assert [work] == results
-
-        # The work was added to the search index.
-        search_service = external_search_fake_fixture.service
-        assert 1 == len(search_service.documents_all())
-
-    def test_failure(
-        self,
-        db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
-    ):
-        work = db.work()
-        work.set_presentation_ready()
-        index = external_search_fake_fixture.external_search
-        external_search_fake_fixture.service.set_failing_mode(
-            SearchServiceFailureMode.FAIL_INDEXING_DOCUMENTS
-        )
-
-        provider = SearchIndexCoverageProvider(db.session, search_index_client=index)
-        results = provider.process_batch([work])
-
-        # We have one transient failure.
-        [record] = results
-        assert isinstance(record, CoverageFailure)
-        assert work == record.obj
-        assert record.transient is True
-        assert "There was an error!" in record.exception
-
-    def test_migration_available(
-        self, external_search_fake_fixture: ExternalSearchFixtureFake
-    ):
-        search = external_search_fake_fixture.external_search
-        directory = search._revision_directory
-
-        # Create a new highest version
-        available = dict(directory._available)
-        available[10000] = SearchV10000()
-        directory._available = available
-        search._revision = directory._available[10000]
-        search._search_service.index_is_populated = lambda revision: False
-
-        mock_db = MagicMock()
-        provider = SearchIndexCoverageProvider(mock_db, search_index_client=search)
-
-        assert provider.migration is not None
-        assert provider.receiver is None
-        # Execute is called once with a Delete statement
-        assert mock_db.execute.call_count == 1
-        assert len(mock_db.execute.call_args[0]) == 1
-        assert mock_db.execute.call_args[0][0].__class__ == sqlaDelete
-
-    def test_migration_not_available(
-        self, end_to_end_search_fixture: EndToEndSearchFixture
-    ):
-        search = end_to_end_search_fixture.external_search_index
-        db = end_to_end_search_fixture.db
-
-        migration = search.start_migration()
-        assert migration is not None
-        migration.finish()
-
-        provider = SearchIndexCoverageProvider(db.session, search_index_client=search)
-        assert provider.migration is None
-        assert provider.receiver is not None
-
-    def test_complete_run_from_script(
-        self, end_to_end_search_fixture: EndToEndSearchFixture
-    ):
-        search = end_to_end_search_fixture.external_search_index
-        db = end_to_end_search_fixture.db
-        work = db.work(title="A Test Work", with_license_pool=True)
-        work.set_presentation_ready(search_index_client=search)
-
-        class _SearchIndexCoverageProvider(SearchIndexCoverageProvider):
-            _did_call_on_completely_finished = False
-
-            def on_completely_finished(self):
-                self._did_call_on_completely_finished = True
-                super().on_completely_finished()
-
-        # Run as the search_index_refresh script would
-        provider = RunWorkCoverageProviderScript(
-            _SearchIndexCoverageProvider, _db=db.session, search_index_client=search
-        )
-        provider.run()
-
-        # The run ran till the end
-        assert provider.providers[0]._did_call_on_completely_finished == True
-        # The single available work was indexed
-        results = search.query_works(None)
-        assert len(results) == 1
-        assert results[0]["work_id"] == work.id
-
-
-class SearchV10000(SearchSchemaRevision):
-    SEARCH_VERSION = 10000
-
-    def mapping_document(self) -> SearchMappingDocument:
-        return MagicMock()
 
 
 class TestJSONQuery:
