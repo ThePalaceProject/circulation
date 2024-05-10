@@ -61,7 +61,7 @@ class Script:
     @property
     def _db(self) -> Session:
         if not hasattr(self, "_session"):
-            self._session = production_session()
+            self._session = production_session(self.__class__)
         return self._session
 
     @property

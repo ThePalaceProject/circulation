@@ -7,7 +7,7 @@ from palace.manager.api.saml.metadata.federations import incommon
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
 from palace.manager.sqlalchemy.session import production_session
 
-with closing(production_session()) as db:
+with closing(production_session("add_saml_federations")) as db:
     incommon_federation = (
         db.query(SAMLFederation)
         .filter(SAMLFederation.type == incommon.FEDERATION_TYPE)

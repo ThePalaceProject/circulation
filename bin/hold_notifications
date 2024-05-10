@@ -5,4 +5,4 @@
 from palace.manager.core.jobs.holds_notification import HoldsNotificationMonitor
 from palace.manager.sqlalchemy.session import production_session
 
-HoldsNotificationMonitor(production_session()).run()
+HoldsNotificationMonitor(production_session(HoldsNotificationMonitor)).run()

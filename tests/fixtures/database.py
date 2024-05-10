@@ -268,7 +268,7 @@ class DatabaseFixture:
         self.connection = self.engine.connect()
 
     def engine_factory(self) -> Engine:
-        return SessionManager.engine(self.database_name.url)
+        return SessionManager.engine(self.database_name.url, application_name="test")
 
     def drop_existing_schema(self) -> None:
         metadata_obj = MetaData()

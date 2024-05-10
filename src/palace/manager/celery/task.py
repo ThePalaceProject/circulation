@@ -68,7 +68,9 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
           worker utilization in production.
         """
         if self._session_maker is None:
-            engine = SessionManager.engine(poolclass=NullPool)
+            engine = SessionManager.engine(
+                poolclass=NullPool, application_name=self.name
+            )
             maker = sessionmaker(bind=engine)
             SessionManager.setup_event_listener(maker)
             self._session_maker = maker

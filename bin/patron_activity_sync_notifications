@@ -7,4 +7,6 @@ from palace.manager.core.jobs.patron_activity_sync import (
 )
 from palace.manager.sqlalchemy.session import production_session
 
-PatronActivitySyncNotificationScript(production_session()).run()
+PatronActivitySyncNotificationScript(
+    production_session(PatronActivitySyncNotificationScript)
+).run()
