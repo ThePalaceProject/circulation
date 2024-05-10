@@ -92,7 +92,18 @@ def test_production_session(mock_database_url, mock_session):
     # Make sure production_session() calls session() with the URL from the
     # configuration.
     mock_database_url.return_value = "test-url"
-    session = production_session()
+    session = production_session("test-app")
     mock_database_url.assert_called_once()
-    mock_session.assert_called_once_with("test-url", application_name="scripts")
+    mock_session.assert_called_once_with("test-url", application_name="test-app")
     assert session == mock_session.return_value
+
+    # production_session can also be called with a class that sets the application name
+    mock_session.reset_mock()
+
+    class Mock:
+        ...
+
+    production_session(Mock)
+    mock_session.assert_called_once_with(
+        "test-url", application_name="tests.manager.sqlalchemy.test_session.Mock"
+    )

@@ -179,10 +179,14 @@ class SessionManager(LoggerMixin):
         return session
 
 
-def production_session() -> Session:
+def production_session(application_name: type[object] | str) -> Session:
+    if isinstance(application_name, str):
+        application_name = application_name
+    else:
+        application_name = f"{application_name.__module__}.{application_name.__name__}"
     url = Configuration.database_url()
     if url.startswith('"'):
         url = url[1:]
     logging.debug("Database url: %s", url)
-    _db = SessionManager.session(url, application_name="scripts")
+    _db = SessionManager.session(url, application_name=application_name)
     return _db

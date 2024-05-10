@@ -3,6 +3,5 @@
 
 
 from palace.manager.core.jobs.playtime_entries import PlaytimeEntriesSummationScript
-from palace.manager.sqlalchemy.session import production_session
 
-PlaytimeEntriesSummationScript(production_session(initialize_data=False)).run()
+PlaytimeEntriesSummationScript().run()
