@@ -81,7 +81,7 @@ def initialize_circulation_manager():
 
 
 def initialize_database():
-    session_factory = SessionManager.sessionmaker()
+    session_factory = SessionManager.sessionmaker(application_name="manager")
     _db = flask_scoped_session(session_factory, app)
     app._db = _db
 

@@ -8,7 +8,9 @@ from palace.manager.service.logging.configuration import LogLevel
 
 
 def test_task_session_maker() -> None:
+    task_name = "test-task"
     task = Task()
+    task.name = task_name
 
     # If session maker is not initialized, it should be None
     assert task._session_maker is None
@@ -25,7 +27,9 @@ def test_task_session_maker() -> None:
         patch("palace.manager.celery.task.sessionmaker") as mock_sessionmaker,
     ):
         assert task.session_maker == mock_sessionmaker.return_value
-        mock_session_manager.engine.assert_called_once_with(poolclass=NullPool)
+        mock_session_manager.engine.assert_called_once_with(
+            poolclass=NullPool, application_name=task_name
+        )
         mock_sessionmaker.assert_called_once_with(
             bind=mock_session_manager.engine.return_value
         )

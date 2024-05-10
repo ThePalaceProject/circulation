@@ -3,6 +3,5 @@
 
 
 from palace.manager.core.jobs.playtime_entries import PlaytimeEntriesEmailReportsScript
-from palace.manager.sqlalchemy.session import production_session
 
-PlaytimeEntriesEmailReportsScript(production_session(initialize_data=False)).run()
+PlaytimeEntriesEmailReportsScript().run()
