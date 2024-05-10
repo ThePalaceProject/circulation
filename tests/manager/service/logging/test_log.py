@@ -94,6 +94,17 @@ class TestJSONFormatter:
         assert "traceback" in data
         assert "ValueError: fake exception" in data["traceback"]
 
+    def test_format_stack_info(self, log_record: LogRecordCallable) -> None:
+        formatter = JSONFormatter()
+        record = log_record(sinfo="some info")
+        data = json.loads(formatter.format(record))
+        assert data["stack"] == "some info"
+
+        # if no stack info is provided, the stack field is not included in the log.
+        record = log_record()
+        data = json.loads(formatter.format(record))
+        assert "stack" not in data
+
     @pytest.mark.parametrize(
         "msg, args, expected",
         [

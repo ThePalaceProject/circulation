@@ -89,6 +89,8 @@ class JSONFormatter(logging.Formatter):
             data["process"] = record.process
         if record.thread and record.thread != self.main_thread_id:
             data["thread"] = record.thread
+        if record.stack_info:
+            data["stack"] = self.formatStack(record.stack_info)
 
         # If we are running in a Flask context, we include the request data in the log
         if flask_request:
