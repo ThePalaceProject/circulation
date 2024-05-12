@@ -12,6 +12,7 @@ from palace.manager.api.admin.config import OperationalMode
 from palace.manager.api.admin.controller.custom_lists import CustomListsController
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
+from palace.manager.api.admin.model.inventory_report import InventoryReportInfo
 from palace.manager.api.admin.model.quicksight import (
     QuicksightDashboardNamesResponse,
     QuicksightGenerateUrlRequest,
@@ -705,6 +706,23 @@ def search_field_values():
 @returns_json_or_response_or_problem_detail
 def diagnostics():
     return app.manager.timestamps_controller.diagnostics()
+
+
+@app.route(
+    "/admin/reports/inventory_report/<path:library_short_name>",
+    methods=["GET"],
+)
+@api_spec.validate(
+    resp=SpecResponse(
+        HTTP_200=InventoryReportInfo, HTTP_403=ProblemDetailModel, HTTP_404=None
+    ),
+    tags=["admin.inventory"],
+)
+@allows_library
+@returns_json_or_response_or_problem_detail
+@requires_admin
+def inventory_report_info():
+    return app.manager.admin_report_controller.inventory_report_info()
 
 
 @app.route(

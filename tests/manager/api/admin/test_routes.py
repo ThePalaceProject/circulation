@@ -1,6 +1,8 @@
 import logging
 from collections.abc import Generator
+from http import HTTPStatus
 from typing import Any
+from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -17,6 +19,7 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.api_routes import MockApp, MockController, MockManager
@@ -746,6 +749,33 @@ class TestAdminLanes:
             url, fixture.controller.change_order, http_method="POST"  # type: ignore
         )
         fixture.assert_supported_methods(url, "POST")
+
+
+class TestAdminInventoryReports:
+    CONTROLLER_NAME = "admin_report_controller"
+
+    @pytest.fixture(scope="function")
+    def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
+        admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
+        return admin_route_fixture
+
+    def test_inventory_report_info(
+        self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
+    ):
+        url = "/admin/reports/inventory_report/<library_short_name>"
+        fixture.assert_supported_methods(url, "GET")
+
+        mock_response = MagicMock(
+            return_value=Response(
+                '{"collections": []}',
+                status=HTTPStatus.OK,
+                mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
+            )
+        )
+        monkeypatch.setattr(fixture.controller.inventory_report_info, "response", mock_response)  # type: ignore
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.inventory_report_info  # type: ignore
+        )
 
 
 class TestTimestamps:
