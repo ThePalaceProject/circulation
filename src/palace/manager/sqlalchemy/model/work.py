@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 from collections import Counter
 from datetime import date, datetime
@@ -59,6 +58,7 @@ from palace.manager.sqlalchemy.util import (
 )
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
+from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -93,7 +93,7 @@ class WorkGenre(Base):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
 
 
-class Work(Base):
+class Work(Base, LoggerMixin):
     APPEALS_URI = "http://librarysimplified.org/terms/appeals/"
 
     CHARACTER_APPEAL = "Character"
@@ -509,7 +509,7 @@ class Work(Base):
             elif not pool.presentation_edition:
                 # A LicensePool with no presentation edition
                 # cannot have an associated Work.
-                logging.warning(
+                self.log.warning(
                     "LicensePool %r has no presentation edition, setting .work to None.",
                     pool,
                 )
@@ -520,7 +520,7 @@ class Work(Base):
                 if not this_pwid:
                     # A LicensePool with no permanent work ID
                     # cannot have an associated Work.
-                    logging.warning(
+                    self.log.warning(
                         "Presentation edition for LicensePool %r has no PWID, setting .work to None.",
                         pool,
                     )
@@ -677,9 +677,9 @@ class Work(Base):
         work_ids = [w.id for w in works]
 
         if len(works) == 1:
-            logging.info("Suppressing cover for %r", works[0])
+            cls.logger().info("Suppressing cover for %r", works[0])
         else:
-            logging.info("Supressing covers for %i Works", len(works))
+            cls.logger().info("Supressing covers for %i Works", len(works))
 
         cover_urls = list()
         for work in works:
@@ -1043,7 +1043,7 @@ class Work(Base):
                 # TODO: maybe change changed to a boolean, and return it as method result
                 changed = "unchanged"
                 representation = repr(self)
-            logging.info("Presentation %s for work: %s", changed, representation)
+            self.log.info("Presentation %s for work: %s", changed, representation)
 
         # We want works to be presentation-ready as soon as possible,
         # unless they are missing crucial information like language or
@@ -1280,7 +1280,7 @@ class Work(Base):
             # processed, this work will be removed from the search
             # index.
             self.external_index_needs_updating()
-            logging.warning("Work is not presentation ready: %r", self)
+            self.log.warning("Work is not presentation ready: %r", self)
         else:
             self.set_presentation_ready(search_index_client=search_index_client)
 
@@ -1538,7 +1538,7 @@ class Work(Base):
                 search_doc = cls.search_doc_as_dict(cast(Self, item))
                 results.append(search_doc)
             except:
-                logging.exception(f"Could not create search document for {item}")
+                cls.logger().exception(f"Could not create search document for {item}")
 
         return results
 
@@ -1595,7 +1595,7 @@ class Work(Base):
                         value = value.replace(tzinfo=pytz.UTC)
                     return value.timestamp()
                 except (ValueError, OverflowError) as e:
-                    logging.error(
+                    cls.logger().error(
                         f"Could not convert date value {value} for document {doc.id}: {e}"
                     )
                     return 0
@@ -1605,7 +1605,7 @@ class Work(Base):
                         value.year, value.month, value.day, tzinfo=pytz.UTC
                     ).timestamp()
                 except (ValueError, OverflowError) as e:
-                    logging.error(
+                    cls.logger().error(
                         f"Could not convert date value {value} for document {doc.id}: {e}"
                     )
                     return 0
@@ -1835,7 +1835,7 @@ class Work(Base):
         try:
             search_index.remove_work(self)
         except opensearchpy.exceptions.NotFoundError:
-            logging.warning(
+            self.log.warning(
                 f"Work {self.id} not found in search index while attempting to delete it."
             )
         _db.delete(self)

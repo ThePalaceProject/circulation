@@ -1,4 +1,3 @@
-import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
@@ -10,6 +9,7 @@ from opensearchpy import NotFoundError, OpenSearch, RequestError
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.util.log import LoggerMixin
 
 
 @dataclass
@@ -159,11 +159,10 @@ class SearchService(ABC):
         """Check to see if a pointer points to an empty index"""
 
 
-class SearchServiceOpensearch1(SearchService):
+class SearchServiceOpensearch1(SearchService, LoggerMixin):
     """The real Opensearch 1.x service."""
 
     def __init__(self, client: OpenSearch, base_revision_name: str):
-        self._logger = logging.getLogger(SearchServiceOpensearch1.__name__)
         self._client = client
         self._search = Search(using=self._client)
         self._base_revision_name = base_revision_name
@@ -197,7 +196,7 @@ class SearchServiceOpensearch1(SearchService):
     def create_empty_index(self) -> None:
         try:
             index_name = self._empty(self.base_revision_name)
-            self._logger.debug(f"creating empty index {index_name}")
+            self.log.debug(f"creating empty index {index_name}")
             self._client.indices.create(index=index_name)
         except RequestError as e:
             if e.error == "resource_already_exists_exception":
@@ -213,7 +212,7 @@ class SearchServiceOpensearch1(SearchService):
                 {"add": {"index": target_index, "alias": alias_name}},
             ]
         }
-        self._logger.debug(f"setting read pointer {alias_name} to index {target_index}")
+        self.log.debug(f"setting read pointer {alias_name} to index {target_index}")
         self._client.indices.update_aliases(body=action)
 
     def index_set_populated(self, revision: SearchSchemaRevision) -> None:
@@ -225,7 +224,7 @@ class SearchServiceOpensearch1(SearchService):
                 {"add": {"index": target_index, "alias": alias_name}},
             ]
         }
-        self._logger.debug(
+        self.log.debug(
             f"creating 'indexed' flag alias {alias_name} for index {target_index}"
         )
         self._client.indices.update_aliases(body=action)
@@ -239,7 +238,7 @@ class SearchServiceOpensearch1(SearchService):
                 {"add": {"index": target_index, "alias": alias_name}},
             ]
         }
-        self._logger.debug(
+        self.log.debug(
             f"setting read pointer {alias_name} to empty index {target_index}"
         )
         self._client.indices.update_aliases(body=action)
@@ -247,7 +246,7 @@ class SearchServiceOpensearch1(SearchService):
     def index_create(self, revision: SearchSchemaRevision) -> None:
         try:
             index_name = revision.name_for_index(self.base_revision_name)
-            self._logger.info(f"creating index {index_name}")
+            self.log.info(f"creating index {index_name}")
             self._client.indices.create(
                 index=index_name,
                 body=revision.mapping_document().serialize(),
@@ -265,7 +264,7 @@ class SearchServiceOpensearch1(SearchService):
     def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         data = {"properties": revision.mapping_document().serialize_properties()}
         index_name = revision.name_for_index(self.base_revision_name)
-        self._logger.debug(f"setting mappings for index {index_name}")
+        self.log.debug(f"setting mappings for index {index_name}")
         self._client.indices.put_mapping(index=index_name, body=data)
         self._ensure_scripts(revision)
 
@@ -279,7 +278,7 @@ class SearchServiceOpensearch1(SearchService):
     def index_submit_documents(
         self, pointer: str, documents: Iterable[dict]
     ) -> list[SearchServiceFailedDocument]:
-        self._logger.info(f"submitting documents to index {pointer}")
+        self.log.info(f"submitting documents to index {pointer}")
 
         # Specifically override the target in all documents to the target pointer
         # Add a hard requirement that the target be an alias (this prevents documents from implicitly creating
@@ -320,7 +319,7 @@ class SearchServiceOpensearch1(SearchService):
         )
 
     def refresh(self):
-        self._logger.debug(f"waiting for indexes to become ready")
+        self.log.debug(f"waiting for indexes to become ready")
         self._client.indices.refresh()
 
     def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
@@ -332,7 +331,7 @@ class SearchServiceOpensearch1(SearchService):
                 {"add": {"index": target_index, "alias": alias_name}},
             ]
         }
-        self._logger.debug(f"setting write pointer {alias_name} to {target_index}")
+        self.log.debug(f"setting write pointer {alias_name} to {target_index}")
         self._client.indices.update_aliases(body=action)
 
     def read_pointer(self) -> str | None:
