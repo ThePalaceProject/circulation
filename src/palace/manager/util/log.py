@@ -1,4 +1,5 @@
 import functools
+import inspect
 import logging
 import time
 from collections.abc import Callable, Generator
@@ -88,12 +89,26 @@ def elapsed_time_logging(
         log_method(f"{prefix}Completed. (elapsed time: {elapsed_time:0.4f} seconds)")
 
 
+def logger_for_function() -> logging.Logger:
+    try:
+        stack = inspect.stack()
+        previous_frame = stack[1]
+        fn_name = previous_frame.function
+        module = inspect.getmodule(previous_frame.frame)
+        module_name = module.__name__  # type: ignore[union-attr]
+    except:
+        fn_name = "<unknown>"
+        module_name = "palace.manager"
+
+    return logging.getLogger(f"{module_name}.{fn_name}")
+
+
+def logger_for_cls(cls: type[object]) -> logging.Logger:
+    return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
+
 class LoggerMixin:
     """Mixin that adds a logger with a standardized name"""
-
-    @staticmethod
-    def logger_for_cls(cls: type[object]) -> logging.Logger:
-        return logging.getLogger(f"{cls.__module__}.{cls.__name__}")
 
     @classmethod
     @functools.cache
@@ -104,7 +119,7 @@ class LoggerMixin:
         This is cached so that we don't create a new logger every time
         it is called.
         """
-        return cls.logger_for_cls(cls)
+        return logger_for_cls(cls)
 
     @property
     def log(self) -> logging.Logger:

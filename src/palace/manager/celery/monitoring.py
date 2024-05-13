@@ -13,7 +13,7 @@ from celery.events.state import State, Task
 
 from palace.manager.util import chunks
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
+from palace.manager.util.log import LoggerMixin, logger_for_cls
 
 if TYPE_CHECKING:
     from mypy_boto3_cloudwatch.literals import StandardUnitType
@@ -156,7 +156,7 @@ class Cloudwatch(Polaroid):
         # We use logger_for_cls instead of just inheriting from LoggerMixin
         # because the base class Polaroid already defines a logger attribute,
         # which conflicts with the logger() method in LoggerMixin.
-        self.logger = LoggerMixin.logger_for_cls(self.__class__)
+        self.logger = logger_for_cls(self.__class__)
         region = self.app.conf.get("cloudwatch_statistics_region")
         dryrun = self.app.conf.get("cloudwatch_statistics_dryrun")
         self.cloudwatch_client = (
