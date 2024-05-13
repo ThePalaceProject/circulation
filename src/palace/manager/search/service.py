@@ -71,7 +71,7 @@ class SearchServiceFailedDocument:
             )
 
 
-SearchDocument = dict[str, "str | int | bool | None | Sequence[str] | SearchDocument"]
+SearchDocument = dict[str, Any]
 
 
 class SearchService(ABC):

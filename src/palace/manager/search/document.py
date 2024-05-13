@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from typing import Any
 
-SearchMappingSerialization = Mapping[
-    str, "str | bool | Sequence[str] | SearchMappingSerialization"
-]
+SearchMappingSerialization = dict[str, Any]
 
 
 class SearchMappingFieldType(ABC):
@@ -193,7 +191,7 @@ class SearchMappingFieldTypeCustomFilterable(SearchMappingFieldTypeCustom):
 
     def serialize(self) -> SearchMappingSerialization:
         output = self._basic.serialize()
-        output["fields"]["keyword"] = {  # type: ignore[index]
+        output["fields"]["keyword"] = {
             "type": "keyword",
             "index": True,
             "store": False,
