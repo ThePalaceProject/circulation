@@ -10,6 +10,8 @@ from palace.manager.api.admin.model.inventory_report import (
     InventoryReportInfo,
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
+from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetailException
@@ -77,7 +79,10 @@ class TestReportController:
             email="librarian@example.org", role=AdminRole.LIBRARIAN, library=library1
         )
 
-        collection = db.collection()
+        collection = db.collection(
+            protocol=OPDSAPI.label(),
+            settings={"data_source": "test", "external_account_id": "http://url"},
+        )
         collection.libraries = [library1, library2]
 
         success_payload_dict = InventoryReportInfo(
@@ -124,17 +129,47 @@ class TestReportController:
         assert admin_response_none.status_code == 404
 
     @pytest.mark.parametrize(
-        "settings, expect_collection",
+        "protocol, settings, expect_collection",
         (
-            ({}, True),
-            ({"include_in_inventory_report": False}, False),
-            ({"include_in_inventory_report": True}, True),
+            (
+                OPDSAPI.label(),
+                {"data_source": "test", "external_account_id": "http://url"},
+                True,
+            ),
+            (
+                OPDSAPI.label(),
+                {
+                    "include_in_inventory_report": False,
+                    "data_source": "test",
+                    "external_account_id": "http://test.url",
+                },
+                False,
+            ),
+            (
+                OPDSAPI.label(),
+                {
+                    "include_in_inventory_report": True,
+                    "data_source": "test",
+                    "external_account_id": "http://test.url",
+                },
+                True,
+            ),
+            (
+                OverdriveAPI.label(),
+                {
+                    "overdrive_website_id": "test",
+                    "overdrive_client_key": "test",
+                    "overdrive_client_secret": "test",
+                },
+                False,
+            ),
         ),
     )
     def test_inventory_report_info_reportable_collections(
         self,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
+        protocol: str,
         settings: dict,
         expect_collection: bool,
     ):
@@ -142,9 +177,8 @@ class TestReportController:
         sysadmin = flask_app_fixture.admin_user(role=AdminRole.SYSTEM_ADMIN)
 
         library = db.library()
-        collection = db.collection()
+        collection = db.collection(protocol=protocol, settings=settings)
         collection.libraries = [library]
-        collection._set_settings(**settings)
 
         expected_collections = (
             [InventoryReportCollectionInfo(id=collection.id, name=collection.name)]
@@ -157,7 +191,6 @@ class TestReportController:
         ).api_dict()
         assert len(expected_collections) == expected_collection_count
 
-        # Sysadmin can get info for any library.
         with flask_app_fixture.test_request_context(
             "/", admin=sysadmin, library=library
         ):

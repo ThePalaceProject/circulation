@@ -3,7 +3,6 @@ from http import HTTPStatus
 
 import flask
 from flask import Response
-from sqlalchemy import not_, select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.model.inventory_report import (
@@ -13,16 +12,11 @@ from palace.manager.api.admin.model.inventory_report import (
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
+    library_report_integrations,
 )
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
-from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -49,20 +43,12 @@ class ReportController(LoggerMixin):
         if not admin.is_librarian(library):
             raise ProblemDetailException(ADMIN_NOT_AUTHORIZED)
 
-        collections = self._db.scalars(
-            select(Collection)
-            .join(IntegrationConfiguration)
-            .join(IntegrationLibraryConfiguration)
-            .where(
-                IntegrationLibraryConfiguration.library_id == library.id,
-                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
-                not_(
-                    IntegrationConfiguration.settings_dict.contains(
-                        {"include_in_inventory_report": False}
-                    )
-                ),
+        collections = [
+            integration.collection
+            for integration in library_report_integrations(
+                library=library, session=self._db
             )
-        ).all()
+        ]
         info = InventoryReportInfo(
             collections=[
                 InventoryReportCollectionInfo(
