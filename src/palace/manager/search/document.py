@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 SearchMappingSerialization = Mapping[
-    str, str | bool | Sequence[str] | "SearchMappingSerialization"
+    str, "str | bool | Sequence[str] | SearchMappingSerialization"
 ]
 
 
