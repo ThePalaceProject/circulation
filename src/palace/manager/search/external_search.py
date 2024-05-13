@@ -1089,36 +1089,36 @@ class JSONQuery(Query):
         "fiction": _KEYWORD_ONLY,
         "genres.name": dict(path="genres"),
         "genres.scheme": dict(path="genres"),
-        "genres.term": dict(path="genres", **_LONG_TYPE),
-        "genres.weight": dict(path="genres", **_LONG_TYPE),
+        "genres.term": dict(path="genres"),
+        "genres.weight": dict(path="genres"),
         "identifiers.identifier": dict(path="identifiers"),
         "identifiers.type": dict(path="identifiers"),
         "imprint": _KEYWORD_ONLY,
         "language": dict(
             type="_text"
         ),  # Made up keyword type, because we don't want text fuzzyness on this
-        "licensepools.available": dict(path="licensepools", **_BOOL_TYPE),
-        "licensepools.availability_time": dict(path="licensepools", **_LONG_TYPE),
-        "licensepools.collection_id": dict(path="licensepools", **_LONG_TYPE),
+        "licensepools.available": dict(path="licensepools"),
+        "licensepools.availability_time": dict(path="licensepools"),
+        "licensepools.collection_id": dict(path="licensepools"),
         "licensepools.data_source_id": dict(
-            path="licensepools", ops=[Operators.EQ, Operators.NEQ], **_LONG_TYPE
+            path="licensepools", ops=[Operators.EQ, Operators.EQ]
         ),
-        "licensepools.licensed": dict(path="licensepools", **_BOOL_TYPE),
+        "licensepools.licensed": dict(path="licensepools"),
         "licensepools.medium": dict(path="licensepools"),
-        "licensepools.open_access": dict(path="licensepools", **_BOOL_TYPE),
-        "licensepools.quality": dict(path="licensepools", **_LONG_TYPE),
-        "licensepools.suppressed": dict(path="licensepools", **_BOOL_TYPE),
+        "licensepools.open_access": dict(path="licensepools"),
+        "licensepools.quality": dict(path="licensepools"),
+        "licensepools.suppressed": dict(path="licensepools"),
         "medium": _KEYWORD_ONLY,
         "presentation_ready": _BOOL_TYPE,
         "publisher": _KEYWORD_ONLY,
-        "quality": _LONG_TYPE,
+        "quality": dict(),
         "series": _KEYWORD_ONLY,
         "sort_author": dict(),
         "sort_title": dict(),
         "subtitle": _KEYWORD_ONLY,
         "target_age": dict(),
         "title": _KEYWORD_ONLY,
-        "published": _LONG_TYPE,
+        "published": dict(),
     }
 
     # From the client, some field names may be abstracted
@@ -1129,17 +1129,6 @@ class JSONQuery(Query):
         "classification": "classifications.term",
         "data_source": "licensepools.data_source_id",
     }
-
-    # We are using "match" queries for the "equals" operator
-    # so we must keep a tight leash on the how much of a spread
-    # in the matches we want to keep
-    # The "match" is used instead of "term" in order to have some
-    # tolerance for spelling mistakes while making a query
-    MATCH_ARGS = dict(
-        auto_generate_synonyms_phrase_query=False,
-        max_expansions=10,
-        fuzziness="AUTO",
-    )
 
     class ValueTransforms:
         @staticmethod
@@ -1274,19 +1263,10 @@ class JSONQuery(Query):
 
         es_query = None
 
-        def _match_or_term_query():
-            """Only text type mappings get a 'match' search, others use a term search
-            All variables are used from the function closure
-            """
-            if mapping.get("type", "text") != "text":
-                return Term(**{key: value})
-            else:
-                return Match(**{key: {"query": value, **self.MATCH_ARGS}})
-
         if op == self.Operators.EQ:
-            es_query = _match_or_term_query()
+            es_query = Term(**{key: value})
         elif op == self.Operators.NEQ:
-            es_query = Bool(must_not=[_match_or_term_query()])
+            es_query = Bool(must_not=[Term(**{key: value})])
         elif op in {
             self.Operators.GT,
             self.Operators.GTE,

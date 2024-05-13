@@ -5039,26 +5039,18 @@ class TestJSONQuery:
     def _jq(query):
         return JSONQuery(dict(query=query))
 
-    match_args = JSONQuery.MATCH_ARGS
-
     def test_search_query(self, external_search_fixture: ExternalSearchFixture):
         q_dict = {"key": "medium", "value": "Book"}
         q = self._jq(q_dict)
-        assert q.search_query.to_dict() == {
-            "match": {"medium.keyword": {"query": "Book", **self.match_args}}
-        }
+        assert q.search_query.to_dict() == {"term": {"medium.keyword": "Book"}}
 
         q = {"or": [self._leaf("medium", "Book"), self._leaf("medium", "Audio")]}
         q = self._jq(q)
         assert q.search_query.to_dict() == {
             "bool": {
                 "should": [
-                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
-                    {
-                        "match": {
-                            "medium.keyword": {"query": "Audio", **self.match_args}
-                        }
-                    },
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
                 ]
             }
         }
@@ -5068,12 +5060,8 @@ class TestJSONQuery:
         assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
-                    {
-                        "match": {
-                            "medium.keyword": {"query": "Audio", **self.match_args}
-                        }
-                    },
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
                 ]
             }
         }
@@ -5088,29 +5076,8 @@ class TestJSONQuery:
         assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
-                    {
-                        "bool": {
-                            "should": [
-                                {
-                                    "match": {
-                                        "medium.keyword": {
-                                            "query": "Book",
-                                            **self.match_args,
-                                        }
-                                    }
-                                },
-                                {
-                                    "match": {
-                                        "medium.keyword": {
-                                            "query": "Audio",
-                                            **self.match_args,
-                                        }
-                                    }
-                                },
-                            ]
-                        }
-                    },
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
                 ]
             }
         }
@@ -5120,21 +5087,8 @@ class TestJSONQuery:
         assert q.search_query.to_dict() == {
             "bool": {
                 "should": [
-                    {"match": {"medium.keyword": {"query": "Book", **self.match_args}}},
-                    {
-                        "bool": {
-                            "must_not": [
-                                {
-                                    "match": {
-                                        "medium.keyword": {
-                                            "query": "Audio",
-                                            **self.match_args,
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
+                    {"term": {"medium.keyword": "Book"}},
+                    {"term": {"medium.keyword": "Audio"}},
                 ]
             }
         }
@@ -5149,21 +5103,8 @@ class TestJSONQuery:
         assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"match": {"title.keyword": {"query": "Title", **self.match_args}}},
-                    {
-                        "bool": {
-                            "must_not": [
-                                {
-                                    "match": {
-                                        "author.keyword": {
-                                            "query": "Geoffrey",
-                                            **self.match_args,
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
+                    {"term": {"title.keyword": "Title"}},
+                    {"bool": {"must_not": [{"term": {"author.keyword": "Geoffrey"}}]}},
                 ]
             }
         }
@@ -5188,7 +5129,7 @@ class TestJSONQuery:
             ("contributors.display_name", "name", True),
             ("contributors.lc", "name", False),
             ("genres.name", "name", False),
-            ("licensepools.medium", "Book", False),
+            ("licensepools.open_access", True, False),
         ],
     )
     def test_search_query_nested(self, key, value, is_keyword):
@@ -5196,10 +5137,7 @@ class TestJSONQuery:
         term = key if not is_keyword else f"{key}.keyword"
         root = key.split(".")[0]
         assert q.search_query.to_dict() == {
-            "nested": {
-                "path": root,
-                "query": {"match": {term: {"query": value, **self.match_args}}},
-            }
+            "nested": {"path": root, "query": {"term": {term: value}}}
         }
 
     @pytest.mark.parametrize(
@@ -5234,9 +5172,7 @@ class TestJSONQuery:
     def test_field_transforms(self):
         q = self._jq(self._leaf("classification", "cls"))
         assert q.search_query.to_dict() == {
-            "match": {
-                "classifications.term.keyword": {"query": "cls", **self.match_args}
-            }
+            "term": {"classifications.term.keyword": "cls"}
         }
         q = self._jq(self._leaf("open_access", True))
         assert q.search_query.to_dict() == {
@@ -5336,19 +5272,6 @@ class TestJSONQuery:
                 "query": {"term": {"licensepools.data_source_id": gutenberg.id}},
             }
         }
-
-    @pytest.mark.parametrize(
-        "key,value,is_text",
-        [
-            ("title", "value", True),
-            ("licensepools.open_access", True, False),
-            ("published", "1990-01-01", False),
-        ],
-    )
-    def test_type_queries(self, key, value, is_text):
-        """Bool and long types are term queries, whereas text is a match query"""
-        q = self._jq(self._leaf(key, value))
-        q.search_query.to_dict().keys() == ["match" if is_text else "term"]
 
     @pytest.mark.parametrize(
         "value,escaped,contains",
