@@ -753,18 +753,20 @@ class TestAdminLanes:
 
 class TestAdminInventoryReports:
     CONTROLLER_NAME = "admin_report_controller"
+    URL = "/admin/reports/inventory_report/<library_short_name>"
 
     @pytest.fixture(scope="function")
     def fixture(self, admin_route_fixture: AdminRouteFixture) -> AdminRouteFixture:
         admin_route_fixture.set_controller_name(self.CONTROLLER_NAME)
         return admin_route_fixture
 
+    def test_inventory_report(self, fixture: AdminRouteFixture):
+        fixture.assert_supported_methods(self.URL, "GET", "POST")
+
     def test_inventory_report_info(
         self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
     ):
-        url = "/admin/reports/inventory_report/<library_short_name>"
-        fixture.assert_supported_methods(url, "GET")
-
+        url = self.URL
         mock_response = MagicMock(
             return_value=Response(
                 '{"collections": []}',
@@ -774,7 +776,23 @@ class TestAdminInventoryReports:
         )
         monkeypatch.setattr(fixture.controller.inventory_report_info, "response", mock_response)  # type: ignore
         fixture.assert_authenticated_request_calls(
-            url, fixture.controller.inventory_report_info  # type: ignore
+            url, fixture.controller.inventory_report_info, http_method="GET"  # type: ignore
+        )
+
+    def test_generate_inventory_report(
+        self, fixture: AdminRouteFixture, monkeypatch: pytest.MonkeyPatch
+    ):
+        url = self.URL
+        mock_response = MagicMock(
+            return_value=Response(
+                '{"message": "A success message."}',
+                status=HTTPStatus.ACCEPTED,
+                mimetype=MediaTypes.APPLICATION_JSON_MEDIA_TYPE,
+            )
+        )
+        monkeypatch.setattr(fixture.controller.generate_inventory_report, "response", mock_response)  # type: ignore
+        fixture.assert_authenticated_request_calls(
+            url, fixture.controller.generate_inventory_report, http_method="POST"  # type: ignore
         )
 
 

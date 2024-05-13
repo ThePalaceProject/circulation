@@ -726,7 +726,7 @@ def inventory_report_info():
 
 
 @app.route(
-    "/admin/reports/generate_inventory_report/<path:library_short_name>",
+    "/admin/reports/inventory_report/<path:library_short_name>",
     methods=["POST"],
 )
 @allows_library
