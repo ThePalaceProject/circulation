@@ -1,4 +1,3 @@
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 
@@ -6,6 +5,7 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.service import SearchService, SearchServiceFailedDocument
+from palace.manager.util.log import LoggerMixin
 
 
 class SearchMigrationException(BasePalaceException):
@@ -30,11 +30,10 @@ class SearchDocumentReceiverType(ABC):
         """Make sure all changes are committed."""
 
 
-class SearchDocumentReceiver(SearchDocumentReceiverType):
+class SearchDocumentReceiver(SearchDocumentReceiverType, LoggerMixin):
     """A receiver of search documents."""
 
     def __init__(self, pointer: str, service: SearchService):
-        self._logger = logging.getLogger(SearchDocumentReceiver.__name__)
         self._pointer = pointer
         self._service = service
 
@@ -53,12 +52,12 @@ class SearchDocumentReceiver(SearchDocumentReceiverType):
 
     def finish(self) -> None:
         """Make sure all changes are committed."""
-        self._logger.info("Finishing search documents.")
+        self.log.info("Finishing search documents.")
         self._service.refresh()
-        self._logger.info("Finished search documents.")
+        self.log.info("Finished search documents.")
 
 
-class SearchMigrationInProgress(SearchDocumentReceiverType):
+class SearchMigrationInProgress(SearchDocumentReceiverType, LoggerMixin):
     """A migration in progress. Documents are being submitted, and the migration must be
     explicitly finished or cancelled to take effect (or not!)."""
 
@@ -68,7 +67,6 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         revision: SearchSchemaRevision,
         service: SearchService,
     ):
-        self._logger = logging.getLogger(SearchMigrationInProgress.__name__)
         self._base_name = base_name
         self._revision = revision
         self._service = service
@@ -84,7 +82,7 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
 
     def finish(self) -> None:
         """Finish the migration."""
-        self._logger.info(f"Completing migration to {self._revision.version}")
+        self.log.info(f"Completing migration to {self._revision.version}")
         # Make sure all changes are committed.
         self._receiver.finish()
         # Create the "indexed" alias.
@@ -94,19 +92,18 @@ class SearchMigrationInProgress(SearchDocumentReceiverType):
         # Set the read pointer to point at the now-populated index
         self._service.read_pointer_set(self._revision)
         self._service.refresh()
-        self._logger.info(f"Completed migration to {self._revision.version}")
+        self.log.info(f"Completed migration to {self._revision.version}")
 
     def cancel(self) -> None:
         """Cancel the migration, leaving the read and write pointers untouched."""
-        self._logger.info(f"Cancelling migration to {self._revision.version}")
+        self.log.info(f"Cancelling migration to {self._revision.version}")
         return None
 
 
-class SearchMigrator:
+class SearchMigrator(LoggerMixin):
     """A search migrator. This moves a search service to the targeted schema version."""
 
     def __init__(self, revisions: SearchRevisionDirectory, service: SearchService):
-        self._logger = logging.getLogger(SearchMigrator.__name__)
         self._revisions = revisions
         self._service = service
 
@@ -124,7 +121,7 @@ class SearchMigrator:
         :raises SearchMigrationException: On errors, but always leaves the system in a usable state.
         """
 
-        self._logger.info(f"starting migration to {base_name} {version}")
+        self.log.info(f"starting migration to {base_name} {version}")
 
         try:
             target = self._revisions.available.get(version)
@@ -140,7 +137,7 @@ class SearchMigrator:
             # Does the read pointer exist? Point it at the empty index if not.
             read = self._service.read_pointer()
             if read is None:
-                self._logger.info("Read pointer did not exist.")
+                self.log.info("Read pointer did not exist.")
                 self._service.read_pointer_set_empty()
 
             # We're probably going to have to do a migration. We might end up returning
@@ -152,7 +149,7 @@ class SearchMigrator:
             # Does the write pointer exist?
             write = self._service.write_pointer()
             if write is None or (not write.version == version):
-                self._logger.info(
+                self.log.info(
                     f"Write pointer does not point to the desired version: {write} != {version}."
                 )
                 # Either the write pointer didn't exist, or it's pointing at a version
@@ -162,7 +159,7 @@ class SearchMigrator:
 
                 # The index now definitely exists, but it might not be populated. Populate it if necessary.
                 if not self._service.index_is_populated(target):
-                    self._logger.info("Write index is not populated.")
+                    self.log.info("Write index is not populated.")
                     return in_progress
 
             # If we didn't need to return the migration, finish it here. This will

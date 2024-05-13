@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import logging
 import time
 from collections.abc import Callable, Generator, Mapping
 from typing import Any, cast
@@ -69,6 +68,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import from_timestamp, strptime_utc, utc_now
 from palace.manager.util.http import HTTP, RemoteIntegrationException, RequestTimedOut
+from palace.manager.util.log import LoggerMixin
 
 
 class EnkiConstants:
@@ -613,12 +613,10 @@ class EnkiAPI(
         pass
 
 
-class BibliographicParser:
+class BibliographicParser(LoggerMixin):
     """Parses Enki's representation of book information into
     Metadata and CirculationData objects.
     """
-
-    log = logging.getLogger("Enki Bibliographic Parser")
 
     # Convert the English names of languages given in the Enki API to
     # the codes we use internally.
