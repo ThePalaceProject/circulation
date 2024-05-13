@@ -4905,15 +4905,17 @@ class TestSearchIndexCoverageProvider:
         work: Work = db.work(with_license_pool=True)
         work.presentation_edition_id = None
         [result] = Work.to_search_documents([work])
-        assert result["identifiers"] == None
+        assert result["identifiers"] is None
 
         # Missing just some attributes
         work = db.work(with_license_pool=True)
         work.presentation_edition.title = None
         work.target_age = None
         [result] = Work.to_search_documents([work])
-        assert result["title"] == None
-        assert result["target_age"]["lower"] == None
+        assert result["title"] is None
+        target_age = result["target_age"]
+        assert isinstance(target_age, dict)
+        assert target_age["lower"] is None
 
     def test_success(
         self,

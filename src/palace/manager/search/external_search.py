@@ -5,7 +5,7 @@ import json
 import re
 import time
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from attr import define
 from flask_babel import lazy_gettext as _
@@ -42,7 +42,7 @@ from palace.manager.search.migrator import (
     SearchMigrator,
 )
 from palace.manager.search.revision_directory import SearchRevisionDirectory
-from palace.manager.search.service import SearchService
+from palace.manager.search.service import SearchDocument, SearchService
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -255,7 +255,7 @@ class ExternalSearchIndex(LoggerMixin):
 
     def create_search_documents_from_works(
         self, works: Iterable[Work]
-    ) -> Iterable[dict]:
+    ) -> Sequence[SearchDocument]:
         """Create search documents for all the given works."""
         if not works:
             # There's nothing to do. Don't bother making any requests

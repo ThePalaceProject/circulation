@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import opensearchpy.helpers
 from opensearch_dsl import MultiSearch, Search
@@ -45,7 +48,7 @@ class SearchServiceFailedDocument:
     error_exception: str
 
     @classmethod
-    def from_bulk_error(cls, error: dict):
+    def from_bulk_error(cls, error: dict[str, Any]) -> SearchServiceFailedDocument:
         """Transform an error dictionary returned from opensearchpy's bulk API to a typed error"""
         if error.get("index"):
             error_indexed = error["index"]
@@ -66,6 +69,9 @@ class SearchServiceFailedDocument:
                 error_status=-1,
                 error_exception=f"{error}",
             )
+
+
+SearchDocument = dict[str, str | int | bool | None | Sequence[str] | "SearchDocument"]
 
 
 class SearchService(ABC):
@@ -126,7 +132,7 @@ class SearchService(ABC):
     def index_submit_documents(
         self,
         pointer: str,
-        documents: Iterable[dict],
+        documents: Sequence[SearchDocument],
     ) -> list[SearchServiceFailedDocument]:
         """Submit search documents to the given index."""
 
@@ -135,11 +141,11 @@ class SearchService(ABC):
         """Atomically set the write pointer to the index for the given revision and base name."""
 
     @abstractmethod
-    def refresh(self):
+    def refresh(self) -> None:
         """Synchronously refresh the service and wait for changes to be completed."""
 
     @abstractmethod
-    def index_clear_documents(self, pointer: str):
+    def index_clear_documents(self, pointer: str) -> None:
         """Clear all search documents in the given index."""
 
     @abstractmethod
@@ -151,11 +157,11 @@ class SearchService(ABC):
         """Return the underlying search client."""
 
     @abstractmethod
-    def index_remove_document(self, pointer: str, id: int):
+    def index_remove_document(self, pointer: str, id: int) -> None:
         """Remove a specific document from the given index."""
 
     @abstractmethod
-    def is_pointer_empty(self, pointer: str):
+    def is_pointer_empty(self, pointer: str) -> bool:
         """Check to see if a pointer points to an empty index"""
 
 
@@ -180,9 +186,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def write_pointer(self) -> SearchWritePointer | None:
         try:
-            result: dict = self._client.indices.get_alias(
-                name=self.write_pointer_name()
-            )
+            result = self._client.indices.get_alias(name=self.write_pointer_name())
             for name in result.keys():
                 match = re.search(f"{self.base_revision_name}-v([0-9]+)", string=name)
                 if match:
@@ -276,7 +280,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
             self._client.put_script(name, script)  # type: ignore [misc] ## Seems the types aren't up to date
 
     def index_submit_documents(
-        self, pointer: str, documents: Iterable[dict]
+        self, pointer: str, documents: Sequence[SearchDocument]
     ) -> list[SearchServiceFailedDocument]:
         self.log.info(f"submitting documents to index {pointer}")
 
@@ -313,12 +317,12 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
         return error_results
 
-    def index_clear_documents(self, pointer: str):
+    def index_clear_documents(self, pointer: str) -> None:
         self._client.delete_by_query(
             index=pointer, body={"query": {"match_all": {}}}, wait_for_completion=True
         )
 
-    def refresh(self):
+    def refresh(self) -> None:
         self.log.debug(f"waiting for indexes to become ready")
         self._client.indices.refresh()
 
@@ -336,20 +340,20 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def read_pointer(self) -> str | None:
         try:
-            result: dict = self._client.indices.get_alias(name=self.read_pointer_name())
+            result = self._client.indices.get_alias(name=self.read_pointer_name())
             for name in result.keys():
                 if name.startswith(f"{self.base_revision_name}-"):
-                    return name
+                    return name  # type: ignore[no-any-return]
             return None
         except NotFoundError:
             return None
 
-    def search_client(self, write=False) -> Search:
+    def search_client(self, write: bool = False) -> Search:
         return self._search.index(
             self.read_pointer_name() if not write else self.write_pointer_name()
         )
 
-    def search_multi_client(self, write=False) -> MultiSearch:
+    def search_multi_client(self, write: bool = False) -> MultiSearch:
         return self._multi_search.index(
             self.read_pointer_name() if not write else self.write_pointer_name()
         )
@@ -361,10 +365,10 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         return f"{self.base_revision_name}-search-write"
 
     @staticmethod
-    def _empty(base_name):
+    def _empty(base_name: str) -> str:
         return f"{base_name}-empty"
 
-    def index_remove_document(self, pointer: str, id: int):
+    def index_remove_document(self, pointer: str, id: int) -> None:
         self._client.delete(index=pointer, id=id, doc_type="_doc")
 
     def is_pointer_empty(self, pointer: str) -> bool:

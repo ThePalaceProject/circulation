@@ -1,4 +1,9 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping, Sequence
+
+SearchMappingSerialization = Mapping[
+    str, str | bool | Sequence[str] | "SearchMappingSerialization"
+]
 
 
 class SearchMappingFieldType(ABC):
@@ -10,7 +15,7 @@ class SearchMappingFieldType(ABC):
     """
 
     @abstractmethod
-    def serialize(self) -> dict:
+    def serialize(self) -> SearchMappingSerialization:
         pass
 
 
@@ -24,7 +29,7 @@ class SearchMappingFieldTypeScalar(SearchMappingFieldType):
     def __init__(self, name: str):
         self._name = name
 
-    def serialize(self) -> dict:
+    def serialize(self) -> dict[str, str]:
         return {"type": self._name}
 
 
@@ -77,7 +82,7 @@ class SearchMappingFieldTypeParameterized(SearchMappingFieldType):
     def parameters(self) -> dict[str, str]:
         return self._parameters
 
-    def serialize(self) -> dict:
+    def serialize(self) -> dict[str, str]:
         output = dict(self._parameters)
         output["type"] = self._name
         return output
@@ -120,13 +125,13 @@ class SearchMappingFieldTypeObject(SearchMappingFieldType):
     def properties(self) -> dict[str, SearchMappingFieldType]:
         return self._properties
 
-    def add_property(self, name, type: SearchMappingFieldType):
+    def add_property(self, name: str, type: SearchMappingFieldType) -> None:
         self.properties[name] = type
 
-    def serialize(self) -> dict:
-        output_properties: dict = {}
-        for name, prop in self._properties.items():
-            output_properties[name] = prop.serialize()
+    def serialize(self) -> SearchMappingSerialization:
+        output_properties = {
+            name: prop.serialize() for name, prop in self._properties.items()
+        }
 
         return {"type": self._type, "properties": output_properties}
 
@@ -151,7 +156,7 @@ class SearchMappingFieldTypeCustomBasicText(SearchMappingFieldTypeCustom):
     that rely on stopwords.
     """
 
-    def serialize(self) -> dict:
+    def serialize(self) -> SearchMappingSerialization:
         return {
             "type": "text",
             "analyzer": "en_default_text_analyzer",
@@ -181,12 +186,12 @@ class SearchMappingFieldTypeCustomFilterable(SearchMappingFieldTypeCustom):
     can be used in filters.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._basic = SearchMappingFieldTypeCustomBasicText()
 
-    def serialize(self) -> dict:
+    def serialize(self) -> SearchMappingSerialization:
         output = self._basic.serialize()
-        output["fields"]["keyword"] = {
+        output["fields"]["keyword"] = {  # type: ignore[index]
             "type": "keyword",
             "index": True,
             "store": False,
@@ -203,10 +208,10 @@ FILTERABLE_TEXT: SearchMappingFieldTypeCustomFilterable = (
 class SearchMappingFieldTypeCustomKeyword(SearchMappingFieldTypeCustom):
     """A custom extension to the keyword type that ensures case-insensitivity."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._base = keyword()
 
-    def serialize(self) -> dict:
+    def serialize(self) -> SearchMappingSerialization:
         output = self._base.serialize()
         output["normalizer"] = "filterable_string"
         return output
@@ -224,13 +229,13 @@ class SearchMappingDocument:
     See: https://opensearch.org/docs/latest/field-types/index/
     """
 
-    def __init__(self):
-        self._settings: dict[str, dict] = {}
+    def __init__(self) -> None:
+        self._settings: dict[str, SearchMappingSerialization] = {}
         self._fields: dict[str, SearchMappingFieldType] = {}
         self._scripts: dict[str, str] = {}
 
     @property
-    def settings(self) -> dict[str, dict]:
+    def settings(self) -> dict[str, SearchMappingSerialization]:
         return self._settings
 
     @property
@@ -242,13 +247,13 @@ class SearchMappingDocument:
         return self._fields
 
     @properties.setter
-    def properties(self, fields: dict[str, SearchMappingFieldType]):
+    def properties(self, fields: dict[str, SearchMappingFieldType]) -> None:
         self._fields = dict(fields)
 
-    def serialize(self) -> dict:
+    def serialize(self) -> dict[str, SearchMappingSerialization]:
         output_properties = self.serialize_properties()
         output_mappings = {"properties": output_properties}
         return {"settings": self.settings, "mappings": output_mappings}
 
-    def serialize_properties(self):
+    def serialize_properties(self) -> SearchMappingSerialization:
         return {name: prop.serialize() for name, prop in self._fields.items()}

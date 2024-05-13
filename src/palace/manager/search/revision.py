@@ -14,7 +14,7 @@ class SearchSchemaRevision(ABC):
     # The SEARCH_VERSION variable MUST be populated in the implemented child classes
     SEARCH_VERSION: int
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self.SEARCH_VERSION is None:
             raise ValueError("The SEARCH_VERSION must be defined with an integer value")
         self._version = self.SEARCH_VERSION
@@ -37,5 +37,5 @@ class SearchSchemaRevision(ABC):
         such as 'circulation-works-v5-indexed'."""
         return f"{base_name}-v{self.version}-indexed"
 
-    def script_name(self, script_name):
+    def script_name(self, script_name: str) -> str:
         return f"simplified.{script_name}.v{self.version}"
