@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Regenerate the lanes for a library."""
 
-
-from palace.manager.scripts import LaneResetScript
+from palace.manager.scripts.lane import LaneResetScript
 
 LaneResetScript().run()

@@ -7,7 +7,7 @@ from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.core.opds2_import import OPDS2Importer, RWPMManifestParser
 from palace.manager.core.opds_schema import OPDS2SchemaValidation
-from palace.manager.core.scripts import OPDSImportScript
+from palace.manager.scripts.opds_import import OPDSImportScript
 
 import_script = OPDSImportScript(
     importer_class=OPDS2Importer,

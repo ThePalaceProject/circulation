@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Update the cached sizes of all lanes."""
 
-
-from palace.manager.core.scripts import UpdateLaneSizeScript
+from palace.manager.scripts.lane import UpdateLaneSizeScript
 
 UpdateLaneSizeScript().run()

@@ -1,5 +1,5 @@
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
-from palace.manager.core.scripts import Script
+from palace.manager.scripts.base import Script
 
 
 class RotateJWEKeyScript(Script):

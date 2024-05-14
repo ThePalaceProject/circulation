@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
 
-from palace.manager.scripts import DisappearingBookReportScript  # noqa: E402
+from palace.manager.scripts.informational import DisappearingBookReportScript
 
 DisappearingBookReportScript().run()

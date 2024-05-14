@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.bibliotheca import BibliothecaBibliographicCoverageProvider
-from palace.manager.core.scripts import RunCollectionCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 
 RunCollectionCoverageProviderScript(BibliothecaBibliographicCoverageProvider).run()

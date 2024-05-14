@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Configure a lane's settings."""
 
-
-from palace.manager.core.scripts import ConfigureLaneScript
+from palace.manager.scripts.configuration import ConfigureLaneScript
 
 ConfigureLaneScript().run()

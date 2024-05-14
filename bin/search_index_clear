@@ -5,7 +5,6 @@ This guarantees that the search index is periodically rebuilt from scratch,
 providing automatic recovery from bugs and major metadata changes.
 """
 
-
-from palace.manager.core.scripts import SearchIndexCoverageRemover
+from palace.manager.scripts.search import SearchIndexCoverageRemover
 
 SearchIndexCoverageRemover().run()

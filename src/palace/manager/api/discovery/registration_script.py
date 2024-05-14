@@ -11,9 +11,9 @@ from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.scripts import LibraryInputScript
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,

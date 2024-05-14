@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.axis import Axis360CirculationMonitor
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(Axis360CirculationMonitor).run()

@@ -13,7 +13,7 @@ import yaml
 from OpenSSL.crypto import FILETYPE_PEM, X509, load_certificate
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.core.scripts import Script
+from palace.manager.scripts.base import Script
 from palace.manager.util.aes import CryptAESCBC
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import (

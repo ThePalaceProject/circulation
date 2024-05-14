@@ -4,7 +4,7 @@ ODL collections."""
 
 
 from palace.manager.api.odl import ODLImporter, ODLImportMonitor
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(
     ODLImportMonitor,

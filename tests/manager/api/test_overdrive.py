@@ -51,8 +51,8 @@ from palace.manager.api.overdrive import (
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import LinkData, TimestampData
-from palace.manager.core.scripts import RunCollectionCoverageProviderScript
 from palace.manager.integration.goals import Goals
+from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject

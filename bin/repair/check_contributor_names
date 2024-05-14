@@ -10,6 +10,6 @@ python bin/repair/check_contributor_names --identifier-type 'RBDigital ID' 97814
 which generates a report file that lists the contributors affected, and whether their names
 were fixed or complained about.
 """
-from palace.manager.core.scripts import CheckContributorNamesInDB
+from palace.manager.scripts.contributor_names import CheckContributorNamesInDB
 
 CheckContributorNamesInDB().run()

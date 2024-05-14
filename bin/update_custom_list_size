@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Update the cached sizes of all custom lists."""
 
-
-from palace.manager.core.scripts import UpdateCustomListSizeScript
+from palace.manager.scripts.customlist import UpdateCustomListSizeScript
 
 UpdateCustomListSizeScript().run()

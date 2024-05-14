@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Show a library or the full list of libraries."""
 
-
-from palace.manager.core.scripts import ShowLibrariesScript
+from palace.manager.scripts.informational import ShowLibrariesScript
 
 ShowLibrariesScript().run()

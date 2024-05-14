@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.axis import Axis360BibliographicCoverageProvider
-from palace.manager.core.scripts import RunCollectionCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 
 RunCollectionCoverageProviderScript(Axis360BibliographicCoverageProvider).run()

@@ -48,7 +48,7 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.metadata_layer import ReplacementPolicy, TimestampData
-from palace.manager.core.scripts import RunCollectionCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Subject

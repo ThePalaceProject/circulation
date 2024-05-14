@@ -5,7 +5,7 @@ import sys
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import LibraryAuthenticator  # noqa: E402
-from palace.manager.core.scripts import LibraryInputScript  # noqa: E402
+from palace.manager.scripts.input import LibraryInputScript
 
 
 class PatronInformationScript(LibraryInputScript):

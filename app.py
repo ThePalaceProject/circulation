@@ -3,7 +3,7 @@ import sys
 import urllib.parse
 
 from palace.manager.api.app import initialize_application
-from palace.manager.scripts import InstanceInitializationScript
+from palace.manager.scripts.initialization import InstanceInitializationScript
 
 
 def run(url=None):

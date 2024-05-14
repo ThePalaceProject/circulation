@@ -7,7 +7,7 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 
 from palace.manager.api.odl2 import ODL2Importer, ODL2ImportMonitor
 from palace.manager.core.opds2_import import RWPMManifestParser
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(
     ODL2ImportMonitor,

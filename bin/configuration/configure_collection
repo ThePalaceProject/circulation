@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Configure a collection's settings."""
 
-
-from palace.manager.core.scripts import ConfigureCollectionScript
+from palace.manager.scripts.configuration import ConfigureCollectionScript
 
 ConfigureCollectionScript().run()

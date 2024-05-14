@@ -69,12 +69,12 @@ from palace.manager.core.monitor import (
     IdentifierSweepMonitor,
     TimelineMonitor,
 )
-from palace.manager.core.scripts import RunCollectionMonitorScript
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.constants import DataSourceConstants
