@@ -340,10 +340,12 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def read_pointer(self) -> str | None:
         try:
-            result = self._client.indices.get_alias(name=self.read_pointer_name())
+            result: dict[str, Any] = self._client.indices.get_alias(
+                name=self.read_pointer_name()
+            )
             for name in result.keys():
                 if name.startswith(f"{self.base_revision_name}-"):
-                    return name  # type: ignore[no-any-return]
+                    return name
             return None
         except NotFoundError:
             return None
