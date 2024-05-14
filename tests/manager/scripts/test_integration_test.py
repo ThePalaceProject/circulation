@@ -34,7 +34,7 @@ def integration_test(db: DatabaseTransactionFixture):
 
 class TestIntegrationTest:
     def test_read_config(self, integration_test: IntegrationTestFixture):
-        with patch("palace.manager.core.jobs.integration_test.open") as mock_open:
+        with patch("palace.manager.scripts.integration_test.open") as mock_open:
             mock_open.return_value = StringIO(BASIC_YAML)
             data = integration_test.script._read_config("on/disk/filepath")
 
@@ -43,7 +43,7 @@ class TestIntegrationTest:
             assert data == BASIC_YAML_DICT
 
         with patch(
-            "palace.manager.core.jobs.integration_test.HTTP.get_with_timeout"
+            "palace.manager.scripts.integration_test.HTTP.get_with_timeout"
         ) as get_with_timeout:
             response = get_with_timeout.return_value
             response.status_code = 400
@@ -61,7 +61,7 @@ class TestIntegrationTest:
 
     def test_read_config_decrypt(self, integration_test: IntegrationTestFixture):
         with patch(
-            "palace.manager.core.jobs.integration_test.read_file_bytes"
+            "palace.manager.scripts.integration_test.read_file_bytes"
         ) as read_file_bytes:
             # Cipher content
             content = b"content"
@@ -78,7 +78,7 @@ class TestIntegrationTest:
 
     def test__run_test(self, integration_test: IntegrationTestFixture):
         with patch(
-            "palace.manager.core.jobs.integration_test.HTTP.request_with_timeout"
+            "palace.manager.scripts.integration_test.HTTP.request_with_timeout"
         ) as request, patch.object(
             integration_test.script, "_test_ssl_validity"
         ) as test_ssl:
@@ -134,7 +134,7 @@ class TestIntegrationTest:
             assert str(raised.value) == "SSL Failure"
 
     def test_generate_key_file(self, integration_test: IntegrationTestFixture):
-        with patch("palace.manager.core.jobs.integration_test.open") as open:
+        with patch("palace.manager.scripts.integration_test.open") as open:
             integration_test.script._generate_key_file("keyfile")
         assert open.call_args == call("keyfile", "wb")
         assert len(open.return_value.__enter__.return_value.write.call_args[0][0]) == 32
@@ -142,11 +142,11 @@ class TestIntegrationTest:
     def test_encrypt(self, integration_test: IntegrationTestFixture):
         script = integration_test.script
         with patch.object(script, "_read_config") as read_config, patch(
-            "palace.manager.core.jobs.integration_test.read_file_bytes"
+            "palace.manager.scripts.integration_test.read_file_bytes"
         ) as read_file_bytes, patch(
-            "palace.manager.core.jobs.integration_test.CryptAESCBC", spec=CryptAESCBC
+            "palace.manager.scripts.integration_test.CryptAESCBC", spec=CryptAESCBC
         ) as aes, patch(
-            "palace.manager.core.jobs.integration_test.open"
+            "palace.manager.scripts.integration_test.open"
         ) as open:
             read_file_bytes.return_value = b"filebytes"
             read_config.return_value = b"7 bytes"
@@ -211,9 +211,9 @@ class TestIntegrationTest:
 
     def test__test_ssl_validity(self, integration_test: IntegrationTestFixture):
         with patch(
-            "palace.manager.core.jobs.integration_test.get_server_certificate"
+            "palace.manager.scripts.integration_test.get_server_certificate"
         ) as get_cert, patch(
-            "palace.manager.core.jobs.integration_test.load_certificate"
+            "palace.manager.scripts.integration_test.load_certificate"
         ) as load_cert:
             test = IntegrationTestDetails("Test", endpoint="https://localhost:543/path")
 

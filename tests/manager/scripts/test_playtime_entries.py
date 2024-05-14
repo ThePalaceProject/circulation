@@ -553,9 +553,9 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         reporting_name = "test cm"
         with (
-            patch("palace.manager.core.jobs.playtime_entries.csv.writer") as writer,
+            patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,
             patch(
-                "palace.manager.core.jobs.playtime_entries.os.environ",
+                "palace.manager.scripts.playtime_entries.os.environ",
                 new={
                     Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
                     Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
@@ -661,7 +661,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         library = db.default_library()
         _ = playtime(db.session, identifier, collection, library, dt1m(20), 1)
 
-        with patch("palace.manager.core.jobs.playtime_entries.os.environ", new={}):
+        with patch("palace.manager.scripts.playtime_entries.os.environ", new={}):
             script = PlaytimeEntriesEmailReportsScript(db.session)
             script._log = MagicMock()
             script.run()

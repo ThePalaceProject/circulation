@@ -21,7 +21,9 @@ class TestInstanceInitializationScript:
 
     def test_run_locks_database(self, db: DatabaseTransactionFixture):
         # The script locks the database with a PostgreSQL advisory lock
-        with patch("palace.manager.scripts.pg_advisory_lock") as advisory_lock:
+        with patch(
+            "palace.manager.scripts.initialization.pg_advisory_lock"
+        ) as advisory_lock:
             mock_engine_factory = MagicMock()
             script = InstanceInitializationScript(engine_factory=mock_engine_factory)
             script.initialize = MagicMock()
@@ -37,7 +39,7 @@ class TestInstanceInitializationScript:
     def test_initialize(self, db: DatabaseTransactionFixture):
         # Test that the script inspects the database and initializes or migrates the database
         # as necessary.
-        with patch("palace.manager.scripts.inspect") as inspect:
+        with patch("palace.manager.scripts.initialization.inspect") as inspect:
             script = InstanceInitializationScript()
             script.migrate_database = MagicMock()  # type: ignore[method-assign]
             script.initialize_database = MagicMock()  # type: ignore[method-assign]
@@ -59,8 +61,8 @@ class TestInstanceInitializationScript:
 
     def test_initialize_alembic_exception(self, caplog: LogCaptureFixture):
         # Test that we handle a CommandError exception being returned by Alembic.
-        with patch("palace.manager.scripts.inspect") as inspect:
-            with patch("palace.manager.scripts.container_instance"):
+        with patch("palace.manager.scripts.initialization.inspect") as inspect:
+            with patch("palace.manager.scripts.initialization.container_instance"):
                 script = InstanceInitializationScript()
 
             caplog.set_level(logging.ERROR)
@@ -82,9 +84,12 @@ class TestInstanceInitializationScript:
         mock_db = MagicMock()
 
         with patch(
-            "palace.manager.scripts.SessionManager", autospec=SessionManager
+            "palace.manager.scripts.initialization.SessionManager",
+            autospec=SessionManager,
         ) as session_manager:
-            with patch("palace.manager.scripts.command") as alemic_command:
+            with patch(
+                "palace.manager.scripts.initialization.command"
+            ) as alemic_command:
                 script.initialize_database(mock_db)
 
         session_manager.initialize_data.assert_called_once()
@@ -95,7 +100,7 @@ class TestInstanceInitializationScript:
         script = InstanceInitializationScript()
         mock_db = MagicMock()
 
-        with patch("palace.manager.scripts.command") as alemic_command:
+        with patch("palace.manager.scripts.initialization.command") as alemic_command:
             script.migrate_database(mock_db)
 
         alemic_command.upgrade.assert_called_once()

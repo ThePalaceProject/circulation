@@ -113,7 +113,7 @@ class TestPatronActivitySync:
         services_fixture.services.fcm.app.override(mock_app)
 
         with patch(
-            "palace.manager.core.jobs.patron_activity_sync.PushNotifications",
+            "palace.manager.scripts.notifications.patron_activity_sync.PushNotifications",
             autospec=True,
         ) as mock_notifications:
             monitor = PatronActivitySyncNotificationScript(db.session)

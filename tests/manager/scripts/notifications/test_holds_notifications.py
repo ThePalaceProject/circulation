@@ -122,7 +122,7 @@ class TestHoldsNotifications:
         services_fixture.services.fcm.app.override(mock_app)
 
         with patch(
-            "palace.manager.core.jobs.holds_notification.PushNotifications",
+            "palace.manager.scripts.notifications.holds_notification.PushNotifications",
             autospec=True,
         ) as mock_notifications:
             monitor = HoldsNotificationMonitor(db.session)
