@@ -64,7 +64,7 @@ def library_report_integrations(
             ),
         )
     ).all()
-    return sorted(eligible_integrations(integrations), key=lambda i: i.name)
+    return sorted(eligible_integrations(integrations), key=lambda i: i.name or "")
 
 
 class GenerateInventoryAndHoldsReportsJob(Job):
