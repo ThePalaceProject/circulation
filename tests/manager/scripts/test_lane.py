@@ -111,7 +111,7 @@ class TestUpdateLaneSizeScript:
                 "palace.manager.sqlalchemy.listeners.site_configuration_has_changed"
             ) as listeners_changed,
             patch(
-                "palace.manager.core.scripts.site_configuration_has_changed"
+                "palace.manager.scripts.lane.site_configuration_has_changed"
             ) as scripts_changed,
         ):
             UpdateLaneSizeScript(db.session).do_run(cmd_args=[])

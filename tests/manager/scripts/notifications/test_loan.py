@@ -185,7 +185,7 @@ class TestLoanNotificationsScript:
         mock_app = MagicMock()
         services_fixture.services.fcm.app.override(mock_app)
         with patch(
-            "palace.manager.core.scripts.PushNotifications", autospec=True
+            "palace.manager.scripts.notifications.loan.PushNotifications", autospec=True
         ) as mock_notifications:
             script = LoanNotificationsScript(
                 db.session, services=services_fixture.services
@@ -201,7 +201,7 @@ class TestLoanNotificationsScript:
         )
 
         with patch(
-            "palace.manager.core.scripts.PushNotifications", autospec=True
+            "palace.manager.scripts.notifications.loan.PushNotifications", autospec=True
         ) as mock_notifications:
             script = LoanNotificationsScript(
                 db.session,
