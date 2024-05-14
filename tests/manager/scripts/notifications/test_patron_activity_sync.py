@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
-from palace.manager.core.jobs.patron_activity_sync import (
+from palace.manager.scripts.notifications.patron_activity_sync import (
     PatronActivitySyncNotificationScript,
 )
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes

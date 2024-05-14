@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Configure a library's settings."""
 
-
-from palace.manager.core.scripts import ConfigureLibraryScript
+from palace.manager.scripts.configuration import ConfigureLibraryScript
 
 ConfigureLibraryScript().run()

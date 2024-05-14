@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Refresh a work's OPDS feeds."""
 
-
-from palace.manager.core.scripts import WorkOPDSScript
+from palace.manager.scripts.work import WorkOPDSScript
 
 WorkOPDSScript().run()

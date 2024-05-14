@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Recalculate works presentation."""
 
-
-from palace.manager.core.scripts import WorkPresentationScript
+from palace.manager.scripts.work import WorkPresentationScript
 
 WorkPresentationScript().run()

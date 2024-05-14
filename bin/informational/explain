@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Explain what the system knows about a book."""
 
-
-from palace.manager.core.scripts import Explain  # noqa: E402
+from palace.manager.scripts.informational import Explain
 
 Explain().run()

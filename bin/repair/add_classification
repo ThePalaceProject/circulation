@@ -8,7 +8,6 @@ filling in a gap in the data provided by Bibliotheca:
 bin/repair/add_classification --identifier-type="Bibliotheca ID" --subject-type="schema:audience" --subject-identifier="Children" hzb1oz9
 """
 
-
-from palace.manager.core.scripts import AddClassificationScript
+from palace.manager.scripts.identifier import AddClassificationScript
 
 AddClassificationScript().run()

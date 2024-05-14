@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Export circulation events for a date range to a CSV file."""
 
-
-from palace.manager.do_scripts import LocalAnalyticsExportScript
+from palace.manager.scripts.local_analytics import LocalAnalyticsExportScript
 
 LocalAnalyticsExportScript().run()

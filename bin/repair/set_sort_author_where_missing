@@ -6,7 +6,6 @@ This is a data repair script that should not need to be run
 regularly.
 """
 
-
-from palace.manager.do_scripts import FillInAuthorScript
+from palace.manager.scripts.metadata import FillInAuthorScript
 
 FillInAuthorScript().run()

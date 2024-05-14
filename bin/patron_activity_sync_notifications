@@ -2,7 +2,7 @@
 """Send out notifications to Patrons that need their loan/hold activity synced"""
 
 
-from palace.manager.core.jobs.patron_activity_sync import (
+from palace.manager.scripts.notifications.patron_activity_sync import (
     PatronActivitySyncNotificationScript,
 )
 from palace.manager.sqlalchemy.session import production_session

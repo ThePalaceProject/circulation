@@ -3,8 +3,7 @@
 out of date.
 """
 
-
-from palace.manager.core.scripts import RunWorkCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
 from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
 
 RunWorkCoverageProviderScript(SearchIndexCoverageProvider).run()

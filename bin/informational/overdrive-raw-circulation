@@ -2,7 +2,7 @@
 import json
 
 from palace.manager.api.overdrive import OverdriveAPI
-from palace.manager.core.scripts import IdentifierInputScript
+from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 
 

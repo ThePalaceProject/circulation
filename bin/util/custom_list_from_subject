@@ -3,7 +3,7 @@
 import sys
 
 from palace.manager.core.external_list import ClassificationBasedMembershipManager
-from palace.manager.core.scripts import CustomListManagementScript
+from palace.manager.scripts.customlist import CustomListManagementScript
 from palace.manager.sqlalchemy.model.datasource import DataSource
 
 if len(sys.argv) < 6:

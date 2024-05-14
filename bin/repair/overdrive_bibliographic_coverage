@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.overdrive import OverdriveBibliographicCoverageProvider
-from palace.manager.core.scripts import RunCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunCoverageProviderScript
 
 RunCoverageProviderScript(OverdriveBibliographicCoverageProvider).run()

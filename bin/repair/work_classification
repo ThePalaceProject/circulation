@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Classify or reclassify works."""
 
-
-from palace.manager.core.scripts import WorkClassificationScript
+from palace.manager.scripts.work import WorkClassificationScript
 
 WorkClassificationScript().run()

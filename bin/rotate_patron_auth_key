@@ -2,6 +2,6 @@
 """Rotate the JWE Auth key in the database"""
 
 
-from palace.manager.core.jobs.rotate_jwe_key import RotateJWEKeyScript
+from palace.manager.scripts.rotate_jwe_key import RotateJWEKeyScript
 
 RotateJWEKeyScript().run()

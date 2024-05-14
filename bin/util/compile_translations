@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Compile translations."""
 
-
-from palace.manager.do_scripts import CompileTranslationsScript
+from palace.manager.scripts.translations import CompileTranslationsScript
 
 CompileTranslationsScript().run()

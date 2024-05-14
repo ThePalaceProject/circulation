@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Show a collection or the full list of collections."""
 
-
-from palace.manager.core.scripts import ShowCollectionsScript
+from palace.manager.scripts.informational import ShowCollectionsScript
 
 ShowCollectionsScript().run()

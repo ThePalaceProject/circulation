@@ -2,7 +2,7 @@
 from xml.dom import minidom
 
 from palace.manager.api.axis import Axis360API
-from palace.manager.core.scripts import IdentifierInputScript
+from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 
 

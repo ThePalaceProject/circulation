@@ -15,7 +15,7 @@ from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
-from palace.manager.core.jobs.playtime_entries import (
+from palace.manager.scripts.playtime_entries import (
     PlaytimeEntriesEmailReportsScript,
     PlaytimeEntriesSummationScript,
 )

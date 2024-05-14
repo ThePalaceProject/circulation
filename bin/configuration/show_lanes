@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Show a lane or the full list of lanes."""
 
-
-from palace.manager.core.scripts import ShowLanesScript
+from palace.manager.scripts.informational import ShowLanesScript
 
 ShowLanesScript().run()

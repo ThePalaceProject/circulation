@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.overdrive import OverdriveCollectionReaper
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(OverdriveCollectionReaper).run()

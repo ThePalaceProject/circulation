@@ -2,7 +2,6 @@
 """Update the circulation manager server with new books from
 OPDS import collections that have authentication."""
 
-
-from palace.manager.do_scripts import OPDSForDistributorsImportScript
+from palace.manager.scripts.opds_import import OPDSForDistributorsImportScript
 
 OPDSForDistributorsImportScript().run()

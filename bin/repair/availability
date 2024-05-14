@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Refresh availability information for one or more specific books."""
 
-
-from palace.manager.do_scripts import AvailabilityRefreshScript
+from palace.manager.scripts.availability import AvailabilityRefreshScript
 
 AvailabilityRefreshScript().run()

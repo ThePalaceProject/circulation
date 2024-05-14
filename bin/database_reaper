@@ -3,7 +3,6 @@
 from the database.
 """
 
-
-from palace.manager.core.scripts import RunReaperMonitorsScript
+from palace.manager.scripts.monitor import RunReaperMonitorsScript
 
 RunReaperMonitorsScript().run()

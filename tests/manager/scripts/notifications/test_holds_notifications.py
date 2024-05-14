@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
-from palace.manager.core.jobs.holds_notification import HoldsNotificationMonitor
+from palace.manager.scripts.notifications.holds_notification import (
+    HoldsNotificationMonitor,
+)
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture

@@ -5,7 +5,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from palace.manager.core.jobs.integration_test import (
+from palace.manager.scripts.integration_test import (
     FailedIntegrationTest,
     IntegrationTest,
     IntegrationTestDetails,

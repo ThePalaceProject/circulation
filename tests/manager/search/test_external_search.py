@@ -29,7 +29,7 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import ContributorData, IdentifierData
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.core.scripts import RunWorkCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
 from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
 from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import (

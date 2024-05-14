@@ -6,6 +6,6 @@
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
-from palace.manager.core.scripts import RunCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunCoverageProviderScript
 
 RunCoverageProviderScript(EquivalentIdentifiersCoverageProvider).run()
