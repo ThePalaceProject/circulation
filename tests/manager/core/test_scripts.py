@@ -42,7 +42,6 @@ from palace.manager.core.scripts import (
     RunMultipleMonitorsScript,
     RunReaperMonitorsScript,
     RunWorkCoverageProviderScript,
-    Script,
     SearchIndexCoverageRemover,
     ShowCollectionsScript,
     ShowIntegrationsScript,
@@ -57,6 +56,7 @@ from palace.manager.core.scripts import (
     WorkProcessingScript,
 )
 from palace.manager.integration.goals import Goals
+from palace.manager.scripts.base import Script
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection

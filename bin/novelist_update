@@ -2,6 +2,6 @@
 """Get all ISBNs for all collections in a library and send to NoveList."""
 
 
-from palace.manager.scripts import NovelistSnapshotScript
+from palace.manager.do_scripts import NovelistSnapshotScript
 
 NovelistSnapshotScript().run()

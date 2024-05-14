@@ -2,6 +2,6 @@
 """Regenerate the lanes for a library."""
 
 
-from palace.manager.scripts import LaneResetScript
+from palace.manager.do_scripts import LaneResetScript
 
 LaneResetScript().run()

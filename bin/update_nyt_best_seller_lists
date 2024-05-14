@@ -2,7 +2,7 @@
 """Bring in the entire history of all NYT best-seller lists."""
 import sys
 
-from palace.manager.scripts import NYTBestSellerListsScript
+from palace.manager.do_scripts import NYTBestSellerListsScript
 
 include_history = "history" in sys.argv
 

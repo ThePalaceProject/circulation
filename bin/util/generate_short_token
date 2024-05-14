@@ -5,6 +5,6 @@ Generate client short tokens from cli.
 """
 
 
-from palace.manager.scripts import GenerateShortTokenScript
+from palace.manager.do_scripts import GenerateShortTokenScript
 
 GenerateShortTokenScript().run()

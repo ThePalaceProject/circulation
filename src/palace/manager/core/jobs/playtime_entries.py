@@ -15,7 +15,7 @@ from sqlalchemy.sql.expression import false, true
 from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
-from palace.manager.scripts import Script
+from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
 

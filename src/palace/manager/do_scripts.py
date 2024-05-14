@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import datetime
 import logging
@@ -42,10 +44,10 @@ from palace.manager.core.scripts import (
     LibraryInputScript,
     OPDSImportScript,
     PatronInputScript,
+    TimestampScript,
 )
-from palace.manager.core.scripts import Script as CoreScript
-from palace.manager.core.scripts import TimestampScript
 from palace.manager.integration.goals import Goals
+from palace.manager.scripts.base import Script
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -70,10 +72,6 @@ from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, get_one, pg_advisory
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.log import LoggerMixin
-
-
-class Script(CoreScript):
-    ...
 
 
 class MetadataCalculationScript(Script):

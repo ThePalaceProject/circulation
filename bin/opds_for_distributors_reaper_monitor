@@ -3,6 +3,6 @@
 have been removed from OPDS for distributors collections."""
 
 
-from palace.manager.scripts import OPDSForDistributorsReaperScript
+from palace.manager.do_scripts import OPDSForDistributorsReaperScript
 
 OPDSForDistributorsReaperScript().run()

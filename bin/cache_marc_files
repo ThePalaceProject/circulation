@@ -2,6 +2,6 @@
 """Refresh and store the MARC files for lanes."""
 
 
-from palace.manager.scripts import CacheMARCFiles
+from palace.manager.do_scripts import CacheMARCFiles
 
 CacheMARCFiles().run()

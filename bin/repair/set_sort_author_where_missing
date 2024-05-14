@@ -7,6 +7,6 @@ regularly.
 """
 
 
-from palace.manager.scripts import FillInAuthorScript
+from palace.manager.do_scripts import FillInAuthorScript
 
 FillInAuthorScript().run()

@@ -70,7 +70,7 @@ from palace.manager.core.monitor import (
     IdentifierSweepMonitor,
     TimelineMonitor,
 )
-from palace.manager.core.scripts import InputScript, Script
+from palace.manager.core.scripts import InputScript
 from palace.manager.integration.base import (
     HasChildIntegrationConfiguration,
     integration_settings_update,
@@ -83,6 +83,7 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.scripts.base import Script
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.constants import DataSourceConstants, MediaTypes

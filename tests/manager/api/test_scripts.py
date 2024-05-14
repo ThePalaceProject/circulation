@@ -20,8 +20,7 @@ from palace.manager.core.marc import (
     MarcExporterLibrarySettings,
     MarcExporterSettings,
 )
-from palace.manager.integration.goals import Goals
-from palace.manager.scripts import (
+from palace.manager.do_scripts import (
     AdobeAccountIDResetScript,
     CacheMARCFiles,
     GenerateShortTokenScript,
@@ -30,6 +29,7 @@ from palace.manager.scripts import (
     LocalAnalyticsExportScript,
     NovelistSnapshotScript,
 )
+from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.discovery_service_registration import (

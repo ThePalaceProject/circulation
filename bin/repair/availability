@@ -2,6 +2,6 @@
 """Refresh availability information for one or more specific books."""
 
 
-from palace.manager.scripts import AvailabilityRefreshScript
+from palace.manager.do_scripts import AvailabilityRefreshScript
 
 AvailabilityRefreshScript().run()

@@ -15,7 +15,7 @@ Migration Case
 import pytest
 
 from palace.manager.core.scripts import RunWorkCoverageProviderScript
-from palace.manager.scripts import InstanceInitializationScript
+from palace.manager.do_scripts import InstanceInitializationScript
 from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
 from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import ExternalSearchIndex
