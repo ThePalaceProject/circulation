@@ -3,6 +3,6 @@
 
 
 from palace.manager.core.monitor import PermanentWorkIDRefreshMonitor
-from palace.manager.core.scripts import RunMonitorScript
+from palace.manager.scripts.monitor import RunMonitorScript
 
 RunMonitorScript(PermanentWorkIDRefreshMonitor).run()

@@ -8,7 +8,7 @@ from palace.manager.core.opds2_import import (
     PalaceOPDS2FeedParserFactory,
     RWPMManifestParser,
 )
-from palace.manager.core.scripts import OPDSImportScript
+from palace.manager.scripts.opds_import import OPDSImportScript
 
 import_script = OPDSImportScript(
     importer_class=OPDS2Importer,

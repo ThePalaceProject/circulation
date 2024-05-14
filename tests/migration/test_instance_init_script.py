@@ -13,7 +13,7 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from typing_extensions import Self
 
-from palace.manager.scripts import InstanceInitializationScript
+from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.sqlalchemy.session import SessionManager
 from tests.fixtures.database import DatabaseFixture
 from tests.fixtures.services import ServicesFixture, mock_services_container

@@ -4,7 +4,7 @@ from freezegun import freeze_time
 from sqlalchemy import delete, select
 
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
-from palace.manager.core.jobs.rotate_jwe_key import RotateJWEKeyScript
+from palace.manager.scripts.rotate_jwe_key import RotateJWEKeyScript
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture

@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.bibliotheca import BibliothecaEventMonitor
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(BibliothecaEventMonitor).run()

@@ -53,8 +53,8 @@ from palace.manager.core.metadata_layer import (
     SubjectData,
     TimestampData,
 )
-from palace.manager.core.scripts import RunCollectionCoverageProviderScript
 from palace.manager.integration.base import integration_settings_update
+from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject

@@ -2,6 +2,6 @@
 """Test external integrations connectivity and status."""
 
 
-from palace.manager.core.jobs.integration_test import IntegrationTest
+from palace.manager.scripts.integration_test import IntegrationTest
 
 IntegrationTest().run()

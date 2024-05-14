@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.enki import EnkiCollectionReaper
-from palace.manager.core.scripts import RunMonitorScript
+from palace.manager.scripts.monitor import RunMonitorScript
 
 RunMonitorScript(EnkiCollectionReaper).run()

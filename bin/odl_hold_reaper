@@ -3,6 +3,6 @@
 
 
 from palace.manager.api.odl import ODLHoldReaper
-from palace.manager.core.scripts import RunCollectionMonitorScript
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(ODLHoldReaper).run()

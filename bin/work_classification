@@ -4,6 +4,6 @@
 
 
 from palace.manager.core.coverage import WorkClassificationCoverageProvider
-from palace.manager.core.scripts import RunWorkCoverageProviderScript
+from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
 
 RunWorkCoverageProviderScript(WorkClassificationCoverageProvider).run()

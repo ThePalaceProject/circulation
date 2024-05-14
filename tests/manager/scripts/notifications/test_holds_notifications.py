@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, call, create_autospec, patch
 
 import pytest
 
-from palace.manager.core.jobs.holds_notification import HoldsNotificationMonitor
+from palace.manager.scripts.notifications.holds_notification import (
+    HoldsNotificationMonitor,
+)
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -120,7 +122,7 @@ class TestHoldsNotifications:
         services_fixture.services.fcm.app.override(mock_app)
 
         with patch(
-            "palace.manager.core.jobs.holds_notification.PushNotifications",
+            "palace.manager.scripts.notifications.holds_notification.PushNotifications",
             autospec=True,
         ) as mock_notifications:
             monitor = HoldsNotificationMonitor(db.session)
