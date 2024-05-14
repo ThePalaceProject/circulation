@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
@@ -32,6 +33,7 @@ from sqlalchemy.sql.expression import and_, case, join, literal_column, select
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core.classifier import Classifier, WorkClassifier
+from palace.manager.search.service import SearchDocument
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
@@ -1413,7 +1415,7 @@ class Work(Base, LoggerMixin):
     OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents(cls, works: list[Self]) -> list[dict]:
+    def to_search_documents(cls, works: list[Self]) -> Sequence[SearchDocument]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
