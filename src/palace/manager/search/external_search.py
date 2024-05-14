@@ -1071,8 +1071,6 @@ class JSONQuery(Query):
     RESERVED_CHARS_MAP = dict(map(lambda ch: (ord(ch), f"\\{ch}"), RESERVED_CHARS))
 
     _KEYWORD_ONLY = {"keyword": True}
-    _LONG_TYPE = {"type": "long"}
-    _BOOL_TYPE = {"type": "bool"}
 
     # The fields mappings in the search DB
     FIELD_MAPPING: dict[str, dict] = {
@@ -1101,7 +1099,7 @@ class JSONQuery(Query):
         "licensepools.availability_time": dict(path="licensepools"),
         "licensepools.collection_id": dict(path="licensepools"),
         "licensepools.data_source_id": dict(
-            path="licensepools", ops=[Operators.EQ, Operators.EQ]
+            path="licensepools", ops=[Operators.EQ, Operators.NEQ]
         ),
         "licensepools.licensed": dict(path="licensepools"),
         "licensepools.medium": dict(path="licensepools"),
@@ -1109,7 +1107,7 @@ class JSONQuery(Query):
         "licensepools.quality": dict(path="licensepools"),
         "licensepools.suppressed": dict(path="licensepools"),
         "medium": _KEYWORD_ONLY,
-        "presentation_ready": _BOOL_TYPE,
+        "presentation_ready": dict(),
         "publisher": _KEYWORD_ONLY,
         "quality": dict(),
         "series": _KEYWORD_ONLY,
@@ -1293,7 +1291,7 @@ class JSONQuery(Query):
     def _parse_json_join(self, query: dict) -> dict:
         if len(query.keys()) != 1:
             raise QueryParseException(
-                detail="A conjuction cannot have multiple parts in the same sub-query"
+                detail="A conjunction cannot have multiple parts in the same sub-query"
             )
 
         join = list(query.keys())[0]

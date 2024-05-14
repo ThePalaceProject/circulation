@@ -5076,8 +5076,15 @@ class TestJSONQuery:
         assert q.search_query.to_dict() == {
             "bool": {
                 "must": [
-                    {"term": {"medium.keyword": "Book"}},
-                    {"term": {"medium.keyword": "Audio"}},
+                    {"term": {"title.keyword": "Title"}},
+                    {
+                        "bool": {
+                            "should": [
+                                {"term": {"medium.keyword": "Book"}},
+                                {"term": {"medium.keyword": "Audio"}},
+                            ]
+                        }
+                    },
                 ]
             }
         }
@@ -5088,7 +5095,7 @@ class TestJSONQuery:
             "bool": {
                 "should": [
                     {"term": {"medium.keyword": "Book"}},
-                    {"term": {"medium.keyword": "Audio"}},
+                    {"bool": {"must_not": [{"term": {"medium.keyword": "Audio"}}]}},
                 ]
             }
         }
@@ -5149,7 +5156,7 @@ class TestJSONQuery:
                 dict(kew="author", op="eq", value="name"),
                 "Could not make sense of the query",
             ),
-            ({"and": [], "or": []}, "A conjuction cannot have multiple parts"),
+            ({"and": [], "or": []}, "A conjunction cannot have multiple parts"),
         ],
     )
     def test_errors(self, query, error_match):
@@ -5289,9 +5296,7 @@ class TestJSONQuery:
                 == f".*{escaped}.*"
             )
         else:
-            assert (
-                q.search_query.to_dict()["match"]["title.keyword"]["query"] == escaped
-            )
+            assert q.search_query.to_dict()["term"]["title.keyword"] == escaped
 
 
 class TestExternalSearchJSONQueryData:
