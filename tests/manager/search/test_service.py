@@ -1,7 +1,6 @@
-from collections.abc import Iterable
-
 from palace.manager.search.document import LONG, SearchMappingDocument
 from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.search.service import SearchDocument
 from tests.fixtures.search import ExternalSearchFixture
 
 
@@ -104,7 +103,7 @@ class TestService:
         # The format expected by the opensearch bulk helper is completely undocumented.
         # It does, however, appear to use mostly the same format as the Elasticsearch equivalent.
         # See: https://elasticsearch-py.readthedocs.io/en/v7.13.1/helpers.html#bulk-helpers
-        documents: Iterable[dict] = [
+        documents: list[SearchDocument] = [
             {
                 "_index": revision.name_for_index("base"),
                 "_type": "_doc",

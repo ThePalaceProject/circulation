@@ -97,7 +97,7 @@ return champion;
         CHAR_FILTERS[name] = normalizer
         AUTHOR_CHAR_FILTER_NAMES.append(name)
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         self._normalizers = {}

@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Sequence
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.revision_directory import SearchRevisionDirectory
-from palace.manager.search.service import SearchService, SearchServiceFailedDocument
+from palace.manager.search.service import (
+    SearchDocument,
+    SearchService,
+    SearchServiceFailedDocument,
+)
 from palace.manager.util.log import LoggerMixin
 
 
@@ -21,7 +25,7 @@ class SearchDocumentReceiverType(ABC):
 
     @abstractmethod
     def add_documents(
-        self, documents: Iterable[dict]
+        self, documents: Sequence[SearchDocument]
     ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
 
@@ -43,7 +47,7 @@ class SearchDocumentReceiver(SearchDocumentReceiverType, LoggerMixin):
         return self._pointer
 
     def add_documents(
-        self, documents: Iterable[dict]
+        self, documents: Sequence[SearchDocument]
     ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
         return self._service.index_submit_documents(
@@ -75,7 +79,7 @@ class SearchMigrationInProgress(SearchDocumentReceiverType, LoggerMixin):
         )
 
     def add_documents(
-        self, documents: Iterable[dict]
+        self, documents: Sequence[SearchDocument]
     ) -> list[SearchServiceFailedDocument]:
         """Submit documents to be indexed."""
         return self._receiver.add_documents(documents)
