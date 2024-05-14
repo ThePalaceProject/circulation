@@ -44,13 +44,10 @@ def eligible_integrations(
 
 
 def library_report_integrations(
-    library: Library, session: Session | None = None
+    library: Library, session: Session
 ) -> list[IntegrationConfiguration]:
-    """Return a list of collections to report for the given library."""
-    if session is None:
-        session = Session.object_session(library)
+    """Return a list of collection integrations to report for the given library."""
 
-    # resolve integrations
     integrations = session.scalars(
         select(IntegrationConfiguration)
         .join(IntegrationLibraryConfiguration)
