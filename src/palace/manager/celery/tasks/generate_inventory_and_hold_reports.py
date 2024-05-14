@@ -28,6 +28,42 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
 
 
+def eligible_integrations(
+    integrations: list[IntegrationConfiguration],
+) -> list[IntegrationConfiguration]:
+    """Subset a list of integrations to only those that are eligible for the inventory report."""
+    registry = LicenseProvidersRegistry()
+
+    def is_eligible(integration: IntegrationConfiguration) -> bool:
+        if integration.protocol is None:
+            return False
+        settings = registry[integration.protocol].settings_load(integration)
+        return isinstance(settings, OPDSImporterSettings)
+
+    return [integration for integration in integrations if is_eligible(integration)]
+
+
+def library_report_integrations(
+    library: Library, session: Session
+) -> list[IntegrationConfiguration]:
+    """Return a list of collection integrations to report for the given library."""
+
+    integrations = session.scalars(
+        select(IntegrationConfiguration)
+        .join(IntegrationLibraryConfiguration)
+        .where(
+            IntegrationLibraryConfiguration.library_id == library.id,
+            IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+            not_(
+                IntegrationConfiguration.settings_dict.contains(
+                    {"include_in_inventory_report": False}
+                )
+            ),
+        )
+    ).all()
+    return sorted(eligible_integrations(integrations), key=lambda i: i.name or "")
+
+
 class GenerateInventoryAndHoldsReportsJob(Job):
     def __init__(
         self,
@@ -63,27 +99,12 @@ class GenerateInventoryAndHoldsReportsJob(Job):
 
             file_name_modifier = f"{library.short_name}-{date_str}"
 
-            # resolve integrations
-            integrations = session.scalars(
-                select(IntegrationConfiguration)
-                .join(IntegrationLibraryConfiguration)
-                .where(
-                    IntegrationLibraryConfiguration.library_id == self.library_id,
-                    IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
-                    not_(
-                        IntegrationConfiguration.settings_dict.contains(
-                            {"include_in_inventory_report": False}
-                        )
-                    ),
+            integration_ids = [
+                integration.id
+                for integration in library_report_integrations(
+                    library=library, session=session
                 )
-            ).all()
-            registry = LicenseProvidersRegistry()
-            integration_ids: list[int] = []
-            for integration in integrations:
-                settings = registry[integration.protocol].settings_load(integration)
-                if not isinstance(settings, OPDSImporterSettings):
-                    continue
-                integration_ids.append(integration.id)
+            ]
 
             # generate inventory report csv file
             sql_params: dict[str, Any] = {

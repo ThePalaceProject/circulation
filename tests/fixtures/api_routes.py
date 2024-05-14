@@ -51,6 +51,9 @@ class MockControllerMethod:
         self.name = name
         self.callable_name = name
 
+    def response(self):
+        return flask.Response(f"I called {repr(self)}", 200)
+
     def __call__(self, *args, **kwargs):
         """Simulate a successful method call.
 
@@ -59,7 +62,7 @@ class MockControllerMethod:
         """
         self.args = args
         self.kwargs = kwargs
-        response = flask.Response("I called %s" % repr(self), 200)
+        response = self.response()
         response.method = self
         return response
 
