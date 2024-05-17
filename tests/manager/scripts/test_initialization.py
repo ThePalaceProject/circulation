@@ -278,3 +278,57 @@ class TestInstanceInitializationScript:
         # Now work2 is searchable, but work1 is not, since the migration was mocked out and did not actually run
         [indexed_work_2] = index.query_works("").hits
         assert indexed_work_2.work_id == work2.id
+
+    def test_migrate_downgrade(
+        self,
+        external_search_fixture: ExternalSearchFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        service = external_search_fixture.service
+
+        script = InstanceInitializationScript()
+
+        old_revision = MockSearchSchemaRevisionLatest(1000000)
+        new_revision = MockSearchSchemaRevisionLatest(1000001)
+        revision_directory = SearchRevisionDirectory(
+            {
+                new_revision.version: new_revision,
+                old_revision.version: old_revision,
+            }
+        )
+        script._container.search.revision_directory.override(revision_directory)
+
+        # Do the initial search index creation
+        script.initialize_search()
+
+        # We should have migrated the search index to the latest revision
+        read_pointer = service.read_pointer()
+        assert read_pointer is not None
+        assert read_pointer.version == new_revision.version
+        write_pointer = service.write_pointer()
+        assert write_pointer is not None
+        assert write_pointer.version == new_revision.version
+
+        # Now we run the migration script again, but this time the most recent revision is the old revision
+        revision_directory = SearchRevisionDirectory(
+            {
+                old_revision.version: old_revision,
+            }
+        )
+        script._container.search.revision_directory.override(revision_directory)
+        script.initialize_search()
+
+        # We should not have touched the read and write pointers, since they are more recent than the latest revision
+        read_pointer = service.read_pointer()
+        assert read_pointer is not None
+        assert read_pointer.version == new_revision.version
+        write_pointer = service.write_pointer()
+        assert write_pointer is not None
+        assert write_pointer.version == new_revision.version
+
+        # And we should have logged a message about the situation
+        assert (
+            "You may be running an old version of the application against a new search index"
+            in caplog.text
+        )

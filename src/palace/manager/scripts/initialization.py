@@ -103,13 +103,6 @@ class InstanceInitializationScript(LoggerMixin):
         service.index_set_mapping(revision)
         service.write_pointer_set(revision)
 
-        if not service.read_pointer():
-            # A read pointer does not exist. We set it to the most recent.
-            cls.logger().info(
-                f"Index read pointer unset. Setting to the latest (v{revision.version})."
-            )
-            service.read_pointer_set(revision)
-
     @classmethod
     def migrate_search(
         cls,
@@ -133,21 +126,32 @@ class InstanceInitializationScript(LoggerMixin):
         write_pointer = service.write_pointer()
         read_pointer = service.read_pointer()
 
-        if write_pointer is None:
-            # A write pointer does not exist. This is a fresh index.
+        if write_pointer is None or read_pointer is None:
+            # Pointers do not exist. This is a fresh index.
             self.log.info("Search index does not exist. Creating a new index.")
             self.create_search_index(service, revision)
-        elif write_pointer.version != revision.version:
+            service.read_pointer_set(revision)
+        elif write_pointer.version < revision.version:
             self.log.info(
                 f"Search index is out-of-date ({service.base_revision_name} v{write_pointer.version})."
             )
             self.migrate_search(service, revision)
-        elif read_pointer is not None and read_pointer.version != revision.version:
+        elif read_pointer.version < revision.version:
             self.log.info(
                 f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}."
                 f"This likely means that the reindexing task is in progress. If there is no reindexing task "
                 f"running, you may need to repair the search index."
             )
+        elif (
+            read_pointer.version > revision.version
+            or write_pointer.version > revision.version
+        ):
+            self.log.error(
+                f"Search index is in an inconsistent state. Read pointer: v{read_pointer.version}, "
+                f"Write pointer: v{write_pointer.version}, Latest revision: v{revision.version}. "
+                f"You may be running an old version of the application against a new search index. "
+            )
+            return
         else:
             self.log.info(
                 f"Search index is up-to-date ({service.base_revision_name} v{revision.version})."
