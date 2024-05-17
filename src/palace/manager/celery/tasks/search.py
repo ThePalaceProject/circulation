@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from random import randrange
 from typing import Any
 
 from celery import chain, shared_task
@@ -13,18 +12,8 @@ from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.log import elapsed_time_logging
-
-
-def exponential_backoff(retries: int) -> int:
-    """
-    Exponential backoff, with some random jitter to prevent thundering herd, if
-    many tasks are failing at the same time.
-    """
-    backoff: int = 3 ** (retries + 1)
-    max_jitter = round(backoff * 0.3)
-    jitter: int = randrange(0, max_jitter)
-    return backoff + jitter
 
 
 def get_work_search_documents(
