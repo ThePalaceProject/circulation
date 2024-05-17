@@ -247,6 +247,7 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
     ) -> None:
         _id = document.pop("_id")
         self._client.index(
+            id=_id,
             index=self.write_pointer_name(),
             body=document,
             require_alias=True,
