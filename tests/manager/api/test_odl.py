@@ -113,7 +113,7 @@ class TestODLAPI:
         assert loan.external_identifier == requested_url
 
     def test_get_license_status_document_errors(
-        self, odl_api_test_fixture: ODLAPITestFixture
+        self, odl_api_test_fixture: ODLAPITestFixture, caplog: pytest.LogCaptureFixture
     ) -> None:
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
 
@@ -132,6 +132,15 @@ class TestODLAPI:
             odl_api_test_fixture.api.get_license_status_document,
             loan,
         )
+
+        odl_api_test_fixture.api.queue_response(403, content="just junk " * 100)
+        pytest.raises(
+            BadResponseException,
+            odl_api_test_fixture.api.get_license_status_document,
+            loan,
+        )
+        assert "returned status code 403. Expected 200." in caplog.text
+        assert "just junk ..." in caplog.text
 
     def test_checkin_success(
         self, db: DatabaseTransactionFixture, odl_api_test_fixture: ODLAPITestFixture

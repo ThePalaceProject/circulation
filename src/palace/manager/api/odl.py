@@ -330,6 +330,21 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
             )
 
         response = self._get(url)
+        if response.status_code != 200:
+            header_string = ", ".join(
+                {f"{k}: {v}" for k, v in response.headers.items()}
+            )
+            response_string = (
+                response.text
+                if len(response.text) < 100
+                else response.text[:100] + "..."
+            )
+            self.log.error(
+                f"Error getting License Status Document for loan ({loan.id}):  Url '{url}' returned "
+                f"status code {response.status_code}. Expected 200. Response headers: {header_string}. "
+                f"Response content: {response_string}."
+            )
+            raise BadResponseException(url, "License Status Document request failed.")
 
         try:
             status_doc = json.loads(response.content)
