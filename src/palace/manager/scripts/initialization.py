@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import ArgumentParser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -167,6 +168,14 @@ class InstanceInitializationScript(LoggerMixin):
         instance of the script is running at a time. This prevents multiple
         instances from trying to initialize the database at the same time.
         """
+
+        # This script doesn't take any arguments, but we still call argparse, so that
+        # we can use the --help option to print out a help message. This avoids the
+        # surprise of the script actually running when the user just wanted to see the help.
+        ArgumentParser(
+            description="Initialize the database and search index for the Palace Manager."
+        ).parse_args()
+
         engine = self._engine_factory()
         with engine.begin() as connection:
             with pg_advisory_lock(connection, LOCK_ID_DB_INIT):
