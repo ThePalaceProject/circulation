@@ -1956,19 +1956,19 @@ protobuf = ">=4.21.6"
 
 [[package]]
 name = "html-sanitizer"
-version = "2.4.2"
+version = "2.4.3"
 description = "HTML sanitizer"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "html_sanitizer-2.4.2-py3-none-any.whl", hash = "sha256:484a6ec99b3aa233224e942f94f085dbf0c0427a07b2679263797c0bba8e5e81"},
-    {file = "html_sanitizer-2.4.2.tar.gz", hash = "sha256:a80a2de4a71c747f7c1d44244415518ec780ae053ac5f8bbc2fec05003989c94"},
+    {file = "html_sanitizer-2.4.3-py3-none-any.whl", hash = "sha256:db57f3c203dc6e173c0420f971ac477b289ccb6a2fbb5969c29b9dc0766521af"},
+    {file = "html_sanitizer-2.4.3.tar.gz", hash = "sha256:6d2870ec5cdaa43903f05c84f93339b6cbc0d3f4af1e7fb7a571b1858f271773"},
 ]
 
 [package.dependencies]
 beautifulsoup4 = "*"
-lxml = ">=5.2.0"
-lxml-html-clean = ">=0.1.0"
+lxml = ">=5.2"
+lxml-html-clean = ">=0.1"
 
 [[package]]
 name = "httplib2"
