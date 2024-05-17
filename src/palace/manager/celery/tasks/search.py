@@ -19,6 +19,9 @@ from palace.manager.util.log import elapsed_time_logging
 def get_work_search_documents(
     session: Session, batch_size: int, offset: int
 ) -> Sequence[dict[str, Any]]:
+    """
+    Get a batch of search documents for works that are presentation ready.
+    """
     works = [
         w.id
         for w in session.execute(
@@ -38,6 +41,12 @@ class FailedToIndex(BasePalaceException):
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
+    """
+    Submit all works that are presentation ready to the search index.
+
+    This is done in batches, with the batch size determined by the batch_size parameter. This
+    task will do a batch, then requeue itself until all works have been indexed.
+    """
     index = task.services.search.index()
 
     task.log.info(
@@ -80,6 +89,13 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def update_read_pointer(task: Task) -> None:
+    """
+    Update the read pointer to the latest revision.
+
+    This is used to indicate that the search index has been updated to a specific version. We
+    chain this task with search_reindex when doing a migration to ensure that the read pointer is
+    updated after all works have been indexed. See get_migrate_search_chain.
+    """
     task.log.info("Updating read pointer.")
     service = task.services.search.service()
     revision_directory = task.services.search.revision_directory()
@@ -99,6 +115,9 @@ def update_read_pointer(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def index_work(task: Task, work_id: int) -> None:
+    """
+    Index a single work into the search index.
+    """
     index = task.services.search.index()
     with task.session() as session:
         documents = Work.to_search_documents(session, [work_id])
@@ -120,4 +139,7 @@ def index_work(task: Task, work_id: int) -> None:
 
 
 def get_migrate_search_chain() -> chain:
+    """
+    Get the chain of tasks to run when migrating the search index to a new schema.
+    """
     return chain(search_reindex.si(), update_read_pointer.si())
