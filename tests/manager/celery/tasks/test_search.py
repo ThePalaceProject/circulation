@@ -187,8 +187,9 @@ def test_index_work_failures(
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
 
-    # If we try to index a work that doesn't exist, we should fail immediately.
-    index_work.delay(555).wait()
+    # If we try to index a work that doesn't exist, we retry up to 4 times, then fail.
+    with pytest.raises(MaxRetriesExceededError):
+        index_work.delay(555).wait()
     assert "Work 555 not found" in caplog.text
 
     # If we fail to add documents, we should retry up to 4 times, then fail.

@@ -2017,7 +2017,7 @@ class TestWork:
     def test_queue_indexing_tasks(self, index_work_mock: MagicMock):
         # Test the method that queues up task to index a work.
         Work.queue_indexing_task(555)
-        index_work_mock.delay.assert_called_once_with(555)
+        index_work_mock.apply_async.assert_called_once_with((555,), countdown=2)
 
         index_work_mock.reset_mock()
         Work.queue_indexing_task(None)

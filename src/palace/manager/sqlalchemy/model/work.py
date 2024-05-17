@@ -1218,7 +1218,7 @@ class Work(Base, LoggerMixin):
         from palace.manager.celery.tasks.search import index_work
 
         if work_id is not None:
-            index_work.delay(work_id)
+            index_work.apply_async((work_id,), countdown=2)
 
     def needs_full_presentation_recalculation(self):
         """Mark this work as needing to have its presentation completely

@@ -123,8 +123,13 @@ def index_work(task: Task, work_id: int) -> None:
         documents = Work.to_search_documents(session, [work_id])
 
     if not documents:
-        task.log.warning(f"Work {work_id} not found. Unable to index.")
-        return
+        # We were unable to find the work. It could have been deleted or maybe the transaction
+        # hasn't been committed yet. We'll wait a bit and try again.
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.warning(
+            f"Work {work_id} not found. Unable to index. Retrying in {wait_time} seconds."
+        )
+        raise task.retry(countdown=wait_time)
 
     try:
         index.add_document(document=documents[0])
