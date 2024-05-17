@@ -11,6 +11,7 @@ from opensearchpy.exceptions import OpenSearchException
 
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.revision_directory import SearchRevisionDirectory
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -157,10 +158,11 @@ class TestInstanceInitializationScript:
 
         # Then we have the latest version index
         read_pointer = service.read_pointer()
-        assert read_pointer == revision.name_for_index(base_name)
+        assert read_pointer is not None
+        assert read_pointer.index == revision.name_for_index(base_name)
         write_pointer = service.write_pointer()
         assert write_pointer is not None
-        assert write_pointer.target_name == revision.name_for_index(base_name)
+        assert write_pointer.index == revision.name_for_index(base_name)
 
         # Now we try to initialize the search index again, and we should not create a new index
         script.create_search_index.reset_mock()
@@ -179,6 +181,7 @@ class TestInstanceInitializationScript:
         self,
         external_search_fixture: ExternalSearchFixture,
         db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
         service = external_search_fixture.service
         index = external_search_fixture.index
@@ -195,10 +198,12 @@ class TestInstanceInitializationScript:
         script.initialize_search()
 
         # We should have migrated the search index to the latest revision
-        assert service.read_pointer() == revision.name_for_index(base_name)
+        read_pointer = service.read_pointer()
+        assert read_pointer is not None
+        assert read_pointer.version == revision.version
         write_pointer = service.write_pointer()
         assert write_pointer is not None
-        assert write_pointer.target_name == revision.name_for_index(base_name)
+        assert write_pointer.version == revision.version
 
         new_revision = MockSearchSchemaRevisionLatest(1000001)
         new_revision_directory = SearchRevisionDirectory(
@@ -237,10 +242,13 @@ class TestInstanceInitializationScript:
         # The write pointer should point to the new revision
         write_pointer = service.write_pointer()
         assert write_pointer is not None
-        assert write_pointer.target_name == new_revision_index_name
+        assert write_pointer.index == new_revision_index_name
+        assert write_pointer.version == new_revision.version
 
         # The read pointer should still point to the old revision
-        assert service.read_pointer() == revision.name_for_index(base_name)
+        read_pointer = service.read_pointer()
+        assert read_pointer is not None
+        assert read_pointer.version == revision.version
 
         # We can add more documents to the index
         index.add_document(work2.to_search_document())
@@ -255,10 +263,14 @@ class TestInstanceInitializationScript:
         get_migrate_search_chain.assert_called_once()
         get_migrate_search_chain.return_value.apply_async.assert_called_once()
 
-        # If the initialization is run again, the migration should not be run again
+        # If the initialization is run again, the migration should not be run again, but we do log a message
+        # about the read pointer being out of date
         script.migrate_search.reset_mock()
+        caplog.clear()
+        caplog.set_level(LogLevel.info)
         script.initialize_search()
         script.migrate_search.assert_not_called()
+        assert "Search read pointer is out-of-date" in caplog.text
 
         # We simulate the migration task completing, by setting the read pointer to the new index
         service.read_pointer_set(new_revision)

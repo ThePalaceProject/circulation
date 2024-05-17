@@ -301,16 +301,22 @@ def test_get_migrate_search_chain(
     # The write pointer should point to the new revision
     write_pointer = service.write_pointer()
     assert write_pointer is not None
-    assert write_pointer.target_name == new_revision_index_name
+    assert write_pointer.index == new_revision_index_name
+    assert write_pointer.version == new_revision.version
 
     # The read pointer should still point to the old revision
-    assert service.read_pointer() == revision.name_for_index(service.base_revision_name)
+    read_pointer = service.read_pointer()
+    assert read_pointer is not None
+    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
+    assert read_pointer.version == revision.version
 
     # Run the migration task
     get_migrate_search_chain().delay().wait()
 
     # The read pointer should now point to the new revision
-    assert service.read_pointer() == new_revision_index_name
+    read_pointer = service.read_pointer()
+    assert read_pointer is not None
+    assert read_pointer.index == new_revision_index_name
 
     # And we should have all the works in the new index
     client.indices.refresh()

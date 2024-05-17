@@ -41,7 +41,9 @@ class TestService:
         service.index_create(revision)
 
         service.read_pointer_set(revision)
-        assert service.read_pointer() == f"{external_search_fixture.index_prefix}-v23"
+        pointer = service.read_pointer()
+        assert pointer is not None
+        assert pointer.index == f"{external_search_fixture.index_prefix}-v23"
 
     def test_write_pointer_set(self, external_search_fixture: ExternalSearchFixture):
         """Setting the write pointer works."""
@@ -53,7 +55,7 @@ class TestService:
 
         pointer = service.write_pointer()
         assert pointer is not None
-        assert pointer.target_name == f"{external_search_fixture.index_prefix}-v23"
+        assert pointer.index == f"{external_search_fixture.index_prefix}-v23"
 
     def test_populate_index_idempotent(
         self, external_search_fixture: ExternalSearchFixture

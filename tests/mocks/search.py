@@ -14,9 +14,9 @@ from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import (
+    SearchPointer,
     SearchService,
     SearchServiceFailedDocument,
-    SearchWritePointer,
 )
 from palace.manager.search.v5 import SearchV5
 from palace.manager.sqlalchemy.model.work import Work
@@ -38,8 +38,8 @@ class SearchServiceFake(SearchService):
         self.base_name = "test_index"
         self._failing = SearchServiceFailureMode.NOT_FAILING
         self._documents_by_index = defaultdict(list)
-        self._read_pointer: str | None = None
-        self._write_pointer: SearchWritePointer | None = None
+        self._read_pointer: SearchPointer | None = None
+        self._write_pointer: SearchPointer | None = None
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._document_submission_attempts = []
@@ -86,17 +86,17 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         return f"{self.base_name}-search-write"
 
-    def read_pointer(self) -> str | None:
+    def read_pointer(self) -> SearchPointer | None:
         self._fail_if_necessary()
         return self._read_pointer
 
-    def write_pointer(self) -> SearchWritePointer | None:
+    def write_pointer(self) -> SearchPointer | None:
         self._fail_if_necessary()
         return self._write_pointer
 
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f"{revision.name_for_index(self.base_name)}"
+        self._read_pointer = self._pointer_set(revision, self.read_pointer_name())
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
@@ -153,9 +153,16 @@ class SearchServiceFake(SearchService):
 
         return []
 
+    def _pointer_set(self, revision: SearchSchemaRevision, alias: str) -> SearchPointer:
+        return SearchPointer(
+            alias=alias,
+            index=revision.name_for_index(self.base_name),
+            version=revision.version,
+        )
+
     def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._write_pointer = SearchWritePointer(self.base_name, revision.version)
+        self._write_pointer = self._pointer_set(revision, self.write_pointer_name())
 
     def index_clear_documents(self):
         self._fail_if_necessary()

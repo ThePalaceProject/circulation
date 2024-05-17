@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import get_migrate_search_chain
 from palace.manager.search.revision import SearchSchemaRevision
-from palace.manager.search.service import SearchService, SearchWritePointer
+from palace.manager.search.service import SearchService
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import LOCK_ID_DB_INIT, pg_advisory_lock
@@ -115,7 +115,6 @@ class InstanceInitializationScript(LoggerMixin):
         cls,
         service: SearchService,
         revision: SearchSchemaRevision,
-        write_pointer: SearchWritePointer,
     ) -> None:
         # The revision is not the most recent. We need to create a new index.
         # and start reindexing our data into it asynchronously. When the reindex
@@ -132,6 +131,7 @@ class InstanceInitializationScript(LoggerMixin):
         revision_directory = self._container.search.revision_directory()
         revision = revision_directory.highest()
         write_pointer = service.write_pointer()
+        read_pointer = service.read_pointer()
 
         if write_pointer is None:
             # A write pointer does not exist. This is a fresh index.
@@ -141,7 +141,13 @@ class InstanceInitializationScript(LoggerMixin):
             self.log.info(
                 f"Search index is out-of-date ({service.base_revision_name} v{write_pointer.version})."
             )
-            self.migrate_search(service, revision, write_pointer)
+            self.migrate_search(service, revision)
+        elif read_pointer is not None and read_pointer.version != revision.version:
+            self.log.info(
+                f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}."
+                f"This likely means that the reindexing task is in progress. If there is no reindexing task "
+                f"running, you may need to repair the search index."
+            )
         else:
             self.log.info(
                 f"Search index is up-to-date ({service.base_revision_name} v{revision.version})."

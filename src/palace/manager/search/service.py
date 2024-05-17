@@ -9,26 +9,39 @@ from typing import Any
 import opensearchpy.helpers
 from opensearch_dsl import MultiSearch, Search
 from opensearchpy import NotFoundError, OpenSearch, RequestError
+from typing_extensions import Self
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.util.log import LoggerMixin
 
 
-@dataclass
-class SearchWritePointer:
-    """The 'write' pointer; the pointer that will be used to populate an index with search documents."""
+@dataclass(frozen=True)
+class SearchPointer:
+    """A search pointer, which is an alias that points to a specific index."""
 
-    base_name: str
+    alias: str
+    index: str
     version: int
 
-    @property
-    def name(self) -> str:
-        return f"{self.base_name}-search-write"
+    @classmethod
+    def from_index(cls, base_name: str, alias: str, index: str) -> Self | None:
+        version = cls._parse_version(base_name, index)
+        if version is None:
+            return None
 
-    @property
-    def target_name(self) -> str:
-        return f"{self.base_name}-v{self.version}"
+        return cls(
+            alias=alias,
+            index=index,
+            version=version,
+        )
+
+    @classmethod
+    def _parse_version(cls, base_name: str, index: str) -> int | None:
+        match = re.search(f"^{base_name}-v([0-9]+)$", string=index)
+        if match is None:
+            return None
+        return int(match.group(1))
 
 
 class SearchServiceException(BasePalaceException):
@@ -93,11 +106,11 @@ class SearchService(ABC):
         """Get the name used for the write pointer."""
 
     @abstractmethod
-    def read_pointer(self) -> str | None:
+    def read_pointer(self) -> SearchPointer | None:
         """Get the read pointer, if it exists."""
 
     @abstractmethod
-    def write_pointer(self) -> SearchWritePointer | None:
+    def write_pointer(self) -> SearchPointer | None:
         """Get the writer pointer, if it exists."""
 
     @abstractmethod
@@ -169,18 +182,21 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
     def base_revision_name(self) -> str:
         return self._base_revision_name
 
-    def write_pointer(self) -> SearchWritePointer | None:
+    def _get_pointer(self, name: str) -> SearchPointer | None:
         try:
-            result = self._client.indices.get_alias(name=self.write_pointer_name())
-            for name in result.keys():
-                match = re.search(f"{self.base_revision_name}-v([0-9]+)", string=name)
-                if match:
-                    return SearchWritePointer(
-                        self.base_revision_name, int(match.group(1))
-                    )
+            result = self._client.indices.get_alias(name=name)
+            for index_name in result.keys():
+                return SearchPointer.from_index(
+                    base_name=self.base_revision_name,
+                    alias=name,
+                    index=index_name,
+                )
             return None
         except NotFoundError:
             return None
+
+    def write_pointer(self) -> SearchPointer | None:
+        return self._get_pointer(self.write_pointer_name())
 
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         alias_name = self.read_pointer_name()
@@ -294,17 +310,8 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         self.log.debug(f"setting write pointer {alias_name} to {target_index}")
         self._client.indices.update_aliases(body=action)
 
-    def read_pointer(self) -> str | None:
-        try:
-            result: dict[str, Any] = self._client.indices.get_alias(
-                name=self.read_pointer_name()
-            )
-            for name in result.keys():
-                if name.startswith(f"{self.base_revision_name}-"):
-                    return name
-            return None
-        except NotFoundError:
-            return None
+    def read_pointer(self) -> SearchPointer | None:
+        return self._get_pointer(self.read_pointer_name())
 
     def search_client(self, write: bool = False) -> Search:
         return self._search.index(
