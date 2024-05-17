@@ -185,13 +185,18 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
     def _get_pointer(self, name: str) -> SearchPointer | None:
         try:
             result = self._client.indices.get_alias(name=name)
-            for index_name in result.keys():
-                return SearchPointer.from_index(
-                    base_name=self.base_revision_name,
-                    alias=name,
-                    index=index_name,
+            if len(result) != 1:
+                # This should never happen, based on my understanding of the API.
+                self.log.error(
+                    f"unexpected number of indexes for alias {name}: {result}"
                 )
-            return None
+                return None
+            index_name = next(iter(result.keys()))
+            return SearchPointer.from_index(
+                base_name=self.base_revision_name,
+                alias=name,
+                index=index_name,
+            )
         except NotFoundError:
             return None
 

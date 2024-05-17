@@ -1,7 +1,67 @@
+from unittest.mock import MagicMock
+
+import pytest
+
 from palace.manager.search.document import LONG
-from palace.manager.search.service import SearchDocument
+from palace.manager.search.service import (
+    SearchDocument,
+    SearchPointer,
+    SearchServiceOpensearch1,
+)
 from tests.fixtures.search import ExternalSearchFixture
 from tests.mocks.search import MockSearchSchemaRevision
+
+
+class TestSearchPointer:
+    @pytest.mark.parametrize(
+        "base, index, expected_version",
+        [
+            ("base", "base-v23", 23),
+            ("base", "base-v42", 42),
+            ("base", "base-v0", 0),
+            ("base", "base-v1", 1),
+            ("base", "base-v99", 99),
+        ],
+    )
+    def test_from_index(self, base: str, index: str, expected_version: int):
+        service = SearchServiceOpensearch1(MagicMock(), base)
+
+        write_pointer = SearchPointer.from_index(
+            base, service.write_pointer_name(), index
+        )
+        assert write_pointer is not None
+        assert write_pointer.index == index
+        assert write_pointer.version == expected_version
+        assert write_pointer.alias == service.write_pointer_name()
+
+        read_pointer = SearchPointer.from_index(
+            base, service.read_pointer_name(), index
+        )
+        assert read_pointer is not None
+        assert read_pointer.index == index
+        assert read_pointer.version == expected_version
+        assert read_pointer.alias == service.read_pointer_name()
+
+    @pytest.mark.parametrize(
+        "base, index",
+        [
+            ("base", "nbase-v23"),
+            ("base", "base-42"),
+            ("base", "basee-42"),
+            ("base", "base"),
+            ("base", "basev1"),
+            ("base", "base-v99abc"),
+        ],
+    )
+    def test_from_index_errors(self, base: str, index: str):
+        service = SearchServiceOpensearch1(MagicMock(), base)
+
+        assert (
+            SearchPointer.from_index(base, service.write_pointer_name(), index) is None
+        )
+        assert (
+            SearchPointer.from_index(base, service.read_pointer_name(), index) is None
+        )
 
 
 class TestService:
@@ -107,3 +167,23 @@ class TestService:
         )[f"{external_search_fixture.index_prefix}-v23"]["mappings"] == {
             "properties": mappings.serialize_properties()
         }
+
+    def test__get_pointer(self):
+        """Getting a pointer works."""
+        mock_client = MagicMock()
+        mock_client.indices.get_alias.return_value = {
+            "base-v23": {"aliases": {"base-search-read": {}}}
+        }
+        service = SearchServiceOpensearch1(mock_client, "base")
+
+        pointer = service._get_pointer("base-search-read")
+        assert pointer is not None
+        assert pointer.index == "base-v23"
+        assert pointer.version == 23
+        mock_client.indices.get_alias.assert_called_once_with(name="base-search-read")
+
+        mock_client.indices.get_alias.reset_mock()
+        mock_client.indices.get_alias.return_value = {"bad": [], "data": []}
+        pointer = service._get_pointer("base-search-read")
+        assert pointer is None
+        mock_client.indices.get_alias.assert_called_once_with(name="base-search-read")
