@@ -151,11 +151,11 @@ class SearchService(ABC):
         """Clear all search documents in the given index."""
 
     @abstractmethod
-    def search_client(self, write: bool = False) -> Search:
+    def read_search_client(self) -> Search:
         """Return the underlying search client."""
 
     @abstractmethod
-    def search_multi_client(self, write: bool = False) -> MultiSearch:
+    def read_search_multi_client(self) -> MultiSearch:
         """Return the underlying search client."""
 
     @abstractmethod
@@ -318,15 +318,11 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
     def read_pointer(self) -> SearchPointer | None:
         return self._get_pointer(self.read_pointer_name())
 
-    def search_client(self, write: bool = False) -> Search:
-        return self._search.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_client(self) -> Search:
+        return self._search.index(self.read_pointer_name())
 
-    def search_multi_client(self, write: bool = False) -> MultiSearch:
-        return self._multi_search.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_multi_client(self) -> MultiSearch:
+        return self._multi_search.index(self.read_pointer_name())
 
     def read_pointer_name(self) -> str:
         return f"{self.base_revision_name}-search-read"

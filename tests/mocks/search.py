@@ -169,15 +169,11 @@ class SearchServiceFake(SearchService):
         pointer = self.write_pointer_name()
         self._documents_by_index[pointer].clear()
 
-    def search_client(self, write=False) -> Search:
-        return self._search_client.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_client(self) -> Search:
+        return self._search_client.index(self.read_pointer_name())
 
-    def search_multi_client(self, write=False) -> MultiSearch:
-        return self._multi_search_client.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_multi_client(self) -> MultiSearch:
+        return self._multi_search_client.index(self.read_pointer_name())
 
     def index_remove_document(self, doc_id: int):
         self._fail_if_necessary()

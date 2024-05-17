@@ -80,7 +80,7 @@ class ExternalSearchIndex(LoggerMixin):
         else:
             query = Query(query_string, filter)
 
-        search = query.build(self._search_service.search_client(), pagination)
+        search = query.build(self._search_service.read_search_client(), pagination)
         if debug:
             search = search.extra(explain=True)
 
@@ -156,7 +156,7 @@ class ExternalSearchIndex(LoggerMixin):
             (query string, Filter, Pagination) 3-tuple.
         """
         # Create a MultiSearch.
-        multi = self._search_service.search_multi_client()
+        multi = self._search_service.read_search_multi_client()
 
         # Give it a Search object for every query definition passed in
         # as part of `queries`.
