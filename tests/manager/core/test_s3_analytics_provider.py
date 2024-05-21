@@ -117,7 +117,7 @@ class TestS3AnalyticsProvider:
         event_time = datetime.datetime.utcnow()
         event_time_formatted = self.timestamp_to_string(event_time)
         event_type = CirculationEvent.CM_CHECKOUT
-
+        user_agent = "the-user-agent"
         s3_analytics_fixture.analytics_provider._get_file_key = MagicMock()
 
         # Act
@@ -126,6 +126,7 @@ class TestS3AnalyticsProvider:
             license_pool,
             event_type,
             event_time,
+            user_agent=user_agent,
         )
 
         # Assert
@@ -178,3 +179,4 @@ class TestS3AnalyticsProvider:
         assert event["series"] == work.series
         assert event["series_position"] == work.series_position
         assert event["language"] == work.language
+        assert event["user_agent"] == user_agent
