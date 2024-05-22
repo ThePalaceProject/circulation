@@ -117,7 +117,7 @@ class InstanceInitializationScript(LoggerMixin):
         cls.create_search_index(service, revision)
         task = get_migrate_search_chain().apply_async()
         cls.logger().info(
-            f"Task queued to indexing data into new search index (Task ID: {task.id})."
+            f"Task queued to index data into new search index (Task ID: {task.id})."
         )
 
     def initialize_search(self) -> None:

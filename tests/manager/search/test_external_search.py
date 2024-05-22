@@ -128,16 +128,20 @@ class TestExternalSearch:
         db: DatabaseTransactionFixture,
         caplog: pytest.LogCaptureFixture,
     ):
-        moby_duck = db.work(title="Moby Duck", with_open_access_download=True)
+        duck_life = db.work(
+            title="Moby's life as a Duck", with_open_access_download=True
+        )
         moby_dick = db.work(title="Moby Dick", with_open_access_download=True)
         client = end_to_end_search_fixture.external_search.client
         index = end_to_end_search_fixture.external_search_index
         end_to_end_search_fixture.populate_search_index()
 
-        end_to_end_search_fixture.expect_results([moby_duck, moby_dick], "Moby")
+        end_to_end_search_fixture.expect_results(
+            [duck_life, moby_dick], "Moby", ordered=False
+        )
 
         index.remove_work(moby_dick)
-        index.remove_work(moby_duck.id)
+        index.remove_work(duck_life.id)
 
         # Refresh search index so we can query the changes
         client.indices.refresh()

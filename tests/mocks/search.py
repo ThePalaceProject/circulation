@@ -179,10 +179,7 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         pointer = self.write_pointer_name()
         items = self._documents_by_index[pointer]
-        to_remove = []
-        for item in items:
-            if item.get("_id") == doc_id:
-                to_remove.append(item)
+        to_remove = [item for item in items if item.get("_id") == doc_id]
         for item in to_remove:
             items.remove(item)
 

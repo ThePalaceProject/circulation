@@ -1505,7 +1505,7 @@ class TestWork:
                 assert doc["customlists"] is None
 
             if work.presentation_edition.contributions:
-                assert len(doc["contributors"]) is len(
+                assert len(doc["contributors"]) == len(
                     work.presentation_edition.contributions
                 )
                 for idx, contribution in enumerate(

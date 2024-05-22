@@ -24,3 +24,12 @@ def test_exponential_backoff(retries: int, expected: int) -> None:
         assert exponential_backoff(retries) == expected
     assert mock_randrange.call_count == 1
     mock_randrange.assert_called_with(0, round(expected * 0.3))
+
+
+def test_exponential_backoff_max_backoff_time() -> None:
+    jitter = 2
+    with patch(
+        "palace.manager.util.backoff.randrange", return_value=jitter
+    ) as mock_randrange:
+        assert exponential_backoff(0, 6) == 3 + jitter
+        assert exponential_backoff(12, 6) == 6 + jitter
