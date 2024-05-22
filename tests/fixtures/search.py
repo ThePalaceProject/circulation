@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from opensearchpy import OpenSearch
 from pydantic import AnyHttpUrl
 
-from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
+from palace.manager.celery.tasks.search import get_work_search_documents
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchServiceOpensearch1
 from palace.manager.service.configuration import ServiceConfiguration
 from palace.manager.service.container import Services, wire_container
@@ -56,6 +58,9 @@ class ExternalSearchFixture(LoggerMixin):
         self.client: OpenSearch = services.search.client()
         self.service: SearchServiceOpensearch1 = services.search.service()
         self.index: ExternalSearchIndex = services.search.index()
+        self.revision: SearchSchemaRevision = (
+            services.search.revision_directory().highest()
+        )
 
         # Make sure the services container is wired up with the newly created search container
         wire_container(self.services_container)
@@ -116,13 +121,17 @@ class EndToEndSearchFixture:
         self.external_search = search_fixture
         self.external_search_index = search_fixture.index
 
+        # Set up the search indices and mapping
+        self.external_search.service.index_create(self.external_search.revision)
+        self.external_search.service.index_set_mapping(self.external_search.revision)
+        self.external_search.service.write_pointer_set(self.external_search.revision)
+        self.external_search.service.read_pointer_set(self.external_search.revision)
+
     def populate_search_index(self):
         """Populate the search index with a set of works. The given callback is passed this fixture instance."""
         # Add all the works created in the setup to the search index.
-        SearchIndexCoverageProvider(
-            self.external_search.db.session,
-            search_index_client=self.external_search_index,
-        ).run()
+        documents = get_work_search_documents(self.db.session, 1000, 0)
+        self.external_search_index.add_documents(documents)
         self.external_search.client.indices.refresh()
 
     @staticmethod
@@ -287,4 +296,53 @@ def external_search_fake_fixture(
 ) -> Generator[ExternalSearchFixtureFake, None, None]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     with ExternalSearchFixtureFake.fixture(db, services_fixture.services) as fixture:
+        yield fixture
+
+
+class WorkExternalIndexingFixture:
+    """
+    In normal operation, when external_index_needs_updating is called on Work, it
+    queues a task to index the Work in the external search index. We don't have
+    the full Celery setup in tests, so we need to mock this behavior.
+    """
+
+    def __init__(self):
+        self.queued_works = set()
+        self.patch = patch.object(Work, "queue_indexing_task", self.queue)
+
+    def queue(self, work_id: int | None) -> None:
+        return self.queued_works.add(work_id)
+
+    def clear(self):
+        self.queued_works.clear()
+
+    def disable_fixture(self):
+        self.patch.stop()
+
+    def is_queued(self, work: int | Work, *, clear: bool = False) -> bool:
+        if isinstance(work, Work):
+            work_id = work.id
+        else:
+            work_id = work
+        queued = work_id in self.queued_works
+
+        if clear:
+            self.clear()
+
+        return queued
+
+    @classmethod
+    @contextmanager
+    def fixture(cls):
+        fixture = cls()
+        fixture.patch.start()
+        try:
+            yield fixture
+        finally:
+            fixture.patch.stop()
+
+
+@pytest.fixture(scope="function")
+def work_external_indexing() -> Generator[WorkExternalIndexingFixture, None, None]:
+    with WorkExternalIndexingFixture.fixture() as fixture:
         yield fixture

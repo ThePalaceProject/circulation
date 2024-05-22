@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from enum import Enum
+from typing import Any
 from unittest.mock import MagicMock
 
 from opensearch_dsl import MultiSearch, Search
 from opensearch_dsl.response.hit import Hit
 from opensearchpy import OpenSearchException
 
+from palace.manager.search.document import SearchMappingDocument
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
-from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.service import (
+    SearchPointer,
     SearchService,
     SearchServiceFailedDocument,
-    SearchWritePointer,
 )
+from palace.manager.search.v5 import SearchV5
 from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -31,18 +34,12 @@ class SearchServiceFailureMode(Enum):
 class SearchServiceFake(SearchService):
     """A search service that doesn't speak to a real service."""
 
-    _documents_by_index: dict[str, list[dict]]
-    _failing: SearchServiceFailureMode
-    _search_client: Search
-    _multi_search_client: MultiSearch
-    _document_submission_attempts: list[dict]
-
     def __init__(self):
         self.base_name = "test_index"
         self._failing = SearchServiceFailureMode.NOT_FAILING
-        self._documents_by_index = {}
-        self._read_pointer: str | None = None
-        self._write_pointer: SearchWritePointer | None = None
+        self._documents_by_index = defaultdict(list)
+        self._read_pointer: SearchPointer | None = None
+        self._write_pointer: SearchPointer | None = None
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._document_submission_attempts = []
@@ -65,8 +62,6 @@ class SearchServiceFake(SearchService):
     def documents_for_index(self, index_name: str) -> list[dict]:
         self._fail_if_necessary()
 
-        if not (index_name in self._documents_by_index):
-            return []
         return self._documents_by_index[index_name]
 
     def documents_all(self) -> list[dict]:
@@ -91,45 +86,36 @@ class SearchServiceFake(SearchService):
         self._fail_if_necessary()
         return f"{self.base_name}-search-write"
 
-    def read_pointer(self) -> str | None:
+    def read_pointer(self) -> SearchPointer | None:
         self._fail_if_necessary()
         return self._read_pointer
 
-    def write_pointer(self) -> SearchWritePointer | None:
+    def write_pointer(self) -> SearchPointer | None:
         self._fail_if_necessary()
         return self._write_pointer
 
-    def create_empty_index(self) -> None:
-        self._fail_if_necessary()
-        return None
-
     def read_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._read_pointer = f"{revision.name_for_indexed_pointer(self.base_name)}"
-
-    def index_set_populated(self, revision: SearchSchemaRevision) -> None:
-        self._fail_if_necessary()
-
-    def read_pointer_set_empty(self) -> None:
-        self._fail_if_necessary()
-        self._read_pointer = f"{self.base_name}-empty"
+        self._read_pointer = self._pointer_set(revision, self.read_pointer_name())
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
         return None
 
-    def index_is_populated(self, revision: SearchSchemaRevision) -> bool:
-        self._fail_if_necessary()
-        return True
-
     def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
 
+    def index_submit_document(
+        self, document: dict[str, Any], refresh: bool = False
+    ) -> None:
+        self.index_submit_documents([document])
+
     def index_submit_documents(
-        self, pointer: str, documents: Iterable[dict]
+        self, documents: Iterable[dict]
     ) -> list[SearchServiceFailedDocument]:
         self._fail_if_necessary()
 
+        pointer = self.write_pointer_name()
         _should_fail = False
         _should_fail = (
             _should_fail
@@ -162,46 +148,40 @@ class SearchServiceFake(SearchService):
 
             return results
 
-        if not (pointer in self._documents_by_index):
-            self._documents_by_index[pointer] = []
-
         for document in documents:
             self._documents_by_index[pointer].append(document)
 
         return []
 
+    def _pointer_set(self, revision: SearchSchemaRevision, alias: str) -> SearchPointer:
+        return SearchPointer(
+            alias=alias,
+            index=revision.name_for_index(self.base_name),
+            version=revision.version,
+        )
+
     def write_pointer_set(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
-        self._write_pointer = SearchWritePointer(self.base_name, revision.version)
+        self._write_pointer = self._pointer_set(revision, self.write_pointer_name())
 
-    def index_clear_documents(self, pointer: str):
+    def index_clear_documents(self):
         self._fail_if_necessary()
-        if pointer in self._documents_by_index:
-            self._documents_by_index[pointer] = []
+        pointer = self.write_pointer_name()
+        self._documents_by_index[pointer].clear()
 
-    def search_client(self, write=False) -> Search:
-        return self._search_client.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_client(self) -> Search:
+        return self._search_client.index(self.read_pointer_name())
 
-    def search_multi_client(self, write=False) -> MultiSearch:
-        return self._multi_search_client.index(
-            self.read_pointer_name() if not write else self.write_pointer_name()
-        )
+    def read_search_multi_client(self) -> MultiSearch:
+        return self._multi_search_client.index(self.read_pointer_name())
 
-    def index_remove_document(self, pointer: str, id: int):
+    def index_remove_document(self, doc_id: int):
         self._fail_if_necessary()
-        if pointer in self._documents_by_index:
-            items = self._documents_by_index[pointer]
-            to_remove = []
-            for item in items:
-                if item.get("_id") == id:
-                    to_remove.append(item)
-            for item in to_remove:
-                items.remove(item)
-
-    def is_pointer_empty(*args):
-        return False
+        pointer = self.write_pointer_name()
+        items = self._documents_by_index[pointer]
+        to_remove = [item for item in items if item.get("_id") == doc_id]
+        for item in to_remove:
+            items.remove(item)
 
 
 def fake_hits(works: list[Work]):
@@ -223,14 +203,9 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
 
     def __init__(
         self,
-        revision_directory: SearchRevisionDirectory | None = None,
-        version: int | None = None,
     ):
-        revision_directory = revision_directory or SearchRevisionDirectory.create()
         super().__init__(
             service=SearchServiceFake(),
-            revision_directory=revision_directory,
-            version=version,
         )
 
         self._mock_multi_works: list[dict] = []
@@ -287,3 +262,23 @@ class ExternalSearchIndexFake(ExternalSearchIndex):
 
     def __repr__(self) -> str:
         return f"Expected Results({id(self)}): {self._mock_multi_works}"
+
+
+class MockSearchSchemaRevision(SearchSchemaRevision):
+    def __init__(self, version: int) -> None:
+        super().__init__()
+        self._version = version
+        self._document = SearchMappingDocument()
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    def mapping_document(self) -> SearchMappingDocument:
+        return self._document
+
+
+class MockSearchSchemaRevisionLatest(MockSearchSchemaRevision):
+    def __init__(self, version: int) -> None:
+        super().__init__(version)
+        self._document = SearchV5().mapping_document()

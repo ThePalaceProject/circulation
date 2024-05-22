@@ -53,9 +53,7 @@ class TestLaneSweeperScript:
 
 class TestUpdateLaneSizeScript:
     def test_do_run(self, db, end_to_end_search_fixture: EndToEndSearchFixture):
-        migration = end_to_end_search_fixture.external_search_index.start_migration()
-        assert migration is not None
-        migration.finish()
+        end_to_end_search_fixture.populate_search_index()
 
         lane = db.lane()
         lane.size = 100
@@ -85,9 +83,7 @@ class TestUpdateLaneSizeScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        migration = end_to_end_search_fixture.external_search_index.start_migration()
-        assert migration is not None
-        migration.finish()
+        end_to_end_search_fixture.populate_search_index()
 
         library = db.default_library()
         lane1 = db.lane()

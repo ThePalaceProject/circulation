@@ -29,12 +29,20 @@ class InstanceInitScriptFixture:
         self.database = function_database
         self.services = services_fixture
         self.alembic_config_path = alembic_config_path
+        self.script = InstanceInitializationScript(
+            config_file=self.alembic_config_path,
+        )
 
-    def script(self) -> InstanceInitializationScript:
-        with self.database.patch_engine():
-            return InstanceInitializationScript(
-                config_file=self.alembic_config_path,
-            )
+        self.initialize_database_schema_mock = Mock(
+            wraps=self.script.initialize_database_schema
+        )
+        self.script.initialize_database_schema = self.initialize_database_schema_mock
+
+        self.migrate_database_mock = Mock(wraps=self.script.migrate_database)
+        self.script.migrate_database = self.migrate_database_mock
+
+    def initialize_database(self) -> None:
+        self.script.initialize_database(self.database.connection)
 
     @classmethod
     @contextmanager
@@ -74,6 +82,8 @@ def _run_script(config_path: Path, db_url: str) -> None:
             script = InstanceInitializationScript(
                 config_file=config_path, engine_factory=engine_factory
             )
+            # Mock out the search initialization, this is tested elsewhere
+            script.initialize_search = MagicMock()
             script.run()
 
         # Set our exit code to the number of upgrades we ran
@@ -128,7 +138,9 @@ def test_locking(
     assert exit_codes[2] == 0
 
 
-def test_initialize(instance_init_script_fixture: InstanceInitScriptFixture) -> None:
+def test_initialize_database(
+    instance_init_script_fixture: InstanceInitScriptFixture,
+) -> None:
     # Drop any existing schema
     instance_init_script_fixture.database.drop_existing_schema()
 
@@ -138,27 +150,24 @@ def test_initialize(instance_init_script_fixture: InstanceInitScriptFixture) -> 
     assert "alembic_version" not in inspector.get_table_names()
     assert len(inspector.get_table_names()) == 0
 
-    script = instance_init_script_fixture.script()
-    script.initialize_database = Mock(wraps=script.initialize_database)
-    script.migrate_database = Mock(wraps=script.migrate_database)
-    script.run()
+    instance_init_script_fixture.initialize_database()
 
     inspector = inspect(engine)
     assert "alembic_version" in inspector.get_table_names()
     assert "libraries" in inspector.get_table_names()
     assert len(inspector.get_table_names()) > 2
 
-    assert script.initialize_database.call_count == 1
-    assert script.migrate_database.call_count == 0
+    assert instance_init_script_fixture.initialize_database_schema_mock.call_count == 1
+    assert instance_init_script_fixture.migrate_database_mock.call_count == 0
 
     # Run the script again. Ensure we don't call initialize_database again,
     # but that we do call migrate_database, since the schema already exists.
-    script.run()
-    assert script.initialize_database.call_count == 1
-    assert script.migrate_database.call_count == 1
+    instance_init_script_fixture.initialize_database()
+    assert instance_init_script_fixture.initialize_database_schema_mock.call_count == 1
+    assert instance_init_script_fixture.migrate_database_mock.call_count == 1
 
 
-def test_migrate(
+def test_migrate_database(
     alembic_runner: MigrationContext,
     instance_init_script_fixture: InstanceInitScriptFixture,
 ) -> None:
@@ -170,13 +179,10 @@ def test_migrate(
     assert alembic_runner.current == "base"
     assert alembic_runner.current != alembic_runner.heads[0]
 
-    script = instance_init_script_fixture.script()
-    script.initialize_database = Mock(wraps=script.initialize_database)
-    script.migrate_database = Mock(wraps=script.migrate_database)
-    script.run()
+    instance_init_script_fixture.initialize_database()
 
     # Make sure we have upgraded
     assert alembic_runner.current == alembic_runner.heads[0]
 
-    assert script.initialize_database.call_count == 0
-    assert script.migrate_database.call_count == 1
+    assert instance_init_script_fixture.initialize_database_schema_mock.call_count == 0
+    assert instance_init_script_fixture.migrate_database_mock.call_count == 1

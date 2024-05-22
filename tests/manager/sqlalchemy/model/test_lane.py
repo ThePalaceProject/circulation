@@ -4031,10 +4031,7 @@ class TestLane:
 
         lane = db.lane()
         search_client = end_to_end_search_fixture.external_search_index
-        docs = end_to_end_search_fixture.external_search_index.start_migration()
-        assert docs is not None
-        docs.add_documents(search_client.create_search_documents_from_works([work]))
-        docs.finish()
+        end_to_end_search_fixture.populate_search_index()
 
         pagination = Pagination(offset=0, size=1)
 

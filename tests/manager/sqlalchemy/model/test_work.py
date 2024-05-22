@@ -1,6 +1,7 @@
 import datetime
 from contextlib import nullcontext
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import opensearchpy
 import pytest
@@ -13,6 +14,7 @@ from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -27,11 +29,19 @@ from palace.manager.sqlalchemy.model.work import (
     WorkGenre,
     work_library_suppressions,
 )
-from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
+from palace.manager.sqlalchemy.util import (
+    get_one_or_create,
+    numericrange_to_tuple,
+    tuple_to_numericrange,
+)
 from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import SampleCoversFixture
-from tests.fixtures.search import EndToEndSearchFixture, ExternalSearchFixtureFake
+from tests.fixtures.search import (
+    EndToEndSearchFixture,
+    ExternalSearchFixtureFake,
+    WorkExternalIndexingFixture,
+)
 
 
 class TestWork:
@@ -110,6 +120,7 @@ class TestWork:
         self,
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
+        work_external_indexing: WorkExternalIndexingFixture,
     ):
         # Test that:
         # - work coverage records are made on work creation and primary edition selection.
@@ -219,12 +230,8 @@ class TestWork:
         assert "Alice Adder, Bob Bitshifter" == work.author
 
         # This Work starts out with a single CoverageRecord reflecting
-        # the work done to choose-edition as a primary edition is set. The
-        # search index CoverageRecord is a marker for work that must
-        # be done in the future, and is not tested here.
-        [choose_edition, update_search_index] = sorted(
-            work.coverage_records, key=lambda x: x.operation
-        )
+        # the work done to choose-edition as a primary edition is set.
+        [choose_edition] = sorted(work.coverage_records, key=lambda x: x.operation)
         assert choose_edition.operation == WorkCoverageRecord.CHOOSE_EDITION_OPERATION
 
         # pools aren't yet aware of each other
@@ -278,7 +285,7 @@ class TestWork:
         # occurred as part of calculate_presentation().
         #
         # All the work has actually been done, except for the work of
-        # updating the search index, which has been registered and
+        # updating the search index, which has been queued and
         # will be done later.
         records = work.coverage_records
 
@@ -289,9 +296,9 @@ class TestWork:
             (wcr.CLASSIFY_OPERATION, success),
             (wcr.SUMMARY_OPERATION, success),
             (wcr.QUALITY_OPERATION, success),
-            (wcr.UPDATE_SEARCH_INDEX_OPERATION, wcr.REGISTERED),
         }
         assert expect == {(x.operation, x.status) for x in records}
+        assert work_external_indexing.is_queued(work)
 
         # Now mark the pool with the presentation edition as suppressed.
         # work.calculate_presentation() will call work.mark_licensepools_as_superceded(),
@@ -482,6 +489,7 @@ class TestWork:
         self,
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
+        work_external_indexing: WorkExternalIndexingFixture,
     ):
         work = db.work(with_license_pool=True)
 
@@ -493,19 +501,8 @@ class TestWork:
         # The work has not been added to the search index.
         assert [] == external_search_fake_fixture.service.documents_all()
 
-        # But the work of adding it to the search engine has been
-        # registered.
-        def assert_record():
-            # Verify the search index WorkCoverageRecord for this work
-            # is in the REGISTERED state.
-            [record] = [
-                x
-                for x in work.coverage_records
-                if x.operation == WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-            ]
-            assert WorkCoverageRecord.REGISTERED == record.status
-
-        assert_record()
+        # But the work of adding it to the search engine has been queued.
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # This work is presentation ready because it has a title.
         # Remove the title, and the work stops being presentation
@@ -514,11 +511,10 @@ class TestWork:
         work.set_presentation_ready_based_on_content(search_index_client=search)
         assert False == work.presentation_ready
 
-        # The search engine WorkCoverageRecord is still in the
-        # REGISTERED state, but its meaning has changed -- the work
-        # will now be _removed_ from the search index, rather than
-        # updated.
-        assert_record()
+        # The work has been queued for reindexing, so that the search
+        # index will be updated to reflect the fact that the work is no
+        # longer presentation-ready.
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # Restore the title, and everything is fixed.
         presentation.title = "foo"
@@ -1411,6 +1407,171 @@ class TestWork:
             == datetime.datetime(1, 1, 1, tzinfo=pytz.UTC).timestamp()
         )
 
+    def test_to_search_doc_no_id(self, db: DatabaseTransactionFixture):
+        work = Work()
+        with pytest.raises(BasePalaceException) as excinfo:
+            work.to_search_document()
+
+        assert "Work has no ID. Cannot generate search document." in str(excinfo.value)
+
+    def test_to_search_documents(self, db: DatabaseTransactionFixture):
+        customlist, editions = db.customlist()
+        library = db.library()
+
+        works = [
+            db.work(
+                authors=[db.contributor()],
+                with_license_pool=True,
+                genre="history",
+            ),
+            editions[0].work,
+        ]
+
+        work1: Work = works[0]
+        work2: Work = works[1]
+        work2.suppressed_for.append(library)
+
+        work1.target_age = NumericRange(lower=18, upper=22, bounds="()")
+        work2.target_age = NumericRange(lower=18, upper=99, bounds="[]")
+
+        genre1, is_new = Genre.lookup(db.session, "Psychology")
+        genre2, is_new = Genre.lookup(db.session, "Cooking")
+        subject1 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject1")
+        subject1.genre = genre1
+        subject2 = db.subject(type=Subject.SIMPLIFIED_GENRE, identifier="subject2")
+        subject2.genre = genre2
+
+        db.session.flush()
+
+        search_docs = Work.to_search_documents(db.session, [w.id for w in works])
+
+        search_doc_work1 = list(
+            filter(lambda x: x["work_id"] == work1.id, search_docs)
+        )[0]
+        search_doc_work2 = list(
+            filter(lambda x: x["work_id"] == work2.id, search_docs)
+        )[0]
+
+        def compare(doc: dict[str, Any], work: Work) -> None:
+            assert doc["_id"] == work.id
+            assert doc["work_id"] == work.id
+            assert doc["title"] == work.title
+            assert doc["sort_title"] == work.sort_title
+            assert doc["subtitle"] == work.subtitle
+            assert doc["series"] == work.series
+            assert doc["series_position"] == work.series_position
+            assert doc["language"] == work.language
+            assert doc["author"] == work.author
+            assert doc["sort_author"] == work.sort_author
+            assert doc["medium"] == work.presentation_edition.medium
+            assert doc["publisher"] == work.publisher
+            assert doc["imprint"] == work.imprint
+            assert (
+                doc["permanent_work_id"] == work.presentation_edition.permanent_work_id
+            )
+            assert doc["presentation_ready"] == work.presentation_ready
+            assert doc["last_update_time"] == work.last_update_time
+            assert doc["fiction"] == "Fiction" if work.fiction else "Nonfiction"
+            assert doc["audience"] == work.audience
+            assert doc["summary"] == work.summary_text
+            assert doc["quality"] == work.quality
+            assert doc["rating"] == work.rating
+            assert doc["popularity"] == work.popularity
+
+            if work.suppressed_for:
+                assert doc["suppressed_for"] == [l.id for l in work.suppressed_for]
+            else:
+                assert doc["suppressed_for"] is None
+
+            if work.license_pools:
+                assert len(doc["licensepools"]) == len(work.license_pools)
+                for idx, pool in enumerate(work.license_pools):
+                    actual = doc["licensepools"][idx]
+                    assert actual["licensepool_id"] == pool.id
+                    assert actual["data_source_id"] == pool.data_source_id
+                    assert actual["collection_id"] == pool.collection_id
+                    assert actual["open_access"] == pool.open_access
+                    assert actual["suppressed"] == pool.suppressed
+            else:
+                assert doc["licensepools"] is None
+
+            if work.custom_list_entries:
+                assert len(doc["customlists"]) == len(work.custom_list_entries)
+                for idx, custom_list in enumerate(work.custom_list_entries):
+                    actual = doc["customlists"][idx]
+                    assert actual["list_id"] == custom_list.list_id
+                    assert actual["featured"] == custom_list.featured
+            else:
+                assert doc["customlists"] is None
+
+            if work.presentation_edition.contributions:
+                assert len(doc["contributors"]) == len(
+                    work.presentation_edition.contributions
+                )
+                for idx, contribution in enumerate(
+                    work.presentation_edition.contributions
+                ):
+                    actual = doc["contributors"][idx]
+                    assert actual["sort_name"] == contribution.contributor.sort_name
+                    assert (
+                        actual["display_name"] == contribution.contributor.display_name
+                    )
+                    assert actual["lc"] == contribution.contributor.lc
+                    assert actual["viaf"] == contribution.contributor.viaf
+                    assert actual["role"] == contribution.role
+            else:
+                assert doc["contributors"] is None
+
+            if work.identifiers:  # type: ignore[attr-defined]
+                assert len(doc["identifiers"]) == len(work.identifiers)  # type: ignore[attr-defined]
+                for idx, identifier in enumerate(work.identifiers):  # type: ignore[attr-defined]
+                    actual = doc["identifiers"][idx]
+                    assert actual["type"] == identifier.type
+                    assert actual["identifier"] == identifier.identifier
+            else:
+                assert doc["identifiers"] is None
+
+            if work.classifications:  # type: ignore[attr-defined]
+                assert len(doc["classifications"]) == len(work.classifications)  # type: ignore[attr-defined]
+            else:
+                assert doc["classifications"] is None
+
+            if work.work_genres:
+                assert len(doc["genres"]) == len(work.work_genres)
+                for idx, genre in enumerate(work.work_genres):
+                    actual = doc["genres"][idx]
+                    assert actual["name"] == genre.genre.name
+                    assert actual["term"] == genre.genre.id
+                    assert actual["weight"] == genre.affinity
+            else:
+                assert doc["genres"] is None
+
+            lower, upper = numericrange_to_tuple(work.target_age)
+            assert doc["target_age"]["lower"] == lower
+            assert doc["target_age"]["upper"] == upper
+
+        compare(search_doc_work1, work1)
+        compare(search_doc_work2, work2)
+
+    def test_to_search_documents_with_missing_data(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Missing edition relationship
+        work: Work = db.work(with_license_pool=True)
+        work.presentation_edition_id = None
+        assert work.id is not None
+        [result] = Work.to_search_documents(db.session, [work.id])
+        assert result["identifiers"] is None
+
+        # Missing just some attributes
+        work = db.work(with_license_pool=True)
+        work.presentation_edition.title = None
+        work.target_age = None
+        assert work.id is not None
+        [result] = Work.to_search_documents(db.session, [work.id])
+        assert result["title"] is None
+        assert result["target_age"]["lower"] is None
+
     def test_age_appropriate_for_patron(self, db: DatabaseTransactionFixture):
         work = db.work()
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT
@@ -1541,99 +1702,72 @@ class TestWork:
         work.target_age = None
         assert "" == work.target_age_string
 
-    def test_reindex_on_availability_change(self, db: DatabaseTransactionFixture):
-        # A change in a LicensePool's availability creates a
-        # WorkCoverageRecord indicating that the work needs to be
-        # re-indexed.
-        def find_record(work):
-            """Find the Work's 'update search index operation'
-            WorkCoverageRecord.
-            """
-            records = [
-                x
-                for x in work.coverage_records
-                if x.operation.startswith(
-                    WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION
-                )
-            ]
-            if records:
-                return records[0]
-            return None
-
-        registered = WorkCoverageRecord.REGISTERED
-        success = WorkCoverageRecord.SUCCESS
+    def test_reindex_on_availability_change(
+        self,
+        db: DatabaseTransactionFixture,
+        work_external_indexing: WorkExternalIndexingFixture,
+    ):
+        # A change in a LicensePool's availability queues a task indicating that
+        # the work needs to be re-indexed.
 
         # A Work with no LicensePool isn't registered as needing
         # indexing. (It will be indexed anyway, but it's not registered
         # as needing it.)
         no_licensepool = db.work()
-        assert None == find_record(no_licensepool)
+        assert not work_external_indexing.is_queued(no_licensepool)
 
         # A Work with a LicensePool starts off in a state where it
         # needs to be indexed.
         work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
-        record = find_record(work)
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If it stops being open-access, it needs to be reindexed.
-        record.status = success
         pool.open_access = False
-        record = find_record(work)
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If it becomes open-access again, it needs to be reindexed.
-        record.status = success
         pool.open_access = True
-        record = find_record(work)
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If its last_update_time is changed, it needs to be
         # reindexed. (This happens whenever
         # LicensePool.update_availability is called, meaning that
         # patron transactions always trigger a reindex).
-        record.status = success
         work.last_update_time = utc_now()
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If its collection changes (which shouldn't happen), it needs
         # to be reindexed.
-        record.status = success
         collection2 = db.collection()
         pool.collection_id = collection2.id
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If a LicensePool is deleted (which also shouldn't happen),
         # its former Work needs to be reindexed.
-        record.status = success
         db.session.delete(pool)
         work = db.session.query(Work).filter(Work.id == work.id).one()
-        record = find_record(work)
-        assert registered == record.status
+        assert work_external_indexing.is_queued(work, clear=True)
 
         # If a LicensePool is moved in from another Work, _both_ Works
         # need to be reindexed.
-        record.status = success
         another_work = db.work(with_license_pool=True)
         [another_pool] = another_work.license_pools
         work.license_pools.append(another_pool)
         assert [] == another_work.license_pools
 
-        for work in (work, another_work):
-            record = find_record(work)
-            assert registered == record.status
+        assert work_external_indexing.is_queued(work)
+        assert work_external_indexing.is_queued(another_work)
 
     def test_reset_coverage(
         self,
         db: DatabaseTransactionFixture,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
         # Test the methods that reset coverage for works, indicating
         # that some task needs to be performed again.
         WCR = WorkCoverageRecord
         work = db.work()
         work.presentation_ready = True
-        index = external_search_fake_fixture.external_search
 
         # Calling _reset_coverage when there is no coverage creates
         # a new WorkCoverageRecord in the REGISTERED state
@@ -1657,15 +1791,9 @@ class TestWork:
         for method, operation in (
             (work.needs_full_presentation_recalculation, WCR.CLASSIFY_OPERATION),
             (work.needs_new_presentation_edition, WCR.CHOOSE_EDITION_OPERATION),
-            (work.external_index_needs_updating, WCR.UPDATE_SEARCH_INDEX_OPERATION),
         ):
             method()
             assert operation == work.coverage_reset_for
-
-        # The work was not added to the search index when we called
-        # external_index_needs_updating. That happens later, when the
-        # WorkCoverageRecord is processed.
-        assert [] == external_search_fake_fixture.service.documents_all()
 
     def test_for_unchecked_subjects(self, db: DatabaseTransactionFixture):
         w1 = db.work(with_license_pool=True)
@@ -1884,6 +2012,16 @@ class TestWork:
         # Ensure work removed from the DB and error message logged.
         assert db.session.query(Work).filter(Work.id == work.id).all() == []
         assert warning_is_present
+
+    @patch("palace.manager.celery.tasks.search.index_work")
+    def test_queue_indexing_tasks(self, index_work_mock: MagicMock):
+        # Test the method that queues up task to index a work.
+        Work.queue_indexing_task(555)
+        index_work_mock.apply_async.assert_called_once_with((555,), countdown=2)
+
+        index_work_mock.reset_mock()
+        Work.queue_indexing_task(None)
+        index_work_mock.delay.assert_not_called()
 
 
 class TestWorkConsolidation:

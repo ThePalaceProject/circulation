@@ -11,8 +11,6 @@ HOME=/var/www/circulation
 
 # These scripts update internal caches.
 #
-*/30 * * * * root bin/run -d 15 search_index_refresh >> /var/log/cron.log 2>&1
-10 0 * * * root bin/run search_index_clear >> /var/log/cron.log 2>&1
 0 0 * * * root bin/run update_custom_list_size >> /var/log/cron.log 2>&1
 0 2 * * * root bin/run update_lane_size >> /var/log/cron.log 2>&1
 */30 * * * * root bin/run -d 5 equivalent_identifiers_refresh >> /var/log/cron.log 2>&1

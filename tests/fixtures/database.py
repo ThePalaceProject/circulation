@@ -10,7 +10,7 @@ from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -66,6 +66,9 @@ from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import create, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.services import ServicesFixture
+
+if TYPE_CHECKING:
+    from tests.fixtures.search import WorkExternalIndexingFixture
 
 
 class TestIdFixture:
@@ -1099,6 +1102,7 @@ def db(
     database_creation: DatabaseCreationFixture,
     database: DatabaseFixture,
     services_fixture: ServicesFixture,
+    work_external_indexing: WorkExternalIndexingFixture,
 ) -> Generator[DatabaseTransactionFixture, None, None]:
     with DatabaseTransactionFixture.fixture(database, services_fixture) as db:
         with (

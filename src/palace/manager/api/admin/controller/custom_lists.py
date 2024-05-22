@@ -289,12 +289,13 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
         if membership_change:
             # We need to update the search index entries for works that caused a membership change,
             # so the upstream counts can be calculated correctly.
-            documents = self.search_engine.create_search_documents_from_works(
-                works_to_update_in_search
+            documents = Work.to_search_documents(
+                self._db,
+                [w.id for w in works_to_update_in_search if w.id is not None],
             )
-            index = self.search_engine.start_updating_search_documents()
-            index.add_documents(documents)
-            index.finish()
+            # TODO: Does this need to be done here, or can this be done asynchronously?
+            self.search_engine.add_documents(documents)
+            self.search_engine.search_service().refresh()
 
             # If this list was used to populate any lanes, those lanes need to have their counts updated.
             for lane in Lane.affected_by_customlist(list):

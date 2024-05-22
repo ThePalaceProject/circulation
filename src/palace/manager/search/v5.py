@@ -16,7 +16,10 @@ from palace.manager.search.revision import SearchSchemaRevision
 
 
 class SearchV5(SearchSchemaRevision):
-    SEARCH_VERSION = 5
+    @property
+    def version(self) -> int:
+        return 5
+
     """
     The body of this mapping looks for bibliographic information in
     the core document, primarily used for matching search
