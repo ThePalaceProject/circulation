@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import flask
+
 from palace.manager.api.s3_analytics_provider import S3AnalyticsProvider
 from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
 from palace.manager.util.datetime_helpers import utc_now
@@ -33,8 +35,14 @@ class Analytics(LoggerMixin):
         if not time:
             time = utc_now()
 
+        user_agent = (
+            flask.request.user_agent.string if flask.request.user_agent else None
+        )
+
         for provider in self.providers:
-            provider.collect_event(library, license_pool, event_type, time, **kwargs)
+            provider.collect_event(
+                library, license_pool, event_type, time, user_agent=user_agent, **kwargs
+            )
 
     def is_configured(self) -> bool:
         return len(self.providers) > 0

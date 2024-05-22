@@ -31,6 +31,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         old_value,
         new_value,
         neighborhood: str | None = None,
+        user_agent: str | None = None,
     ) -> dict:
         """Create a Python dict containing required information about the event.
 
@@ -47,6 +48,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :param new_value: New value of the metric changed by the event
 
         :param neighborhood: Geographic location of the event
+
+        :param user_agent: the user agent string of the caller
 
         :return: Python dict containing required information about the event
         """
@@ -126,6 +129,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "series_position": work.series_position if work else None,
             "language": work.language if work else None,
             "open_access": license_pool.open_access if license_pool else None,
+            "user_agent": user_agent,
         }
 
         return event
@@ -138,6 +142,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         time,
         old_value=None,
         new_value=None,
+        user_agent: str | None = None,
         **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
@@ -165,13 +170,22 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :param new_value: New value of the metric changed by the event
         :type new_value: Any
+
+        :param user_agent: The user_agent of the caller.
+        :type user_agent:  str
         """
 
         if not library and not license_pool:
             raise ValueError("Either library or license_pool must be provided.")
 
         event = self._create_event_object(
-            library, license_pool, event_type, time, old_value, new_value
+            library,
+            license_pool,
+            event_type,
+            time,
+            old_value,
+            new_value,
+            user_agent=user_agent,
         )
         content = json.dumps(
             event,
