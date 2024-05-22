@@ -1,4 +1,6 @@
+import logging
 from http import HTTPStatus
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -14,7 +16,7 @@ from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.problem_detail import ProblemDetailException
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -63,6 +65,88 @@ class TestReportController:
         mock_generate_reports.delay.assert_called_once_with(
             email_address=email_address, library_id=library_id
         )
+
+    @patch(
+        "palace.manager.api.admin.controller.report.generate_inventory_and_hold_reports"
+    )
+    def test_generate_report_authorization(
+        self,
+        mock_generate_reports,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(
+            logging.INFO,
+            "palace.manager.api.admin.controller.report",
+        )
+
+        task_id = 7
+        mock_generate_reports.delay.return_value = SimpleNamespace(id=task_id)
+        log_message_suffix = f"Task Request Id: {task_id})"
+
+        controller = ReportController(db.session)
+        method = controller.generate_inventory_report
+
+        library1 = db.library()
+        library2 = db.library()
+
+        sysadmin_email = "sysadmin@example.org"
+        librarian_email = "librarian@example.org"
+
+        sysadmin = flask_app_fixture.admin_user(
+            email=sysadmin_email, role=AdminRole.SYSTEM_ADMIN
+        )
+        librarian1 = flask_app_fixture.admin_user(
+            email=librarian_email, role=AdminRole.LIBRARIAN, library=library1
+        )
+
+        collection = db.collection(
+            protocol=OPDSAPI.label(),
+            settings={"data_source": "test", "external_account_id": "http://url"},
+        )
+        collection.libraries = [library1, library2]
+
+        def assert_and_clear_caplog(
+            response: Response | ProblemDetail, email: str
+        ) -> None:
+            assert isinstance(response, Response)
+            assert response.status_code == 202
+            assert "The completed reports will be sent to" in response.get_json().get(
+                "message"
+            )
+            assert email in response.get_json().get("message")
+            assert log_message_suffix in caplog.text
+            caplog.clear()
+
+        # Sysadmin can get info for any library.
+        with flask_app_fixture.test_request_context(
+            "/", admin=sysadmin, library=library1
+        ):
+            assert_and_clear_caplog(method(), sysadmin_email)
+
+        with flask_app_fixture.test_request_context(
+            "/", admin=sysadmin, library=library2
+        ):
+            assert_and_clear_caplog(method(), sysadmin_email)
+
+        # The librarian for library 1 can get info only for that library...
+        with flask_app_fixture.test_request_context(
+            "/", admin=librarian1, library=library1
+        ):
+            assert_and_clear_caplog(method(), librarian_email)
+        # ... since it does not have an admin role for library2.
+        with flask_app_fixture.test_request_context(
+            "/", admin=librarian1, library=library2
+        ):
+            with pytest.raises(ProblemDetailException) as exc:
+                method()
+        assert exc.value.problem_detail == ADMIN_NOT_AUTHORIZED
+
+        # A library must be provided.
+        with flask_app_fixture.test_request_context("/", admin=sysadmin, library=None):
+            admin_response_none = method()
+        assert admin_response_none.status_code == 404
 
     def test_inventory_report_info(
         self, db: DatabaseTransactionFixture, flask_app_fixture: FlaskAppFixture
