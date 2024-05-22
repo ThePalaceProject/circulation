@@ -35,7 +35,9 @@ class Analytics(LoggerMixin):
         if not time:
             time = utc_now()
 
-        user_agent = flask.request.user_agent
+        user_agent = (
+            flask.request.user_agent.string if flask.request.user_agent else None
+        )
 
         for provider in self.providers:
             provider.collect_event(
