@@ -1,9 +1,0 @@
-#!/usr/bin/env python
-"""Re-index any Works whose entries in the search index have become
-out of date.
-"""
-
-from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
-from palace.manager.search.coverage_provider import SearchIndexCoverageProvider
-
-RunWorkCoverageProviderScript(SearchIndexCoverageProvider).run()

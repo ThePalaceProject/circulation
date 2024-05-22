@@ -331,9 +331,7 @@ class CirculationControllerFixture(ControllerFixture):
             work.license_pools[0].collection = self.collection
             self.works.append(work)
 
-        self.manager.external_search.search_service().index_submit_documents(
-            self.manager.external_search._search_write_pointer, [self.works]
-        )
+        self.manager.external_search.search_service().index_submit_documents(self.works)
         self.manager.external_search.mock_query_works_multi(self.works)
 
 

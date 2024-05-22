@@ -29,10 +29,11 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, contains_eager, joinedload, relationship
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import and_, case, join, literal_column, select
+from sqlalchemy.sql.expression import and_, case, literal_column, select
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core.classifier import Classifier, WorkClassifier
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.service import SearchDocument
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.base import Base
@@ -1203,19 +1204,21 @@ class Work(Base, LoggerMixin):
         return record
 
     def external_index_needs_updating(self):
-        """Mark this work as needing to have its search document reindexed.
-        This is a more efficient alternative to reindexing immediately,
-        since these WorkCoverageRecords are handled in large batches.
-        """
-        return self._reset_coverage(WorkCoverageRecord.UPDATE_SEARCH_INDEX_OPERATION)
+        """Mark this work as needing to have its search document reindexed."""
+        return self.queue_indexing_task(self.id)
 
-    def update_external_index(self, client, add_coverage_record=True):
-        """Create a WorkCoverageRecord so that this work's
-        entry in the search index can be modified or deleted.
-        This method is deprecated -- call
-        external_index_needs_updating() instead.
+    @staticmethod
+    def queue_indexing_task(work_id: int | None):
         """
-        self.external_index_needs_updating()
+        Queue a task to index a Work.
+
+        This is a static method, so it can be easily mocked in tests,
+        when we don't want to actually queue a task.
+        """
+        from palace.manager.celery.tasks.search import index_work
+
+        if work_id is not None:
+            index_work.apply_async((work_id,), countdown=2)
 
     def needs_full_presentation_recalculation(self):
         """Mark this work as needing to have its presentation completely
@@ -1415,19 +1418,23 @@ class Work(Base, LoggerMixin):
     OPENSEARCH_TIME_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS"."MS'
 
     @classmethod
-    def to_search_documents(cls, works: list[Self]) -> Sequence[SearchDocument]:
+    def to_search_documents(
+        cls, session: Session, work_ids: Sequence[int]
+    ) -> Sequence[SearchDocument]:
         """In app to search documents needed to ease off the burden
         of complex queries from the DB cluster
         No recursive identifier policy is taken here as using the
         RecursiveEquivalentsCache implicitly has that set
         """
-        _db = Session.object_session(works[0])
+        if not work_ids:
+            return []
 
-        qu = _db.query(Work).filter(Work.id.in_([w.id for w in works]))
+        qu = session.query(Work).filter(Work.id.in_(work_ids))
         qu = qu.options(
             joinedload(Work.presentation_edition)
             .joinedload(Edition.contributions)
             .joinedload(Contribution.contributor),
+            joinedload(Work.suppressed_for),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),
             joinedload(Work.custom_list_entries),
         )
@@ -1444,14 +1451,14 @@ class Work(Base, LoggerMixin):
         ## Add it to another table so it becomes faster to just query the pre-computed table
 
         equivalent_identifiers = (
-            _db.query(RecursiveEquivalencyCache)
+            session.query(RecursiveEquivalencyCache)
             .join(
                 Edition,
                 Edition.primary_identifier_id
                 == RecursiveEquivalencyCache.parent_identifier_id,
             )
             .join(Work, Work.presentation_edition_id == Edition.id)
-            .filter(Work.id.in_(w.id for w in works))
+            .filter(Work.id.in_(work_ids))
             .with_entities(
                 Work.id.label("work_id"),
                 RecursiveEquivalencyCache.identifier_id.label("equivalent_id"),
@@ -1459,19 +1466,19 @@ class Work(Base, LoggerMixin):
             .cte("equivalent_cte")
         )
 
-        identifiers_query = (
-            select(
-                [
-                    equivalent_identifiers.c.work_id,
-                    Identifier.identifier,
-                    Identifier.type,
-                ]
-            )
-            .select_from(Identifier)
-            .where(Identifier.id == literal_column("equivalent_cte.equivalent_id"))
+        identifiers_query = select(
+            [
+                equivalent_identifiers.c.work_id,
+                Identifier.identifier,
+                Identifier.type,
+            ]
+        ).join_from(
+            Identifier,
+            equivalent_identifiers,
+            Identifier.id == literal_column("equivalent_cte.equivalent_id"),
         )
 
-        identifiers = list(_db.execute(identifiers_query))
+        identifiers = list(session.execute(identifiers_query))
         ## IDENTIFIERS END
 
         ## CLASSIFICATION START
@@ -1515,16 +1522,16 @@ class Work(Base, LoggerMixin):
                 and_(Subject.type.in_(Subject.TYPES_FOR_SEARCH), term_column != None),
             )
             .group_by(scheme_column, term_column, equivalent_identifiers.c.work_id)
-            .where(
+            .join_from(
+                Classification,
+                equivalent_identifiers,
                 Classification.identifier_id
-                == literal_column("equivalent_cte.equivalent_id")
+                == literal_column("equivalent_cte.equivalent_id"),
             )
-            .select_from(
-                join(Classification, Subject, Classification.subject_id == Subject.id)
-            )
+            .join_from(Classification, Subject, Classification.subject_id == Subject.id)
         )
 
-        all_subjects = list(_db.execute(subjects))
+        all_subjects = list(session.execute(subjects))
 
         ## CLASSIFICATION END
 
@@ -1545,7 +1552,7 @@ class Work(Base, LoggerMixin):
         return results
 
     @classmethod
-    def search_doc_as_dict(cls, doc: Self):
+    def search_doc_as_dict(cls, doc: Self) -> dict[str, Any]:
         columns = {
             "work": [
                 "fiction",
@@ -1732,9 +1739,15 @@ class Work(Base, LoggerMixin):
         target_age = select([upper, lower]).where(Work.id == foreign_work_id_field)
         return target_age
 
-    def to_search_document(self):
+    def to_search_document(self) -> dict[str, Any]:
         """Generate a search document for this Work."""
-        return Work.to_search_documents([self])[0]
+        db = Session.object_session(self)
+        if self.id is None:
+            raise BasePalaceException(
+                "Work has no ID. Cannot generate search document."
+            )
+
+        return Work.to_search_documents(db, [self.id])[0]
 
     def mark_licensepools_as_superceded(self):
         """Make sure that all but the single best open-access LicensePool for
