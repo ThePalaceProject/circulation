@@ -14,13 +14,12 @@ from firebase_admin.messaging import UnregisteredError
 from google.auth import credentials
 from requests_mock import Mocker
 
-from palace.manager.sqlalchemy.constants import NotificationConstants
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
+from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.notifications import PushNotifications
+from palace.manager.util.notifications import NotificationType, PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -108,7 +107,7 @@ class TestPushNotifications:
                     "data": dict(
                         title="Only 1 day left on your loan!",
                         body=f'Your loan for "{work.presentation_edition.title}" at {loan.library.name} is expiring soon',
-                        event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
+                        event_type=NotificationType.LOAN_EXPIRY,
                         loans_endpoint="http://localhost/default/loans",
                         external_identifier=patron.external_identifier,
                         authorization_identifier=patron.authorization_identifier,
@@ -179,82 +178,6 @@ class TestPushNotifications:
             assert responses == ["mock-mid"]
             assert hold.patron_last_notified == datetime(2020, 1, 1).date()
 
-    def test_send_activity_sync(self, push_notf_fixture: PushNotificationsFixture):
-        db = push_notf_fixture.db
-        # Only patron 1 will get authorization identifiers
-        patron1 = db.patron()
-        patron1.authorization_identifier = "auth1"
-        patron2 = db.patron()
-        patron3 = db.patron()
-
-        tokens = []
-        for patron in (patron1, patron2, patron3):
-            t, _ = create(
-                db.session,
-                DeviceToken,
-                patron=patron,
-                device_token=f"ios-token-{patron.id}",
-                token_type=DeviceTokenTypes.FCM_IOS,
-            )
-            tokens.append(t)
-            t, _ = create(
-                db.session,
-                DeviceToken,
-                patron=patron,
-                device_token=f"android-token-{patron.id}",
-                token_type=DeviceTokenTypes.FCM_ANDROID,
-            )
-            tokens.append(t)
-
-        with mock.patch("palace.manager.util.notifications.messaging") as messaging:
-            # Notify 2 patrons of 3 total
-            push_notf_fixture.notifications.send_activity_sync_message(
-                [patron1, patron2]
-            )
-            assert messaging.Message.call_count == 4
-            assert messaging.Message.call_args_list == [
-                mock.call(
-                    token=tokens[0].device_token,
-                    notification=None,
-                    data=dict(
-                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                        loans_endpoint="http://localhost/default/loans",
-                        external_identifier=patron1.external_identifier,
-                        authorization_identifier=patron1.authorization_identifier,
-                    ),
-                ),
-                mock.call(
-                    token=tokens[1].device_token,
-                    notification=None,
-                    data=dict(
-                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                        loans_endpoint="http://localhost/default/loans",
-                        external_identifier=patron1.external_identifier,
-                        authorization_identifier=patron1.authorization_identifier,
-                    ),
-                ),
-                mock.call(
-                    token=tokens[2].device_token,
-                    notification=None,
-                    data=dict(
-                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                        loans_endpoint="http://localhost/default/loans",
-                        external_identifier=patron2.external_identifier,
-                    ),
-                ),
-                mock.call(
-                    token=tokens[3].device_token,
-                    notification=None,
-                    data=dict(
-                        event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                        loans_endpoint="http://localhost/default/loans",
-                        external_identifier=patron2.external_identifier,
-                    ),
-                ),
-            ]
-
-            assert messaging.send.call_count == 4
-
     def test_holds_notification(self, push_notf_fixture: PushNotificationsFixture):
         db = push_notf_fixture.db
         # Only patron1 will get an identifier
@@ -303,7 +226,7 @@ class TestPushNotifications:
             data = dict(
                 title="Your hold is available!",
                 body=f'Your hold on "{work.title}" is available at {hold.library.name}!',
-                event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                event_type=NotificationType.HOLD_AVAILABLE,
                 loans_endpoint=loans_api,
                 identifier=hold.license_pool.identifier.identifier,
                 type=hold.license_pool.identifier.type,

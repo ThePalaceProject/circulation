@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
 
 import firebase_admin
@@ -9,13 +10,23 @@ from firebase_admin.messaging import UnregisteredError
 from sqlalchemy.orm import Session
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.sqlalchemy.constants import NotificationConstants
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
+
+# TODO: Remove this when we drop support for Python 3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum
+
+
+class NotificationType(StrEnum):
+    LOAN_EXPIRY = "LoanExpiry"
+    HOLD_AVAILABLE = "HoldAvailable"
 
 
 class PushNotifications(LoggerMixin):
@@ -110,7 +121,7 @@ class PushNotifications(LoggerMixin):
         data = dict(
             title=title,
             body=body,
-            event_type=NotificationConstants.LOAN_EXPIRY_TYPE,
+            event_type=NotificationType.LOAN_EXPIRY,
             loans_endpoint=f"{url}/{loan.library.short_name}/loans",
             type=identifier.type,
             identifier=identifier.identifier,
@@ -132,37 +143,6 @@ class PushNotifications(LoggerMixin):
         if len(responses) > 0:
             # At least one notification succeeded
             loan.patron_last_notified = utc_now().date()
-        return responses
-
-    def send_activity_sync_message(self, patrons: list[Patron]) -> list[str]:
-        """Send notifications to the given patrons to sync their bookshelves.
-        Enough information needs to be sent to identify a patron on the mobile Apps,
-        and make the loans api request with the right authentication"""
-        if not patrons:
-            return []
-
-        responses = []
-        url = self.base_url
-        for patron in patrons:
-            tokens = self.notifiable_tokens(patron)
-            loans_api = f"{url}/{patron.library.short_name}/loans"
-            data = dict(
-                event_type=NotificationConstants.ACTIVITY_SYNC_TYPE,
-                loans_endpoint=loans_api,
-            )
-            if patron.external_identifier:
-                data["external_identifier"] = patron.external_identifier
-            if patron.authorization_identifier:
-                data["authorization_identifier"] = patron.authorization_identifier
-
-            self.log.info(
-                f"Must sync patron activity for {patron.authorization_identifier}, has {len(tokens)} device tokens. "
-                f"Sending activity sync notification(s)."
-            )
-
-            resp = self.send_messages(tokens, None, data)
-            responses.extend(resp)
-
         return responses
 
     def send_holds_notifications(self, holds: list[Hold]) -> list[str]:
@@ -189,7 +169,7 @@ class PushNotifications(LoggerMixin):
                 data = dict(
                     title=title,
                     body=body,
-                    event_type=NotificationConstants.HOLD_AVAILABLE_TYPE,
+                    event_type=NotificationType.HOLD_AVAILABLE,
                     loans_endpoint=loans_api,
                     identifier=identifier.identifier,
                     type=identifier.type,
