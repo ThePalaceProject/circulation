@@ -35,9 +35,13 @@ class Analytics(LoggerMixin):
         if not time:
             time = utc_now()
 
-        user_agent = (
-            flask.request.user_agent.string if flask.request.user_agent else None
-        )
+        user_agent: str | None = None
+        try:
+            user_agent = flask.request.user_agent.string
+            if user_agent == "":
+                user_agent = None
+        except Exception as e:
+            self.log.warning(f"Unable to resolve the user_agent: {repr(e)}")
 
         for provider in self.providers:
             provider.collect_event(
