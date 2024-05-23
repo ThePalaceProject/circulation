@@ -709,6 +709,7 @@ class DatabaseTransactionFixture:
         set_edition_as_presentation=False,
         collection=None,
         unlimited_access=False,
+        work=None,
     ):
         source = DataSource.lookup(self.session, data_source_name)
         if not edition:
@@ -728,6 +729,9 @@ class DatabaseTransactionFixture:
 
         if set_edition_as_presentation:
             pool.presentation_edition = edition
+
+        if work is not None:
+            pool.work = work
 
         if with_open_access_download:
             pool.open_access = True
