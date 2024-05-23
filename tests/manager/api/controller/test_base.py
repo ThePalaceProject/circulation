@@ -96,6 +96,7 @@ class TestBaseController:
                 result = (
                     circulation_fixture.controller.authenticated_patron_from_request()
                 )
+                assert isinstance(result, ProblemDetail)
                 assert 401 == result.status_code
                 assert None == flask.request.patron  # type: ignore
 
@@ -130,6 +131,7 @@ class TestBaseController:
                 result = (
                     circulation_fixture.controller.authenticated_patron_from_request()
                 )
+                assert isinstance(result, ProblemDetail)
                 assert 401 == result.status_code
                 assert None == flask.request.patron  # type: ignore
 
@@ -214,6 +216,7 @@ class TestBaseController:
             response = circulation_fixture.controller.handle_conditional_request(
                 now_datetime
             )
+            assert response is not None
             assert 304 == response.status_code
 
         # Try with a few specific values that comply to a greater or lesser
@@ -230,6 +233,7 @@ class TestBaseController:
                 response = circulation_fixture.controller.handle_conditional_request(
                     very_old
                 )
+                assert response is not None
                 assert 304 == response.status_code
 
         # All remaining test cases are failures: for whatever reason,
@@ -318,6 +322,7 @@ class TestBaseController:
         loaded = circulation_fixture.controller.load_licensepools(
             circulation_fixture.db.default_library(), i1.type, i1.identifier
         )
+        assert not isinstance(loaded, ProblemDetail)
 
         # Two LicensePools were loaded: the LicensePool for the first
         # Identifier in Collection 1, and the LicensePool for the same
@@ -342,6 +347,7 @@ class TestBaseController:
             "bad identifier type",
             i1.identifier,
         )
+        assert isinstance(problem_detail, ProblemDetail)
         assert NO_LICENSES.uri == problem_detail.uri
         expect = (
             "The item you're asking about (bad identifier type/%s) isn't in this collection."
@@ -356,6 +362,7 @@ class TestBaseController:
             lp5.identifier.type,
             lp5.identifier.identifier,
         )
+        assert isinstance(problem_detail, ProblemDetail)
         assert NO_LICENSES.uri == problem_detail.uri
 
     def test_load_work(self, circulation_fixture: CirculationControllerFixture):
@@ -428,6 +435,7 @@ class TestBaseController:
         delivery = circulation_fixture.controller.load_licensepooldelivery(
             licensepool, lpdm.delivery_mechanism.id
         )
+        assert not isinstance(delivery, ProblemDetail)
 
         # We don't know which LicensePoolDeliveryMechanism this is,
         # but we know it's one of the matches.
@@ -441,6 +449,7 @@ class TestBaseController:
         problem_detail = circulation_fixture.controller.load_licensepooldelivery(
             adobe_licensepool, lpdm.delivery_mechanism.id
         )
+        assert isinstance(problem_detail, ProblemDetail)
         assert BAD_DELIVERY_MECHANISM.uri == problem_detail.uri
 
     def test_apply_borrowing_policy_succeeds_for_unlimited_access_books(
@@ -500,6 +509,7 @@ class TestBaseController:
             problem = circulation_fixture.controller.apply_borrowing_policy(
                 patron, pool
             )
+            assert isinstance(problem, ProblemDetail)
             assert FORBIDDEN_BY_POLICY.uri == problem.uri
 
     def test_apply_borrowing_policy_for_age_inappropriate_book(
@@ -539,6 +549,7 @@ class TestBaseController:
             problem = circulation_fixture.controller.apply_borrowing_policy(
                 patron, pool
             )
+            assert isinstance(problem, ProblemDetail)
             assert FORBIDDEN_BY_POLICY.uri == problem.uri
 
             # If the lane is expanded to allow the book's age range, there's
@@ -644,7 +655,7 @@ class TestBaseController:
             # If a lane cannot be looked up by ID, a problem detail
             # is returned.
             for bad_id in ("nosuchlane", -1):
-                not_found = circulation_fixture.controller.load_lane(bad_id)
+                not_found = circulation_fixture.controller.load_lane(bad_id)  # type: ignore[arg-type]
                 assert isinstance(not_found, ProblemDetail)
                 assert not_found.uri == NO_SUCH_LANE.uri
                 assert (

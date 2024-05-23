@@ -188,11 +188,7 @@ class TestLoansController:
             url, fixture.controller.revoke, "<license_pool_id>"  # type: ignore[union-attr]
         )
 
-        # TODO: DELETE shouldn't be in here, but "DELETE
-        # /loans/<license_pool_id>/revoke" is interpreted as an attempt
-        # to match /loans/<identifier_type>/<path:identifier>, the
-        # method tested directly below, which does support DELETE.
-        fixture.assert_supported_methods(url, "GET", "PUT", "DELETE")
+        fixture.assert_supported_methods(url, "GET", "PUT")
 
     def test_loan_or_hold_detail(self, fixture: RouteTestFixture):
         url = "/loans/<identifier_type>/<identifier>"
@@ -203,7 +199,7 @@ class TestLoansController:
             "<identifier>",
             authenticated=True,
         )
-        fixture.assert_supported_methods(url, "GET", "DELETE")
+        fixture.assert_supported_methods(url, "GET")
 
 
 class TestAnnotationsController:

@@ -439,7 +439,7 @@ def revoke_loan_or_hold(license_pool_id):
     return app.manager.loans.revoke(license_pool_id)
 
 
-@library_route("/loans/<identifier_type>/<path:identifier>", methods=["GET", "DELETE"])
+@library_route("/loans/<identifier_type>/<path:identifier>", methods=["GET"])
 @has_library
 @allows_patron_web
 @requires_auth

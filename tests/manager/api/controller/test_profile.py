@@ -6,7 +6,7 @@ import pytest
 
 from palace.manager.api.authenticator import CirculationPatronProfileStorage
 from palace.manager.core.user_profile import ProfileController, ProfileStorage
-from palace.manager.sqlalchemy.model.patron import Annotation
+from palace.manager.sqlalchemy.model.patron import Annotation, Patron
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -55,6 +55,7 @@ class TestProfileController:
             "/", method="GET", headers=profile_fixture.auth
         ):
             patron = profile_fixture.controller.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             patron.synchronize_annotations = True
             response = profile_fixture.manager.profiles.protocol()
             assert "200 OK" == response.status
@@ -79,6 +80,7 @@ class TestProfileController:
             request_patron = (
                 profile_fixture.controller.authenticated_patron_from_request()
             )
+            assert isinstance(request_patron, Patron)
             assert request_patron.synchronize_annotations is None
 
             # By sending a PUT request...

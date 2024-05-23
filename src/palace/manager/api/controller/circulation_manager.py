@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import email
+from datetime import datetime
+from email.utils import parsedate_to_datetime
+from typing import TypeVar
 
 import flask
 import pytz
@@ -9,6 +11,7 @@ from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session, eagerload
 
+from palace.manager.api.circulation import CirculationAPI
 from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
@@ -19,6 +22,7 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import (
@@ -26,22 +30,31 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.lane import Lane, WorkList
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 
+T = TypeVar("T", Loan, Hold)
+
 
 class CirculationManagerController(BaseCirculationManagerController):
-    def get_patron_circ_objects(self, object_class, patron, license_pools):
+    def get_patron_circ_objects(
+        self,
+        object_class: type[T],
+        patron: Patron | None,
+        license_pools: list[LicensePool],
+    ) -> list[T]:
         if not patron:
             return []
         pool_ids = [pool.id for pool in license_pools]
 
-        return (
+        return (  # type: ignore[no-any-return]
             self._db.query(object_class)
             .filter(
                 object_class.patron_id == patron.id,
@@ -51,14 +64,18 @@ class CirculationManagerController(BaseCirculationManagerController):
             .all()
         )
 
-    def get_patron_loan(self, patron, license_pools):
+    def get_patron_loan(
+        self, patron: Patron | None, license_pools: list[LicensePool]
+    ) -> tuple[Loan, LicensePool] | tuple[None, None]:
         loans = self.get_patron_circ_objects(Loan, patron, license_pools)
         if loans:
             loan = loans[0]
             return loan, loan.license_pool
         return None, None
 
-    def get_patron_hold(self, patron, license_pools):
+    def get_patron_hold(
+        self, patron: Patron | None, license_pools: list[LicensePool]
+    ) -> tuple[Hold, LicensePool] | tuple[None, None]:
         holds = self.get_patron_circ_objects(Hold, patron, license_pools)
         if holds:
             hold = holds[0]
@@ -66,13 +83,13 @@ class CirculationManagerController(BaseCirculationManagerController):
         return None, None
 
     @property
-    def circulation(self):
+    def circulation(self) -> CirculationAPI:
         """Return the appropriate CirculationAPI for the request Library."""
-        library_id = flask.request.library.id
-        return self.manager.circulation_apis[library_id]
+        library_id = flask.request.library.id  # type: ignore[attr-defined]
+        return self.manager.circulation_apis[library_id]  # type: ignore[no-any-return]
 
     @property
-    def search_engine(self):
+    def search_engine(self) -> ExternalSearchIndex | ProblemDetail:
         """Return the configured external search engine, or a
         ProblemDetail if none is configured.
         """
@@ -81,9 +98,11 @@ class CirculationManagerController(BaseCirculationManagerController):
             return REMOTE_INTEGRATION_FAILED.detailed(
                 _("The search index for this site is not properly configured.")
             )
-        return search_engine
+        return search_engine  # type: ignore[no-any-return]
 
-    def handle_conditional_request(self, last_modified=None):
+    def handle_conditional_request(
+        self, last_modified: datetime | None = None
+    ) -> Response | None:
         """Handle a conditional HTTP request.
 
         :param last_modified: A datetime representing the time this
@@ -106,14 +125,8 @@ class CirculationManagerController(BaseCirculationManagerController):
             return None
 
         try:
-            parsed_if_modified_since = email.utils.parsedate_to_datetime(
-                if_modified_since
-            )
-        except TypeError:
-            # Parse error <= Python 3.9
-            return None
+            parsed_if_modified_since = parsedate_to_datetime(if_modified_since)
         except ValueError:
-            # Parse error >= Python 3.10
             return None
         if not parsed_if_modified_since:
             return None
@@ -128,9 +141,9 @@ class CirculationManagerController(BaseCirculationManagerController):
             return Response(status=304)
         return None
 
-    def load_lane(self, lane_identifier):
+    def load_lane(self, lane_identifier: int | None) -> Lane | WorkList | ProblemDetail:
         """Turn user input into a Lane object."""
-        library_id = flask.request.library.id
+        library_id = flask.request.library.id  # type: ignore[attr-defined]
 
         lane = None
         if lane_identifier is None:
@@ -165,24 +178,28 @@ class CirculationManagerController(BaseCirculationManagerController):
                 )
             )
 
-        return lane
+        return lane  # type: ignore[no-any-return]
 
-    def load_work(self, library, identifier_type, identifier):
+    def load_work(
+        self, library: Library, identifier_type: str, identifier: str
+    ) -> Work | ProblemDetail:
         pools = self.load_licensepools(library, identifier_type, identifier)
         if isinstance(pools, ProblemDetail):
             return pools
 
         # We know there is at least one LicensePool, and all LicensePools
         # for an Identifier have the same Work.
-        work = pools[0].work
+        work: Work = pools[0].work
 
         if work and not work.age_appropriate_for_patron(self.request_patron):
             # This work is not age-appropriate for the authenticated
             # patron. Don't show it.
-            work = NOT_AGE_APPROPRIATE
+            return NOT_AGE_APPROPRIATE
         return work
 
-    def load_licensepools(self, library, identifier_type, identifier):
+    def load_licensepools(
+        self, library: Library, identifier_type: str, identifier: str
+    ) -> list[LicensePool] | ProblemDetail:
         """Turn user input into one or more LicensePool objects.
 
         :param library: The LicensePools must be associated with one of this
@@ -223,7 +240,7 @@ class CirculationManagerController(BaseCirculationManagerController):
             )
         return pools
 
-    def load_licensepool(self, license_pool_id):
+    def load_licensepool(self, license_pool_id: int) -> LicensePool | ProblemDetail:
         """Turns user input into a LicensePool"""
         license_pool = get_one(self._db, LicensePool, id=license_pool_id)
         if not license_pool:
@@ -233,7 +250,9 @@ class CirculationManagerController(BaseCirculationManagerController):
 
         return license_pool
 
-    def load_licensepooldelivery(self, pool, mechanism_id):
+    def load_licensepooldelivery(
+        self, pool: LicensePool, mechanism_id: int
+    ) -> LicensePoolDeliveryMechanism | ProblemDetail:
         """Turn user input into a LicensePoolDeliveryMechanism object."""
         mechanism = get_one(
             self._db,
@@ -245,7 +264,9 @@ class CirculationManagerController(BaseCirculationManagerController):
         )
         return mechanism or BAD_DELIVERY_MECHANISM
 
-    def apply_borrowing_policy(self, patron, license_pool):
+    def apply_borrowing_policy(
+        self, patron: Patron | ProblemDetail | None, license_pool: LicensePool
+    ) -> ProblemDetail | None:
         """Apply the borrowing policy of the patron's library to the
         book they're trying to check out.
 

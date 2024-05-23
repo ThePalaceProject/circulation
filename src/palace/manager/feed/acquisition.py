@@ -523,7 +523,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     def single_entry_loans_feed(
         cls,
         circulation: Any,
-        item: LicensePool | Loan,
+        item: LicensePool | Loan | Hold | None,
         annotator: LibraryAnnotator | None = None,
         fulfillment: FulfillmentInfo | None = None,
         **response_kwargs: Any,

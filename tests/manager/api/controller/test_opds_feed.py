@@ -23,6 +23,7 @@ from palace.manager.sqlalchemy.model.lane import (
     WorkList,
 )
 from palace.manager.util.flask_util import Response
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture, WorkSpec
 from tests.fixtures.library import LibraryFixture
 
@@ -319,6 +320,7 @@ class TestOPDSFeedController:
             # Thus, when we pass lane=None into groups(), we're asking for a
             # feed for the sole top-level lane, "World Languages".
             expect_lane = circulation_fixture.manager.opds_feeds.load_lane(None)
+            assert not isinstance(expect_lane, ProblemDetail)
             assert "World Languages" == expect_lane.display_name
 
             # Ask for that feed.

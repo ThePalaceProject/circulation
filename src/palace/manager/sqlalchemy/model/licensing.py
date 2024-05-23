@@ -268,7 +268,7 @@ class LicensePool(Base):
     licenses_owned: int = Column(Integer, default=0, index=True)
     licenses_available: int = Column(Integer, default=0, index=True)
     licenses_reserved: int = Column(Integer, default=0)
-    patrons_in_hold_queue = Column(Integer, default=0)
+    patrons_in_hold_queue: int = Column(Integer, default=0)
     should_track_playtime = Column(Boolean, default=False, nullable=False)
 
     # This lets us cache the work of figuring out the best open access

@@ -51,12 +51,12 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
     RightsStatus,
 )
-from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.flask_util import Response
+from palace.manager.util.flask_util import OPDSEntryResponse, Response
 from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
@@ -79,6 +79,8 @@ class LoanFixture(CirculationControllerFixture):
     ):
         super().__init__(db, services_fixture)
         self.pool = self.english_1.license_pools[0]
+        assert self.pool.id is not None
+        self.pool_id = self.pool.id
         [self.mech1] = self.pool.delivery_mechanisms
         self.mech2 = self.pool.set_delivery_mechanism(
             Representation.PDF_MEDIA_TYPE,
@@ -89,6 +91,13 @@ class LoanFixture(CirculationControllerFixture):
         self.edition = self.pool.presentation_edition
         self.data_source = self.edition.data_source
         self.identifier = self.edition.primary_identifier
+
+        assert self.identifier is not None
+        assert self.identifier.identifier is not None
+        assert self.identifier.type is not None
+
+        self.identifier_identifier = self.identifier.identifier
+        self.identifier_type = self.identifier.type
 
 
 @pytest.fixture(scope="function")
@@ -149,9 +158,9 @@ class TestLoanController:
         # If the library has a way of authenticating patrons (as the
         # default library does), then fulfilling a title always
         # requires an active loan.
-        patron = object()
-        pool = object()
-        lpdm = object()
+        patron = MagicMock()
+        pool = MagicMock()
+        lpdm = MagicMock()
         assert False == m(loan_fixture.db.default_library(), patron, pool, lpdm)
 
         # If the library does not authenticate patrons, then this
@@ -194,9 +203,10 @@ class TestLoanController:
 
         pools = loan_fixture.manager.loans.load_licensepools(
             loan_fixture.library,
-            loan_fixture.identifier.type,
-            loan_fixture.identifier.identifier,
+            loan_fixture.identifier_type,
+            loan_fixture.identifier_identifier,
         )
+        assert not isinstance(pools, ProblemDetail)
 
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
@@ -205,30 +215,30 @@ class TestLoanController:
 
             # Without a loan or a hold, nothing is returned.
             # No loans.
-            result = loan_fixture.manager.loans.get_patron_loan(
+            result_loan_call = loan_fixture.manager.loans.get_patron_loan(
                 loan_fixture.default_patron, pools
             )
-            assert (None, None) == result
+            assert (None, None) == result_loan_call
 
             # No holds.
-            result = loan_fixture.manager.loans.get_patron_hold(
+            result_hold_call = loan_fixture.manager.loans.get_patron_hold(
                 loan_fixture.default_patron, pools
             )
-            assert (None, None) == result
+            assert (None, None) == result_hold_call
 
             # When there's a loan, we retrieve it.
             loan, newly_created = loan_fixture.pool.loan_to(loan_fixture.default_patron)
-            result = loan_fixture.manager.loans.get_patron_loan(
+            result_loan_call = loan_fixture.manager.loans.get_patron_loan(
                 loan_fixture.default_patron, pools
             )
-            assert (loan, loan_fixture.pool) == result
+            assert (loan, loan_fixture.pool) == result_loan_call
 
             # When there's a hold, we retrieve it.
             hold, newly_created = other_pool.on_hold_to(loan_fixture.default_patron)
-            result = loan_fixture.manager.loans.get_patron_hold(
+            result_hold_call = loan_fixture.manager.loans.get_patron_hold(
                 loan_fixture.default_patron, pools
             )
-            assert (hold, other_pool) == result
+            assert (hold, other_pool) == result_hold_call
 
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
@@ -266,15 +276,16 @@ class TestLoanController:
         # Create a new loan.
         with loan_fixture.request_context_with_library("/", headers=headers):
             loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier.type, loan_fixture.identifier.identifier
+            borrow_response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
             )
             loan = get_one(
                 loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
             )
 
             # A new loan should return a 201 status.
-            assert 201 == response.status_code
+            assert isinstance(borrow_response, FlaskResponse)
+            assert 201 == borrow_response.status_code
 
             # A loan has been created for this license pool.
             assert loan is not None
@@ -283,13 +294,13 @@ class TestLoanController:
 
             # We've been given an OPDS feed with one entry, which tells us how
             # to fulfill the license.
-            new_feed_content = response.get_data()
+            new_feed_content = borrow_response.get_data()
 
         # Borrow again with an existing loan.
         with loan_fixture.request_context_with_library("/", headers=headers):
             loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier.type, loan_fixture.identifier.identifier
+            borrow_response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
             )
 
             # A loan has been created for this license pool.
@@ -297,7 +308,8 @@ class TestLoanController:
                 loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
             )
             # An existing loan should return a 200 status.
-            assert 200 == response.status_code
+            assert isinstance(borrow_response, OPDSEntryResponse)
+            assert 200 == borrow_response.status_code
 
             # There is still a loan that has not yet been fulfilled.
             assert loan is not None
@@ -305,13 +317,13 @@ class TestLoanController:
 
             # We've been given an OPDS feed with one entry, which tells us how
             # to fulfill the license.
-            existing_feed_content = response.get_data()
+            existing_feed_content = borrow_response.get_data()
 
             # The new loan feed should look the same as the existing loan feed.
             assert new_feed_content == existing_feed_content
 
             feed_links = serialization_helper.verify_and_get_single_entry_feed_links(
-                response
+                borrow_response
             )
 
             fulfillment_links = [
@@ -359,18 +371,17 @@ class TestLoanController:
                 loan_fixture.pool, fulfillment
             )
 
-            assert isinstance(loan_fixture.pool.id, int)
-            response = loan_fixture.manager.loans.fulfill(
-                loan_fixture.pool.id,
+            fulfill_response = loan_fixture.manager.loans.fulfill(
+                loan_fixture.pool_id,
                 fulfillable_mechanism.delivery_mechanism.id,
             )
-            if isinstance(response, ProblemDetail):
-                j, status, headers = response.response
+            if isinstance(fulfill_response, ProblemDetail):
+                j, status, headers = fulfill_response.response
                 raise Exception(repr(j))
-            assert 302 == response.status_code
+            assert 302 == fulfill_response.status_code
             assert (
                 fulfillable_mechanism.resource.representation.public_url
-                == response.headers.get("Location")
+                == fulfill_response.headers.get("Location")
             )
 
             # The mechanism we used has been registered with the loan.
@@ -400,23 +411,25 @@ class TestLoanController:
             )
             http.queue_response(200, content="I am an ACSM file")
 
-            response = loan_fixture.manager.loans.fulfill(
-                loan_fixture.pool.id, do_get=http.do_get
+            fulfill_response = loan_fixture.manager.loans.fulfill(
+                loan_fixture.pool_id, do_get=http.do_get
             )
-            assert 200 == response.status_code
-            assert "I am an ACSM file" == response.get_data(as_text=True)
+            assert isinstance(fulfill_response, wkResponse)
+            assert 200 == fulfill_response.status_code
+            assert "I am an ACSM file" == fulfill_response.get_data(as_text=True)
             assert http.requests == [fulfillable_mechanism.resource.url]
 
             # But we can't use some other mechanism -- we're stuck with
             # the first one we chose.
-            response = loan_fixture.manager.loans.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+            fulfill_response = loan_fixture.manager.loans.fulfill(
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
-
-            assert 409 == response.status_code
+            assert isinstance(fulfill_response, ProblemDetail)
+            assert 409 == fulfill_response.status_code
+            assert fulfill_response.detail is not None
             assert (
                 "You already fulfilled this loan as application/epub+zip (DRM Scheme 1), you can't also do it as application/pdf (DRM Scheme 2)"
-                in response.detail
+                in fulfill_response.detail
             )
 
             # If the remote server fails, we get a problem detail.
@@ -427,11 +440,11 @@ class TestLoanController:
                 loan_fixture.pool, fulfillment
             )
 
-            response = loan_fixture.manager.loans.fulfill(
-                loan_fixture.pool.id, do_get=doomed_get
+            fulfill_response = loan_fixture.manager.loans.fulfill(
+                loan_fixture.pool_id, do_get=doomed_get
             )
-            assert isinstance(response, ProblemDetail)
-            assert 502 == response.status_code
+            assert isinstance(fulfill_response, ProblemDetail)
+            assert 502 == fulfill_response.status_code
 
     def test_borrow_and_fulfill_with_streaming_delivery_mechanism(
         self, loan_fixture: LoanFixture
@@ -466,9 +479,10 @@ class TestLoanController:
                     utc_now() + datetime.timedelta(seconds=3600),
                 ),
             )
-            response = loan_fixture.manager.loans.borrow(
+            borrow_response = loan_fixture.manager.loans.borrow(
                 identifier.type, identifier.identifier
             )
+            assert isinstance(borrow_response, Response)
 
             # A loan has been created for this license pool.
             loan = get_one(loan_fixture.db.session, Loan, license_pool=pool)
@@ -478,8 +492,8 @@ class TestLoanController:
 
             # We've been given an OPDS feed with two delivery mechanisms, which tell us how
             # to fulfill the license.
-            assert 201 == response.status_code
-            feed = feedparser.parse(response.get_data())
+            assert 201 == borrow_response.status_code
+            feed = feedparser.parse(borrow_response.get_data())
             [entry] = feed["entries"]
             fulfillment_links = [
                 x["href"]
@@ -520,13 +534,14 @@ class TestLoanController:
                     None,
                 ),
             )
-            response = loan_fixture.manager.loans.fulfill(
+            fulfill_response = loan_fixture.manager.loans.fulfill(
                 pool.id, streaming_mechanism.delivery_mechanism.id
             )
+            assert isinstance(fulfill_response, Response)
 
             # We get an OPDS entry.
-            assert 200 == response.status_code
-            opds_entries = feedparser.parse(response.response[0])["entries"]
+            assert 200 == fulfill_response.status_code
+            opds_entries = feedparser.parse(fulfill_response.get_data())["entries"]
             assert 1 == len(opds_entries)
             links = opds_entries[0]["links"]
 
@@ -566,10 +581,11 @@ class TestLoanController:
                     None,
                 ),
             )
-            response = loan_fixture.manager.loans.fulfill(
+            fulfill_response = loan_fixture.manager.loans.fulfill(
                 pool.id, mech1.delivery_mechanism.id, do_get=http.do_get
             )
-            assert 200 == response.status_code
+            assert isinstance(fulfill_response, wkResponse)
+            assert 200 == fulfill_response.status_code
 
             # Now the fulfillment has been set to the other mechanism.
             assert mech1 == loan.fulfillment
@@ -590,11 +606,12 @@ class TestLoanController:
                 ),
             )
 
-            response = loan_fixture.manager.loans.fulfill(
+            fulfill_response = loan_fixture.manager.loans.fulfill(
                 pool.id, streaming_mechanism.delivery_mechanism.id
             )
-            assert 200 == response.status_code
-            opds_entries = feedparser.parse(response.response[0])["entries"]
+            assert isinstance(fulfill_response, Response)
+            assert 200 == fulfill_response.status_code
+            opds_entries = feedparser.parse(fulfill_response.get_data())["entries"]
             assert 1 == len(opds_entries)
             links = opds_entries[0]["links"]
 
@@ -618,7 +635,7 @@ class TestLoanController:
         ):
             loan_fixture.manager.loans.authenticated_patron_from_request()
             response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier.type, loan_fixture.identifier.identifier, -100
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier, -100
             )
             assert BAD_DELIVERY_MECHANISM == response
 
@@ -657,6 +674,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
+            assert isinstance(response, wkResponse)
             assert 201 == response.status_code
 
             # A hold has been created for this license pool.
@@ -680,6 +698,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
+            assert isinstance(response, wkResponse)
             assert 404 == response.status_code
             assert NO_LICENSES == response
 
@@ -721,6 +740,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
+            assert isinstance(response, wkResponse)
             assert 201 == response.status_code
 
             # A hold has been created for this license pool.
@@ -750,6 +770,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
+            assert isinstance(response, ProblemDetail)
             assert 404 == response.status_code
             assert (
                 "http://librarysimplified.org/terms/problem/not-found-on-remote"
@@ -781,7 +802,7 @@ class TestLoanController:
             mock_remote = circulation.api_for_license_pool(loan.license_pool)
             assert 1 == len(mock_remote.responses["checkout"])
             response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier.type, loan_fixture.identifier.identifier
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
             )
 
             # No checkout request was actually made to the remote.
@@ -790,8 +811,9 @@ class TestLoanController:
             # We got an OPDS entry that includes at least one
             # fulfillment link, which is what we expect when we ask
             # about an active loan.
+            assert isinstance(response, wkResponse)
             assert 200 == response.status_code
-            [entry] = feedparser.parse(response.response[0])["entries"]
+            [entry] = feedparser.parse(response.get_data())["entries"]
             assert any(
                 [
                     x
@@ -812,12 +834,12 @@ class TestLoanController:
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
             authenticated = controller.authenticated_patron_from_request()
+            assert isinstance(authenticated, Patron)
             loan, ignore = loan_fixture.pool.loan_to(authenticated)
 
             # Try to fulfill the loan.
-            assert isinstance(loan_fixture.pool.id, int)
             controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
 
             # Verify that the right arguments were passed into
@@ -870,12 +892,12 @@ class TestLoanController:
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
             authenticated = controller.authenticated_patron_from_request()
+            assert isinstance(authenticated, Patron)
             loan, ignore = loan_fixture.pool.loan_to(authenticated)
 
             # Fulfill the loan.
-            assert isinstance(loan_fixture.pool.id, int)
             result = controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
 
             # The result of MockFulfillmentInfo.as_response was
@@ -892,9 +914,8 @@ class TestLoanController:
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
             controller.authenticated_patron_from_request()
-            assert isinstance(loan_fixture.pool.id, int)
             response = controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert isinstance(response, ProblemDetail)
             assert NO_ACTIVE_LOAN.uri == response.uri
@@ -902,7 +923,7 @@ class TestLoanController:
         # ...or it might be because there is no authenticated patron.
         with loan_fixture.request_context_with_library("/"):
             response = controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert isinstance(response, FlaskResponse)
             assert 401 == response.status_code
@@ -917,7 +938,7 @@ class TestLoanController:
         controller.authenticated_patron_from_request = mock_authenticated_patron
         with loan_fixture.request_context_with_library("/"):
             problem = controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
             assert INTEGRATION_ERROR == problem
         controller.authenticated_patron_from_request = old_authenticated_patron
@@ -949,7 +970,7 @@ class TestLoanController:
             controller.can_fulfill_without_loan = mock_can_fulfill_without_loan
             controller.circulation.fulfill = mock_fulfill
             response = controller.fulfill(
-                loan_fixture.pool.id, loan_fixture.mech2.delivery_mechanism.id
+                loan_fixture.pool_id, loan_fixture.mech2.delivery_mechanism.id
             )
 
             assert isinstance(response, wkResponse)
@@ -964,6 +985,7 @@ class TestLoanController:
         ):
             circulation = controller.circulation
             authenticated = controller.authenticated_patron_from_request()
+            assert isinstance(authenticated, Patron)
             loan_fixture.pool.loan_to(authenticated)
             with patch(
                 "palace.manager.api.controller.opds_feed.OPDSAcquisitionFeed.single_entry_loans_feed"
@@ -978,9 +1000,8 @@ class TestLoanController:
                     DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE
                 )
 
-                assert isinstance(loan_fixture.pool.id, int)
                 response = controller.fulfill(
-                    loan_fixture.pool.id, loan_fixture.mech1.delivery_mechanism.id
+                    loan_fixture.pool_id, loan_fixture.mech1.delivery_mechanism.id
                 )
                 assert response == NOT_FOUND_ON_REMOTE
 
@@ -1085,11 +1106,12 @@ class TestLoanController:
         # Create a new loan.
         with loan_fixture.request_context_with_library("/", headers=headers):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             loan, newly_created = loan_fixture.pool.loan_to(patron)
 
             loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool, True)
 
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
             assert 200 == response.status_code
             _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
@@ -1106,8 +1128,9 @@ class TestLoanController:
                 side_effect=CannotReturn()
             )
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             loan_fixture.pool.loan_to(patron)
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
         assert isinstance(response, ProblemDetail)
         assert response == COULD_NOT_MIRROR_TO_REMOTE
@@ -1130,13 +1153,14 @@ class TestLoanController:
 
         with loan_fixture.request_context_with_library("/", headers=headers):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             hold, newly_created = loan_fixture.pool.on_hold_to(patron, position=0)
 
             loan_fixture.manager.d_circulation.queue_release_hold(
                 loan_fixture.pool, True
             )
 
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
             assert 200 == response.status_code
             _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
@@ -1153,8 +1177,9 @@ class TestLoanController:
                 side_effect=CannotReleaseHold()
             )
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             loan_fixture.pool.on_hold_to(patron, position=0)
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool.id)
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
         assert isinstance(response, ProblemDetail)
         assert response == CANNOT_RELEASE_HOLD
@@ -1209,13 +1234,15 @@ class TestLoanController:
             # The patron's credentials are valid, but they have a lot
             # of fines.
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             patron.fines = Decimal("12345678.90")
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
-
+            assert isinstance(response, ProblemDetail)
             assert 403 == response.status_code
             assert OUTSTANDING_FINES.uri == response.uri
+            assert response.detail is not None
             assert "$12345678.90 outstanding" in response.detail
 
         # Reduce the patron's fines, and there's no problem.
@@ -1223,6 +1250,7 @@ class TestLoanController:
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
             patron.fines = Decimal("0.49")
             loan_fixture.manager.d_circulation.queue_checkout(
                 pool,
@@ -1238,7 +1266,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
-
+            assert response is not None
             assert 201 == response.status_code
 
     def test_3m_cant_revoke_hold_if_reserved(self, loan_fixture: LoanFixture):
@@ -1259,6 +1287,7 @@ class TestLoanController:
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             hold, newly_created = pool.on_hold_to(patron, position=0)
             response = loan_fixture.manager.loans.revoke(pool.id)
+            assert isinstance(response, ProblemDetail)
             assert 400 == response.status_code
             assert CANNOT_RELEASE_HOLD.uri == response.uri
             assert (
