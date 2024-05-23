@@ -241,7 +241,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                                               from licenses where status = 'available') l on lp.id = l.license_pool_id
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
-              e.id = w.presentation_edition_id and
+              w.id = lp.work_id and
               d.id = e.data_source_id and
               c.id = lp.collection_id and
               c.integration_configuration_id = ic.id and
@@ -307,7 +307,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
         where lp.identifier_id = i.id and
               e.primary_identifier_id = i.id and
               e.id = lib_holds.presentation_edition_id and
-              e.id = w.presentation_edition_id and
+              w.id = lp.work_id and
               d.id = e.data_source_id and
               c.id = lp.collection_id and
               c.integration_configuration_id = ic.id and
