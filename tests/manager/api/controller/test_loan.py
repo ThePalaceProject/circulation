@@ -698,7 +698,7 @@ class TestLoanController:
             response = loan_fixture.manager.loans.borrow(
                 pool.identifier.type, pool.identifier.identifier
             )
-            assert isinstance(response, wkResponse)
+            assert isinstance(response, ProblemDetail)
             assert 404 == response.status_code
             assert NO_LICENSES == response
 

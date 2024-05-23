@@ -4,6 +4,7 @@ import random
 from unittest.mock import MagicMock, patch
 
 import flask
+from flask import Response
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.circulation_exceptions import RemoteInitiatedServerError
@@ -27,8 +28,6 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.problem_detail import ProblemDetail
-
-# TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -96,7 +95,7 @@ class TestBaseController:
                 result = (
                     circulation_fixture.controller.authenticated_patron_from_request()
                 )
-                assert isinstance(result, ProblemDetail)
+                assert isinstance(result, Response)
                 assert 401 == result.status_code
                 assert None == flask.request.patron  # type: ignore
 
@@ -131,7 +130,7 @@ class TestBaseController:
                 result = (
                     circulation_fixture.controller.authenticated_patron_from_request()
                 )
-                assert isinstance(result, ProblemDetail)
+                assert isinstance(result, Response)
                 assert 401 == result.status_code
                 assert None == flask.request.patron  # type: ignore
 
