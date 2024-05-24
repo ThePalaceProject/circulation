@@ -714,7 +714,9 @@ def diagnostics():
 )
 @api_spec.validate(
     resp=SpecResponse(
-        HTTP_200=InventoryReportInfo, HTTP_403=ProblemDetailModel, HTTP_404=None
+        HTTP_200=InventoryReportInfo,
+        HTTP_403=ProblemDetailModel,
+        HTTP_404=ProblemDetailModel,
     ),
     tags=["admin.inventory"],
 )

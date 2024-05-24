@@ -13,6 +13,7 @@ from palace.manager.api.admin.model.inventory_report import (
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
 from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.util import create
@@ -145,8 +146,9 @@ class TestReportController:
 
         # A library must be provided.
         with flask_app_fixture.test_request_context("/", admin=sysadmin, library=None):
-            admin_response_none = method()
-        assert admin_response_none.status_code == 404
+            with pytest.raises(ProblemDetailException) as exc:
+                method()
+        assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     def test_inventory_report_info(
         self, db: DatabaseTransactionFixture, flask_app_fixture: FlaskAppFixture
@@ -209,8 +211,9 @@ class TestReportController:
 
         # A library must be provided.
         with flask_app_fixture.test_request_context("/", admin=sysadmin, library=None):
-            admin_response_none = controller.inventory_report_info()
-        assert admin_response_none.status_code == 404
+            with pytest.raises(ProblemDetailException) as exc:
+                controller.inventory_report_info()
+        assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     @pytest.mark.parametrize(
         "protocol, settings, expect_collection",

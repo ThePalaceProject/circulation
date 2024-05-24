@@ -10,6 +10,7 @@ from palace.manager.api.admin.model.inventory_report import (
     InventoryReportInfo,
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
+from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
     library_report_integrations,
@@ -24,24 +25,22 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 def _authorize_from_request(
     request: Request,
-) -> tuple[Admin, Library, None] | tuple[None, None, Response]:
-    """Authorize the admin for the library from the request.
+) -> tuple[Admin, Library]:
+    """Authorize the admin for the library specified in the request.
 
     :param request: A Flask Request object.
-    :return: A 3-tuple of admin, library, and error response.
-        If there is no library, the error response is a 404.
-        Otherwise, we return a valid admin and library, if the admin is authorized.
-    :raise: ProblemDetailException, jf admin not authorized for library.
+    :return: A 2-tuple of admin and library, if the admin is authorized for the library.
+    :raise: ProblemDetailException, if no library or if admin not authorized for the library.
     """
     library: Library | None = getattr(request, "library")
     if library is None:
-        return None, None, Response(status=404)
+        raise ProblemDetailException(LIBRARY_NOT_FOUND)
 
     admin: Admin = getattr(request, "admin")
     if not admin.is_librarian(library):
         raise ProblemDetailException(ADMIN_NOT_AUTHORIZED)
 
-    return admin, library, None
+    return admin, library
 
 
 class ReportController(LoggerMixin):
@@ -54,11 +53,7 @@ class ReportController(LoggerMixin):
         returns: Inventory report info response, if the library exists and
             the admin is authorized.
         """
-        admin, library, error_response = _authorize_from_request(flask.request)
-        if error_response:
-            return error_response
-        assert admin is not None
-        assert library is not None
+        admin, library = _authorize_from_request(flask.request)
 
         collections = [
             integration.collection
@@ -81,11 +76,7 @@ class ReportController(LoggerMixin):
         )
 
     def generate_inventory_report(self) -> Response | ProblemDetail:
-        admin, library, error_response = _authorize_from_request(flask.request)
-        if error_response:
-            return error_response
-        assert admin is not None
-        assert library is not None
+        admin, library = _authorize_from_request(flask.request)
 
         try:
             task = generate_inventory_and_hold_reports.delay(
