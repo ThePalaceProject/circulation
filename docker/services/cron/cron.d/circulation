@@ -99,7 +99,6 @@ HOME=/var/www/circulation
 #
 10 */8 * * * root bin/run loan_notifications >> /var/log/cron.log 2>&1
 15 */8 * * * root bin/run hold_notifications >> /var/log/cron.log 2>&1
-0 1 * * * root bin/run patron_activity_sync_notifications >> /var/log/cron.log 2>&1
 
 # Audiobook playtimes
 # Every 12 hours, but spaced after hour 8 to reduce job cluttering
