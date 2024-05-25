@@ -578,6 +578,10 @@ class TestBaseController:
             assert expect_default == value
             assert expect_default == flask.request.library  # type: ignore
 
+    # TODO: Remove this test. It's just prove that it passes once in the PR.
+    #  The `reload_settings_if_changed` call has been moved from the relative
+    #  obscurity of `BaseCirculationManagerController.library_for_request`
+    #  into a Flask `before_request` function.
     def test_library_for_request_reloads_settings_if_necessary(
         self, circulation_fixture: CirculationControllerFixture
     ):
@@ -588,6 +592,8 @@ class TestBaseController:
         # will fail.
         assert new_name not in circulation_fixture.manager.auth.library_authenticators
         with circulation_fixture.app.test_request_context("/"):
+            # Ensure that any `before_request` handlers are run, as in real request.
+            circulation_fixture.app.preprocess_request()
             problem = circulation_fixture.controller.library_for_request(new_name)
             assert LIBRARY_NOT_FOUND == problem
 
@@ -607,6 +613,8 @@ class TestBaseController:
         # But the first time we make a request that calls the library
         # by its new name, those settings are reloaded.
         with circulation_fixture.app.test_request_context("/"):
+            # Ensure that any `before_request` handlers are run, as in real request.
+            circulation_fixture.app.preprocess_request()
             value = circulation_fixture.controller.library_for_request(new_name)
             assert circulation_fixture.db.default_library() == value
 
