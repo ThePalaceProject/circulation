@@ -21,6 +21,7 @@ from palace.manager.api.admin.model.dashboard_statistics import (
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
@@ -58,7 +59,7 @@ class Statistics:
         (
             all_authorized_collections,
             authorized_collections_by_library,
-        ) = self._authorized_collections(authorized_libraries)
+        ) = self._authorized_collections(admin, authorized_libraries)
 
         collection_inventories = self._create_collection_inventories(
             all_authorized_collections
@@ -104,25 +105,48 @@ class Statistics:
             patron_summary=patron_summary,
         )
 
-    @staticmethod
+    def _all_collections(self) -> dict[int | None, _Collection]:
+        collection_query = self._db.execute(
+            select(Collection.id, IntegrationConfiguration.name)
+            .select_from(Collection)
+            .join(IntegrationConfiguration)
+        ).all()
+        return {
+            c.id: _Collection(id=c.id, name=c.name)
+            for c in collection_query
+            if c.id is not None
+        }
+
     def _authorized_collections(
+        self,
+        admin: Admin,
         authorized_libraries: list[Library],
-    ) -> tuple[list[Collection], dict[str | None, list[Collection]]]:
+    ) -> tuple[list[_Collection], dict[str | None, list[_Collection]]]:
         authorized_collections = set()
         authorized_collections_by_library = {}
 
-        def key_func(collection: Collection) -> int:
-            return collection.id if collection.id is not None else 0
+        all_collections = self._all_collections()
 
         for library in authorized_libraries:
-            library_collections = set(library.all_collections)
-            authorized_collections.update(library_collections)
+            library_collections = {
+                all_collections[c.id] for c in library.all_collections
+            }
             authorized_collections_by_library[library.short_name] = sorted(
-                library_collections, key=key_func
+                library_collections, key=lambda c: c.id
             )
 
+        if admin.is_system_admin():
+            # If the user is a system admin, they have access to all collections, even those
+            # not associated with a library.
+            authorized_collections.update(all_collections.values())
+        else:
+            # Otherwise, the user only has access to collections associated with their
+            # authorized libraries.
+            for collections in authorized_collections_by_library.values():
+                authorized_collections.update(collections)
+
         return (
-            sorted(authorized_collections, key=key_func),
+            sorted(authorized_collections, key=lambda c: c.id),
             authorized_collections_by_library,
         )
 
@@ -131,7 +155,7 @@ class Statistics:
         query_filter: Any,
         /,
         columns: list[Any],
-        collections: list[Collection] | None = None,
+        collections: list[_Collection],
     ) -> dict[int, dict[str, dict[str, int]]]:
         query = (
             select(
@@ -166,7 +190,7 @@ class Statistics:
         return statistics
 
     def _run_collections_stats_queries(
-        self, collections: list[Collection]
+        self, collections: list[_Collection]
     ) -> dict[int | None, _CollectionStatisticsQueryResults]:
         count = func.count().label("count")
         metered_title_counts = self._collections_statistics_by_medium_query(
@@ -217,11 +241,10 @@ class Statistics:
                 else {},
             )
             for c in collections
-            if c.id is not None
         }
 
     def _create_collection_inventories(
-        self, collections: list[Collection]
+        self, collections: list[_Collection]
     ) -> list[CollectionInventory]:
         statistics = self._run_collections_stats_queries(collections)
         inventories = []
@@ -334,7 +357,7 @@ class Statistics:
 
 def _summarize_collection_inventories(
     collection_inventories: Iterable[CollectionInventory],
-    collections: Iterable[Collection],
+    collections: Iterable[_Collection],
 ) -> tuple[InventoryStatistics, dict[str, InventoryStatistics]]:
     """Summarize the inventories associated with the specified collections.
 
@@ -422,3 +445,9 @@ class _CollectionStatisticsQueryResults:
         """Return value for a statistic, if present; else, return zero."""
         field: dict[str, dict[str, int]] = getattr(self, group, {})
         return field.get(medium, {}).get(column_name, 0)
+
+
+@dataclasses.dataclass(frozen=True)
+class _Collection:
+    id: int
+    name: str
