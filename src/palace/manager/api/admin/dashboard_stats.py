@@ -122,7 +122,7 @@ class Statistics:
         admin: Admin,
         authorized_libraries: list[Library],
     ) -> tuple[list[_Collection], dict[str | None, list[_Collection]]]:
-        authorized_collections = set()
+        authorized_collections: set[_Collection] = set()
         authorized_collections_by_library = {}
 
         all_collections = self._all_collections()
