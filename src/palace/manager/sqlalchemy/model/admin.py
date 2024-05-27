@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import bcrypt
 from flask_babel import lazy_gettext as _
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -15,6 +13,8 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     func,
+    or_,
+    select,
 )
 from sqlalchemy.orm import Mapped, relationship, validates
 from sqlalchemy.orm.exc import NoResultFound
@@ -24,11 +24,9 @@ from palace.manager.core.problem_details import INVALID_RESET_PASSWORD_TOKEN
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.problem_detail import ProblemDetail
-
-if TYPE_CHECKING:
-    from palace.manager.sqlalchemy.model.library import Library
 
 
 class Admin(Base, HasSessionCache):
@@ -214,6 +212,21 @@ class Admin(Base, HasSessionCache):
             if self.is_librarian(library):
                 return True
         return False
+
+    def authorized_libraries(self) -> list[Library]:
+        query = select(Library).order_by(Library.id)
+        session = Session.object_session(self)
+        if self.is_sitewide_librarian():
+            return session.scalars(query).all()
+        return session.scalars(
+            query.join(AdminRole).where(
+                AdminRole.admin_id == self.id,
+                or_(
+                    AdminRole.role == AdminRole.LIBRARY_MANAGER,
+                    AdminRole.role == AdminRole.LIBRARIAN,
+                ),
+            )
+        ).all()
 
     def add_role(self, role, library=None):
         _db = Session.object_session(self)

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable, Iterable
+from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime
-from functools import partial
-from typing import TYPE_CHECKING
+from typing import Any
 
+from sqlalchemy import union
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func, select
-from sqlalchemy.sql.expression import and_, false, or_, true
+from sqlalchemy.sql import Select, func, select
+from sqlalchemy.sql.expression import and_, distinct, false, or_, true
 
 from palace.manager.api.admin.model.dashboard_statistics import (
     CollectionInventory,
@@ -23,15 +24,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-
-if TYPE_CHECKING:
-    from sqlalchemy.sql.elements import (
-        BinaryExpression,
-        BooleanClauseList,
-        ClauseElement,
-    )
-    from sqlalchemy.sql.expression import ColumnElement
-    from sqlalchemy.sql.type_api import TypeEngine
 
 
 def generate_statistics(admin: Admin, db: Session) -> StatisticsResponse:
@@ -62,17 +54,14 @@ class Statistics:
         """Build and return a statistics response for admin user's authorized libraries."""
 
         # Determine which libraries and collections are authorized for this user.
-        authorized_libraries = self._libraries_for_admin(admin)
-        authorized_collections_by_library = {
-            lib.short_name: set(lib.all_collections) for lib in authorized_libraries
-        }
-        all_authorized_collections: list[Collection] = [
-            c for c in self._db.query(Collection) if admin.can_see_collection(c)
-        ]
+        authorized_libraries = admin.authorized_libraries()
+        (
+            all_authorized_collections,
+            authorized_collections_by_library,
+        ) = self._authorized_collections(authorized_libraries)
 
-        collection_inventories = sorted(
-            (self._create_collection_inventory(c) for c in all_authorized_collections),
-            key=lambda c: c.id,
+        collection_inventories = self._create_collection_inventories(
+            all_authorized_collections
         )
         (
             collection_inventory_summary,
@@ -87,10 +76,7 @@ class Statistics:
             )
             for library_key, collections in authorized_collections_by_library.items()
         }
-        patron_stats_by_library = {
-            lib.short_name: self._gather_patron_stats(lib)
-            for lib in authorized_libraries
-        }
+        patron_stats_by_library = self._gather_patron_stats(authorized_libraries)
         library_statistics = [
             LibraryStatistics(
                 key=lib.short_name,
@@ -98,13 +84,9 @@ class Statistics:
                 patron_statistics=patron_stats_by_library[lib.short_name],
                 inventory_summary=inventories_by_library[lib.short_name][0],
                 inventory_by_medium=inventories_by_library[lib.short_name][1],
-                collection_ids=sorted(
-                    [
-                        c.id
-                        for c in authorized_collections_by_library[lib.short_name]
-                        if c.id is not None
-                    ]
-                ),
+                collection_ids=[
+                    c.id for c in authorized_collections_by_library[lib.short_name]
+                ],
             )
             for lib in authorized_libraries
         ]
@@ -122,117 +104,232 @@ class Statistics:
             patron_summary=patron_summary,
         )
 
-    def _libraries_for_admin(self, admin: Admin) -> list[Library]:
-        """Return a list of libraries to which this user has access."""
-        return [
-            library
-            for library in self._db.query(Library)
-            if admin.is_librarian(library)
-        ]
+    @staticmethod
+    def _authorized_collections(
+        authorized_libraries: list[Library],
+    ) -> tuple[list[Collection], dict[str | None, list[Collection]]]:
+        authorized_collections = set()
+        authorized_collections_by_library = {}
 
-    def _collection_statistics_by_medium_query(
+        def key_func(collection: Collection) -> int:
+            return collection.id if collection.id is not None else 0
+
+        for library in authorized_libraries:
+            library_collections = set(library.all_collections)
+            authorized_collections.update(library_collections)
+            authorized_collections_by_library[library.short_name] = sorted(
+                library_collections, key=key_func
+            )
+
+        return (
+            sorted(authorized_collections, key=key_func),
+            authorized_collections_by_library,
+        )
+
+    def _collections_statistics_by_medium_query(
         self,
-        collection_filter: BinaryExpression[TypeEngine[bool]],
-        query_filter: BooleanClauseList[ClauseElement],
+        query_filter: Any,
         /,
-        columns: list[ColumnElement[TypeEngine[int]]],
-    ) -> dict[str, dict[str, int]]:
-        stats_with_medium = (
-            self._db.execute(
-                select(
-                    Edition.medium,
-                    *columns,
+        columns: list[Any],
+        collections: list[Collection] | None = None,
+    ) -> dict[int, dict[str, dict[str, int]]]:
+        query = (
+            select(
+                LicensePool.collection_id,
+                Edition.medium,
+                *columns,
+            )
+            .select_from(LicensePool)
+            .join(Edition, Edition.id == LicensePool.presentation_edition_id)
+            .where(query_filter)
+            .group_by(Edition.medium, LicensePool.collection_id)
+        )
+        # We only filter by collection here if there are fewer than 25 collections,
+        # this number is somewhat arbitrary. The idea is to avoid a very large query
+        # if there are many collections. When the query gets very large its faster to
+        # just get all the collections and filter them in python. Either way the caller
+        # has to filter the results by the collections they are interested in.
+        if len(collections) < 25:
+            query = query.where(
+                LicensePool.collection_id.in_({c.id for c in collections})
+            )
+
+        stats_with_medium = self._db.execute(query).mappings().all()
+
+        statistics: dict[int, dict[str, dict[str, int]]] = defaultdict(dict)
+        for row in stats_with_medium:
+            collection_id = row["collection_id"]
+            medium = row["medium"]
+            statistics[collection_id][medium] = {
+                k: v for k, v in row.items() if k not in ["medium", "collection_id"]
+            }
+        return statistics
+
+    def _run_collections_stats_queries(
+        self, collections: list[Collection]
+    ) -> dict[int | None, _CollectionStatisticsQueryResults]:
+        count = func.count().label("count")
+        metered_title_counts = self._collections_statistics_by_medium_query(
+            self.METERED_LICENSE_FILTER,
+            columns=[count],
+            collections=collections,
+        )
+        unlimited_title_counts = self._collections_statistics_by_medium_query(
+            self.UNLIMITED_LICENSE_FILTER,
+            columns=[count],
+            collections=collections,
+        )
+        open_access_title_counts = self._collections_statistics_by_medium_query(
+            self.OPEN_ACCESS_FILTER,
+            columns=[count],
+            collections=collections,
+        )
+        loanable_title_counts = self._collections_statistics_by_medium_query(
+            self.AT_LEAST_ONE_LOANABLE_FILTER,
+            columns=[count],
+            collections=collections,
+        )
+        metered_license_stats = self._collections_statistics_by_medium_query(
+            self.METERED_LICENSE_FILTER,
+            columns=[
+                func.sum(LicensePool.licenses_owned).label("owned"),
+                func.sum(LicensePool.licenses_available).label("available"),
+            ],
+            collections=collections,
+        )
+
+        return {
+            c.id: _CollectionStatisticsQueryResults(
+                metered_title_counts=metered_title_counts[c.id]
+                if c.id in metered_title_counts
+                else {},
+                unlimited_title_counts=unlimited_title_counts[c.id]
+                if c.id in unlimited_title_counts
+                else {},
+                open_access_title_counts=open_access_title_counts[c.id]
+                if c.id in open_access_title_counts
+                else {},
+                loanable_title_counts=loanable_title_counts[c.id]
+                if c.id in loanable_title_counts
+                else {},
+                metered_license_stats=metered_license_stats[c.id]
+                if c.id in metered_license_stats
+                else {},
+            )
+            for c in collections
+            if c.id is not None
+        }
+
+    def _create_collection_inventories(
+        self, collections: list[Collection]
+    ) -> list[CollectionInventory]:
+        statistics = self._run_collections_stats_queries(collections)
+        inventories = []
+        for collection in collections:
+            inventory_by_medium = {
+                str(m): inv
+                for m, inv in statistics[collection.id].inventories_by_medium().items()
+            }
+            summary_inventory = sum(
+                inventory_by_medium.values(), InventoryStatistics.zeroed()
+            )
+            inventories.append(
+                CollectionInventory(
+                    id=collection.id,
+                    name=collection.name,
+                    inventory=summary_inventory,
+                    inventory_by_medium=inventory_by_medium,
                 )
-                .select_from(LicensePool)
-                .join(Edition, Edition.id == LicensePool.presentation_edition_id)
-                .where(collection_filter)
-                .where(query_filter)
-                .group_by(Edition.medium)
+            )
+        return inventories
+
+    @staticmethod
+    def _loans_or_holds_query(loan_or_hold: type[Loan] | type[Hold]) -> Select:
+        query = (
+            select(
+                Patron.library_id,
+            )
+            .select_from(loan_or_hold)
+            .join(Patron)
+        )
+
+        if issubclass(loan_or_hold, Loan):
+            query = query.where(loan_or_hold.end >= datetime.now())
+
+        return query
+
+    @classmethod
+    def _loans_or_holds_count_query(
+        cls, loan_or_hold: type[Loan] | type[Hold]
+    ) -> Select:
+        return (
+            cls._loans_or_holds_query(loan_or_hold)
+            .add_columns(
+                func.count().label("count"),
+                func.count(distinct(loan_or_hold.patron_id)).label("patron_count"),
+            )
+            .group_by(Patron.library_id)
+        )
+
+    @classmethod
+    def _active_loans_or_holds_count_query(cls) -> Select:
+        union_query = union(
+            cls._loans_or_holds_query(Loan).add_columns(Patron.id.label("patron_id")),
+            cls._loans_or_holds_query(Hold).add_columns(Patron.id.label("patron_id")),
+        )
+
+        return (
+            select(
+                func.count(distinct(union_query.columns["patron_id"])).label("count"),
+                union_query.columns["library_id"],
+            )
+            .select_from(union_query)
+            .group_by(union_query.columns["library_id"])
+        )
+
+    def _gather_patron_stats(
+        self, libraries: list[Library]
+    ) -> dict[str | None, PatronStatistics]:
+        patron_count_query = (
+            self._db.execute(
+                select(Patron.library_id, func.count().label("count"))
+                .select_from(Patron)
+                .group_by(Patron.library_id)
             )
             .mappings()
             .all()
         )
+        patron_count = {row["library_id"]: row["count"] for row in patron_count_query}
+        loans_query = (
+            self._db.execute(self._loans_or_holds_count_query(Loan)).mappings().all()
+        )
+        loan_count = {row["library_id"]: row["count"] for row in loans_query}
+        active_loans = {row["library_id"]: row["patron_count"] for row in loans_query}
+        hold_query = (
+            self._db.execute(self._loans_or_holds_count_query(Hold)).mappings().all()
+        )
+        hold_count = {row["library_id"]: row["count"] for row in hold_query}
+        active_loan_or_hold_query = (
+            self._db.execute(self._active_loans_or_holds_count_query()).mappings().all()
+        )
+        active_loan_or_hold = {
+            row["library_id"]: row["count"] for row in active_loan_or_hold_query
+        }
+
         return {
-            row["medium"]: {k: v for k, v in row.items() if k != "medium"}
-            for row in stats_with_medium
+            library.short_name: PatronStatistics(
+                total=patron_count[library.id] if library.id in patron_count else 0,
+                with_active_loan=active_loans[library.id]
+                if library.id in active_loans
+                else 0,
+                with_active_loan_or_hold=active_loan_or_hold[library.id]
+                if library.id in active_loan_or_hold
+                else 0,
+                loans=loan_count[library.id] if library.id in loan_count else 0,
+                holds=hold_count[library.id] if library.id in hold_count else 0,
+            )
+            for library in libraries
         }
-
-    def _run_collection_stats_queries(
-        self, collection: Collection
-    ) -> _CollectionStatisticsQueryResults:
-        collection_filter = LicensePool.collection_id == collection.id
-        _query_stats_group: Callable[..., dict[str, dict[str, int]]] = partial(
-            self._collection_statistics_by_medium_query, collection_filter
-        )
-        count = func.count().label("count")
-        return _CollectionStatisticsQueryResults(
-            metered_title_counts=_query_stats_group(
-                self.METERED_LICENSE_FILTER, columns=[count]
-            ),
-            unlimited_title_counts=_query_stats_group(
-                self.UNLIMITED_LICENSE_FILTER, columns=[count]
-            ),
-            open_access_title_counts=_query_stats_group(
-                self.OPEN_ACCESS_FILTER, columns=[count]
-            ),
-            loanable_title_counts=_query_stats_group(
-                self.AT_LEAST_ONE_LOANABLE_FILTER, columns=[count]
-            ),
-            metered_license_stats=_query_stats_group(
-                self.METERED_LICENSE_FILTER,
-                columns=[
-                    func.sum(LicensePool.licenses_owned).label("owned"),
-                    func.sum(LicensePool.licenses_available).label("available"),
-                ],
-            ),
-        )
-
-    def _create_collection_inventory(
-        self, collection: Collection
-    ) -> CollectionInventory:
-        """Return a CollectionInventory for the given collection."""
-
-        statistics = self._run_collection_stats_queries(collection)
-        # Ensure that the key is a string, even if the medium is null.
-        inventory_by_medium = {
-            str(m): inv for m, inv in statistics.inventories_by_medium().items()
-        }
-        summary_inventory = sum(
-            inventory_by_medium.values(), InventoryStatistics.zeroed()
-        )
-        return CollectionInventory(
-            id=collection.id,
-            name=collection.name,
-            inventory=summary_inventory,
-            inventory_by_medium=inventory_by_medium,
-        )
-
-    def _gather_patron_stats(self, library: Library) -> PatronStatistics:
-        library_patron_query = self._db.query(Patron.id.label("id")).filter(
-            Patron.library_id == library.id
-        )
-        patrons_for_active_loans_query = library_patron_query.join(Loan).filter(
-            Loan.end >= datetime.now()
-        )
-        patrons_for_active_holds_query = library_patron_query.join(Hold)
-
-        patron_count = library_patron_query.count()
-        loan_count = patrons_for_active_loans_query.count()
-        hold_count = patrons_for_active_holds_query.count()
-        patrons_with_active_loans = patrons_for_active_loans_query.distinct(
-            "id"
-        ).count()
-        patrons_with_active_loans_or_holds = patrons_for_active_loans_query.union(
-            patrons_for_active_holds_query
-        ).count()
-
-        return PatronStatistics(
-            total=patron_count,
-            with_active_loan=patrons_with_active_loans,
-            with_active_loan_or_hold=patrons_with_active_loans_or_holds,
-            loans=loan_count,
-            holds=hold_count,
-        )
 
 
 def _summarize_collection_inventories(
