@@ -4499,19 +4499,18 @@ testing = ["build[virtualenv] (>=1.0.3)", "covdefaults (>=2.3)", "detect-test-po
 
 [[package]]
 name = "tox-docker"
-version = "4.1.0"
-description = "Launch a docker instance around test runs"
+version = "5.0.0"
+description = "Manage lifecycle of docker containers during Tox test runs"
 optional = false
 python-versions = "*"
 files = [
-    {file = "tox-docker-4.1.0.tar.gz", hash = "sha256:0317e692dc80f2197eaf9c905dcb8d1d1f9d5bf2686ecfd83c22a1da9d23fb24"},
-    {file = "tox_docker-4.1.0-py2.py3-none-any.whl", hash = "sha256:444c72192a2443d2b4db5766545d4413ea683cc488523d770e2e216f15fa3086"},
+    {file = "tox_docker-5.0.0-py3-none-any.whl", hash = "sha256:7dd7293ea286dff422eab6c23a70652147b275eb436c02e97a90ac59ba41f8a8"},
+    {file = "tox_docker-5.0.0.tar.gz", hash = "sha256:3cbfe70713910b9dbb9f74e20a5c42f19da42d375bac7d6a3ccc11aed0738d7a"},
 ]
 
 [package.dependencies]
-docker = ">=4.0,<7.0"
-packaging = "*"
-tox = ">=3.0.0,<5.0"
+docker = ">=4.0,<8.0"
+tox = ">=4.0.0,<5.0"
 
 [[package]]
 name = "tox-gh-actions"
@@ -5054,4 +5053,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "b0d51937bbee12d448ddefa3a33c922c5bfebf1f2d7b223d768fc9d87f8b06c2"
+content-hash = "7e6561630c7a110d357c151043bafe4d064ada9bba8bdc8c41a8f313781d1d54"
