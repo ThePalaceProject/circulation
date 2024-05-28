@@ -383,6 +383,26 @@ class TestAdminWork:
             http_method="POST",
         )
 
+    def test_suppress_for_library(self, fixture: AdminRouteFixture):
+        url = "/admin/works/<identifier_type>/an/identifier/suppress-for-library"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.suppress_for_library,  # type: ignore
+            "<identifier_type>",
+            "an/identifier",
+            http_method="POST",
+        )
+
+    def test_unsuppress_for_library(self, fixture: AdminRouteFixture):
+        url = "/admin/works/<identifier_type>/an/identifier/unsuppress-for-library"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.unsuppress_for_library,  # type: ignore
+            "<identifier_type>",
+            "an/identifier",
+            http_method="POST",
+        )
+
     def test_refresh_metadata(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/refresh"
         fixture.assert_authenticated_request_calls(

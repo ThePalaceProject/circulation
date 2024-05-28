@@ -706,16 +706,20 @@ class TestWorkController:
     def test_suppress(self, work_fixture: WorkFixture):
         [lp] = work_fixture.english_1.license_pools
 
+        work_fixture.admin.add_role(
+            AdminRole.LIBRARY_MANAGER, library=work_fixture.ctrl.db.default_library()
+        )
+
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.suppress(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
-            assert True == lp.suppressed
+            assert lp.suppressed
 
         lp.suppressed = False
         work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
+            AdminRole.LIBRARY_MANAGER, work_fixture.ctrl.db.default_library()
         )
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
@@ -728,6 +732,10 @@ class TestWorkController:
     def test_unsuppress(self, work_fixture: WorkFixture):
         [lp] = work_fixture.english_1.license_pools
         lp.suppressed = True
+
+        work_fixture.admin.add_role(
+            AdminRole.LIBRARY_MANAGER, library=work_fixture.ctrl.db.default_library()
+        )
 
         broken_lp = work_fixture.ctrl.db.licensepool(
             work_fixture.english_1.presentation_edition,
@@ -744,17 +752,72 @@ class TestWorkController:
             # Both LicensePools are unsuppressed, even though one of them
             # has a LicensePool-specific complaint.
             assert 200 == response.status_code
-            assert False == lp.suppressed
-            assert False == broken_lp.suppressed
+            assert not lp.suppressed
+            assert not broken_lp.suppressed
 
         lp.suppressed = True
         work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
+            AdminRole.LIBRARY_MANAGER, work_fixture.ctrl.db.default_library()
         )
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
                 work_fixture.manager.admin_work_controller.unsuppress,
+                lp.identifier.type,
+                lp.identifier.identifier,
+            )
+
+    def test_suppress_for_library(self, work_fixture: WorkFixture):
+        work = work_fixture.english_1
+        [lp] = work.license_pools
+        library = work_fixture.ctrl.db.default_library()
+
+        assert library not in work.suppressed_for
+
+        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.suppress_for_library(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 200 == response.status_code
+            assert library in work.suppressed_for
+
+        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
+        with work_fixture.request_context_with_library_and_admin("/"):
+            pytest.raises(
+                AdminNotAuthorized,
+                work_fixture.manager.admin_work_controller.suppress_for_library,
+                lp.identifier.type,
+                lp.identifier.identifier,
+            )
+
+    def test_unsuppress_for_library(self, work_fixture: WorkFixture):
+        work = work_fixture.english_1
+        [lp] = work.license_pools
+        library = work_fixture.ctrl.db.default_library()
+
+        assert library not in work.suppressed_for
+
+        work.suppressed_for.append(library)
+        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = (
+                work_fixture.manager.admin_work_controller.unsuppress_for_library(
+                    lp.identifier.type, lp.identifier.identifier
+                )
+            )
+
+            assert 200 == response.status_code
+            assert library not in work.suppressed_for
+
+        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        with work_fixture.request_context_with_library_and_admin("/"):
+            pytest.raises(
+                AdminNotAuthorized,
+                work_fixture.manager.admin_work_controller.unsuppress_for_library,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )

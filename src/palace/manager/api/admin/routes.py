@@ -219,6 +219,34 @@ def unsuppress(identifier_type, identifier):
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
+@library_route(
+    "/admin/works/<identifier_type>/<path:identifier>/suppress-for-library",
+    methods=["POST"],
+)
+@has_library
+@returns_problem_detail
+@requires_admin
+@requires_csrf_token
+def suppress_for_library(identifier_type, identifier):
+    return app.manager.admin_work_controller.suppress_for_library(
+        identifier_type, identifier
+    )
+
+
+@library_route(
+    "/admin/works/<identifier_type>/<path:identifier>/unsuppress-for-library",
+    methods=["POST"],
+)
+@has_library
+@returns_problem_detail
+@requires_admin
+@requires_csrf_token
+def unsuppress_for_library(identifier_type, identifier):
+    return app.manager.admin_work_controller.unsuppress_for_library(
+        identifier_type, identifier
+    )
+
+
 @library_route("/works/<identifier_type>/<path:identifier>/refresh", methods=["POST"])
 @has_library
 @returns_problem_detail
