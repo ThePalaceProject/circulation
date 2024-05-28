@@ -424,7 +424,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
     def checkout(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
@@ -795,7 +795,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
     def place_hold(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         notification_email_address: str | None,
     ) -> HoldInfo:
@@ -869,7 +869,9 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         self.update_licensepool(licensepool)
         return True
 
-    def patron_activity(self, patron: Patron, pin: str) -> list[LoanInfo | HoldInfo]:
+    def patron_activity(
+        self, patron: Patron, pin: str | None
+    ) -> list[LoanInfo | HoldInfo]:
         """Look up non-expired loans for this collection in the database."""
         _db = Session.object_session(patron)
         loans = (

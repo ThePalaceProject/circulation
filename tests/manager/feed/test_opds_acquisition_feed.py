@@ -936,7 +936,7 @@ class TestOPDSAcquisitionFeed:
     def test_single_entry_loans_feed_errors(self, db: DatabaseTransactionFixture):
         with pytest.raises(ValueError) as raised:
             # Mandatory loans item was missing
-            OPDSAcquisitionFeed.single_entry_loans_feed(None, None)  # type: ignore[arg-type]
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, None)
         assert str(raised.value) == "Argument 'item' must be non-empty"
 
         with pytest.raises(ValueError) as raised:

@@ -426,7 +426,7 @@ class Axis360API(
     def checkout(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
@@ -490,7 +490,7 @@ class Axis360API(
     def place_hold(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         hold_notification_email: str | None,
     ) -> HoldInfo:

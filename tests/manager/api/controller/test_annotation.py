@@ -6,7 +6,7 @@ from wsgiref.handlers import format_date_time
 import pytest
 
 from palace.manager.api.annotations import AnnotationWriter
-from palace.manager.sqlalchemy.model.patron import Annotation
+from palace.manager.sqlalchemy.model.patron import Annotation, Patron
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -162,6 +162,7 @@ class TestAnnotationController:
             patron = (
                 annotation_fixture.manager.annotations.authenticated_patron_from_request()
             )
+            assert isinstance(patron, Patron)
             patron.synchronize_annotations = True
             # The patron doesn't have any annotations yet.
             annotations = (

@@ -627,7 +627,7 @@ class BaseCirculationAPI(
 
     @classmethod
     def default_notification_email_address(
-        self, library_or_patron: Library | Patron, pin: str
+        self, library_or_patron: Library | Patron, pin: str | None
     ) -> str:
         """What email address should be used to notify this library's
         patrons of changes?
@@ -675,7 +675,7 @@ class BaseCirculationAPI(
     def checkout(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo | HoldInfo:
@@ -714,7 +714,7 @@ class BaseCirculationAPI(
     def place_hold(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         notification_email_address: str | None,
     ) -> HoldInfo:
@@ -753,7 +753,7 @@ class PatronActivityCirculationAPI(
 
     @abstractmethod
     def patron_activity(
-        self, patron: Patron, pin: str
+        self, patron: Patron, pin: str | None
     ) -> Iterable[LoanInfo | HoldInfo]:
         """Return a patron's current checkouts and holds."""
         ...
@@ -774,7 +774,7 @@ class PatronActivityThread(Thread, LoggerMixin):
         api_cls: type[PatronActivityCirculationApiType],
         collection_id: int | None,
         patron_id: int | None,
-        pin: str,
+        pin: str | None,
     ) -> None:
         self.db = db
         self.api_cls = api_cls
@@ -979,9 +979,9 @@ class CirculationAPI(LoggerMixin):
     def borrow(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
         hold_notification_email: str | None = None,
     ) -> tuple[Loan | None, Hold | None, bool]:
         """Either borrow a book or put it on hold. Don't worry about fulfilling
@@ -1076,7 +1076,7 @@ class CirculationAPI(LoggerMixin):
         # last looked.
         try:
             loan_info = api.checkout(
-                patron, pin, licensepool, delivery_mechanism=delivery_mechanism
+                patron, pin, licensepool, delivery_mechanism=delivery_mechanism  # type: ignore[arg-type]
             )
 
             if isinstance(loan_info, HoldInfo):
@@ -1522,7 +1522,7 @@ class CirculationAPI(LoggerMixin):
         message_prefix="patron_activity sync", log_level=LogLevel.debug, skip_start=True
     )
     def patron_activity(
-        self, patron: Patron, pin: str
+        self, patron: Patron, pin: str | None
     ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
         """Return a record of the patron's current activity
         vis-a-vis all relevant external loan sources.
@@ -1586,7 +1586,7 @@ class CirculationAPI(LoggerMixin):
         )
 
     def sync_bookshelf(
-        self, patron: Patron, pin: str, force: bool = False
+        self, patron: Patron, pin: str | None, force: bool = False
     ) -> tuple[list[Loan] | Query[Loan], list[Hold] | Query[Hold]]:
         """Sync our internal model of a patron's bookshelf with any external
         vendors that provide books to the patron's library.

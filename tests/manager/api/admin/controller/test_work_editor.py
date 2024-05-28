@@ -930,10 +930,6 @@ class TestWorkController:
         work = work_fixture.ctrl.db.work(with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
 
-        # Whenever the mocked search engine is asked how many
-        # works are in a Lane, it will say there are two.
-        work_fixture.ctrl.controller.search_engine.docs = dict(id1="doc1", id2="doc2")
-
         # Create a Lane that depends on this CustomList for its membership.
         lane = work_fixture.ctrl.db.lane()
         lane.customlists.append(list)
@@ -954,7 +950,6 @@ class TestWorkController:
             assert True == work.custom_list_entries[0].featured
 
         # Now remove the work from the list.
-        work_fixture.ctrl.controller.search_engine.docs = dict(id1="doc1")
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [

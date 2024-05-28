@@ -430,7 +430,7 @@ class BibliothecaAPI(
     def checkout(
         self,
         patron_obj: Patron,
-        patron_password: str,
+        patron_password: str | None,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:

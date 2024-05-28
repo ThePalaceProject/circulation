@@ -113,6 +113,7 @@ def test_job_run(
         data_source_name=ds.name,
         set_edition_as_presentation=True,
         collection=collection,
+        work=work,
     )
 
     days_remaining = 10
