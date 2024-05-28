@@ -17,7 +17,6 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.core.classifier import Classifier
-from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
@@ -577,49 +576,6 @@ class TestBaseController:
             expect_default = Library.default(circulation_fixture.db.session)
             assert expect_default == value
             assert expect_default == flask.request.library  # type: ignore
-
-    # TODO: Remove this test. It's just prove that it passes once in the PR.
-    #  The `reload_settings_if_changed` call has been moved from the relative
-    #  obscurity of `BaseCirculationManagerController.library_for_request`
-    #  into a Flask `before_request` function.
-    def test_library_for_request_reloads_settings_if_necessary(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        # We're about to change the shortname of the default library.
-        new_name = "newname" + circulation_fixture.db.fresh_str()
-
-        # Before we make the change, a request to the library's new name
-        # will fail.
-        assert new_name not in circulation_fixture.manager.auth.library_authenticators
-        with circulation_fixture.app.test_request_context("/"):
-            # Ensure that any `before_request` handlers are run, as in real request.
-            circulation_fixture.app.preprocess_request()
-            problem = circulation_fixture.controller.library_for_request(new_name)
-            assert LIBRARY_NOT_FOUND == problem
-
-        # Make the change.
-        circulation_fixture.db.default_library().short_name = new_name
-        circulation_fixture.db.session.commit()
-
-        # Bypass the 1-second cooldown and make sure the site knows
-        # the configuration has actually changed.
-        site_configuration_has_changed(circulation_fixture.db.session, cooldown=0)
-
-        # Just making the change and calling
-        # site_configuration_has_changed was not enough to update the
-        # CirculationManager's settings.
-        assert new_name not in circulation_fixture.manager.auth.library_authenticators
-
-        # But the first time we make a request that calls the library
-        # by its new name, those settings are reloaded.
-        with circulation_fixture.app.test_request_context("/"):
-            # Ensure that any `before_request` handlers are run, as in real request.
-            circulation_fixture.app.preprocess_request()
-            value = circulation_fixture.controller.library_for_request(new_name)
-            assert circulation_fixture.db.default_library() == value
-
-            # An assertion that would have failed before works now.
-            assert new_name in circulation_fixture.manager.auth.library_authenticators
 
     def test_load_lane(self, circulation_fixture: CirculationControllerFixture):
         # Verify that requests for specific lanes are mapped to
