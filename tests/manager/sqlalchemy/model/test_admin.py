@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
 
@@ -22,14 +23,14 @@ class AdminFixture:
         self.db = db
 
     @contextmanager
-    def with_roles(self, admin: Admin, *roles: str | tuple[str, Library]) -> None:
-        roles = [role if isinstance(role, tuple) else (role, None) for role in roles]
-        for role in roles:
-            role, library = role
+    def with_roles(
+        self, admin: Admin, *roles: str | tuple[str, Library]
+    ) -> Generator[None, None, None]:
+        filtered_roles = [r if isinstance(r, tuple) else (r, None) for r in roles]
+        for role, library in filtered_roles:
             admin.add_role(role, library=library)
         yield
-        for role in roles:
-            role, library = role
+        for role, library in filtered_roles:
             admin.remove_role(role, library=library)
 
 
