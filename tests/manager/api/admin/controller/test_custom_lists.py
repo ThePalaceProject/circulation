@@ -778,12 +778,6 @@ class TestCustomListsController:
         list.add_entry(w1)
         list.add_entry(w2)
 
-        # Whenever the mocked search engine is asked how many
-        # works are in a Lane, it will say there are two.
-        admin_librarian_fixture.ctrl.controller.search_engine.docs = dict(
-            id1="doc1", id2="doc2"
-        )
-
         # Create a second CustomList, from another data source,
         # containing a single work.
         nyt = DataSource.lookup(admin_librarian_fixture.ctrl.db.session, DataSource.NYT)

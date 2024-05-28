@@ -329,9 +329,6 @@ class TestLanesController:
         # search engine to update lane.size, and it will think there
         # are two works in the lane.
         assert 0 == lane.size
-        alm_fixture.ctrl.controller.search_engine.docs = dict(
-            id1="value1", id2="value2"
-        )
 
         with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(

@@ -1,5 +1,6 @@
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.api_controller import (
     CirculationControllerFixture,
     ControllerFixtureSetupOverrides,
@@ -45,6 +46,7 @@ class TestMultipleLibraries:
                 patron = (
                     controller_fixture.manager.loans.authenticated_patron_from_request()
                 )
+                assert isinstance(patron, Patron)
                 assert library == patron.library
                 response = controller_fixture.manager.index_controller()
                 assert (

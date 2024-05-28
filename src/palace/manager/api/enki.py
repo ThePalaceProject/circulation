@@ -401,7 +401,7 @@ class EnkiAPI(
     def checkout(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
@@ -600,7 +600,7 @@ class EnkiAPI(
     def place_hold(
         self,
         patron: Patron,
-        pin: str,
+        pin: str | None,
         licensepool: LicensePool,
         notification_email_address: str | None,
     ) -> HoldInfo:

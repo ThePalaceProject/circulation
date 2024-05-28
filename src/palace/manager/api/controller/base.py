@@ -50,7 +50,7 @@ class BaseCirculationManagerController(LoggerMixin):
 
         return flask.request.patron
 
-    def authenticated_patron_from_request(self):
+    def authenticated_patron_from_request(self) -> ProblemDetail | Patron | Response:
         """Try to authenticate a patron for the incoming request.
 
         When this method returns, flask.request.patron will
@@ -61,7 +61,7 @@ class BaseCirculationManagerController(LoggerMixin):
           authentication, a ProblemDetail.
         """
         # Start off by assuming authentication will not work.
-        flask.request.patron = None
+        flask.request.patron = None  # type: ignore[attr-defined]
 
         auth = self.authorization_header()
 
@@ -80,7 +80,7 @@ class BaseCirculationManagerController(LoggerMixin):
             # to identify anyone in particular.
             return self.authenticate()
         if isinstance(patron, Patron):
-            flask.request.patron = patron
+            flask.request.patron = patron  # type: ignore[attr-defined]
         return patron
 
     def authenticated_patron(self, authorization_header: Authorization):
@@ -102,7 +102,7 @@ class BaseCirculationManagerController(LoggerMixin):
 
         return patron
 
-    def authenticate(self):
+    def authenticate(self) -> Response:
         """Sends a 401 response that demands authentication."""
         headers = self.manager.auth.create_authentication_headers()
         data = self.manager.authentication_for_opds_document
