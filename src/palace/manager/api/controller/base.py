@@ -108,15 +108,20 @@ class BaseCirculationManagerController(LoggerMixin):
         data = self.manager.authentication_for_opds_document
         return Response(data, 401, headers)
 
-    def library_for_request(self, library_short_name):
-        """Look up the library the user is trying to access.
+    def library_for_request(
+        self, library_short_name: str | None
+    ) -> Library | ProblemDetail:
+        """Look up the library the user is trying to use.
 
-        Since this is called on pretty much every request, it's also
-        an appropriate time to check whether the site configuration
-        has been changed and needs to be updated.
+        :param library_short_name: Optional key for looking up the library.
+        :return: The Library for the provided key, if found; a default library,
+            if available; or the `LIBRARY_NOT_FOUND` ProblemDetail.
+
+        If the key is present, use it to look up the library. If it is not
+        found, return the `LIBRARY_NOT_FOUND` ProblemDetail. If the key is
+        not present, try to get a default library. If one is not found, return
+        the `LIBRARY_NOT_FOUND` ProblemDetail.
         """
-        self.manager.reload_settings_if_changed()
-
         if library_short_name:
             library = Library.lookup(self._db, short_name=library_short_name)
         else:
@@ -124,5 +129,5 @@ class BaseCirculationManagerController(LoggerMixin):
 
         if not library:
             return LIBRARY_NOT_FOUND
-        flask.request.library = library
+        flask.request.library = library  # type: ignore[attr-defined]
         return library

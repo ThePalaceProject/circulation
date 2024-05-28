@@ -16,6 +16,11 @@ from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
 
 
+@app.before_request
+def before_request():
+    app.manager.reload_settings_if_changed()
+
+
 @app.after_request
 def print_cache(response):
     if hasattr(app, "_db") and HasSessionCache.CACHE_ATTRIBUTE in app._db.info:
