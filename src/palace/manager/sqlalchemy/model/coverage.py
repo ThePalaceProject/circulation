@@ -619,7 +619,6 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
     CLASSIFY_OPERATION = "classify"
     SUMMARY_OPERATION = "summary"
     QUALITY_OPERATION = "quality"
-    UPDATE_SEARCH_INDEX_OPERATION = "update-search-index"
 
     id = Column(Integer, primary_key=True)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
