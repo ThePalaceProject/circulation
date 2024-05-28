@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import timedelta
 
 import pytest
@@ -5,6 +6,7 @@ from freezegun import freeze_time
 
 from palace.manager.core.problem_details import INVALID_RESET_PASSWORD_TOKEN
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
@@ -18,6 +20,17 @@ class AdminFixture:
     def __init__(self, admin: Admin, db: DatabaseTransactionFixture):
         self.admin = admin
         self.db = db
+
+    @contextmanager
+    def with_roles(self, admin: Admin, *roles: str | tuple[str, Library]) -> None:
+        roles = [role if isinstance(role, tuple) else (role, None) for role in roles]
+        for role in roles:
+            role, library = role
+            admin.add_role(role, library=library)
+        yield
+        for role in roles:
+            role, library = role
+            admin.remove_role(role, library=library)
 
 
 @pytest.fixture()
@@ -243,3 +256,32 @@ class TestAdmin:
         )
         assert isinstance(extracted_admin, Admin)
         assert extracted_admin == admin
+
+    def test_authorized_libraries(self, admin_fixture: AdminFixture):
+        libraries = [admin_fixture.db.library() for _ in range(6)]
+        admin = admin_fixture.admin
+
+        # The admin has no roles yet.
+        assert admin.authorized_libraries() == []
+
+        # If the admin has a site-wide role, they have access to all libraries.
+        for role in [
+            AdminRole.SYSTEM_ADMIN,
+            AdminRole.SITEWIDE_LIBRARY_MANAGER,
+            AdminRole.SITEWIDE_LIBRARIAN,
+        ]:
+            with admin_fixture.with_roles(admin, role):
+                assert admin.authorized_libraries() == libraries
+
+        # If the admin has a library role, they have access to that library.
+        l1 = libraries[0]
+        l2 = libraries[1]
+        for role in [AdminRole.LIBRARY_MANAGER, AdminRole.LIBRARIAN]:
+            with admin_fixture.with_roles(admin, (role, l1)):
+                assert admin.authorized_libraries() == [l1]
+
+        # The admin can have multiple roles
+        with admin_fixture.with_roles(
+            admin, (AdminRole.LIBRARY_MANAGER, l1), (AdminRole.LIBRARIAN, l2)
+        ):
+            assert admin.authorized_libraries() == [l1, l2]

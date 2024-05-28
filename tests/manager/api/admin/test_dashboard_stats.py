@@ -253,6 +253,25 @@ def test_stats_inventory(admin_statistics_session: AdminStatisticsSessionFixture
         assert 15 == inventory_data.metered_licenses_owned
         assert 4 == inventory_data.metered_licenses_available
 
+    # If there are many collections that the admin doesn't have access to, the query is filtered differently,
+    # but the results should be the same. We create some additional collections not associated with our library.
+    for _ in range(10):
+        db.collection()
+
+    response = session.get_statistics()
+    library_stats = response.libraries_by_key.get(default_library.short_name)
+    library_inventory = library_stats.inventory_summary
+    summary_inventory = response.inventory_summary
+    for inventory_data in [library_inventory, summary_inventory]:
+        assert 2 == inventory_data.titles
+        assert 1 == inventory_data.available_titles
+        assert 0 == inventory_data.open_access_titles
+        assert 2 == inventory_data.licensed_titles
+        assert 0 == inventory_data.unlimited_license_titles
+        assert 2 == inventory_data.titles
+        assert 15 == inventory_data.metered_licenses_owned
+        assert 4 == inventory_data.metered_licenses_available
+
 
 def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixture):
     session = admin_statistics_session
@@ -618,3 +637,26 @@ def test_stats_parent_collection_permissions(
     # No exceptions were thrown
     assert child.id in collection_ids
     assert parent.name not in collection_ids
+
+
+def test_stats_many_collections(
+    admin_statistics_session: AdminStatisticsSessionFixture,
+):
+    """If a library has many collections, we filter the query differently, but this should not affect the results."""
+
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
+
+    collection: Collection = db.collection()
+    library = db.library()
+    collection.libraries.append(library)
+    admin.add_role(AdminRole.LIBRARIAN, library)
+
+    response = session.get_statistics()
+    collection_ids = [c.id for c in response.collections]
+
+    # Collection is in stats
+    # No exceptions were thrown
+    assert collection.id in collection_ids
+    assert collection.name in collection_ids

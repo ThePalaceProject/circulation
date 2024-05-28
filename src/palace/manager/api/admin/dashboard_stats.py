@@ -179,7 +179,7 @@ class Statistics:
             .where(query_filter)
             .group_by(Edition.medium, LicensePool.collection_id)
         )
-        if collections:
+        if collections is not None:
             query = query.where(
                 LicensePool.collection_id.in_({c.id for c in collections})
             )
