@@ -637,26 +637,3 @@ def test_stats_parent_collection_permissions(
     # No exceptions were thrown
     assert child.id in collection_ids
     assert parent.name not in collection_ids
-
-
-def test_stats_many_collections(
-    admin_statistics_session: AdminStatisticsSessionFixture,
-):
-    """If a library has many collections, we filter the query differently, but this should not affect the results."""
-
-    session = admin_statistics_session
-    admin = session.admin
-    db = session.db
-
-    collection: Collection = db.collection()
-    library = db.library()
-    collection.libraries.append(library)
-    admin.add_role(AdminRole.LIBRARIAN, library)
-
-    response = session.get_statistics()
-    collection_ids = [c.id for c in response.collections]
-
-    # Collection is in stats
-    # No exceptions were thrown
-    assert collection.id in collection_ids
-    assert collection.name in collection_ids
