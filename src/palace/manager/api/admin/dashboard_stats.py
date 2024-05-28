@@ -59,10 +59,11 @@ class Statistics:
         (
             all_authorized_collections,
             authorized_collections_by_library,
+            filter_collections,
         ) = self._authorized_collections(admin, authorized_libraries)
 
         collection_inventories = self._create_collection_inventories(
-            all_authorized_collections
+            all_authorized_collections, filter_collections
         )
         (
             collection_inventory_summary,
@@ -121,7 +122,7 @@ class Statistics:
         self,
         admin: Admin,
         authorized_libraries: list[Library],
-    ) -> tuple[list[_Collection], dict[str | None, list[_Collection]]]:
+    ) -> tuple[list[_Collection], dict[str | None, list[_Collection]], bool]:
         authorized_collections: set[_Collection] = set()
         authorized_collections_by_library = {}
 
@@ -148,6 +149,10 @@ class Statistics:
         return (
             sorted(authorized_collections, key=lambda c: c.id),
             authorized_collections_by_library,
+            # This cutoff is arbitrary, but it's a reasonable heuristic for when to filter collections
+            # by library as part of the query, vs filtering them in Python. It is slower to filter as
+            # part of the query if the user has access to most collections.
+            len(authorized_collections) / len(all_collections) < 0.5,
         )
 
     def _collections_statistics_by_medium_query(
@@ -155,7 +160,7 @@ class Statistics:
         query_filter: Any,
         /,
         columns: list[Any],
-        collections: list[_Collection],
+        collections: list[_Collection] | None,
     ) -> dict[int, dict[str, dict[str, int]]]:
         query = (
             select(
@@ -168,12 +173,7 @@ class Statistics:
             .where(query_filter)
             .group_by(Edition.medium, LicensePool.collection_id)
         )
-        # We only filter by collection here if there are fewer than 25 collections,
-        # this number is somewhat arbitrary. The idea is to avoid a very large query
-        # if there are many collections. When the query gets very large its faster to
-        # just get all the collections and filter them in python. Either way the caller
-        # has to filter the results by the collections they are interested in.
-        if len(collections) < 25:
+        if collections:
             query = query.where(
                 LicensePool.collection_id.in_({c.id for c in collections})
             )
@@ -190,28 +190,27 @@ class Statistics:
         return statistics
 
     def _run_collections_stats_queries(
-        self, collections: list[_Collection]
+        self, collections: list[_Collection], filter_collections: bool
     ) -> dict[int | None, _CollectionStatisticsQueryResults]:
         count = func.count().label("count")
+        collection_filter = collections if filter_collections else None
         metered_title_counts = self._collections_statistics_by_medium_query(
-            self.METERED_LICENSE_FILTER,
-            columns=[count],
-            collections=collections,
+            self.METERED_LICENSE_FILTER, columns=[count], collections=collection_filter
         )
         unlimited_title_counts = self._collections_statistics_by_medium_query(
             self.UNLIMITED_LICENSE_FILTER,
             columns=[count],
-            collections=collections,
+            collections=collection_filter,
         )
         open_access_title_counts = self._collections_statistics_by_medium_query(
             self.OPEN_ACCESS_FILTER,
             columns=[count],
-            collections=collections,
+            collections=collection_filter,
         )
         loanable_title_counts = self._collections_statistics_by_medium_query(
             self.AT_LEAST_ONE_LOANABLE_FILTER,
             columns=[count],
-            collections=collections,
+            collections=collection_filter,
         )
         metered_license_stats = self._collections_statistics_by_medium_query(
             self.METERED_LICENSE_FILTER,
@@ -219,7 +218,7 @@ class Statistics:
                 func.sum(LicensePool.licenses_owned).label("owned"),
                 func.sum(LicensePool.licenses_available).label("available"),
             ],
-            collections=collections,
+            collections=collection_filter,
         )
 
         return {
@@ -244,9 +243,11 @@ class Statistics:
         }
 
     def _create_collection_inventories(
-        self, collections: list[_Collection]
+        self, collections: list[_Collection], filter_collections: bool
     ) -> list[CollectionInventory]:
-        statistics = self._run_collections_stats_queries(collections)
+        statistics = self._run_collections_stats_queries(
+            collections, filter_collections
+        )
         inventories = []
         for collection in collections:
             inventory_by_medium = {
