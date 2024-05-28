@@ -146,13 +146,19 @@ class Statistics:
             for collections in authorized_collections_by_library.values():
                 authorized_collections.update(collections)
 
+        # This cutoff is arbitrary, but it's a reasonable heuristic for when to filter collections
+        # by library as part of the query, vs filtering them in Python. It is slower to filter as
+        # part of the query if the user has access to most collections.
+        filter_collections = (
+            len(authorized_collections) / len(all_collections) < 0.5
+            if all_collections
+            else False
+        )
+
         return (
             sorted(authorized_collections, key=lambda c: c.id),
             authorized_collections_by_library,
-            # This cutoff is arbitrary, but it's a reasonable heuristic for when to filter collections
-            # by library as part of the query, vs filtering them in Python. It is slower to filter as
-            # part of the query if the user has access to most collections.
-            len(authorized_collections) / len(all_collections) < 0.5,
+            filter_collections,
         )
 
     def _collections_statistics_by_medium_query(
