@@ -304,7 +304,10 @@ class TestCloudwatch:
         cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
             [
                 cloudwatch_camera.mock_task(
-                    None, routing_key="unknown_queue", started=True, uuid="uuid7"
+                    None, "unknown_queue", started=True, uuid="uuid7"
+                ),
+                cloudwatch_camera.mock_task(
+                    "task2", None, started=False, succeeded=False, uuid="uuid8"
                 ),
                 cloudwatch_camera.mock_task(None, None, started=True, uuid="uuid5"),
             ]
@@ -323,10 +326,19 @@ class TestCloudwatch:
         }
 
         # We log the information about tasks with no name or routing key.
-        no_name_warning_1, no_name_warning_2, no_routing_key_warning = caplog.messages
+        (
+            no_name_warning_1,
+            no_routing_key_warning_1,
+            no_name_warning_2,
+            no_routing_key_warning_2,
+        ) = caplog.messages
         assert (
             "Task has no name. [routing_key]:unknown_queue, [sent]:True, [started]:True, [uuid]:uuid7."
             in no_name_warning_1
+        )
+        assert (
+            "Task has no routing_key. [name]:task2, [sent]:True, [started]:False, [uuid]:uuid8."
+            in no_routing_key_warning_1
         )
         assert (
             "Task has no name. [sent]:True, [started]:True, [uuid]:uuid5."
@@ -334,7 +346,7 @@ class TestCloudwatch:
         )
         assert (
             "Task has no routing_key. [sent]:True, [started]:True, [uuid]:uuid5."
-            in no_routing_key_warning
+            in no_routing_key_warning_2
         )
 
     def test_publish(
