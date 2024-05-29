@@ -266,7 +266,7 @@ class TestCloudwatch:
         }
         assert time.isoformat() == "2021-01-01T00:00:00+00:00"
 
-        # We can also handle the case where we see a task with an unknown queue.
+        # We can also handle the case where we see a task with an unknown queue or unknown name.
         cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
             [
                 cloudwatch_camera.mock_task(
@@ -275,6 +275,14 @@ class TestCloudwatch:
                     started=False,
                     succeeded=False,
                     uuid="uuid5",
+                    runtime=3.0,
+                ),
+                cloudwatch_camera.mock_task(
+                    "unknown_task",
+                    "queue1",
+                    failed=True,
+                    succeeded=False,
+                    uuid="uuid6",
                 ),
             ]
         )
@@ -283,6 +291,7 @@ class TestCloudwatch:
         assert tasks == {
             "task1": TaskStats(),
             "task2": TaskStats(),
+            "unknown_task": TaskStats(failed=1),
         }
         assert queues == {
             "queue1": QueueStats(),
@@ -295,7 +304,7 @@ class TestCloudwatch:
         cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
             [
                 cloudwatch_camera.mock_task(
-                    None, routing_key="unknown_queue", started=True, uuid="uuid6"
+                    None, routing_key="unknown_queue", started=True, uuid="uuid7"
                 ),
                 cloudwatch_camera.mock_task(None, None, started=True, uuid="uuid5"),
             ]
@@ -305,6 +314,7 @@ class TestCloudwatch:
         assert tasks == {
             "task1": TaskStats(),
             "task2": TaskStats(),
+            "unknown_task": TaskStats(),
         }
         assert queues == {
             "queue1": QueueStats(),
@@ -315,7 +325,7 @@ class TestCloudwatch:
         # We log the information about tasks with no name or routing key.
         no_name_warning_1, no_name_warning_2, no_routing_key_warning = caplog.messages
         assert (
-            "Task has no name. [routing_key]:unknown_queue, [sent]:True, [started]:True, [uuid]:uuid6."
+            "Task has no name. [routing_key]:unknown_queue, [sent]:True, [started]:True, [uuid]:uuid7."
             in no_name_warning_1
         )
         assert (

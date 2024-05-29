@@ -175,7 +175,14 @@ class Cloudwatch(Polaroid):
             QueueStats,
             {queue.name: QueueStats() for queue in self.app.conf.get("task_queues")},
         )
-        self.tasks: defaultdict[str, TaskStats] = defaultdict(TaskStats)
+        self.tasks: defaultdict[str, TaskStats] = defaultdict(
+            TaskStats,
+            {
+                task: TaskStats()
+                for task in self.app.tasks.keys()
+                if not self.is_celery_task(task)
+            },
+        )
 
     @staticmethod
     def is_celery_task(task_name: str) -> bool:
