@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -108,6 +109,11 @@ class TaskStats:
 
         return metric_data
 
+    def reset(self) -> None:
+        self.succeeded = 0
+        self.failed = 0
+        self.runtime = []
+
 
 @dataclass
 class QueueStats(LoggerMixin):
@@ -120,14 +126,12 @@ class QueueStats(LoggerMixin):
 
     def update(self, task: Task) -> None:
         self.log.debug("Task: %r", task)
-        if task.uuid in self.queued:
-            if task.started:
-                self.log.debug("Task %s started.", task.uuid)
-                self.queued.remove(task.uuid)
-        else:
-            if task.sent and not task.started:
-                self.log.debug("Task %s queued.", task.uuid)
-                self.queued.add(task.uuid)
+        if task.uuid in self.queued and task.started:
+            self.log.debug(f"Task {task.uuid} started.")
+            self.queued.remove(task.uuid)
+        elif task.sent and not task.started:
+            self.log.debug(f"Task {task.uuid} queued.")
+            self.queued.add(task.uuid)
 
     def metrics(
         self, timestamp: datetime, dimensions: dict[str, str]
@@ -167,30 +171,56 @@ class Cloudwatch(Polaroid):
         )
         self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
         self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
-        self.queues = {
-            str(queue.name): QueueStats() for queue in self.app.conf.get("task_queues")
-        }
+        self.queues = defaultdict(
+            QueueStats,
+            {queue.name: QueueStats() for queue in self.app.conf.get("task_queues")},
+        )
+        self.tasks = defaultdict(TaskStats)
+
+    @staticmethod
+    def is_celery_task(task_name: str) -> bool:
+        return task_name.startswith("celery.")
+
+    @staticmethod
+    def task_info_str(task: Task) -> str:
+        return ", ".join(
+            [
+                f"[{k}]:{v}"
+                for k, v in task.info(extra=["name", "sent", "started", "uuid"]).items()
+            ]
+        )
 
     def on_shutter(self, state: State) -> None:
         timestamp = utc_now()
-        tasks = {
-            task: TaskStats()
-            for task in self.app.tasks.keys()
-            if not task.startswith("celery.")
-        }
+
+        # Reset the task stats for each snapshot
+        for task in self.tasks.values():
+            task.reset()
 
         for task in state.tasks.values():
-            try:
-                tasks[task.name].update(task)
-                self.queues[task.routing_key].update(task)
-            except KeyError:
-                self.logger.exception(
-                    "Error processing task %s with routing key %s",
-                    task.name,
-                    task.routing_key,
-                )
+            # Update task stats for each task
+            if task.name is None:
+                self.logger.warning(f"Task has no name. {self.task_info_str(task)}.")
+            elif self.is_celery_task(task.name):
+                # If this is an internal Celery task, we skip it entirely.
+                # We don't want to track internal Celery tasks.
+                continue
+            else:
+                self.tasks[task.name].update(task)
 
-        self.publish(tasks, self.queues, timestamp)
+            # Update queue stats for each task
+            if task.routing_key is None:
+                self.logger.warning(
+                    f"Task has no routing_key. {self.task_info_str(task)}."
+                )
+                if task.started:
+                    # Its possible that we are tracking this task, so we make sure its not in any of our queues
+                    for queue in self.queues.values():
+                        queue.update(task)
+            else:
+                self.queues[task.routing_key].update(task)
+
+        self.publish(self.tasks, self.queues, timestamp)
 
     def publish(
         self,
@@ -226,4 +256,4 @@ class Cloudwatch(Polaroid):
             else:
                 self.logger.info("Dry run enabled. Not sending metrics to Cloudwatch.")
                 for data in chunk:
-                    self.logger.info("Data: %s", data)
+                    self.logger.info(f"Data: {data}")

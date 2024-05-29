@@ -23,15 +23,24 @@ class CloudwatchCameraFixture:
         }
         self.client = boto_client
         self.state = create_autospec(State)
-        self.state.tasks = {
-            "uuid1": self.mock_task("task1", "queue1", runtime=1.0),
-            "uuid2": self.mock_task("task1", "queue1", runtime=2.0),
-            "uuid3": self.mock_task("task2", "queue2", succeeded=False, failed=True),
-            "uuid4": self.mock_task(
-                "task2", "queue2", started=False, succeeded=False, uuid="uuid4"
-            ),
-        }
+        self.state.tasks = self.task_list(
+            [
+                self.mock_task("task1", "queue1", runtime=1.0),
+                self.mock_task("task1", "queue1", runtime=2.0),
+                self.mock_task("task2", "queue2", succeeded=False, failed=True),
+                self.mock_task(
+                    "task2", "queue2", started=False, succeeded=False, uuid="uuid4"
+                ),
+                self.mock_task(
+                    "celery.built_in", "queue2", started=False, succeeded=False
+                ),
+            ]
+        )
         self.create_cloudwatch = partial(Cloudwatch, state=self.state, app=self.app)
+
+    @staticmethod
+    def task_list(tasks: list[Task]) -> dict[str, Task]:
+        return {task.uuid: task for task in tasks}
 
     def mock_queue(self, name: str) -> MagicMock:
         queue = MagicMock()
@@ -51,10 +60,6 @@ class CloudwatchCameraFixture:
     ) -> Task:
         if uuid is None:
             uuid = str(uuid4())
-        if name is None:
-            name = "task"
-        if routing_key is None:
-            routing_key = "queue"
         return Task(
             uuid=uuid,
             name=name,
@@ -192,8 +197,10 @@ class TestQueueStats:
         stats.update(mock_task)
         assert len(stats.queued) == 1
 
-        # If the task is started, it should be removed from the queue.
+        # If the task is started, it should be removed from the queue, even if we no longer
+        # have its routing key.
         mock_task.started = True
+        mock_task.routing_key = None
         stats.update(mock_task)
         assert len(stats.queued) == 0
 
@@ -236,7 +243,11 @@ class TestCloudwatch:
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         assert cloudwatch.cloudwatch_client is None
 
-    def test_on_shutter(self, cloudwatch_camera: CloudwatchCameraFixture):
+    def test_on_shutter(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         mock_publish = create_autospec(cloudwatch.publish)
         cloudwatch.publish = mock_publish
@@ -255,23 +266,66 @@ class TestCloudwatch:
         }
         assert time.isoformat() == "2021-01-01T00:00:00+00:00"
 
-    def test_on_shutter_error(
-        self,
-        cloudwatch_camera: CloudwatchCameraFixture,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        cloudwatch_camera.app.tasks = {"task1": MagicMock()}
-        cloudwatch = cloudwatch_camera.create_cloudwatch()
-        mock_publish = create_autospec(cloudwatch.publish)
-        cloudwatch.publish = mock_publish
+        # We can also handle the case where we see a task with an unknown queue.
+        cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
+            [
+                cloudwatch_camera.mock_task(
+                    "task2",
+                    "unknown_queue",
+                    started=False,
+                    succeeded=False,
+                    uuid="uuid5",
+                ),
+            ]
+        )
         cloudwatch.on_shutter(cloudwatch_camera.state)
-        mock_publish.assert_called_once()
-        [tasks, queues, time] = mock_publish.call_args.args
+        [tasks, queues, _] = mock_publish.call_args.args
+        assert tasks == {
+            "task1": TaskStats(),
+            "task2": TaskStats(),
+        }
+        assert queues == {
+            "queue1": QueueStats(),
+            "queue2": QueueStats(queued={"uuid4"}),
+            "unknown_queue": QueueStats(queued={"uuid5"}),
+        }
 
-        assert tasks == {"task1": TaskStats(succeeded=2, runtime=[1.0, 2.0])}
-        assert queues == {"queue1": QueueStats(), "queue2": QueueStats()}
-        assert time is not None
-        assert "Error processing task" in caplog.text
+        # We can handle tasks with no name or tasks with no routing key.
+        caplog.clear()
+        cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
+            [
+                cloudwatch_camera.mock_task(
+                    None, routing_key="unknown_queue", started=True, uuid="uuid6"
+                ),
+                cloudwatch_camera.mock_task(None, None, started=True, uuid="uuid5"),
+            ]
+        )
+        cloudwatch.on_shutter(cloudwatch_camera.state)
+        [tasks, queues, _] = mock_publish.call_args.args
+        assert tasks == {
+            "task1": TaskStats(),
+            "task2": TaskStats(),
+        }
+        assert queues == {
+            "queue1": QueueStats(),
+            "queue2": QueueStats(queued={"uuid4"}),
+            "unknown_queue": QueueStats(),
+        }
+
+        # We log the information about tasks with no name or routing key.
+        no_name_warning_1, no_name_warning_2, no_routing_key_warning = caplog.messages
+        assert (
+            "Task has no name. [routing_key]:unknown_queue, [sent]:True, [started]:True, [uuid]:uuid6."
+            in no_name_warning_1
+        )
+        assert (
+            "Task has no name. [sent]:True, [started]:True, [uuid]:uuid5."
+            in no_name_warning_2
+        )
+        assert (
+            "Task has no routing_key. [sent]:True, [started]:True, [uuid]:uuid5."
+            in no_routing_key_warning
+        )
 
     def test_publish(
         self,
