@@ -23,8 +23,8 @@ class CeleryConfiguration(ServiceConfiguration):
     task_track_started: bool = True
 
     worker_cancel_long_running_tasks_on_connection_loss: bool = False
-    worker_max_tasks_per_child: int = 100
-    worker_prefetch_multiplier: int = 1
+    worker_max_tasks_per_child: int = 400
+    worker_prefetch_multiplier: int = 100
     worker_hijack_root_logger: bool = False
     worker_log_color: bool = False
     worker_send_task_events: bool = True
