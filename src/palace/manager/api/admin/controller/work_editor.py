@@ -30,6 +30,7 @@ from palace.manager.core.classifier import (
     SimplifiedGenreClassifier,
     genres,
 )
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.classification import (
@@ -367,53 +368,15 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def suppress(self, identifier_type, identifier) -> Response | ProblemDetail:
-        """Suppress the license pool associated with a book."""
-        library = flask.request.library  # type: ignore
-        self.require_library_manager(library)
-
-        # Turn source + identifier into a LicensePool
-        pools = self.load_licensepools(
-            flask.request.library, identifier_type, identifier  # type: ignore
-        )
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
-
-        # Assume that the Work is being suppressed from the catalog, and
-        # not just the LicensePool.
-        # TODO: Suppress individual LicensePools when it's not that deep.
-        for pool in pools:
-            pool.suppressed = True
-        return Response("", 200)
-
-    def unsuppress(self, identifier_type, identifier) -> Response | ProblemDetail:
-        """Unsuppress all license pools associated with a book.
-
-        TODO: This will need to be revisited when we distinguish
-        between complaints about a work and complaints about a
-        LicensePoool.
-        """
-        library = flask.request.library  # type: ignore
-        self.require_library_manager(library)
-
-        # Turn source + identifier into a group of LicensePools
-        pools = self.load_licensepools(library, identifier_type, identifier)
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
-
-        # Unsuppress each pool.
-        for pool in pools:
-            pool.suppressed = False
-        return Response("", 200)
-
-    def suppress_for_library(
+    def suppress(
         self, identifier_type: str, identifier: str
     ) -> Response | ProblemDetail:
         """Suppress a book at the level of a library."""
 
-        library = flask.request.library  # type: ignore
+        library = flask.request.library  # type: ignore[attr-defined]
+
+        if library is None:
+            return self.no_library_response()
 
         self.require_library_manager(library)
 
@@ -432,12 +395,15 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def unsuppress_for_library(
+    def unsuppress(
         self, identifier_type: str, identifier: str
     ) -> Response | ProblemDetail:
-        """Unsuppress book at the level of a library"""
+        """Remove a book suppression from a book at the level of a library"""
 
-        library = flask.request.library  # type: ignore
+        library = flask.request.library  # type: ignore[attr-defined]
+
+        if library is None:
+            return self.no_library_response()
 
         self.require_library_manager(library)
 
@@ -770,3 +736,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
                 lane.update_size(self._db, search_engine=self.search_engine)
 
             return Response(str(_("Success")), 200)
+
+    def no_library_response(self) -> ProblemDetail:
+        return INVALID_INPUT.detailed(
+            "A library must be specified in the request. No library specified."
+        )

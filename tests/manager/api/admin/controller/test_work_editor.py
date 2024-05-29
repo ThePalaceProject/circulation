@@ -1,7 +1,6 @@
 import json
 from collections.abc import Generator
 
-import feedparser
 import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
@@ -76,64 +75,6 @@ def work_fixture(
 
 
 class TestWorkController:
-    def test_details(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
-
-        lp.suppressed = False
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.details(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 200 == response.status_code
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
-            suppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
-            ]
-            unsuppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
-            ]
-            assert 0 == len(unsuppress_links)
-            assert 1 == len(suppress_links)
-            assert lp.identifier.identifier in suppress_links[0]
-
-        lp.suppressed = True
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.details(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 200 == response.status_code
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
-            suppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
-            ]
-            unsuppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
-            ]
-            assert 0 == len(suppress_links)
-            assert 1 == len(unsuppress_links)
-            assert lp.identifier.identifier in unsuppress_links[0]
-
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.details,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
-
     def test_roles(self, work_fixture: WorkFixture):
         roles = work_fixture.manager.admin_work_controller.roles()
         assert Contributor.ILLUSTRATOR_ROLE in list(roles.values())
@@ -706,23 +647,40 @@ class TestWorkController:
             )
 
     def test_suppress(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
+        work = work_fixture.english_1
+        [lp] = work.license_pools
+        library = work_fixture.ctrl.db.default_library()
 
-        work_fixture.admin.add_role(
-            AdminRole.LIBRARY_MANAGER, library=work_fixture.ctrl.db.default_library()
-        )
+        assert library not in work.suppressed_for
 
+        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        # test success
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.suppress(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
-            assert lp.suppressed
+            assert library in work.suppressed_for
 
-        lp.suppressed = False
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARY_MANAGER, work_fixture.ctrl.db.default_library()
-        )
+        # test non-existent id
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.suppress(
+                IdentifierType.URI.value, "http://non-existent-id"
+            )
+            assert isinstance(response, ProblemDetail)
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            response = work_fixture.manager.admin_work_controller.suppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 400 == response.status_code
+            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
+
+        # test unauthorized
+        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
@@ -732,75 +690,6 @@ class TestWorkController:
             )
 
     def test_unsuppress(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
-        lp.suppressed = True
-
-        work_fixture.admin.add_role(
-            AdminRole.LIBRARY_MANAGER, library=work_fixture.ctrl.db.default_library()
-        )
-
-        broken_lp = work_fixture.ctrl.db.licensepool(
-            work_fixture.english_1.presentation_edition,
-            data_source_name=DataSource.OVERDRIVE,
-        )
-        work_fixture.english_1.license_pools.append(broken_lp)
-        broken_lp.suppressed = True
-
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.unsuppress(
-                lp.identifier.type, lp.identifier.identifier
-            )
-
-            # Both LicensePools are unsuppressed, even though one of them
-            # has a LicensePool-specific complaint.
-            assert 200 == response.status_code
-            assert not lp.suppressed
-            assert not broken_lp.suppressed
-
-        lp.suppressed = True
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARY_MANAGER, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.unsuppress,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
-
-    def test_suppress_for_library(self, work_fixture: WorkFixture):
-        work = work_fixture.english_1
-        [lp] = work.license_pools
-        library = work_fixture.ctrl.db.default_library()
-
-        assert library not in work.suppressed_for
-
-        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
-
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.suppress_for_library(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 200 == response.status_code
-            assert library in work.suppressed_for
-
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.suppress_for_library(
-                IdentifierType.URI.value, "http://non-existent-id"
-            )
-            assert isinstance(response, ProblemDetail)
-
-        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.suppress_for_library,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
-
-    def test_unsuppress_for_library(self, work_fixture: WorkFixture):
         work = work_fixture.english_1
         [lp] = work.license_pools
         library = work_fixture.ctrl.db.default_library()
@@ -811,29 +700,34 @@ class TestWorkController:
         work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = (
-                work_fixture.manager.admin_work_controller.unsuppress_for_library(
-                    lp.identifier.type, lp.identifier.identifier
-                )
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                lp.identifier.type, lp.identifier.identifier
             )
 
             assert 200 == response.status_code
             assert library not in work.suppressed_for
 
         with work_fixture.request_context_with_library_and_admin("/"):
-            response = (
-                work_fixture.manager.admin_work_controller.unsuppress_for_library(
-                    IdentifierType.URI.value, "http://non-existent-id"
-                )
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                IdentifierType.URI.value, "http://non-existent-id"
             )
             assert isinstance(response, ProblemDetail)
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 400 == response.status_code
+            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
 
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
 
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.unsuppress_for_library,
+                work_fixture.manager.admin_work_controller.unsuppress,
                 lp.identifier.type,
                 lp.identifier.identifier,
             )

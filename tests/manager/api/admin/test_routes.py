@@ -363,7 +363,18 @@ class TestAdminWork:
             http_method="POST",
         )
 
-    def test_suppress(self, fixture: AdminRouteFixture):
+    def test_suppression_post(self, fixture: AdminRouteFixture):
+        url = "/admin/works/<identifier_type>/an/identifier/suppress"
+        fixture.assert_authenticated_request_calls(
+            url,
+            fixture.controller.suppression,  # type: ignore
+            "<identifier_type>",
+            "an/identifier",
+            http_method="POST",
+        )
+
+        # TODO: when /suppress end point is removed (currently deprecated) we'll want to remove the following two lines
+        # since these tests will start failing here.
         url = "/admin/works/<identifier_type>/an/identifier/suppress"
         fixture.assert_authenticated_request_calls(
             url,
@@ -373,31 +384,33 @@ class TestAdminWork:
             http_method="POST",
         )
 
-    def test_unsuppress(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/unsuppress"
+    def test_suppression_delete(self, fixture: AdminRouteFixture):
+        url = "/admin/works/<identifier_type>/an/identifier/suppression"
         fixture.assert_authenticated_request_calls(
             url,
             fixture.controller.unsuppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
-            http_method="POST",
+            http_method="DELETE",
         )
 
-    def test_suppress_for_library(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/suppress-for-library"
+        # TODO: when /suppress end point is removed (currently deprecated we'll want to remove the following two lines
+        # since these tests will start failing here.
+        url = "/admin/works/<identifier_type>/an/identifier/suppress"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.suppress_for_library,  # type: ignore
+            fixture.controller.unsuppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
-            http_method="POST",
+            http_method="DELETE",
         )
 
-    def test_unsuppress_for_library(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/unsuppress-for-library"
+    @DeprecationWarning
+    def test_unsuppress(self, fixture: AdminRouteFixture):
+        url = "/admin/works/<identifier_type>/an/identifier/unsuppress"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.unsuppress_for_library,  # type: ignore
+            fixture.controller.unsuppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
