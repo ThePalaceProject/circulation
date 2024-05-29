@@ -175,7 +175,7 @@ class Cloudwatch(Polaroid):
             QueueStats,
             {queue.name: QueueStats() for queue in self.app.conf.get("task_queues")},
         )
-        self.tasks = defaultdict(TaskStats)
+        self.tasks: defaultdict[str, TaskStats] = defaultdict(TaskStats)
 
     @staticmethod
     def is_celery_task(task_name: str) -> bool:
@@ -190,12 +190,15 @@ class Cloudwatch(Polaroid):
             ]
         )
 
+    def reset_tasks(self) -> None:
+        for task in self.tasks.values():
+            task.reset()
+
     def on_shutter(self, state: State) -> None:
         timestamp = utc_now()
 
         # Reset the task stats for each snapshot
-        for task in self.tasks.values():
-            task.reset()
+        self.reset_tasks()
 
         for task in state.tasks.values():
             # Update task stats for each task
