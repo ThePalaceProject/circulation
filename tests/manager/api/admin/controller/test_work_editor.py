@@ -22,6 +22,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_ROLE,
 )
 from palace.manager.core.classifier import SimplifiedGenreClassifier
+from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -36,6 +37,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks.flask import add_request_context
@@ -783,6 +785,12 @@ class TestWorkController:
             assert 200 == response.status_code
             assert library in work.suppressed_for
 
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.suppress_for_library(
+                IdentifierType.URI.value, "http://non-existent-id"
+            )
+            assert isinstance(response, ProblemDetail)
+
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
@@ -811,6 +819,14 @@ class TestWorkController:
 
             assert 200 == response.status_code
             assert library not in work.suppressed_for
+
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = (
+                work_fixture.manager.admin_work_controller.unsuppress_for_library(
+                    IdentifierType.URI.value, "http://non-existent-id"
+                )
+            )
+            assert isinstance(response, ProblemDetail)
 
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
 

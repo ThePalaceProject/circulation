@@ -367,13 +367,14 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def suppress(self, identifier_type, identifier):
+    def suppress(self, identifier_type, identifier) -> Response | ProblemDetail:
         """Suppress the license pool associated with a book."""
-        self.require_library_manager(flask.request.library)
+        library = flask.request.library  # type: ignore
+        self.require_library_manager(library)
 
         # Turn source + identifier into a LicensePool
         pools = self.load_licensepools(
-            flask.request.library, identifier_type, identifier
+            flask.request.library, identifier_type, identifier  # type: ignore
         )
         if isinstance(pools, ProblemDetail):
             # Something went wrong.
@@ -386,19 +387,18 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             pool.suppressed = True
         return Response("", 200)
 
-    def unsuppress(self, identifier_type, identifier):
+    def unsuppress(self, identifier_type, identifier) -> Response | ProblemDetail:
         """Unsuppress all license pools associated with a book.
 
         TODO: This will need to be revisited when we distinguish
         between complaints about a work and complaints about a
         LicensePoool.
         """
-        self.require_library_manager(flask.request.library)
+        library = flask.request.library  # type: ignore
+        self.require_library_manager(library)
 
         # Turn source + identifier into a group of LicensePools
-        pools = self.load_licensepools(
-            flask.request.library, identifier_type, identifier
-        )
+        pools = self.load_licensepools(library, identifier_type, identifier)
         if isinstance(pools, ProblemDetail):
             # Something went wrong.
             return pools
@@ -408,7 +408,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             pool.suppressed = False
         return Response("", 200)
 
-    def suppress_for_library(self, identifier_type: str, identifier: str):
+    def suppress_for_library(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
         """Suppress a book at the level of a library."""
 
         library = flask.request.library  # type: ignore
@@ -430,7 +432,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def unsuppress_for_library(self, identifier_type: str, identifier: str):
+    def unsuppress_for_library(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
         """Unsuppress book at the level of a library"""
 
         library = flask.request.library  # type: ignore
