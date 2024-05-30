@@ -29,10 +29,6 @@ def beat_schedule() -> dict[str, Any]:
     of the task to run.
     """
     return {
-        "update_custom_lists": {
-            "task": "custom_list.update_custom_lists",
-            "schedule": crontab(minute="5"),  # Run every hour at 5 minutes past
-        },
         "full_search_reindex": {
             "task": "search.search_reindex",
             "schedule": crontab(hour="0", minute="10"),  # Run every day at 12:10 AM

@@ -91,6 +91,10 @@ HOME=/var/www/circulation
 #
 0 5 * * * root bin/run saml_monitor >> /var/log/cron.log 2>&1
 
+# Auto update lists
+# Every hour between 7AM - 1AM
+5 0,1,7-23 * * * root core/bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1
+
 # Rotate the patron auth JWE access token key daily
 #
 0 3 * * * root bin/run rotate_patron_auth_key >> /var/log/cron.log 2>&1
