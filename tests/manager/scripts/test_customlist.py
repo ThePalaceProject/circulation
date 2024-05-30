@@ -166,7 +166,9 @@ class TestCustomListUpdateEntriesScript:
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        with patch("core.scripts.CustomListQueries") as mock_queries:
+        with patch(
+            "palace.manager.scripts.customlist.CustomListQueries"
+        ) as mock_queries:
             fixture = end_to_end_search_fixture
             db, session = (
                 fixture.external_search.db,
