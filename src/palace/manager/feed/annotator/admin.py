@@ -23,6 +23,7 @@ class AdminAnnotator(LibraryAnnotator):
 
         identifier = entry.identifier
         active_license_pool = entry.license_pool
+        work = entry.work
 
         # Find staff rating and add a tag for it.
         for measurement in identifier.measurements:
@@ -35,19 +36,7 @@ class AdminAnnotator(LibraryAnnotator):
                     self.rating(measurement.quantity_measured, measurement.value)
                 )
 
-        if active_license_pool and active_license_pool.suppressed:
-            entry.computed.other_links.append(
-                Link(
-                    href=self.url_for(
-                        "unsuppress",
-                        identifier_type=identifier.type,
-                        identifier=identifier.identifier,
-                        _external=True,
-                    ),
-                    rel="http://librarysimplified.org/terms/rel/restore",
-                )
-            )
-        else:
+        if active_license_pool and not active_license_pool.suppressed:
             entry.computed.other_links.append(
                 Link(
                     href=self.url_for(
@@ -57,6 +46,44 @@ class AdminAnnotator(LibraryAnnotator):
                         _external=True,
                     ),
                     rel="http://librarysimplified.org/terms/rel/hide",
+                )
+            )
+            if self.library in work.suppressed_for:
+                entry.computed.other_links.append(
+                    Link(
+                        href=self.url_for(
+                            "unsuppress_for_library",
+                            identifier_type=identifier.type,
+                            identifier=identifier.identifier,
+                            library_short_name=self.library.short_name,
+                            _external=True,
+                        ),
+                        rel="http://palaceproject.io/terms/rel/unsuppress-for-library",
+                    )
+                )
+            else:
+                entry.computed.other_links.append(
+                    Link(
+                        href=self.url_for(
+                            "suppress_for_library",
+                            identifier_type=identifier.type,
+                            identifier=identifier.identifier,
+                            library_short_name=self.library.short_name,
+                            _external=True,
+                        ),
+                        rel="http://palaceproject.io/terms/rel/suppress-for-library",
+                    )
+                )
+        elif active_license_pool and active_license_pool.suppressed:
+            entry.computed.other_links.append(
+                Link(
+                    href=self.url_for(
+                        "unsuppress",
+                        identifier_type=identifier.type,
+                        identifier=identifier.identifier,
+                        _external=True,
+                    ),
+                    rel="http://librarysimplified.org/terms/rel/restore",
                 )
             )
 

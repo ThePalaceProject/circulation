@@ -1,6 +1,7 @@
 import json
 from collections.abc import Generator
 
+import feedparser
 import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
@@ -75,6 +76,85 @@ def work_fixture(
 
 
 class TestWorkController:
+    def test_details(self, work_fixture: WorkFixture):
+        def _links_for_rel(entry: str, rel: str):
+            return [link for link in entry["links"] if link["rel"] == rel]
+
+        def _suppression_hrefs(entry) -> tuple(str, str, str, str):
+            return (
+                [
+                    link["href"]
+                    for link in _links_for_rel(
+                        entry, "http://palaceproject.io/terms/rel/suppress-for-library"
+                    )
+                ],
+                [
+                    link["href"]
+                    for link in _links_for_rel(
+                        entry,
+                        "http://palaceproject.io/terms/rel/unsuppress-for-library",
+                    )
+                ],
+            )
+
+        [lp] = work_fixture.english_1.license_pools
+
+        lp.suppressed = False
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.details(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 200 == response.status_code
+            feed = feedparser.parse(response.get_data())
+            [entry] = feed["entries"]
+            (
+                hide_for_coll_href,
+                unhide_for_coll_href,
+                hide_for_lib_href,
+                unhide_for_lib_href,
+            ) = _suppression_hrefs(entry)
+            assert 0 == len(unhide_for_coll_href)
+            assert 1 == len(hide_for_coll_href)
+            assert 0 == len(unhide_for_lib_href)
+            assert 1 == len(hide_for_lib_href)
+            assert lp.identifier.identifier in hide_for_coll_href[0]
+            assert lp.identifier.identifier in hide_for_lib_href[0]
+
+        lp.suppressed = True
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.details(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 200 == response.status_code
+            feed = feedparser.parse(response.get_data())
+            [entry] = feed["entries"]
+            hide_for_coll_href = [
+                x["href"]
+                for x in entry["links"]
+                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
+            ]
+            unhide_for_coll_href = [
+                x["href"]
+                for x in entry["links"]
+                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
+            ]
+            assert 0 == len(hide_for_coll_href)
+            assert 1 == len(unhide_for_coll_href)
+            assert 0 == len(hide_for_lib_href)
+            assert 0 == len(unhide_for_lib_href)
+            assert lp.identifier.identifier in unhide_for_coll_href[0]
+
+        work_fixture.admin.remove_role(
+            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
+        )
+        with work_fixture.request_context_with_library_and_admin("/"):
+            pytest.raises(
+                AdminNotAuthorized,
+                work_fixture.manager.admin_work_controller.details,
+                lp.identifier.type,
+                lp.identifier.identifier,
+            )
+
     def test_roles(self, work_fixture: WorkFixture):
         roles = work_fixture.manager.admin_work_controller.roles()
         assert Contributor.ILLUSTRATOR_ROLE in list(roles.values())
