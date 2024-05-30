@@ -39,7 +39,5 @@ def run(url=None):
 
 
 if __name__ == "__main__":
-    url = None
-    if len(sys.argv) > 1:
-        url = sys.argv[1]
+    url = sys.argv.pop()
     run(url)
