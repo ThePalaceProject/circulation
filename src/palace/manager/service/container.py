@@ -74,7 +74,6 @@ def wire_container(container: Services) -> None:
             "palace.manager.core.metadata_layer",
             "palace.manager.sqlalchemy.model.collection",
             "palace.manager.sqlalchemy.model.work",
-            "palace.manager.core.query.customlist",
         ]
     )
 
