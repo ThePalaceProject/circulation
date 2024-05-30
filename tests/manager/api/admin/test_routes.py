@@ -364,21 +364,10 @@ class TestAdminWork:
         )
 
     def test_suppression_post(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/suppress"
+        url = "/admin/works/<identifier_type>/an/identifier/suppression"
         fixture.assert_authenticated_request_calls(
             url,
             fixture.controller.suppression,  # type: ignore
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
-        # TODO: when /suppress end point is removed (currently deprecated) we'll want to remove the following two lines
-        # since these tests will start failing here.
-        url = "/admin/works/<identifier_type>/an/identifier/suppress"
-        fixture.assert_authenticated_request_calls(
-            url,
-            fixture.controller.suppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
@@ -394,19 +383,22 @@ class TestAdminWork:
             http_method="DELETE",
         )
 
-        # TODO: when /suppress end point is removed (currently deprecated we'll want to remove the following two lines
+    @DeprecationWarning
+    def test_suppress(self, fixture: AdminRouteFixture):
+        # TODO: when /suppress end point is removed (currently deprecated) we'll want to remove this test
         # since these tests will start failing here.
         url = "/admin/works/<identifier_type>/an/identifier/suppress"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.unsuppress,  # type: ignore
+            fixture.controller.suppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
-            http_method="DELETE",
+            http_method="POST",
         )
 
     @DeprecationWarning
     def test_unsuppress(self, fixture: AdminRouteFixture):
+        # TODO when deprecated /unsuppress endpoint is removed we'll want to remove this test.
         url = "/admin/works/<identifier_type>/an/identifier/unsuppress"
         fixture.assert_authenticated_request_calls(
             url,

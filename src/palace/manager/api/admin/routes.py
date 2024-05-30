@@ -209,7 +209,7 @@ def suppress(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/suppression", methods=["DELETe"]
+    "/admin/works/<identifier_type>/<path:identifier>/suppression", methods=["DELETE"]
 )
 @allows_library
 @returns_problem_detail
