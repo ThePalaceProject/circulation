@@ -9,7 +9,6 @@ from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 from flask_pydantic_spec.flask_backend import Context
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.problem_details import (
@@ -22,13 +21,14 @@ from palace.manager.api.admin.problem_details import (
     MISSING_COLLECTION,
     MISSING_CUSTOM_LIST,
 )
+from palace.manager.api.controller.circulation_manager import (
+    CirculationManagerController,
+)
 from palace.manager.api.problem_details import CANNOT_DELETE_SHARED_LIST
-from palace.manager.celery.tasks.custom_list import update_custom_list
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWED
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -38,11 +38,12 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create, get_one
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
-class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
+class CustomListsController(
+    CirculationManagerController, AdminPermissionsControllerMixin
+):
     class CustomListSharePostResponse(BaseModel):
         successes: int = 0
         failures: int = 0
@@ -57,13 +58,6 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
         auto_update: bool = False
         auto_update_query: dict | None = None
         auto_update_facets: dict | None = None
-
-    def __init__(
-        self, _db: Session, search_engine: ExternalSearchIndex, annotator: Callable
-    ) -> None:
-        self._db = _db
-        self.search_engine = search_engine
-        self.annotator = annotator
 
     def _list_as_json(self, list: CustomList, is_owner=True) -> dict:
         """Transform a CustomList object into a response ready dict"""
@@ -240,10 +234,11 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
             and list.auto_update_enabled
             and list.auto_update_status == CustomList.INIT
         ):
+            if isinstance(self.search_engine, ProblemDetail):
+                return self.search_engine
             CustomListQueries.populate_query_pages(
                 self._db, self.search_engine, list, max_pages=1
             )
-            update_custom_list.delay(list.id)
         elif (
             not is_new
             and list.auto_update_enabled
@@ -257,7 +252,6 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
                 prev_query_dict = json.loads(previous_auto_update_query)
                 if prev_query_dict != auto_update_query:
                     list.auto_update_status = CustomList.REPOPULATE
-                    update_custom_list.delay(list.id)
             except json.JSONDecodeError:
                 # Do nothing if the previous query was not valid
                 pass
@@ -294,6 +288,8 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
                 [w.id for w in works_to_update_in_search if w.id is not None],
             )
             # TODO: Does this need to be done here, or can this be done asynchronously?
+            if isinstance(self.search_engine, ProblemDetail):
+                return self.search_engine
             self.search_engine.add_documents(documents)
             self.search_engine.search_service().refresh()
 
@@ -358,7 +354,7 @@ class CustomListsController(AdminPermissionsControllerMixin, LoggerMixin):
             worklist = WorkList()
             worklist.initialize(library, customlists=[list])
 
-            annotator = self.annotator(worklist)
+            annotator = self.manager.annotator(worklist)
             url_fn = self.url_for_custom_list(library, list)
             feed = OPDSAcquisitionFeed.from_query(
                 query, self._db, list.name or "", url, pagination, url_fn, annotator
