@@ -247,7 +247,7 @@ class ODLAPITestFixture:
 
 
 @pytest.fixture(scope="function")
-def odl_api_test_fixture(odl_test_fixture: ODLTestFixture) -> ODLAPITestFixture:
+def odl_api_test_fixture(odl_test_fixture) -> ODLAPITestFixture:
     library = odl_test_fixture.library()
     collection = odl_test_fixture.collection(library)
     work = odl_test_fixture.work(collection)

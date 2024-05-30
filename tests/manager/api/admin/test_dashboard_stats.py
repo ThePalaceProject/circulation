@@ -82,7 +82,7 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
 
     # patron2 has a hold.
     patron2 = db.patron()
-    pool.on_hold_to(patron2)
+    pool.on_hold_to(patron2, position=0)
 
     # patron3 has an open access loan with no end date, but it doesn't count
     # because we don't know if it is still active.
@@ -106,7 +106,7 @@ def test_stats_patrons(admin_statistics_session: AdminStatisticsSessionFixture):
     pool.loan_to(patron4, end=utc_now() + timedelta(days=5))
 
     patron5 = db.patron(library=l2)
-    pool.on_hold_to(patron5)
+    pool.on_hold_to(patron5, position=1)
 
     response = session.get_statistics()
     library_stats = response.libraries_by_key.get(default_library.short_name)

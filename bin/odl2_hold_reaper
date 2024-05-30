@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+"""Check for ODL 2 holds that have expired and delete them."""
+
+
+from palace.manager.api.odl import ODL2HoldReaper
+from palace.manager.scripts.monitor import RunCollectionMonitorScript
+
+RunCollectionMonitorScript(ODL2HoldReaper).run()

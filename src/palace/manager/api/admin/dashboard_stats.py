@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import union
+from sqlalchemy import not_, union
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select, func, select
 from sqlalchemy.sql.expression import and_, distinct, false, or_, true
@@ -285,6 +285,21 @@ class Statistics:
 
         if issubclass(loan_or_hold, Loan):
             query = query.where(loan_or_hold.end >= datetime.now())
+        elif issubclass(loan_or_hold, Hold):
+            # active holds are holds where the position is greater than zero AND end is not before present.
+            # apparently a hold can have an end that is None when the estimate end has not yet been or
+            # cannot be calculated.
+            # Hold.position = 0 and Hold.end before present is the only state where we can definitively say the
+            # hold is not active so we exclude only those holds here.
+            query = query.where(
+                not_(
+                    and_(
+                        loan_or_hold.position == 0,
+                        loan_or_hold.end != None,
+                        loan_or_hold.end < datetime.now(),
+                    )
+                )
+            )
 
         return query
 
