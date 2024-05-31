@@ -30,7 +30,6 @@ from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.registry.discovery import DiscoveryRegistry
-from palace.manager.service.configuration import ServiceConfiguration
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -65,6 +64,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import create, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.config import FixtureTestUrlConfiguration, ToxPasswordUrlTuple
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
@@ -122,12 +122,16 @@ def function_test_id(worker_id: str) -> TestIdFixture:
     return TestIdFixture(worker_id, "function")
 
 
-class DatabaseTestConfiguration(ServiceConfiguration):
+class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
     create_database: bool = True
 
     class Config:
         env_prefix = "PALACE_TEST_DATABASE_"
+
+    @classmethod
+    def url_cls(cls) -> type[ToxPasswordUrlTuple]:
+        return ToxPasswordUrlTuple
 
 
 class DatabaseCreationFixture:
@@ -141,7 +145,7 @@ class DatabaseCreationFixture:
 
     def __init__(self, test_id: TestIdFixture):
         self.test_id = test_id
-        config = DatabaseTestConfiguration()
+        config = DatabaseTestConfiguration.from_env()
         if not config.create_database and self.test_id.parallel:
             raise BasePalaceException(
                 "Database creation is disabled, but tests are running in parallel mode. "

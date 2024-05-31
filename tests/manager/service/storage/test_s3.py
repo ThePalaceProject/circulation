@@ -15,6 +15,7 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.configuration import ServiceConfiguration
 from palace.manager.service.storage.container import Storage
 from palace.manager.service.storage.s3 import S3Service
+from tests.fixtures.config import FixtureTestUrlConfiguration
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -232,8 +233,8 @@ class TestS3Service:
             upload.upload_part(b"foo")
 
 
-class S3UploaderIntegrationConfiguration(ServiceConfiguration):
-    endpoint_url: AnyHttpUrl
+class S3UploaderIntegrationConfiguration(FixtureTestUrlConfiguration):
+    url: AnyHttpUrl
     user: str
     password: str
 
@@ -244,18 +245,18 @@ class S3UploaderIntegrationConfiguration(ServiceConfiguration):
 class S3ServiceIntegrationFixture:
     def __init__(self):
         self.container = Storage()
-        self.configuration = S3UploaderIntegrationConfiguration()
+        self.configuration = S3UploaderIntegrationConfiguration.from_env()
         self.analytics_bucket = self.random_name("analytics")
         self.public_access_bucket = self.random_name("public")
         self.container.config.from_dict(
             {
                 "access_key": self.configuration.user,
                 "secret_key": self.configuration.password,
-                "endpoint_url": self.configuration.endpoint_url,
+                "endpoint_url": self.configuration.url,
                 "region": "us-east-1",
                 "analytics_bucket": self.analytics_bucket,
                 "public_access_bucket": self.public_access_bucket,
-                "url_template": self.configuration.endpoint_url + "/{bucket}/{key}",
+                "url_template": self.configuration.url + "/{bucket}/{key}",
             }
         )
         self.buckets = []

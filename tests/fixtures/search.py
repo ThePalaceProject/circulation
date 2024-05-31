@@ -12,17 +12,17 @@ from palace.manager.celery.tasks.search import get_work_search_documents
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchServiceOpensearch1
-from palace.manager.service.configuration import ServiceConfiguration
 from palace.manager.service.container import Services, wire_container
 from palace.manager.service.search.container import Search
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
+from tests.fixtures.config import FixtureTestUrlConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture, TestIdFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFake
 
 
-class SearchTestConfiguration(ServiceConfiguration):
+class SearchTestConfiguration(FixtureTestUrlConfiguration):
     url: AnyHttpUrl
     timeout: int = 20
     maxsize: int = 25
@@ -43,7 +43,7 @@ class ExternalSearchFixture(LoggerMixin):
     def __init__(
         self, db: DatabaseTransactionFixture, services: Services, test_id: TestIdFixture
     ):
-        self.search_config = SearchTestConfiguration()
+        self.search_config = SearchTestConfiguration.from_env()
         self.services_container = services
         self.index_prefix = test_id.id
 
