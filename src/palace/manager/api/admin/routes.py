@@ -215,7 +215,7 @@ def suppress(identifier_type, identifier):
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
-def unsurpress(identifier_type, identifier):
+def unsuppress(identifier_type, identifier):
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
