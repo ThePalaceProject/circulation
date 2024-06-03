@@ -330,7 +330,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
             )
 
         response = self._get(url)
-        if response.status_code != 200:
+        if not response.ok:
             header_string = ", ".join(
                 {f"{k}: {v}" for k, v in response.headers.items()}
             )
