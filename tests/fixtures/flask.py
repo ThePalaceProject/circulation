@@ -47,13 +47,14 @@ class FlaskAppFixture:
             flask.request.admin = admin  # type: ignore[attr-defined]
             flask.request.form = ImmutableMultiDict()
             flask.request.files = ImmutableMultiDict()
-            yield c
-
-            # Flush any changes that may have occurred during the request, then
-            # expire all objects to ensure that the next request will see the
-            # changes.
-            self.db.session.commit()
-            self.db.session.expire_all()
+            try:
+                yield c
+            finally:
+                # Flush any changes that may have occurred during the request, then
+                # expire all objects to ensure that the next request will see the
+                # changes.
+                self.db.session.commit()
+                self.db.session.expire_all()
 
     @contextmanager
     def test_request_context_system_admin(

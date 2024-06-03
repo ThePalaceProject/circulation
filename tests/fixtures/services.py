@@ -34,8 +34,10 @@ def mock_services_container(
     from palace.manager.service import container
 
     container._container_instance = services_container
-    yield
-    container._container_instance = None
+    try:
+        yield
+    finally:
+        container._container_instance = None
 
 
 @dataclass
@@ -197,8 +199,10 @@ class ServicesFixture:
     @contextmanager
     def wired(self) -> Generator[None, None, None]:
         wire_container(self.services)
-        yield
-        self.services.unwire()
+        try:
+            yield
+        finally:
+            self.services.unwire()
 
 
 @pytest.fixture
