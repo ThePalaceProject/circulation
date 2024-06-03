@@ -341,7 +341,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
             )
             self.log.error(
                 f"Error getting License Status Document for loan ({loan.id}):  Url '{url}' returned "
-                f"status code {response.status_code}. Expected 200. Response headers: {header_string}. "
+                f"status code {response.status_code}. Response headers: {header_string}. "
                 f"Response content: {response_string}."
             )
             raise BadResponseException(url, "License Status Document request failed.")
