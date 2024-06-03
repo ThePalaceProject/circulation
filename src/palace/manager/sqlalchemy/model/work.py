@@ -1632,7 +1632,7 @@ class Work(Base, LoggerMixin):
         result["summary"] = getattr(doc, "summary_text")
         result["suppressed_for"] = [int(l.id) for l in getattr(doc, "suppressed_for")]
         result["fiction"] = (
-            "Fiction" if getattr(doc, "fiction") is True else "Nonfiction"
+            "fiction" if getattr(doc, "fiction") is True else "nonfiction"
         )
         if result["audience"]:
             result["audience"] = result["audience"].replace(" ", "")
