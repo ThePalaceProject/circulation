@@ -44,8 +44,10 @@ class AdminControllerFixture:
             flask.request.files = {}
             self.ctrl.db.session.begin_nested()
             flask.request.admin = admin
-            yield c
-            self.ctrl.db.session.commit()
+            try:
+                yield c
+            finally:
+                self.ctrl.db.session.commit()
 
     @contextmanager
     def request_context_with_library_and_admin(self, route, *args, **kwargs):
@@ -57,8 +59,10 @@ class AdminControllerFixture:
             flask.request.files = {}
             self.ctrl.db.session.begin_nested()
             flask.request.admin = admin
-            yield c
-            self.ctrl.db.session.commit()
+            try:
+                yield c
+            finally:
+                self.ctrl.db.session.commit()
 
 
 @pytest.fixture(scope="function")
