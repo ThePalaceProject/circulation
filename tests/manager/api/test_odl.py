@@ -55,7 +55,7 @@ class TestODLAPI:
         # With a new loan.
         loan, _ = odl_api_test_fixture.license.loan_to(odl_api_test_fixture.patron)
         odl_api_test_fixture.api.queue_response(
-            200, content=json.dumps(dict(status="ready"))
+            201, content=json.dumps(dict(status="ready"))
         )
         odl_api_test_fixture.api.get_license_status_document(loan)
         requested_url = odl_api_test_fixture.api.requests[0][0]
@@ -139,7 +139,7 @@ class TestODLAPI:
             odl_api_test_fixture.api.get_license_status_document,
             loan,
         )
-        assert "returned status code 403. Expected 200." in caplog.text
+        assert "returned status code 403." in caplog.text
         assert "just junk ..." in caplog.text
 
     def test_checkin_success(
