@@ -367,7 +367,7 @@ class TestAdminWork:
         url = "/admin/works/<identifier_type>/an/identifier/suppression"
         fixture.assert_authenticated_request_calls(
             url,
-            fixture.controller.suppression,  # type: ignore
+            fixture.controller.suppress,  # type: ignore
             "<identifier_type>",
             "an/identifier",
             http_method="POST",
