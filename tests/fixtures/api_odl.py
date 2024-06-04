@@ -19,7 +19,6 @@ from tests.fixtures.files import FilesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
-    from tests.fixtures.odl import ODLTestFixture
 
 
 class LicenseHelper:
@@ -133,7 +132,7 @@ def odl_mock_get() -> MockGet:
 @pytest.fixture()
 def odl_importer(
     db: DatabaseTransactionFixture,
-    odl_test_fixture: ODLTestFixture,
+    odl_test_fixture,
     odl_mock_get: MockGet,
 ) -> ODLImporter:
     library = odl_test_fixture.library()
@@ -147,7 +146,7 @@ def odl_importer(
 @pytest.fixture()
 def odl2_importer(
     db: DatabaseTransactionFixture,
-    odl_test_fixture: ODLTestFixture,
+    odl_test_fixture,
     odl_mock_get: MockGet,
 ) -> ODL2Importer:
     library = odl_test_fixture.library()
