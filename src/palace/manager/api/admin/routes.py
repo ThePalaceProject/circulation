@@ -198,9 +198,9 @@ def edit(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/suppress", methods=["POST"]
+    "/admin/works/<identifier_type>/<path:identifier>/suppression", methods=["POST"]
 )
-@has_library
+@allows_library
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
@@ -209,13 +209,37 @@ def suppress(identifier_type, identifier):
 
 
 @library_route(
-    "/admin/works/<identifier_type>/<path:identifier>/unsuppress", methods=["POST"]
+    "/admin/works/<identifier_type>/<path:identifier>/suppression", methods=["DELETE"]
 )
-@has_library
+@allows_library
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
 def unsuppress(identifier_type, identifier):
+    return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
+
+
+@DeprecationWarning
+@library_route(
+    "/admin/works/<identifier_type>/<path:identifier>/suppress", methods=["POST"]
+)
+@allows_library
+@returns_problem_detail
+@requires_admin
+@requires_csrf_token
+def suppress_deprecated(identifier_type, identifier):
+    return app.manager.admin_work_controller.suppress(identifier_type, identifier)
+
+
+@DeprecationWarning
+@library_route(
+    "/admin/works/<identifier_type>/<path:identifier>/unsuppress", methods=["POST"]
+)
+@allows_library
+@returns_problem_detail
+@requires_admin
+@requires_csrf_token
+def unsuppress_deprecated(identifier_type, identifier):
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 

@@ -23,7 +23,10 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
-from palace.manager.api.problem_details import REMOTE_INTEGRATION_FAILED
+from palace.manager.api.problem_details import (
+    LIBRARY_NOT_FOUND,
+    REMOTE_INTEGRATION_FAILED,
+)
 from palace.manager.core.classifier import (
     NO_NUMBER,
     NO_VALUE,
@@ -367,45 +370,58 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def suppress(self, identifier_type, identifier):
-        """Suppress the license pool associated with a book."""
-        self.require_librarian(flask.request.library)
+    def suppress(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
+        """Suppress a book at the level of a library."""
 
-        # Turn source + identifier into a LicensePool
-        pools = self.load_licensepools(
-            flask.request.library, identifier_type, identifier
+        library = flask.request.library  # type: ignore[attr-defined]
+
+        if library is None:
+            return self.no_library_response()
+
+        self.require_library_manager(library)
+
+        work = self.load_work(
+            library=library, identifier_type=identifier_type, identifier=identifier
         )
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
 
-        # Assume that the Work is being suppressed from the catalog, and
-        # not just the LicensePool.
-        # TODO: Suppress individual LicensePools when it's not that deep.
-        for pool in pools:
-            pool.suppressed = True
+        if isinstance(work, ProblemDetail):
+            # Something went wrong.
+            return work
+
+        work.suppressed_for.append(library)
+        self.log.info(
+            f"Suppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
+        )
+
         return Response("", 200)
 
-    def unsuppress(self, identifier_type, identifier):
-        """Unsuppress all license pools associated with a book.
+    def unsuppress(
+        self, identifier_type: str, identifier: str
+    ) -> Response | ProblemDetail:
+        """Remove a book suppression from a book at the level of a library"""
 
-        TODO: This will need to be revisited when we distinguish
-        between complaints about a work and complaints about a
-        LicensePoool.
-        """
-        self.require_librarian(flask.request.library)
+        library = flask.request.library  # type: ignore[attr-defined]
 
-        # Turn source + identifier into a group of LicensePools
-        pools = self.load_licensepools(
-            flask.request.library, identifier_type, identifier
+        if library is None:
+            return self.no_library_response()
+
+        self.require_library_manager(library)
+
+        work = self.load_work(
+            library=library, identifier_type=identifier_type, identifier=identifier
         )
-        if isinstance(pools, ProblemDetail):
-            # Something went wrong.
-            return pools
 
-        # Unsuppress each pool.
-        for pool in pools:
-            pool.suppressed = False
+        if isinstance(work, ProblemDetail):
+            # Something went wrong.
+            return work
+
+        work.suppressed_for.remove(library)
+        self.log.info(
+            f"Unsuppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
+        )
+
         return Response("", 200)
 
     def refresh_metadata(self, identifier_type, identifier, provider=None):
@@ -722,3 +738,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
                 lane.update_size(self._db, search_engine=self.search_engine)
 
             return Response(str(_("Success")), 200)
+
+    def no_library_response(self) -> ProblemDetail:
+        return LIBRARY_NOT_FOUND.detailed(
+            "A library must be specified in the request. No library specified."
+        )

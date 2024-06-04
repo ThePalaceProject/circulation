@@ -1,7 +1,6 @@
 import json
 from collections.abc import Generator
 
-import feedparser
 import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
@@ -22,6 +21,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_ROLE,
 )
 from palace.manager.core.classifier import SimplifiedGenreClassifier
+from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -36,6 +36,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks.flask import add_request_context
@@ -74,64 +75,6 @@ def work_fixture(
 
 
 class TestWorkController:
-    def test_details(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
-
-        lp.suppressed = False
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.details(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 200 == response.status_code
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
-            suppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
-            ]
-            unsuppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
-            ]
-            assert 0 == len(unsuppress_links)
-            assert 1 == len(suppress_links)
-            assert lp.identifier.identifier in suppress_links[0]
-
-        lp.suppressed = True
-        with work_fixture.request_context_with_library_and_admin("/"):
-            response = work_fixture.manager.admin_work_controller.details(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 200 == response.status_code
-            feed = feedparser.parse(response.get_data())
-            [entry] = feed["entries"]
-            suppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
-            ]
-            unsuppress_links = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
-            ]
-            assert 0 == len(suppress_links)
-            assert 1 == len(unsuppress_links)
-            assert lp.identifier.identifier in unsuppress_links[0]
-
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.details,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
-
     def test_roles(self, work_fixture: WorkFixture):
         roles = work_fixture.manager.admin_work_controller.roles()
         assert Contributor.ILLUSTRATOR_ROLE in list(roles.values())
@@ -704,19 +647,40 @@ class TestWorkController:
             )
 
     def test_suppress(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
+        work = work_fixture.english_1
+        [lp] = work.license_pools
+        library = work_fixture.ctrl.db.default_library()
 
+        assert library not in work.suppressed_for
+
+        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
+
+        # test success
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.suppress(
                 lp.identifier.type, lp.identifier.identifier
             )
             assert 200 == response.status_code
-            assert True == lp.suppressed
+            assert library in work.suppressed_for
 
-        lp.suppressed = False
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
+        # test non-existent id
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.suppress(
+                IdentifierType.URI.value, "http://non-existent-id"
+            )
+            assert isinstance(response, ProblemDetail)
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            response = work_fixture.manager.admin_work_controller.suppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 404 == response.status_code
+            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
+
+        # test unauthorized
+        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
@@ -726,31 +690,40 @@ class TestWorkController:
             )
 
     def test_unsuppress(self, work_fixture: WorkFixture):
-        [lp] = work_fixture.english_1.license_pools
-        lp.suppressed = True
+        work = work_fixture.english_1
+        [lp] = work.license_pools
+        library = work_fixture.ctrl.db.default_library()
 
-        broken_lp = work_fixture.ctrl.db.licensepool(
-            work_fixture.english_1.presentation_edition,
-            data_source_name=DataSource.OVERDRIVE,
-        )
-        work_fixture.english_1.license_pools.append(broken_lp)
-        broken_lp.suppressed = True
+        assert library not in work.suppressed_for
+
+        work.suppressed_for.append(library)
+        work_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
 
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.unsuppress(
                 lp.identifier.type, lp.identifier.identifier
             )
 
-            # Both LicensePools are unsuppressed, even though one of them
-            # has a LicensePool-specific complaint.
             assert 200 == response.status_code
-            assert False == lp.suppressed
-            assert False == broken_lp.suppressed
+            assert library not in work.suppressed_for
 
-        lp.suppressed = True
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                IdentifierType.URI.value, "http://non-existent-id"
+            )
+            assert isinstance(response, ProblemDetail)
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 404 == response.status_code
+            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
+
+        work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
+
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
