@@ -23,14 +23,16 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
-from palace.manager.api.problem_details import REMOTE_INTEGRATION_FAILED
+from palace.manager.api.problem_details import (
+    LIBRARY_NOT_FOUND,
+    REMOTE_INTEGRATION_FAILED,
+)
 from palace.manager.core.classifier import (
     NO_NUMBER,
     NO_VALUE,
     SimplifiedGenreClassifier,
     genres,
 )
-from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.classification import (
@@ -738,6 +740,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             return Response(str(_("Success")), 200)
 
     def no_library_response(self) -> ProblemDetail:
-        return INVALID_INPUT.detailed(
+        return LIBRARY_NOT_FOUND.detailed(
             "A library must be specified in the request. No library specified."
         )

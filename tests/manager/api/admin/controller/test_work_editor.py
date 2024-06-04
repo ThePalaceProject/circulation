@@ -676,7 +676,7 @@ class TestWorkController:
             response = work_fixture.manager.admin_work_controller.suppress(
                 lp.identifier.type, lp.identifier.identifier
             )
-            assert 400 == response.status_code
+            assert 404 == response.status_code
             assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
 
         # test unauthorized
@@ -719,7 +719,7 @@ class TestWorkController:
             response = work_fixture.manager.admin_work_controller.unsuppress(
                 lp.identifier.type, lp.identifier.identifier
             )
-            assert 400 == response.status_code
+            assert 404 == response.status_code
             assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
 
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
