@@ -5,12 +5,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from flask_babel import lazy_gettext as _
-from pydantic import PositiveInt
+from pydantic import NonNegativeInt, PositiveInt
 from sqlalchemy.orm import Session
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from palace.manager.api.circulation_exceptions import (
+    HoldsNotPermitted,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
@@ -76,13 +77,16 @@ class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
         ),
     )
 
-    hold_limit: PositiveInt | None = FormField(
+    hold_limit: NonNegativeInt | None = FormField(
         default=None,
         alias="odl2_hold_limit",
         form=ConfigurationFormItem(
             label=_("Hold limit per patron"),
             description=_(
-                "The maximum number of books a patron can have on hold at any given time."
+                "The maximum number of books from this collection that a patron can "
+                "have on hold at any given time. "
+                "<br>A value of 0 means that holds are NOT permitted."
+                "<br>No value means that no limit is imposed by this setting."
             ),
             type=ConfigurationFormItemType.NUMBER,
             required=False,
@@ -128,14 +132,15 @@ class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
         return super()._checkout(patron, licensepool, hold)
 
     def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
-        # If the hold limit is not None or 0
-        if self.hold_limit:
+        if self.hold_limit is not None:
             holds = list(
                 filter(
                     lambda x: x.license_pool.collection.id == self.collection_id,
                     patron.holds,
                 )
             )
+            if self.hold_limit == 0:
+                raise HoldsNotPermitted()
             if len(holds) >= self.hold_limit:
                 raise PatronHoldLimitReached(limit=self.hold_limit)
         return super()._place_hold(patron, licensepool)
