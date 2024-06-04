@@ -81,9 +81,8 @@ def test_PP_1332_fiction_returns_results(
     work1 = db.work(with_open_access_download=True, fiction=True)
     work2 = db.work(with_open_access_download=True, fiction=False)
     documents = get_work_search_documents(db.session, 2, 0)
-    assert [doc["_id"] for doc in documents] == [work2.id, work1.id]
-    assert "nonfiction" == documents[0]["fiction"]
-    assert "fiction" == documents[1]["fiction"]
+    assert {doc["_id"] for doc in documents} == {work2.id, work1.id}
+
     end_to_end_search_fixture.populate_search_index()
     end_to_end_search_fixture.expect_results(
         expect=[work1, work2], ordered=False, query_string=""

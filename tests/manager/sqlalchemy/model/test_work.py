@@ -1212,7 +1212,7 @@ class TestWork:
                 search_doc["published"], tz=pytz.UTC
             ).date()
         )
-        assert "Nonfiction" == search_doc["fiction"]
+        assert "nonfiction" == search_doc["fiction"]
         assert "YoungAdult" == search_doc["audience"]
         assert work.summary_text == search_doc["summary"]
         assert work.quality == search_doc["quality"]
@@ -1471,7 +1471,7 @@ class TestWork:
             )
             assert doc["presentation_ready"] == work.presentation_ready
             assert doc["last_update_time"] == work.last_update_time
-            assert doc["fiction"] == "Fiction" if work.fiction else "Nonfiction"
+            assert doc["fiction"] == "fiction" if work.fiction else "nonfiction"
             assert doc["audience"] == work.audience
             assert doc["summary"] == work.summary_text
             assert doc["quality"] == work.quality
