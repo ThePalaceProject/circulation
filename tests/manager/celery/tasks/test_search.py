@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -12,6 +13,7 @@ from palace.manager.celery.tasks.search import (
     update_read_pointer,
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
+from palace.manager.search.external_search import Filter
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
@@ -71,6 +73,37 @@ def test_search_reindex(
 
     # Check that all the works are in the search index.
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
+
+
+def test_PP_1332_fiction_returns_results(
+    db: DatabaseTransactionFixture, end_to_end_search_fixture: EndToEndSearchFixture
+) -> None:
+    work1 = db.work(with_open_access_download=True, fiction=True)
+    work2 = db.work(with_open_access_download=True, fiction=False)
+    documents = get_work_search_documents(db.session, 2, 0)
+    assert [doc["_id"] for doc in documents] == [work2.id, work1.id]
+    assert "nonfiction" == documents[0]["fiction"]
+    assert "fiction" == documents[1]["fiction"]
+    end_to_end_search_fixture.populate_search_index()
+    end_to_end_search_fixture.expect_results(
+        expect=[work1, work2], ordered=False, query_string=""
+    )
+    default_filter = Filter()
+    default_filter.search_type = "json"
+    qs = {"query": {"key": "fiction", "value": "fiction"}}
+    end_to_end_search_fixture.expect_results(
+        expect=[work1],
+        ordered=False,
+        filter=default_filter,
+        query_string=json.dumps(qs),
+    )
+    qs["query"]["value"] = "nonfiction"
+    end_to_end_search_fixture.expect_results(
+        expect=[work2],
+        ordered=False,
+        filter=default_filter,
+        query_string=json.dumps(qs),
+    )
 
 
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
