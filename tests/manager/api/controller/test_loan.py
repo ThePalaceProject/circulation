@@ -23,6 +23,7 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyOnHold,
     CannotReleaseHold,
     CannotReturn,
+    HoldsNotPermitted,
     NoAvailableCopies,
     NoLicenses,
     NotFoundOnRemote,
@@ -33,6 +34,7 @@ from palace.manager.api.problem_details import (
     CANNOT_RELEASE_HOLD,
     COULD_NOT_MIRROR_TO_REMOTE,
     HOLD_LIMIT_REACHED,
+    HOLDS_NOT_PERMITTED,
     NO_ACTIVE_LOAN,
     NO_LICENSES,
     NOT_FOUND_ON_REMOTE,
@@ -1192,6 +1194,21 @@ class TestLoanController:
             response = loan_fixture.manager.loans.revoke(-10)
             assert isinstance(response, ProblemDetail)
             assert INVALID_INPUT.uri == response.uri
+
+    def test_hold_fails_when_holds_disallowed(self, loan_fixture: LoanFixture):
+        edition, pool = loan_fixture.db.edition(with_license_pool=True)
+        pool.open_access = False
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            loan_fixture.manager.d_circulation.queue_checkout(pool, NoAvailableCopies())
+            loan_fixture.manager.d_circulation.queue_hold(pool, HoldsNotPermitted())
+            response = loan_fixture.manager.loans.borrow(
+                pool.identifier.type, pool.identifier.identifier
+            )
+            assert isinstance(response, ProblemDetail)
+            assert HOLDS_NOT_PERMITTED.uri == response.uri
 
     def test_hold_fails_when_patron_is_at_hold_limit(self, loan_fixture: LoanFixture):
         edition, pool = loan_fixture.db.edition(with_license_pool=True)

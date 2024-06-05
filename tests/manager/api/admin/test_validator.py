@@ -139,6 +139,7 @@ class TestValidator:
         assert response.detail == '"invalid_url" is not a valid URL.'
         assert response.status_code == 400
 
+    # TODO: Do we still need this?
     def test_validate_number(self):
         settings_form = [
             {

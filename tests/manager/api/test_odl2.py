@@ -9,6 +9,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 
 from palace.manager.api.circulation_exceptions import (
+    HoldsNotPermitted,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
@@ -405,8 +406,6 @@ class TestODL2API:
     ):
         """Test the hold limit collection setting"""
         odl2api = odl2_api_test_fixture
-        # Set the hold limit
-        odl2api.api.hold_limit = 1
 
         patron1 = db.patron()
 
@@ -417,6 +416,16 @@ class TestODL2API:
             response[0].identifier
             == odl2api.work.presentation_edition.primary_identifier.identifier
         )
+
+        # Set the hold limit to zero (holds disallowed) and ensure hold fails.
+        odl2api.api.hold_limit = 0
+        with pytest.raises(HoldsNotPermitted) as exc:
+            odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert "Holds not permitted" in exc.value.problem_detail.title
+        assert "Holds are not permitted" in exc.value.problem_detail.detail
+
+        # Set the hold limit to 1.
+        odl2api.api.hold_limit = 1
 
         hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
         # Hold was successful
