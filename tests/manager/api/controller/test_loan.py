@@ -1109,7 +1109,7 @@ class TestLoanController:
             assert isinstance(patron, Patron)
             loan, newly_created = loan_fixture.pool.loan_to(patron)
 
-            loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool, True)
+            loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool)
 
             response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
@@ -1156,9 +1156,7 @@ class TestLoanController:
             assert isinstance(patron, Patron)
             hold, newly_created = loan_fixture.pool.on_hold_to(patron, position=0)
 
-            loan_fixture.manager.d_circulation.queue_release_hold(
-                loan_fixture.pool, True
-            )
+            loan_fixture.manager.d_circulation.queue_release_hold(loan_fixture.pool)
 
             response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
@@ -1390,21 +1388,25 @@ class TestLoanController:
         bibliotheca_pool.open_access = False
 
         loan_fixture.manager.d_circulation.add_remote_loan(
-            overdrive_pool.collection,
-            overdrive_pool.data_source,
-            overdrive_pool.identifier.type,
-            overdrive_pool.identifier.identifier,
-            utc_now(),
-            utc_now() + datetime.timedelta(seconds=3600),
+            LoanInfo(
+                overdrive_pool.collection,
+                overdrive_pool.data_source,
+                overdrive_pool.identifier.type,
+                overdrive_pool.identifier.identifier,
+                utc_now(),
+                utc_now() + datetime.timedelta(seconds=3600),
+            )
         )
         loan_fixture.manager.d_circulation.add_remote_hold(
-            bibliotheca_pool.collection,
-            bibliotheca_pool.data_source,
-            bibliotheca_pool.identifier.type,
-            bibliotheca_pool.identifier.identifier,
-            utc_now(),
-            utc_now() + datetime.timedelta(seconds=3600),
-            0,
+            HoldInfo(
+                bibliotheca_pool.collection,
+                bibliotheca_pool.data_source,
+                bibliotheca_pool.identifier.type,
+                bibliotheca_pool.identifier.identifier,
+                utc_now(),
+                utc_now() + datetime.timedelta(seconds=3600),
+                0,
+            )
         )
 
         # Making a new request so soon after the last one means the
