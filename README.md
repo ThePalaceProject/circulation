@@ -146,7 +146,7 @@ grant all privileges on database circ to palace;
 
 ### Redis
 
-Redis is used as the broker for Celery. You can run Redis with docker using the following command:
+Redis is used as the broker for Celery and the caching layer. You can run Redis with docker using the following command:
 
 ```sh
 docker run -d --name redis -p 6379:6379 redis
@@ -192,6 +192,19 @@ pass a broker URL to the application.
 We support overriding a number of other Celery settings via environment variables, but in most cases
 the defaults should be sufficient. The full list of settings can be found in
 [`service/celery/configuration.py`](src/palace/manager/service/celery/configuration.py).
+
+#### Redis
+
+We use Redis as the caching layer for the application. Although you can use the same redis database for both
+Celery and caching, we recommend that you use a separate database for each purpose to avoid conflicts.
+
+- `PALACE_REDIS_URL`: The URL of the Redis instance to use for caching. (**required**).
+    - for example:
+        ```sh
+          export PALACE_REDIS_URL="redis://localhost:6379/1"
+        ```
+- `PALACE_REDIS_KEY_PREFIX`: The prefix to use for keys stored in the Redis instance. The default is `palace`.
+    This is useful if you want to use the same Redis database for multiple CM (optional).
 
 #### General
 

@@ -15,6 +15,8 @@ from palace.manager.service.integration_registry.container import (
 )
 from palace.manager.service.logging.configuration import LoggingConfiguration
 from palace.manager.service.logging.container import Logging
+from palace.manager.service.redis.configuration import RedisConfiguration
+from palace.manager.service.redis.container import RedisContainer
 from palace.manager.service.search.configuration import SearchConfiguration
 from palace.manager.service.search.container import Search
 from palace.manager.service.sitewide import SitewideConfiguration
@@ -65,6 +67,11 @@ class Services(DeclarativeContainer):
         IntegrationRegistryContainer,
     )
 
+    redis = Container(
+        RedisContainer,
+        config=config.redis,
+    )
+
 
 def wire_container(container: Services) -> None:
     container.wire(
@@ -97,6 +104,7 @@ def create_container() -> Services:
             "email": EmailConfiguration().dict(),
             "celery": CeleryConfiguration().dict(),
             "fcm": FcmConfiguration().dict(),
+            "redis": RedisConfiguration().dict(),
         }
     )
     wire_container(container)

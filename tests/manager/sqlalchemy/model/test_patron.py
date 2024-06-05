@@ -364,6 +364,10 @@ class TestPatron:
             == repr(patron)
         )
 
+    def test___redis_key__(self, db: DatabaseTransactionFixture):
+        patron = db.patron(external_identifier="a patron")
+        assert patron.__redis_key__() == f"Patron::{patron.id}"
+
     def test_identifier_to_remote_service(self, db: DatabaseTransactionFixture):
         # Here's a patron.
         patron = db.patron()

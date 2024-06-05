@@ -597,3 +597,9 @@ class TestCollection:
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()
         assert [] == work2.license_pools
+
+    def test___redis_key__(self, example_collection_fixture: ExampleCollectionFixture):
+        collection = example_collection_fixture.collection
+
+        # The key is based on the collection's ID.
+        assert collection.__redis_key__() == f"Collection::{collection.id}"

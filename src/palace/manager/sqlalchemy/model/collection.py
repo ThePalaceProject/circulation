@@ -158,6 +158,9 @@ class Collection(Base, HasSessionCache):
     def __repr__(self) -> str:
         return f'<Collection "{self.name}"/"{self.protocol}" ID={self.id}>'
 
+    def __redis_key__(self) -> str:
+        return f"Collection::{self.id}"
+
     def cache_key(self) -> tuple[str | None, str | None]:
         return self.name, self.integration_configuration.protocol
 

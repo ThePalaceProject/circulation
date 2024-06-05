@@ -216,6 +216,9 @@ class Patron(Base):
             date(self.last_external_sync),
         )
 
+    def __redis_key__(self) -> str:
+        return f"Patron::{self.id}"
+
     def identifier_to_remote_service(self, remote_data_source, generator=None):
         """Find or randomly create an identifier to use when identifying
         this patron to a remote service.
