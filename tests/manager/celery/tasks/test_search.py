@@ -75,7 +75,7 @@ def test_search_reindex(
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
 
 
-def test_PP_1332_fiction_returns_results(
+def test_fiction_query_returns_results(
     db: DatabaseTransactionFixture, end_to_end_search_fixture: EndToEndSearchFixture
 ) -> None:
     work1 = db.work(with_open_access_download=True, fiction=True)
@@ -87,20 +87,20 @@ def test_PP_1332_fiction_returns_results(
     end_to_end_search_fixture.expect_results(
         expect=[work1, work2], ordered=False, query_string=""
     )
-    default_filter = Filter()
-    default_filter.search_type = "json"
+    json_filter = Filter()
+    json_filter.search_type = "json"
     qs = {"query": {"key": "fiction", "value": "fiction"}}
     end_to_end_search_fixture.expect_results(
         expect=[work1],
         ordered=False,
-        filter=default_filter,
+        filter=json_filter,
         query_string=json.dumps(qs),
     )
     qs["query"]["value"] = "nonfiction"
     end_to_end_search_fixture.expect_results(
         expect=[work2],
         ordered=False,
-        filter=default_filter,
+        filter=json_filter,
         query_string=json.dumps(qs),
     )
 
