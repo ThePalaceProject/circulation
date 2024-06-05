@@ -421,6 +421,8 @@ class TestODL2API:
         odl2api.api.hold_limit = 0
         with pytest.raises(HoldsNotPermitted) as exc:
             odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert exc.value.problem_detail.title is not None
+        assert exc.value.problem_detail.detail is not None
         assert "Holds not permitted" in exc.value.problem_detail.title
         assert "Holds are not permitted" in exc.value.problem_detail.detail
 
@@ -446,9 +448,9 @@ class TestODL2API:
         )
 
         # Hold should fail
-        with pytest.raises(PatronHoldLimitReached) as exc:
+        with pytest.raises(PatronHoldLimitReached) as exc2:
             odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        assert exc.value.limit == 1
+        assert exc2.value.limit == 1
 
 
 class TestODL2HoldReaper:
