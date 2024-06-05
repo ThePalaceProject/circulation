@@ -1,5 +1,6 @@
 import json
 import types
+from unittest.mock import create_autospec
 
 import flask
 import pytest
@@ -67,25 +68,31 @@ class TestODLNotificationController:
     when a loan's status changes."""
 
     @pytest.mark.parametrize(
-        "protocol",
+        "api_cls",
         [
-            pytest.param(ODLAPI.label(), id="ODL 1.x collection"),
-            pytest.param(ODL2API.label(), id="ODL 2.x collection"),
+            pytest.param(ODLAPI, id="ODL 1.x collection"),
+            pytest.param(ODL2API, id="ODL 2.x collection"),
         ],
     )
     def test_notify_success(
         self,
-        protocol,
+        api_cls: type[ODLAPI] | type[ODL2API],
         controller_fixture: ControllerFixture,
         odl_fixture: ODLFixture,
     ):
         db = controller_fixture.db
 
-        odl_fixture.collection.integration_configuration.protocol = protocol
+        odl_fixture.collection.integration_configuration.protocol = api_cls.label()
         odl_fixture.pool.licenses_owned = 10
         odl_fixture.pool.licenses_available = 5
         loan, ignore = odl_fixture.pool.loan_to(odl_fixture.patron)
         loan.external_identifier = db.fresh_str()
+
+        api = controller_fixture.manager.circulation_apis[
+            db.default_library().id
+        ].api_for_license_pool(loan.license_pool)
+        update_loan_mock = create_autospec(api_cls.update_loan)
+        api.update_loan = update_loan_mock
 
         with controller_fixture.request_context_with_library("/", method="POST"):
             text = json.dumps(
@@ -101,11 +108,8 @@ class TestODLNotificationController:
             )
             assert 200 == response.status_code
 
-            # The pool's availability has been updated.
-            api = controller_fixture.manager.circulation_apis[
-                db.default_library().id
-            ].api_for_license_pool(loan.license_pool)
-            assert [loan.license_pool] == api.availability_updated_for
+            # Update loan was called with the expected arguments.
+            update_loan_mock.assert_called_once_with(loan, json.loads(text))
 
     def test_notify_errors(self, controller_fixture: ControllerFixture):
         db = controller_fixture.db

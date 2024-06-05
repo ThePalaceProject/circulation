@@ -2,7 +2,7 @@
 import datetime
 from datetime import timedelta
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import flask
 import pytest
@@ -34,7 +34,6 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
-from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -48,11 +47,7 @@ from tests.fixtures.files import BibliothecaFilesFixture
 from tests.fixtures.library import LibraryFixture
 from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.bibliotheca import MockBibliothecaAPI
-from tests.mocks.circulation import (
-    MockCirculationAPI,
-    MockPatronActivityCirculationAPI,
-    MockRemoteAPI,
-)
+from tests.mocks.circulation import MockCirculationAPI, MockPatronActivityCirculationAPI
 
 
 class CirculationAPIFixture:
@@ -183,15 +178,6 @@ class TestCirculationAPI:
         a loan for.
         """
         # Remote loan.
-        circulation_api.circulation.add_remote_loan(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.YESTERDAY,
-            self.IN_TWO_WEEKS,
-        )
-
         circulation_api.remote.queue_checkout(AlreadyCheckedOut())
         now = utc_now()
         loan, hold, is_new = self.borrow(circulation_api)
@@ -217,16 +203,6 @@ class TestCirculationAPI:
         on hold.
         """
         # Remote hold.
-        circulation_api.circulation.add_remote_hold(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.YESTERDAY,
-            self.IN_TWO_WEEKS,
-            10,
-        )
-
         circulation_api.remote.queue_checkout(AlreadyOnHold())
         now = utc_now()
         loan, hold, is_new = self.borrow(circulation_api)
@@ -255,16 +231,6 @@ class TestCirculationAPI:
         # Local loan.
         loan, ignore = circulation_api.pool.loan_to(circulation_api.patron)
 
-        # Remote loan.
-        circulation_api.circulation.add_remote_loan(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.YESTERDAY,
-            self.IN_TWO_WEEKS,
-        )
-
         # This is the expected behavior in most cases--you tried to
         # renew the loan and failed because it's not time yet.
         circulation_api.remote.queue_checkout(CannotRenew())
@@ -282,14 +248,6 @@ class TestCirculationAPI:
         loan, ignore = circulation_api.pool.loan_to(circulation_api.patron)
 
         # Remote loan.
-        circulation_api.circulation.add_remote_loan(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.YESTERDAY,
-            self.IN_TWO_WEEKS,
-        )
 
         # NoAvailableCopies can happen if there are already people
         # waiting in line for the book. This case gives a more
@@ -576,7 +534,7 @@ class TestCirculationAPI:
         # is to call enforce_limits() before trying to check out the
         # book.
 
-        mock_api = MagicMock(spec=MockPatronActivityCirculationAPI)
+        mock_api = create_autospec(BaseCirculationAPI)
         mock_api.checkout.side_effect = NotImplementedError()
 
         mock_circulation = circulation_api.circulation
@@ -893,18 +851,14 @@ class TestCirculationAPI:
         circulation_api.pool.open_access = True
         circulation_api.pool.collection = collection
 
-        circulation_api.circulation.remotes[
-            circulation_api.pool.data_source.name
-        ] = OPDSAPI(circulation_api.db.session, collection)
-
         # The patron has the title on loan.
         circulation_api.pool.loan_to(circulation_api.patron)
 
         # It has a LicensePoolDeliveryMechanism that is broken (has no
         # associated Resource).
-        broken_lpdm = circulation_api.delivery_mechanism
-        assert None == broken_lpdm.resource
-        i_want_an_epub = broken_lpdm.delivery_mechanism
+        circulation_api.circulation.queue_fulfill(
+            circulation_api.pool, FormatNotAvailable()
+        )
 
         # fulfill() will raise FormatNotAvailable.
         pytest.raises(
@@ -913,72 +867,7 @@ class TestCirculationAPI:
             circulation_api.patron,
             "1234",
             circulation_api.pool,
-            broken_lpdm,
-            sync_on_failure=False,
-        )
-
-        # Let's add a second LicensePoolDeliveryMechanism of the same
-        # type which has an associated Resource.
-        link, new = circulation_api.pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD,
-            circulation_api.db.fresh_url(),
-            circulation_api.pool.data_source,
-        )
-
-        working_lpdm = circulation_api.pool.set_delivery_mechanism(
-            i_want_an_epub.content_type,
-            i_want_an_epub.drm_scheme,
-            RightsStatus.GENERIC_OPEN_ACCESS,
-            link.resource,
-        )
-
-        # It's still not going to work because the Resource has no
-        # Representation.
-        assert None == link.resource.representation
-        pytest.raises(
-            FormatNotAvailable,
-            circulation_api.circulation.fulfill,
-            circulation_api.patron,
-            "1234",
-            circulation_api.pool,
-            broken_lpdm,
-            sync_on_failure=False,
-        )
-
-        # Let's add a Representation to the Resource.
-        representation, is_new = circulation_api.db.representation(
-            link.resource.url,
-            i_want_an_epub.content_type,
-            "Dummy content",
-            mirrored=True,
-        )
-        link.resource.representation = representation
-
-        # We can finally fulfill a loan.
-        result = circulation_api.circulation.fulfill(
-            circulation_api.patron, "1234", circulation_api.pool, broken_lpdm
-        )
-        assert isinstance(result, FulfillmentInfo)
-        assert result.content_link == link.resource.representation.public_url
-        assert result.content_type == i_want_an_epub.content_type
-
-        # If we change the working LPDM so that it serves a different
-        # media type than the one we're asking for, we're back to
-        # FormatNotAvailable errors.
-        irrelevant_delivery_mechanism, ignore = DeliveryMechanism.lookup(
-            circulation_api.db.session,
-            "application/some-other-type",
-            DeliveryMechanism.NO_DRM,
-        )
-        working_lpdm.delivery_mechanism = irrelevant_delivery_mechanism
-        pytest.raises(
-            FormatNotAvailable,
-            circulation_api.circulation.fulfill,
-            circulation_api.patron,
-            "1234",
-            circulation_api.pool,
-            broken_lpdm,
-            sync_on_failure=False,
+            circulation_api.delivery_mechanism,
         )
 
     def test_fulfill(self, circulation_api: CirculationAPIFixture):
@@ -1037,7 +926,7 @@ class TestCirculationAPI:
 
         circulation_api.patron.last_loan_activity_sync = utc_now()
         circulation_api.pool.loan_to(circulation_api.patron)
-        circulation_api.remote.queue_checkin(True)
+        circulation_api.remote.queue_checkin()
 
         result = circulation_api.circulation.revoke_loan(
             circulation_api.patron, "1234", circulation_api.pool
@@ -1057,7 +946,7 @@ class TestCirculationAPI:
 
         circulation_api.patron.last_loan_activity_sync = utc_now()
         circulation_api.pool.on_hold_to(circulation_api.patron)
-        circulation_api.remote.queue_release_hold(True)
+        circulation_api.remote.queue_release_hold()
 
         result = circulation_api.circulation.release_hold(
             circulation_api.patron, "1234", circulation_api.pool
@@ -1293,12 +1182,14 @@ class TestCirculationAPI:
         # But the remote thinks the loan runs from today until two
         # weeks from today.
         circulation_api.circulation.add_remote_loan(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.TODAY,
-            self.IN_TWO_WEEKS,
+            LoanInfo(
+                circulation_api.pool.collection,
+                circulation_api.pool.data_source,
+                circulation_api.identifier.type,
+                circulation_api.identifier.identifier,
+                self.TODAY,
+                self.IN_TWO_WEEKS,
+            )
         )
 
         # Similar situation for this hold on a different LicensePool.
@@ -1315,13 +1206,15 @@ class TestCirculationAPI:
         hold.position = 10
 
         circulation_api.circulation.add_remote_hold(
-            pool2.collection,
-            pool2.data_source,
-            pool2.identifier.type,
-            pool2.identifier.identifier,
-            self.TODAY,
-            self.IN_TWO_WEEKS,
-            0,
+            HoldInfo(
+                pool2.collection,
+                pool2.data_source,
+                pool2.identifier.type,
+                pool2.identifier.identifier,
+                self.TODAY,
+                self.IN_TWO_WEEKS,
+                0,
+            )
         )
         circulation_api.circulation.sync_bookshelf(circulation_api.patron, "1234")
 
@@ -1344,13 +1237,15 @@ class TestCirculationAPI:
         )
         pool = circulation_api.db.licensepool(None)
         circulation_api.circulation.add_remote_loan(
-            pool.collection,
-            pool.data_source.name,
-            pool.identifier.type,
-            pool.identifier.identifier,
-            utc_now(),
-            None,
-            locked_to=mechanism,
+            LoanInfo(
+                pool.collection,
+                pool.data_source.name,
+                pool.identifier.type,
+                pool.identifier.identifier,
+                utc_now(),
+                None,
+                locked_to=mechanism,
+            )
         )
         circulation_api.circulation.sync_bookshelf(circulation_api.patron, "1234")
 
@@ -1375,12 +1270,14 @@ class TestCirculationAPI:
         # Little do we know that they just used a vendor website to
         # create a loan.
         circulation_api.circulation.add_remote_loan(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            self.YESTERDAY,
-            self.IN_TWO_WEEKS,
+            LoanInfo(
+                circulation_api.pool.collection,
+                circulation_api.pool.data_source,
+                circulation_api.identifier.type,
+                circulation_api.identifier.identifier,
+                self.YESTERDAY,
+                self.IN_TWO_WEEKS,
+            )
         )
 
         # Syncing our loans with the remote won't actually do anything.
@@ -1503,7 +1400,7 @@ class TestBaseCirculationAPI:
         """By default, there is a blanket prohibition on fulfilling a title
         when there is no active loan.
         """
-        api = MockRemoteAPI(db.session, db.default_collection())
+        api = MockPatronActivityCirculationAPI(db.session, db.default_collection())
         assert False == api.can_fulfill_without_loan(
             MagicMock(), MagicMock(), MagicMock()
         )

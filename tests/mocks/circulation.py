@@ -1,6 +1,8 @@
-from abc import ABC
+from __future__ import annotations
+
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,7 @@ from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
     CirculationApiType,
+    FulfillmentInfo,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
@@ -16,12 +19,33 @@ from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from palace.manager.sqlalchemy.model.patron import Patron
 
 
-class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI, ABC):
+class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        set_delivery_mechanism_at: str | None = BaseCirculationAPI.FULFILL_STEP,
+        can_revoke_hold_when_reserved: bool = True,
+    ):
+        old_protocol = collection.integration_configuration.protocol
+        collection.integration_configuration.protocol = self.label()
+        super().__init__(_db, collection)
+        collection.integration_configuration.protocol = old_protocol
+        self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
+        self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
+        self.responses: dict[str, list[Any]] = defaultdict(list)
+        self.availability_updated_for: list[LicensePool] = []
+
     @classmethod
     def label(cls) -> str:
         return ""
@@ -38,127 +62,146 @@ class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI, ABC):
     def library_settings_class(cls) -> type[BaseSettings]:
         return BaseSettings
 
-
-class MockRemoteAPI(MockPatronActivityCirculationAPI):
-    def __init__(
-        self, set_delivery_mechanism_at=True, can_revoke_hold_when_reserved=True
-    ):
-        self.SET_DELIVERY_MECHANISM_AT = set_delivery_mechanism_at
-        self.CAN_REVOKE_HOLD_WHEN_RESERVED = can_revoke_hold_when_reserved
-        self.responses = defaultdict(list)
-        self.availability_updated_for = []
-
-    def checkout(self, patron_obj, patron_password, licensepool, delivery_mechanism):
+    def checkout(
+        self,
+        patron: Patron,
+        pin: str | None,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> LoanInfo | HoldInfo:
         # Should be a LoanInfo.
         return self._return_or_raise("checkout")
 
-    def update_availability(self, licensepool):
+    def update_availability(self, licensepool: LicensePool) -> None:
         """Simply record the fact that update_availability was called."""
         self.availability_updated_for.append(licensepool)
 
-    def place_hold(self, patron, pin, licensepool, hold_notification_email=None):
+    def place_hold(
+        self,
+        patron: Patron,
+        pin: str | None,
+        licensepool: LicensePool,
+        notification_email_address: str | None,
+    ) -> HoldInfo:
         # Should be a HoldInfo.
         return self._return_or_raise("hold")
 
     def fulfill(
         self,
-        patron,
-        pin,
-        licensepool,
-        delivery_mechanism,
-    ):
+        patron: Patron,
+        pin: str,
+        licensepool: LicensePool,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
         # Should be a FulfillmentInfo.
         return self._return_or_raise("fulfill")
 
-    def checkin(self, patron, pin, licensepool):
+    def patron_activity(
+        self, patron: Patron, pin: str | None
+    ) -> Iterable[LoanInfo | HoldInfo]:
+        # This method isn't used on the mock, so we just raise an exception.
+        raise NotImplementedError()
+
+    def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # Return value is not checked.
         return self._return_or_raise("checkin")
 
-    def patron_activity(self, patron, pin):
-        return self._return_or_raise("patron_activity")
-
-    def release_hold(self, patron, pin, licensepool):
+    def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # Return value is not checked.
         return self._return_or_raise("release_hold")
 
-    def internal_format(self, delivery_mechanism):
-        return delivery_mechanism
-
-    def update_loan(self, loan, status_doc):
-        self.availability_updated_for.append(loan.license_pool)
-
-    def queue_checkout(self, response):
+    def queue_checkout(self, response: LoanInfo | HoldInfo | Exception) -> None:
         self._queue("checkout", response)
 
-    def queue_hold(self, response):
+    def queue_hold(self, response: HoldInfo | Exception) -> None:
         self._queue("hold", response)
 
-    def queue_fulfill(self, response):
+    def queue_fulfill(self, response: FulfillmentInfo | Exception) -> None:
         self._queue("fulfill", response)
 
-    def queue_checkin(self, response):
+    def queue_checkin(self, response: None | Exception = None) -> None:
         self._queue("checkin", response)
 
-    def queue_release_hold(self, response):
+    def queue_release_hold(self, response: None | Exception = None) -> None:
         self._queue("release_hold", response)
 
-    def _queue(self, k, v):
+    def _queue(self, k: str, v: Any) -> None:
         self.responses[k].append(v)
 
-    def _return_or_raise(self, k):
-        self.log.debug(k)
-        l = self.responses[k]
-        v = l.pop()
-        if isinstance(v, Exception):
-            raise v
-        return v
+    def _return_or_raise(self, key: str) -> Any:
+        self.log.debug(key)
+        response = self.responses[key].pop()
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 class MockCirculationAPI(CirculationAPI):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.responses = defaultdict(list)
-        self.remote_loans = []
-        self.remote_holds = []
-        self.remotes = {}
+    def __init__(
+        self,
+        db: Session,
+        library: Library,
+        library_collection_apis: Mapping[int | None, CirculationApiType],
+        analytics: Analytics | None = None,
+    ):
+        super().__init__(db, library, library_collection_apis, analytics=analytics)
+        self.remote_loans: list[LoanInfo] = []
+        self.remote_holds: list[HoldInfo] = []
+        self.remotes: dict[str, MockPatronActivityCirculationAPI] = {}
 
-    def local_loans(self, patron):
-        return self._db.query(Loan).filter(Loan.patron == patron)
+    def add_remote_loan(
+        self,
+        loan: LoanInfo,
+    ) -> None:
+        self.remote_loans.append(loan)
 
-    def local_holds(self, patron):
-        return self._db.query(Hold).filter(Hold.patron == patron)
+    def add_remote_hold(
+        self,
+        hold: HoldInfo,
+    ) -> None:
+        self.remote_holds.append(hold)
 
-    def add_remote_loan(self, *args, **kwargs):
-        self.remote_loans.append(LoanInfo(*args, **kwargs))
-
-    def add_remote_hold(self, *args, **kwargs):
-        self.remote_holds.append(HoldInfo(*args, **kwargs))
-
-    def patron_activity(self, patron, pin):
+    def patron_activity(
+        self, patron: Patron, pin: str | None
+    ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
         """Return a 3-tuple (loans, holds, completeness)."""
         return self.remote_loans, self.remote_holds, True
 
-    def queue_checkout(self, licensepool, response):
-        self._queue("checkout", licensepool, response)
+    def queue_checkout(
+        self, licensepool: LicensePool, response: LoanInfo | HoldInfo | Exception
+    ) -> None:
+        api = self.api_for_license_pool(licensepool)
+        api.queue_checkout(response)
 
-    def queue_hold(self, licensepool, response):
-        self._queue("hold", licensepool, response)
+    def queue_hold(
+        self, licensepool: LicensePool, response: HoldInfo | Exception
+    ) -> None:
+        api = self.api_for_license_pool(licensepool)
+        api.queue_hold(response)
 
-    def queue_fulfill(self, licensepool, response):
-        self._queue("fulfill", licensepool, response)
+    def queue_fulfill(
+        self, licensepool: LicensePool, response: FulfillmentInfo | Exception
+    ) -> None:
+        api = self.api_for_license_pool(licensepool)
+        api.queue_fulfill(response)
 
-    def queue_checkin(self, licensepool, response):
-        self._queue("checkin", licensepool, response)
+    def queue_checkin(
+        self, licensepool: LicensePool, response: None | Exception = None
+    ) -> None:
+        api = self.api_for_license_pool(licensepool)
+        api.queue_checkin(response)
 
-    def queue_release_hold(self, licensepool, response):
-        self._queue("release_hold", licensepool, response)
+    def queue_release_hold(
+        self, licensepool: LicensePool, response: None | Exception = None
+    ) -> None:
+        api = self.api_for_license_pool(licensepool)
+        api.queue_release_hold(response)
 
-    def _queue(self, method, licensepool, response):
-        mock = self.api_for_license_pool(licensepool)
-        return mock._queue(method, response)
-
-    def api_for_license_pool(self, licensepool):
+    def api_for_license_pool(
+        self, licensepool: LicensePool
+    ) -> MockPatronActivityCirculationAPI:
         source = licensepool.data_source.name
+        assert source is not None
         if source not in self.remotes:
             set_delivery_mechanism_at = BaseCirculationAPI.FULFILL_STEP
             can_revoke_hold_when_reserved = True
@@ -166,8 +209,11 @@ class MockCirculationAPI(CirculationAPI):
                 set_delivery_mechanism_at = BaseCirculationAPI.BORROW_STEP
             if source == DataSource.THREEM:
                 can_revoke_hold_when_reserved = False
-            remote = MockRemoteAPI(
-                set_delivery_mechanism_at, can_revoke_hold_when_reserved
+            remote = MockPatronActivityCirculationAPI(
+                self._db,
+                licensepool.collection,
+                set_delivery_mechanism_at,
+                can_revoke_hold_when_reserved,
             )
             self.remotes[source] = remote
         return self.remotes[source]
