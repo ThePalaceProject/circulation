@@ -452,6 +452,20 @@ class TestODL2API:
             odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
         assert exc2.value.limit == 1
 
+        # Set the hold limit to None (unlimited) and ensure hold succeeds.
+        odl2api.api.hold_limit = None
+        hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert hold_response.hold_position == 1
+        create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
+        # Verify that there are now two holds that  our test patron has both of them.
+        assert 2 == db.session.query(Hold).count()
+        assert (
+            2
+            == db.session.query(Hold)
+            .filter(Hold.patron_id == odl2api.patron.id)
+            .count()
+        )
+
 
 class TestODL2HoldReaper:
     def test_run_once(
