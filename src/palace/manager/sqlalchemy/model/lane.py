@@ -2289,27 +2289,27 @@ class DatabaseBackedWorkList(WorkList):
     def _restrict_query_for_no_hold_collections(
         self, _db: Session, qu: query.Query
     ) -> query.Query:
-        """Restrict the query to not select works that are part of a collection
-        that dissallow holds through DISPLAY_RESERVES if they have no available copies
-        This is only meant for Bibliotheca collections, but since they're the only ones with
-        the DISPLAY_RESERVES setting it will implicitly only be active for them
+        """Restrict query to available books, if holds not allowed.
+
+        Holds are not allowed if the collection's `hold_limit` is set to 0
+        or if the library's `dont_display_reserves` is set to True.
         """
 
-        # Modify the query to not show holds on collections
-        # that don't allow it
-        # This query looks like a prime candidate for some in-memory caching
         restricted_collections = _db.execute(
             select(Collection.id)
-            .join(
-                IntegrationConfiguration,
-            )
-            .join(
-                IntegrationLibraryConfiguration,
-            )
+            .join(IntegrationConfiguration)
+            .join(IntegrationLibraryConfiguration)
             .where(
-                IntegrationLibraryConfiguration.library_id == self.library_id,
-                IntegrationLibraryConfiguration.settings_dict.contains(
-                    {"dont_display_reserves": ConfigurationAttributeValue.NOVALUE.value}
+                or_(
+                    IntegrationConfiguration.settings_dict.contains({"hold_limit": 0}),
+                    and_(
+                        IntegrationLibraryConfiguration.library_id == self.library_id,
+                        IntegrationLibraryConfiguration.settings_dict.contains(
+                            {
+                                "dont_display_reserves": ConfigurationAttributeValue.NOVALUE.value
+                            }
+                        ),
+                    ),
                 ),
             )
         ).all()

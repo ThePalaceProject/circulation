@@ -94,6 +94,12 @@ HOLD_LIMIT_REACHED = pd(
     _("Limit reached."),
     GENERIC_HOLD_LIMIT_MESSAGE,
 )
+HOLDS_NOT_PERMITTED = pd(
+    "http://palaceproject.io/terms/problem/holds-not-allowed",
+    403,
+    _("Holds not permitted."),
+    _("Holds are not permitted for this book."),
+)
 
 OUTSTANDING_FINES = pd(
     "http://librarysimplified.org/terms/problem/outstanding-fines",

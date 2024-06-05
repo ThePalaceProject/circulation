@@ -13,6 +13,7 @@ from palace.manager.api.problem_details import (
     EXPIRED_CREDENTIALS,
     HOLD_FAILED,
     HOLD_LIMIT_REACHED,
+    HOLDS_NOT_PERMITTED,
     INVALID_CREDENTIALS,
     LOAN_LIMIT_REACHED,
     NO_ACCEPTABLE_FORMAT,
@@ -250,6 +251,12 @@ class CannotHold(CirculationException):
     @property
     def base(self) -> ProblemDetail:
         return HOLD_FAILED
+
+
+class HoldsNotPermitted(CannotHold):
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLDS_NOT_PERMITTED
 
 
 class PatronHoldLimitReached(CannotHold, LimitReached):

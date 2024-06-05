@@ -9,6 +9,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 
 from palace.manager.api.circulation_exceptions import (
+    HoldsNotPermitted,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
@@ -405,8 +406,6 @@ class TestODL2API:
     ):
         """Test the hold limit collection setting"""
         odl2api = odl2_api_test_fixture
-        # Set the hold limit
-        odl2api.api.hold_limit = 1
 
         patron1 = db.patron()
 
@@ -417,6 +416,18 @@ class TestODL2API:
             response[0].identifier
             == odl2api.work.presentation_edition.primary_identifier.identifier
         )
+
+        # Set the hold limit to zero (holds disallowed) and ensure hold fails.
+        odl2api.api.hold_limit = 0
+        with pytest.raises(HoldsNotPermitted) as exc:
+            odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert exc.value.problem_detail.title is not None
+        assert exc.value.problem_detail.detail is not None
+        assert "Holds not permitted" in exc.value.problem_detail.title
+        assert "Holds are not permitted" in exc.value.problem_detail.detail
+
+        # Set the hold limit to 1.
+        odl2api.api.hold_limit = 1
 
         hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
         # Hold was successful
@@ -437,9 +448,23 @@ class TestODL2API:
         )
 
         # Hold should fail
-        with pytest.raises(PatronHoldLimitReached) as exc:
+        with pytest.raises(PatronHoldLimitReached) as exc2:
             odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        assert exc.value.limit == 1
+        assert exc2.value.limit == 1
+
+        # Set the hold limit to None (unlimited) and ensure hold succeeds.
+        odl2api.api.hold_limit = None
+        hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
+        assert hold_response.hold_position == 1
+        create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
+        # Verify that there are now two holds that  our test patron has both of them.
+        assert 2 == db.session.query(Hold).count()
+        assert (
+            2
+            == db.session.query(Hold)
+            .filter(Hold.patron_id == odl2api.patron.id)
+            .count()
+        )
 
 
 class TestODL2HoldReaper:

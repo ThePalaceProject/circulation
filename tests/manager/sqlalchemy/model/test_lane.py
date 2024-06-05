@@ -10,6 +10,7 @@ from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
+from palace.manager.api.odl2 import ODL2API
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import (
@@ -2638,6 +2639,87 @@ class TestWorkList:
         assert alternate_collection_library_config is not None
         BibliothecaAPI.library_settings_update(
             alternate_collection_library_config, settings
+        )
+        assert [[w2], []] == m(db.session, [[hit2], [hit1]])
+
+        # Both restricted but one has availability
+        alternate_w1_lp.licenses_available = 1
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
+
+    def test_worklist_for_resultset_no_collection_holds_allowed(
+        self, db: DatabaseTransactionFixture
+    ):
+        # This test mirrors the one above in `test_worklist_for_resultset_no_holds_allowed`,
+        # but at the collection, instead of library, level.
+
+        wl = WorkList()
+        wl.initialize(db.default_library())
+        m = wl.works_for_resultsets
+
+        # Create two works.
+        w1: Work = db.work(with_license_pool=True)
+        w2: Work = db.work(with_license_pool=True)
+
+        w1.license_pools[0].licenses_available = 0
+        collection1: Collection = w1.license_pools[0].collection
+        integration1 = collection1.integration_configuration
+        odl2api_required_settings = dict(
+            external_account_id="http://account_id",
+            data_source="distributor X",
+            username="user",
+            password="pw",
+        )
+        setting_under_test = dict(hold_limit=0)
+        settings = ODL2API.settings_class()(
+            **odl2api_required_settings | setting_under_test
+        )
+        ODL2API.settings_update(integration1, settings)
+        db.session.commit()
+
+        class MockHit:
+            def __init__(self, work_id, has_last_update=False):
+                self.work_id = work_id.id if isinstance(work_id, Work) else work_id
+                self.has_last_update = has_last_update
+
+            def __contains__(self, k):
+                # Pretend to have the 'last_update' script field,
+                # if necessary.
+                return k == "last_update" and self.has_last_update
+
+        hit1 = MockHit(w1)
+        hit2 = MockHit(w2)
+
+        # Basic test
+        # For each list of hits passed in, a corresponding list of
+        # Works is returned.
+        assert [[w2]] == m(db.session, [[hit2]])
+        assert [[w2], []] == m(db.session, [[hit2], [hit1]])
+        assert [[], [w2, w2], []] == m(db.session, [[hit1, hit1], [hit2, hit2], []])
+
+        # Restricted pool has availability
+        w1.license_pools[0].licenses_available = 1
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
+
+        # Revert back, no availablility
+        w1.license_pools[0].licenses_available = 0
+
+        # Work1 now has 2 license pools, one of which has availability
+        alternate_collection = db.collection()
+        alternate_collection.libraries.append(db.default_library())
+        alternate_w1_lp: LicensePool = db.licensepool(
+            w1.presentation_edition, collection=alternate_collection
+        )
+        alternate_w1_lp.work_id = w1.id
+        db.session.add_all([alternate_collection, alternate_w1_lp])
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
+
+        # Still show availability since alternate collection is not restricted
+        alternate_w1_lp.licenses_available = 0
+        assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
+
+        # Now both collections are restricted and have no availability
+        ODL2API.settings_update(
+            alternate_collection.integration_configuration, settings
         )
         assert [[w2], []] == m(db.session, [[hit2], [hit1]])
 
