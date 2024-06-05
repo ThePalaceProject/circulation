@@ -24,6 +24,7 @@ from sqlalchemy.orm.session import Session
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.user_profile import ProfileStorage
+from palace.manager.service.redis.key import RedisKeyMixin
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
@@ -63,7 +64,7 @@ class LoanAndHoldMixin:
         return None
 
 
-class Patron(Base):
+class Patron(Base, RedisKeyMixin):
     __tablename__ = "patrons"
     id = Column(Integer, primary_key=True)
 
@@ -103,10 +104,9 @@ class Patron(Base):
     # system such as an ILS.
     last_external_sync = Column(DateTime(timezone=True))
 
-    # The last time this record was synced with the corresponding
-    # records managed by the vendors who provide the library with
-    # ebooks.
-    _last_loan_activity_sync = Column(
+    # TODO: This field is no longer used. Its left here for backwards compatibility until
+    #   the release with this change is deployed. It should be removed after that.
+    _REMOVED_last_loan_activity_sync = Column(
         "last_loan_activity_sync", DateTime(timezone=True), default=None
     )
 
@@ -216,9 +216,6 @@ class Patron(Base):
             date(self.last_external_sync),
         )
 
-    def __redis_key__(self) -> str:
-        return f"Patron::{self.id}"
-
     def identifier_to_remote_service(self, remote_data_source, generator=None):
         """Find or randomly create an identifier to use when identifying
         this patron to a remote service.
@@ -255,46 +252,6 @@ class Patron(Base):
         holds = [hold.work for hold in self.holds if hold.work]
         loans = self.works_on_loan()
         return set(holds + loans)
-
-    @property
-    def loan_activity_max_age(self):
-        """In the absence of any other information, how long should loan
-        activity be considered 'fresh' for this patron?
-
-        We reset Patron.last_loan_activity_sync immediately if we hear
-        about a change to a patron's loans or holds. This handles
-        cases where patron activity happens where we can't see it,
-        e.g. on a vendor website or mobile app.
-
-        TODO: This is currently a constant, but in the future it could become
-        a per-library setting.
-        """
-        return 15 * 60
-
-    def is_last_loan_activity_stale(self) -> bool:
-        """Has the last_loan_activity_sync timestamp outlived the loan_activity_max_age seconds"""
-        if not self._last_loan_activity_sync:
-            return True
-
-        return utc_now() > self._last_loan_activity_sync + datetime.timedelta(
-            seconds=self.loan_activity_max_age
-        )
-
-    @property
-    def last_loan_activity_sync(self):
-        """When was the last time we asked the vendors about
-        this patron's loan activity?
-
-        :return: A datetime, or None if we know our loan data is
-            stale.
-        """
-        if self.is_last_loan_activity_stale():
-            return None
-        return self._last_loan_activity_sync
-
-    @last_loan_activity_sync.setter
-    def last_loan_activity_sync(self, value):
-        self._last_loan_activity_sync = value
 
     @hybrid_property
     def synchronize_annotations(self):

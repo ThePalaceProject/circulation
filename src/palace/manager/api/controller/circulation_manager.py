@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-from email.utils import parsedate_to_datetime
 from typing import TypeVar
 
 import flask
-import pytz
-from flask import Response
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session, eagerload
@@ -23,6 +19,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import (
@@ -100,46 +97,9 @@ class CirculationManagerController(BaseCirculationManagerController):
             )
         return search_engine  # type: ignore[no-any-return]
 
-    def handle_conditional_request(
-        self, last_modified: datetime | None = None
-    ) -> Response | None:
-        """Handle a conditional HTTP request.
-
-        :param last_modified: A datetime representing the time this
-           resource was last modified.
-
-        :return: a Response, if the incoming request can be handled
-            conditionally. Otherwise, None.
-        """
-        if not last_modified:
-            return None
-
-        # If-Modified-Since values have resolution of one second. If
-        # last_modified has millisecond resolution, change its
-        # resolution to one second.
-        if last_modified.microsecond:
-            last_modified = last_modified.replace(microsecond=0)
-
-        if_modified_since = flask.request.headers.get("If-Modified-Since")
-        if not if_modified_since:
-            return None
-
-        try:
-            parsed_if_modified_since = parsedate_to_datetime(if_modified_since)
-        except ValueError:
-            return None
-        if not parsed_if_modified_since:
-            return None
-
-        # "[I]f the date is conforming to the RFCs it will represent a
-        # time in UTC but with no indication of the actual source
-        # timezone of the message the date comes from."
-        if parsed_if_modified_since.tzinfo is None:
-            parsed_if_modified_since = parsed_if_modified_since.replace(tzinfo=pytz.UTC)
-
-        if parsed_if_modified_since >= last_modified:
-            return Response(status=304)
-        return None
+    @property
+    def redis_client(self) -> Redis:
+        return self.manager.services.redis.client()  # type: ignore[no-any-return]
 
     def load_lane(self, lane_identifier: int | None) -> Lane | WorkList | ProblemDetail:
         """Turn user input into a Lane object."""

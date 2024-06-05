@@ -8,7 +8,7 @@ class MockSupportsRedisKey:
     def __init__(self, key: str = "test"):
         self.key = key
 
-    def __redis_key__(self) -> str:
+    def redis_key(self) -> str:
         return self.key
 
 

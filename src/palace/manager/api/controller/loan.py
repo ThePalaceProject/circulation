@@ -24,8 +24,10 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
 )
+from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
@@ -58,32 +60,17 @@ class LoanController(CirculationManagerController):
             self.log.exception(f"Could not parse refresh query parameter.")
             refresh = True
 
-        # Save some time if we don't believe the patron's loans or holds have
-        # changed since the last time the client requested this feed.
-        response = self.handle_conditional_request(patron.last_loan_activity_sync)
-        if isinstance(response, Response):
-            return response
-
-        # TODO: SimplyE used to make a HEAD request to the bookshelf feed
-        # as a quick way of checking authentication. Does this still happen?
-        # It shouldn't -- the patron profile feed should be used instead.
-        # If it's not used, we can take this out.
-        if flask.request.method == "HEAD":
-            return Response()
-
-        # First synchronize our local list of loans and holds with all
-        # third-party loan providers.
+        # Queue up tasks to sync the patron's activity with any third-party providers,
+        # that need to be synced. We don't wait for the task to complete, so we can return
+        # the feed immediately. If our knowledge of the loans is out of date, the patron will
+        # see the updated information when they refresh the page.
         if patron.authorization_identifier and refresh:
             header = self.authorization_header()
             credential = self.manager.auth.get_credential_from_header(header)
-            try:
-                self.circulation.sync_bookshelf(patron, credential)
-            except Exception as e:
-                # If anything goes wrong, omit the sync step and just
-                # display the current active loans, as we understand them.
-                self.manager.log.error(
-                    "ERROR DURING SYNC for %s: %r", patron.id, e, exc_info=e
-                )
+            for collection in PatronActivity.collections_ready_for_sync(
+                self.redis_client, patron
+            ):
+                sync_patron_activity.apply_async((collection.id, patron.id, credential))
 
         # Then make the feed.
         feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
@@ -93,9 +80,6 @@ class LoanController(CirculationManagerController):
             mime_types=flask.request.accept_mimetypes,
         )
 
-        last_modified = patron.last_loan_activity_sync
-        if last_modified:
-            response.last_modified = last_modified
         return response
 
     def borrow(
@@ -141,11 +125,22 @@ class LoanController(CirculationManagerController):
                 return loan_or_hold_or_pd
             loan_or_hold = loan_or_hold_or_pd
 
-        # At this point we have either a loan or a hold. If a loan, serve
-        # a feed that tells the patron how to fulfill the loan. If a hold,
-        # serve a feed that talks about the hold.
-        # We also need to drill in the Accept header, so that it eventually
-        # gets sent to core.feed.opds.BaseOPDSFeed.entry_as_response
+        # At this point we have either a loan or a hold.
+
+        # If it is a new loan or hold, queue up a task to sync the patron's activity with the remote.
+        # This way we are sure we have the most up-to-date information.
+        if is_new and self.circulation.supports_patron_activity(
+            loan_or_hold.license_pool
+        ):
+            sync_patron_activity.apply_async(
+                (loan_or_hold.license_pool.collection.id, patron.id, credential),
+                {"force": True},
+                countdown=5,
+            )
+
+        # If we have a loan, serve a feed that tells the patron how to fulfill the loan. If a hold,
+        # serve a feed that talks about the hold. We also need to drill in the Accept header, so that
+        # it eventually gets sent to core.feed.opds.BaseOPDSFeed.entry_as_response
         response_kwargs = {
             "status": 201 if is_new else 200,
             "mime_types": flask.request.accept_mimetypes,
@@ -510,6 +505,16 @@ class LoanController(CirculationManagerController):
                 self.circulation.release_hold(patron, credential, pool)
             except (CirculationException, RemoteInitiatedServerError) as e:
                 return e.problem_detail
+
+        # At this point we have successfully revoked the loan or hold.
+        # If the api supports it, queue up a task to sync the patron's activity with the remote.
+        # That way we are sure we have the most up-to-date information.
+        if self.circulation.supports_patron_activity(pool):
+            sync_patron_activity.apply_async(
+                (pool.collection.id, patron.id, credential),
+                {"force": True},
+                countdown=5,
+            )
 
         work = pool.work
         annotator = self.manager.annotator(None)

@@ -507,53 +507,6 @@ class TestOPDSForDistributorsAPI:
             < 5
         )
 
-    def test_patron_activity(
-        self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
-    ):
-        # The patron has two loans from this API's collection and
-        # one from a different collection.
-        patron = opds_dist_api_fixture.db.patron()
-
-        data_source = DataSource.lookup(
-            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
-        )
-        e1, p1 = opds_dist_api_fixture.db.edition(
-            identifier_type=Identifier.URI,
-            data_source_name=data_source.name,
-            with_license_pool=True,
-            collection=opds_dist_api_fixture.collection,
-        )
-        p1.loan_to(patron)
-
-        e2, p2 = opds_dist_api_fixture.db.edition(
-            identifier_type=Identifier.URI,
-            data_source_name=data_source.name,
-            with_license_pool=True,
-            collection=opds_dist_api_fixture.collection,
-        )
-        p2.loan_to(patron)
-
-        other_collection = opds_dist_api_fixture.db.collection(
-            protocol=OverdriveAPI.label()
-        )
-        e3, p3 = opds_dist_api_fixture.db.edition(
-            identifier_type=Identifier.OVERDRIVE_ID,
-            data_source_name=DataSource.OVERDRIVE,
-            with_license_pool=True,
-            collection=other_collection,
-        )
-        p3.loan_to(patron)
-
-        activity = opds_dist_api_fixture.api.patron_activity(patron, "1234")
-        assert 2 == len(activity)
-        [l1, l2] = activity
-        assert l1.collection_id == opds_dist_api_fixture.collection.id
-        assert l2.collection_id == opds_dist_api_fixture.collection.id
-        assert {l1.identifier, l2.identifier} == {
-            p1.identifier.identifier,
-            p2.identifier.identifier,
-        }
-
 
 class TestOPDSForDistributorsImporter:
     def test_import(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):

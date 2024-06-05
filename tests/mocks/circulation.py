@@ -29,7 +29,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Patron
 
 
-class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI):
+class MockBaseCirculationAPI(BaseCirculationAPI):
     def __init__(
         self,
         _db: Session,
@@ -96,12 +96,6 @@ class MockPatronActivityCirculationAPI(PatronActivityCirculationAPI):
         # Should be a FulfillmentInfo.
         return self._return_or_raise("fulfill")
 
-    def patron_activity(
-        self, patron: Patron, pin: str | None
-    ) -> Iterable[LoanInfo | HoldInfo]:
-        # This method isn't used on the mock, so we just raise an exception.
-        raise NotImplementedError()
-
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # Return value is not checked.
         return self._return_or_raise("checkin")
@@ -145,27 +139,7 @@ class MockCirculationAPI(CirculationAPI):
         analytics: Analytics | None = None,
     ):
         super().__init__(db, library, library_collection_apis, analytics=analytics)
-        self.remote_loans: list[LoanInfo] = []
-        self.remote_holds: list[HoldInfo] = []
-        self.remotes: dict[str, MockPatronActivityCirculationAPI] = {}
-
-    def add_remote_loan(
-        self,
-        loan: LoanInfo,
-    ) -> None:
-        self.remote_loans.append(loan)
-
-    def add_remote_hold(
-        self,
-        hold: HoldInfo,
-    ) -> None:
-        self.remote_holds.append(hold)
-
-    def patron_activity(
-        self, patron: Patron, pin: str | None
-    ) -> tuple[list[LoanInfo], list[HoldInfo], bool]:
-        """Return a 3-tuple (loans, holds, completeness)."""
-        return self.remote_loans, self.remote_holds, True
+        self.remotes: dict[str, MockBaseCirculationAPI] = {}
 
     def queue_checkout(
         self, licensepool: LicensePool, response: LoanInfo | HoldInfo | Exception
@@ -197,9 +171,7 @@ class MockCirculationAPI(CirculationAPI):
         api = self.api_for_license_pool(licensepool)
         api.queue_release_hold(response)
 
-    def api_for_license_pool(
-        self, licensepool: LicensePool
-    ) -> MockPatronActivityCirculationAPI:
+    def api_for_license_pool(self, licensepool: LicensePool) -> MockBaseCirculationAPI:
         source = licensepool.data_source.name
         assert source is not None
         if source not in self.remotes:
@@ -209,7 +181,7 @@ class MockCirculationAPI(CirculationAPI):
                 set_delivery_mechanism_at = BaseCirculationAPI.BORROW_STEP
             if source == DataSource.THREEM:
                 can_revoke_hold_when_reserved = False
-            remote = MockPatronActivityCirculationAPI(
+            remote = MockBaseCirculationAPI(
                 self._db,
                 licensepool.collection,
                 set_delivery_mechanism_at,
@@ -217,6 +189,39 @@ class MockCirculationAPI(CirculationAPI):
             )
             self.remotes[source] = remote
         return self.remotes[source]
+
+    def add_remote_api(
+        self, licensepool: LicensePool, api: MockBaseCirculationAPI
+    ) -> None:
+        source = licensepool.data_source.name
+        assert source is not None
+        self.remotes[source] = api
+
+
+class MockPatronActivityCirculationAPI(
+    MockBaseCirculationAPI, PatronActivityCirculationAPI
+):
+    def __init__(self, _db: Session, collection: Collection):
+        super().__init__(_db, collection)
+        self.remote_loans: list[LoanInfo] = []
+        self.remote_holds: list[HoldInfo] = []
+        self.patron_activity_calls: list[tuple[Patron, str | None]] = []
+
+    def add_remote_loan(
+        self,
+        loan: LoanInfo,
+    ) -> None:
+        self.remote_loans.append(loan)
+
+    def add_remote_hold(self, hold: HoldInfo) -> None:
+        self.remote_holds.append(hold)
+
+    def patron_activity(
+        self, patron: Patron, pin: str | None
+    ) -> Iterable[LoanInfo | HoldInfo]:
+        self.patron_activity_calls.append((patron, pin))
+        yield from self.remote_loans
+        yield from self.remote_holds
 
 
 class MockCirculationManager(CirculationManager):

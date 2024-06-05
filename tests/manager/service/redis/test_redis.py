@@ -40,3 +40,26 @@ class TestRedis:
         with pytest.raises(RedisValueError) as exc_info:
             client.execute_command("UNKNOWN", key1)
         assert "Command UNKNOWN is not checked for prefix" in str(exc_info.value)
+
+    def test_pipeline(self, redis_fixture: RedisFixture):
+        # We can also use pipelines
+        client = redis_fixture.client
+        key = client.get_key("test")
+        with client.pipeline() as pipe:
+            pipe.set(key, "value")
+            pipe.get(key)
+            result = pipe.execute()
+        assert result == [True, "value"]
+
+        # Any pipeline commands are also checked for prefixes
+        with pytest.raises(RedisValueError) as exc_info:
+            with client.pipeline() as pipe:
+                pipe.set(key, "value")
+                pipe.get(key)
+                pipe.set("unprefixed", "value")
+                pipe.get("unprefixed")
+                pipe.execute()
+        assert (
+            f"Key unprefixed does not start with prefix {redis_fixture.key_prefix}"
+            in str(exc_info.value)
+        )

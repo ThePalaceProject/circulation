@@ -1,8 +1,8 @@
 import datetime
-import urllib.parse
 from collections.abc import Generator
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
+from urllib.parse import quote
 
 import feedparser
 import pytest
@@ -43,6 +43,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
+from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -57,7 +58,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, Response
 from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed
@@ -65,7 +66,9 @@ from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
+from tests.mocks.circulation import MockPatronActivityCirculationAPI
 from tests.mocks.mock import DummyHTTPClient
 
 
@@ -100,6 +103,12 @@ class LoanFixture(CirculationControllerFixture):
 
         self.identifier_identifier = self.identifier.identifier
         self.identifier_type = self.identifier.type
+
+        # Make sure our collection has a PatronActivityCirculationAPI setup, so we can test the
+        # patron activity sync tasks.
+        self.manager.d_circulation.add_remote_api(
+            self.pool, MockPatronActivityCirculationAPI(db.session, self.collection)
+        )
 
 
 @pytest.fixture(scope="function")
@@ -277,10 +286,13 @@ class TestLoanController:
 
         # Create a new loan.
         with loan_fixture.request_context_with_library("/", headers=headers):
-            loan_fixture.manager.loans.authenticated_patron_from_request()
-            borrow_response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier_type, loan_fixture.identifier_identifier
-            )
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                borrow_response = loan_fixture.manager.loans.borrow(
+                    loan_fixture.identifier_type, loan_fixture.identifier_identifier
+                )
             loan = get_one(
                 loan_fixture.db.session, Loan, license_pool=loan_fixture.pool
             )
@@ -288,6 +300,18 @@ class TestLoanController:
             # A new loan should return a 201 status.
             assert isinstance(borrow_response, FlaskResponse)
             assert 201 == borrow_response.status_code
+
+            # And queue up a task to sync the patron's activity.
+            assert isinstance(patron, Patron)
+            sync_task.apply_async.assert_called_once_with(
+                (
+                    loan_fixture.pool.collection.id,
+                    patron.id,
+                    loan_fixture.valid_credentials["password"],
+                ),
+                {"force": True},
+                countdown=5,
+            )
 
             # A loan has been created for this license pool.
             assert loan is not None
@@ -301,9 +325,12 @@ class TestLoanController:
         # Borrow again with an existing loan.
         with loan_fixture.request_context_with_library("/", headers=headers):
             loan_fixture.manager.loans.authenticated_patron_from_request()
-            borrow_response = loan_fixture.manager.loans.borrow(
-                loan_fixture.identifier_type, loan_fixture.identifier_identifier
-            )
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                borrow_response = loan_fixture.manager.loans.borrow(
+                    loan_fixture.identifier_type, loan_fixture.identifier_identifier
+                )
 
             # A loan has been created for this license pool.
             loan = get_one(
@@ -312,6 +339,9 @@ class TestLoanController:
             # An existing loan should return a 200 status.
             assert isinstance(borrow_response, OPDSEntryResponse)
             assert 200 == borrow_response.status_code
+
+            # Because the loan was existing, we didn't queue up a task to sync the patron's activity.
+            sync_task.apply_async.assert_not_called()
 
             # There is still a loan that has not yet been fulfilled.
             assert loan is not None
@@ -481,10 +511,15 @@ class TestLoanController:
                     utc_now() + datetime.timedelta(seconds=3600),
                 ),
             )
-            borrow_response = loan_fixture.manager.loans.borrow(
-                identifier.type, identifier.identifier
-            )
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                borrow_response = loan_fixture.manager.loans.borrow(
+                    identifier.type, identifier.identifier
+                )
             assert isinstance(borrow_response, Response)
+
+            sync_task.apply_async.assert_called_once()
 
             # A loan has been created for this license pool.
             loan = get_one(loan_fixture.db.session, Loan, license_pool=pool)
@@ -1105,7 +1140,7 @@ class TestLoanController:
             {"Authorization": loan_fixture.valid_auth}
         )
 
-        # Create a new loan.
+        # Create a loan and revoke it
         with loan_fixture.request_context_with_library("/", headers=headers):
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             assert isinstance(patron, Patron)
@@ -1113,10 +1148,66 @@ class TestLoanController:
 
             loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool)
 
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
-            assert 200 == response.status_code
-            _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
+        assert 200 == response.status_code
+        serialization_helper.verify_and_get_single_entry_feed_links(response)
+
+        # We queued up a sync_patron_activity_collection task
+        sync_task.apply_async.assert_called_once_with(
+            (
+                loan_fixture.pool.collection.id,
+                patron.id,
+                loan_fixture.valid_credentials["password"],
+            ),
+            {"force": True},
+            countdown=5,
+        )
+
+    @pytest.mark.parametrize(
+        *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
+    )
+    def test_revoke_loan_no_patron_activity_support(
+        self,
+        loan_fixture: LoanFixture,
+        accept_header: str | None,
+        expected_content_type: str,
+    ):
+        serialization_helper = OPDSSerializationTestHelper(
+            accept_header, expected_content_type
+        )
+        headers = serialization_helper.merge_accept_header(
+            {"Authorization": loan_fixture.valid_auth}
+        )
+
+        # Create a loan and revoke it
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan, newly_created = loan_fixture.pool.loan_to(patron)
+
+            mock_supports_patron_activity = create_autospec(
+                loan_fixture.manager.d_circulation.supports_patron_activity,
+                return_value=False,
+            )
+            loan_fixture.manager.d_circulation.supports_patron_activity = (
+                mock_supports_patron_activity
+            )
+            loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool)
+
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+
+        assert 200 == response.status_code
+        serialization_helper.verify_and_get_single_entry_feed_links(response)
+
+        mock_supports_patron_activity.assert_called_once_with(loan_fixture.pool)
+        sync_task.apply_async.assert_not_called()
 
     def test_revoke_loan_exception(
         self,
@@ -1132,10 +1223,16 @@ class TestLoanController:
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             assert isinstance(patron, Patron)
             loan_fixture.pool.loan_to(patron)
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
         assert isinstance(response, ProblemDetail)
         assert response == COULD_NOT_MIRROR_TO_REMOTE
+
+        # Because of the error we did not queue up a sync_patron_activity_collection task
+        sync_task.apply_async.assert_not_called()
 
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
@@ -1160,10 +1257,24 @@ class TestLoanController:
 
             loan_fixture.manager.d_circulation.queue_release_hold(loan_fixture.pool)
 
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
-            assert 200 == response.status_code
-            _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
+        assert 200 == response.status_code
+        _ = serialization_helper.verify_and_get_single_entry_feed_links(response)
+
+        # We queued up a sync_patron_activity_collection task
+        sync_task.apply_async.assert_called_once_with(
+            (
+                loan_fixture.pool.collection.id,
+                patron.id,
+                loan_fixture.valid_credentials["password"],
+            ),
+            {"force": True},
+            countdown=5,
+        )
 
     def test_revoke_hold_exception(
         self,
@@ -1179,10 +1290,16 @@ class TestLoanController:
             patron = loan_fixture.manager.loans.authenticated_patron_from_request()
             assert isinstance(patron, Patron)
             loan_fixture.pool.on_hold_to(patron, position=0)
-            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
 
         assert isinstance(response, ProblemDetail)
         assert response == CANNOT_RELEASE_HOLD
+
+        # Because of the error we did not queue up a sync_patron_activity_collection task
+        sync_task.apply_async.assert_not_called()
 
     def test_revoke_hold_nonexistent_licensepool(self, loan_fixture: LoanFixture):
         with loan_fixture.request_context_with_library(
@@ -1310,200 +1427,137 @@ class TestLoanController:
                 == response.detail
             )
 
-    def test_active_loans(self, loan_fixture: LoanFixture):
-        # First, verify that this controller supports conditional HTTP
-        # GET by calling handle_conditional_request and propagating
-        # any Response it returns.
-        response_304 = Response(status=304)
+    def test_active_loans(
+        self,
+        db: DatabaseTransactionFixture,
+        loan_fixture: LoanFixture,
+        redis_fixture: RedisFixture,
+    ):
+        # An OPDS feed is returned. This feed is empty because the patron has no loans.
+        with loan_fixture.request_context_with_library(
+            "/", headers=dict(Authorization=loan_fixture.valid_auth)
+        ):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.sync()
+        assert not "<entry>" in response.get_data(as_text=True)
+        assert response.headers["Cache-Control"].startswith("private,")
 
-        def handle_conditional_request(last_modified=None):
-            return response_304
-
-        original_handle_conditional_request = (
-            loan_fixture.controller.handle_conditional_request
-        )
-        loan_fixture.manager.loans.handle_conditional_request = (
-            handle_conditional_request
-        )
-
-        # Before making any requests, set the patron's last_loan_activity_sync
-        # to a known value.
-        patron = None
-        with loan_fixture.request_context_with_library("/"):
-            patron = loan_fixture.controller.authenticated_patron(
-                loan_fixture.valid_credentials
+        # We queued up a sync_patron_activity task to go sync the patrons information
+        assert isinstance(patron, Patron)
+        assert sync_task.apply_async.call_count == len(patron.library.collections)
+        for library in patron.library.collections:
+            sync_task.apply_async.assert_any_call(
+                (library.id, patron.id, loan_fixture.valid_credentials["password"]),
             )
-        now = utc_now()
-        patron.last_loan_activity_sync = now
 
-        # Make a request -- it doesn't have If-Modified-Since, but our
-        # mocked handle_conditional_request will treat it as a
-        # successful conditional request.
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
-            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.sync()
-            assert response is response_304
-
-        # Since the conditional request succeeded, we did not call out
-        # to the vendor APIs, and patron.last_loan_activity_sync was
-        # not updated.
-        assert now == patron.last_loan_activity_sync
-
-        # Leaving patron.last_loan_activity_sync alone will stop the
-        # circulation manager from calling out to the external APIs,
-        # since it was set to a recent time. We test this explicitly
-        # later, but for now, clear it out.
-        patron.last_loan_activity_sync = None
-
-        # Un-mock handle_conditional_request. It will be called over
-        # the course of this test, but it will not notice any more
-        # conditional requests -- the detailed behavior of
-        # handle_conditional_request is tested elsewhere.
-        loan_fixture.manager.loans.handle_conditional_request = (
-            original_handle_conditional_request
-        )
-
-        # If the request is not conditional, an OPDS feed is returned.
-        # This feed is empty because the patron has no loans.
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
-            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.sync()
-            assert not "<entry>" in response.get_data(as_text=True)
-            assert response.headers["Cache-Control"].startswith("private,")
-
-            # patron.last_loan_activity_sync was set to the moment the
-            # LoanController started calling out to the remote APIs.
-            new_sync_time = patron.last_loan_activity_sync
-            assert new_sync_time > now
-
-        # Set up a bunch of loans on the remote APIs.
-        overdrive_edition, overdrive_pool = loan_fixture.db.edition(
+        # Set up some loans and holds
+        overdrive_edition, overdrive_pool = db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
             with_license_pool=True,
         )
-        overdrive_book = loan_fixture.db.work(
+        overdrive_book = db.work(
             presentation_edition=overdrive_edition,
         )
         overdrive_pool.open_access = False
+        now = utc_now()
+        overdrive_pool.loan_to(patron, now, now + datetime.timedelta(seconds=3600))
 
-        bibliotheca_edition, bibliotheca_pool = loan_fixture.db.edition(
+        bibliotheca_edition, bibliotheca_pool = db.edition(
             with_open_access_download=False,
             data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.BIBLIOTHECA_ID,
             with_license_pool=True,
         )
-        bibliotheca_book = loan_fixture.db.work(
+        bibliotheca_book = db.work(
             presentation_edition=bibliotheca_edition,
         )
         bibliotheca_pool.licenses_available = 0
         bibliotheca_pool.open_access = False
-
-        loan_fixture.manager.d_circulation.add_remote_loan(
-            LoanInfo(
-                overdrive_pool.collection,
-                overdrive_pool.data_source,
-                overdrive_pool.identifier.type,
-                overdrive_pool.identifier.identifier,
-                utc_now(),
-                utc_now() + datetime.timedelta(seconds=3600),
-            )
-        )
-        loan_fixture.manager.d_circulation.add_remote_hold(
-            HoldInfo(
-                bibliotheca_pool.collection,
-                bibliotheca_pool.data_source,
-                bibliotheca_pool.identifier.type,
-                bibliotheca_pool.identifier.identifier,
-                utc_now(),
-                utc_now() + datetime.timedelta(seconds=3600),
-                0,
-            )
+        bibliotheca_pool.on_hold_to(
+            patron, now, now + datetime.timedelta(seconds=3600), 0
         )
 
-        # Making a new request so soon after the last one means the
-        # circulation manager won't actually call out to the vendor
-        # APIs. The resulting feed won't reflect what we know to be
-        # the reality.
+        # Add a collection, that doesn't need to be synced
+        collection_already_synced = db.collection(library=patron.library)
+        patron_activity = PatronActivity(
+            redis_client=redis_fixture.client,
+            collection=collection_already_synced,
+            patron=patron,
+            task_id="test",
+        )
+        patron_activity.lock()
+        patron_activity.success()
+
+        # The loans are returned in the feed.
         with loan_fixture.request_context_with_library(
             "/", headers=dict(Authorization=loan_fixture.valid_auth)
         ):
-            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.sync()
-            assert "<entry>" not in response.get_data(as_text=True)
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                response = loan_fixture.manager.loans.sync()
 
-        # patron.last_loan_activity_sync was not changed as the result
-        # of this request, since we didn't go to the vendor APIs.
-        assert patron.last_loan_activity_sync == new_sync_time
+        # This time, the feed contains entries.
+        feed = feedparser.parse(response.data)
+        entries = feed["entries"]
 
-        # Change it now, to a timestamp far in the past.
-        long_ago = datetime_utc(2000, 1, 1)
-        patron.last_loan_activity_sync = long_ago
+        overdrive_entry = [
+            entry for entry in entries if entry["title"] == overdrive_book.title
+        ][0]
+        bibliotheca_entry = [
+            entry for entry in entries if entry["title"] == bibliotheca_book.title
+        ][0]
 
-        # This ensures that when we request the loans feed again, the
-        # LoanController actually goes out to the vendor APIs for new
-        # information.
-        with loan_fixture.request_context_with_library(
-            "/", headers=dict(Authorization=loan_fixture.valid_auth)
-        ):
-            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
-            response = loan_fixture.manager.loans.sync()
+        assert overdrive_entry["opds_availability"]["status"] == "available"
+        assert bibliotheca_entry["opds_availability"]["status"] == "ready"
 
-            # This time, the feed contains entries.
-            feed = feedparser.parse(response.data)
-            entries = feed["entries"]
+        overdrive_links = overdrive_entry["links"]
+        fulfill_link = [
+            x for x in overdrive_links if x["rel"] == "http://opds-spec.org/acquisition"
+        ][0]["href"]
+        revoke_link = [
+            x for x in overdrive_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
+        ][0]["href"]
+        bibliotheca_links = bibliotheca_entry["links"]
+        borrow_link = [
+            x
+            for x in bibliotheca_links
+            if x["rel"] == "http://opds-spec.org/acquisition/borrow"
+        ][0]["href"]
+        bibliotheca_revoke_links = [
+            x for x in bibliotheca_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
+        ]
 
-            overdrive_entry = [
-                entry for entry in entries if entry["title"] == overdrive_book.title
-            ][0]
-            bibliotheca_entry = [
-                entry for entry in entries if entry["title"] == bibliotheca_book.title
-            ][0]
-
-            assert overdrive_entry["opds_availability"]["status"] == "available"
-            assert bibliotheca_entry["opds_availability"]["status"] == "ready"
-
-            overdrive_links = overdrive_entry["links"]
-            fulfill_link = [
-                x
-                for x in overdrive_links
-                if x["rel"] == "http://opds-spec.org/acquisition"
-            ][0]["href"]
-            revoke_link = [
-                x for x in overdrive_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
-            ][0]["href"]
-            bibliotheca_links = bibliotheca_entry["links"]
-            borrow_link = [
-                x
-                for x in bibliotheca_links
-                if x["rel"] == "http://opds-spec.org/acquisition/borrow"
-            ][0]["href"]
-            bibliotheca_revoke_links = [
-                x for x in bibliotheca_links if x["rel"] == OPDSFeed.REVOKE_LOAN_REL
-            ]
-
-            assert urllib.parse.quote("%s/fulfill" % overdrive_pool.id) in fulfill_link
-            assert urllib.parse.quote("%s/revoke" % overdrive_pool.id) in revoke_link
-            assert (
-                urllib.parse.quote(
-                    "%s/%s/borrow"
-                    % (
-                        bibliotheca_pool.identifier.type,
-                        bibliotheca_pool.identifier.identifier,
-                    )
+        assert quote("%s/fulfill" % overdrive_pool.id) in fulfill_link
+        assert quote("%s/revoke" % overdrive_pool.id) in revoke_link
+        assert (
+            quote(
+                "%s/%s/borrow"
+                % (
+                    bibliotheca_pool.identifier.type,
+                    bibliotheca_pool.identifier.identifier,
                 )
-                in borrow_link
             )
-            assert 0 == len(bibliotheca_revoke_links)
+            in borrow_link
+        )
+        assert 0 == len(bibliotheca_revoke_links)
 
-            # Since we went out the the vendor APIs,
-            # patron.last_loan_activity_sync was updated.
-            assert patron.last_loan_activity_sync > new_sync_time
+        # We queued up a sync_patron_activity task to go sync the patrons information,
+        # but only for the collections that needed to be synced
+        assert sync_task.apply_async.call_count == 1
+        sync_task.apply_async.assert_any_call(
+            (
+                loan_fixture.collection.id,
+                patron.id,
+                loan_fixture.valid_credentials["password"],
+            ),
+        )
 
     @pytest.mark.parametrize(
         "refresh,expected_sync_call_count",
@@ -1521,6 +1575,7 @@ class TestLoanController:
     def test_loans_refresh(
         self,
         loan_fixture: LoanFixture,
+        redis_fixture: RedisFixture,
         refresh: str | None,
         expected_sync_call_count: int,
     ):
@@ -1529,11 +1584,13 @@ class TestLoanController:
             loan_fixture.request_context_with_library(
                 url, headers=dict(Authorization=loan_fixture.valid_auth)
             ),
-            patch.object(loan_fixture.manager.d_circulation, "sync_bookshelf") as sync,
+            patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task,
         ):
             loan_fixture.manager.loans.authenticated_patron_from_request()
             loan_fixture.manager.loans.sync()
-            assert sync.call_count == expected_sync_call_count
+            assert sync_task.apply_async.call_count == expected_sync_call_count
 
     @pytest.mark.parametrize(
         "target_loan_duration, "
@@ -1711,9 +1768,10 @@ class TestLoanController:
 
             loan_fixture.manager.d_circulation.queue_checkout(license_pool, loan_info)
 
-            response = loan_fixture.manager.loans.borrow(
-                license_pool.identifier.type, license_pool.identifier.identifier
-            )
+            with patch("palace.manager.api.controller.loan.sync_patron_activity"):
+                response = loan_fixture.manager.loans.borrow(
+                    license_pool.identifier.type, license_pool.identifier.identifier
+                )
 
             loan = get_one(loan_fixture.db.session, Loan, license_pool=license_pool)
             assert loan is not None

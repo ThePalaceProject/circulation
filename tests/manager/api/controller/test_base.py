@@ -1,6 +1,4 @@
 import datetime
-import email
-import random
 from unittest.mock import MagicMock, patch
 
 import flask
@@ -25,7 +23,7 @@ from palace.manager.sqlalchemy.model.licensing import LicensePoolDeliveryMechani
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
-from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.library import LibraryFixture
@@ -193,81 +191,6 @@ class TestBaseController:
         ):
             response = circulation_fixture.controller.authenticate()
             assert None == response.headers.get("WWW-Authenticate")
-
-    def test_handle_conditional_request(
-        self, circulation_fixture: CirculationControllerFixture
-    ):
-        # First, test success: the client provides If-Modified-Since
-        # and it is _not_ earlier than the 'last modified' date known by
-        # the server.
-
-        now_datetime = utc_now()
-        now_string = email.utils.format_datetime(now_datetime)
-
-        # To make the test more realistic, set a meaningless
-        # microseconds value of 'now'.
-        now_datetime = now_datetime.replace(microsecond=random.randint(0, 999999))
-
-        with circulation_fixture.app.test_request_context(
-            headers={"If-Modified-Since": now_string}
-        ):
-            response = circulation_fixture.controller.handle_conditional_request(
-                now_datetime
-            )
-            assert response is not None
-            assert 304 == response.status_code
-
-        # Try with a few specific values that comply to a greater or lesser
-        # extent with the date-format spec.
-        very_old = datetime_utc(2000, 1, 1)
-        for value in [
-            "Thu, 01 Aug 2019 10:00:40 -0000",
-            "Thu, 01 Aug 2019 10:00:40",
-            "01 Aug 2019 10:00:40",
-        ]:
-            with circulation_fixture.app.test_request_context(
-                headers={"If-Modified-Since": value}
-            ):
-                response = circulation_fixture.controller.handle_conditional_request(
-                    very_old
-                )
-                assert response is not None
-                assert 304 == response.status_code
-
-        # All remaining test cases are failures: for whatever reason,
-        # the request is not a valid conditional request and the
-        # method returns None.
-
-        with circulation_fixture.app.test_request_context(
-            headers={"If-Modified-Since": now_string}
-        ):
-            # This request _would_ be a conditional request, but the
-            # precondition fails: If-Modified-Since is earlier than
-            # the 'last modified' date known by the server.
-            newer = now_datetime + datetime.timedelta(seconds=10)
-            response = circulation_fixture.controller.handle_conditional_request(newer)
-            assert None == response
-
-            # Here, the server doesn't know what the 'last modified' date is,
-            # so it can't evaluate the precondition.
-            response = circulation_fixture.controller.handle_conditional_request(None)
-            assert None == response
-
-        # Here, the precondition string is not parseable as a datetime.
-        with circulation_fixture.app.test_request_context(
-            headers={"If-Modified-Since": "01 Aug 2019"}
-        ):
-            response = circulation_fixture.controller.handle_conditional_request(
-                very_old
-            )
-            assert None == response
-
-        # Here, the client doesn't provide a precondition at all.
-        with circulation_fixture.app.test_request_context():
-            response = circulation_fixture.controller.handle_conditional_request(
-                very_old
-            )
-            assert None == response
 
     def test_load_licensepools(self, circulation_fixture: CirculationControllerFixture):
         # Here's a Library that has two Collections.

@@ -40,6 +40,9 @@ from palace.manager.feed.annotator.circulation import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
@@ -259,10 +262,12 @@ class CirculationManager(LoggerMixin):
             message_prefix="load_settings - create collection apis",
         ):
             collection_apis = {}
-            registry = self.services.integration_registry.license_providers()
+            registry: LicenseProvidersRegistry = (
+                self.services.integration_registry.license_providers()
+            )
             for collection in collections:
                 try:
-                    api = registry[collection.protocol](self._db, collection)
+                    api = registry.from_collection(self._db, collection)
                     collection_apis[collection.id] = api
                 except CannotLoadConfiguration as exception:
                     self.log.exception(

@@ -337,12 +337,10 @@ class TestLicense:
         pool = licenses.pool
         license = licenses.perpetual
         patron = licenses.db.patron()
-        patron.last_loan_activity_sync = utc_now()
         loan, is_new = license.loan_to(patron)
         assert license == loan.license
         assert pool == loan.license_pool
         assert True == is_new
-        assert None == patron.last_loan_activity_sync
 
         loan2, is_new = license.loan_to(patron)
         assert loan == loan2
@@ -1125,15 +1123,10 @@ class TestLicensePool:
 
     def test_loan_to_patron(self, db: DatabaseTransactionFixture):
         # Test our ability to loan LicensePools to Patrons.
-        #
-        # TODO: The path where the LicensePool is loaned to an
-        # IntegrationClient rather than a Patron is currently not
-        # directly tested.
 
         pool = db.licensepool(None)
         patron = db.patron()
         now = utc_now()
-        patron.last_loan_activity_sync = now
 
         yesterday = now - datetime.timedelta(days=1)
         tomorrow = now + datetime.timedelta(days=1)
@@ -1148,7 +1141,7 @@ class TestLicensePool:
             external_identifier=external_identifier,
         )
 
-        assert True == is_new
+        assert is_new is True
         assert isinstance(loan, Loan)
         assert pool == loan.license_pool
         assert patron == loan.patron
@@ -1157,16 +1150,7 @@ class TestLicensePool:
         assert fulfillment == loan.fulfillment
         assert external_identifier == loan.external_identifier
 
-        # Issuing a loan locally created uncertainty about a patron's
-        # loans, since we don't know how the external vendor dealt
-        # with the request. The last_loan_activity_sync has been
-        # cleared out so we know to check back with the source of
-        # truth.
-        assert None == patron.last_loan_activity_sync
-
-        # 'Creating' a loan that already exists does not create any
-        # uncertainty.
-        patron.last_loan_activity_sync = now
+        # 'Creating' a loan that already exists returns the existing loan.
         loan2, is_new = pool.loan_to(
             patron,
             start=yesterday,
@@ -1174,20 +1158,15 @@ class TestLicensePool:
             fulfillment=fulfillment,
             external_identifier=external_identifier,
         )
-        assert False == is_new
+        assert is_new == False
         assert loan == loan2
-        assert now == patron.last_loan_activity_sync
 
     def test_on_hold_to_patron(self, db: DatabaseTransactionFixture):
         # Test our ability to put a Patron in the holds queue for a LicensePool.
-        #
-        # TODO: The path where the 'patron' is an IntegrationClient
-        # rather than a Patron is currently not directly tested.
 
         pool = db.licensepool(None)
         patron = db.patron()
         now = utc_now()
-        patron.last_loan_activity_sync = now
 
         yesterday = now - datetime.timedelta(days=1)
         tomorrow = now + datetime.timedelta(days=1)
@@ -1203,7 +1182,7 @@ class TestLicensePool:
             external_identifier=external_identifier,
         )
 
-        assert True == is_new
+        assert is_new is True
         assert isinstance(hold, Hold)
         assert pool == hold.license_pool
         assert patron == hold.patron
@@ -1212,16 +1191,7 @@ class TestLicensePool:
         assert position == hold.position
         assert external_identifier == hold.external_identifier
 
-        # Issuing a hold locally created uncertainty about a patron's
-        # loans, since we don't know how the external vendor dealt
-        # with the request. The last_loan_activity_sync has been
-        # cleared out so we know to check back with the source of
-        # truth.
-        assert None == patron.last_loan_activity_sync
-
-        # 'Creating' a hold that already exists does not create any
-        # uncertainty.
-        patron.last_loan_activity_sync = now
+        # 'Creating' a hold that already exists returns the existing hold.
         hold2, is_new = pool.on_hold_to(
             patron,
             start=yesterday,
@@ -1229,9 +1199,8 @@ class TestLicensePool:
             position=position,
             external_identifier=external_identifier,
         )
-        assert False == is_new
+        assert is_new is False
         assert hold == hold2
-        assert now == patron.last_loan_activity_sync
 
 
 class TestLicensePoolDeliveryMechanism:

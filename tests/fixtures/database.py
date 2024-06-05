@@ -528,6 +528,7 @@ class DatabaseTransactionFixture:
         password=None,
         data_source_name=None,
         settings: dict[str, Any] | None = None,
+        library: Library | None = None,
     ) -> Collection:
         name = name or self.fresh_str()
         collection, _ = Collection.by_name_and_protocol(self.session, name, protocol)
@@ -544,6 +545,8 @@ class DatabaseTransactionFixture:
 
         if data_source_name:
             collection.data_source = data_source_name
+        if library:
+            collection.libraries.append(library)
         return collection
 
     def work(

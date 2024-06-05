@@ -1,5 +1,7 @@
 import datetime
-from typing import overload
+from collections.abc import Callable
+from functools import wraps
+from typing import ParamSpec, TypeVar, overload
 
 import pytz
 from dateutil.relativedelta import relativedelta
@@ -11,15 +13,26 @@ from dateutil.relativedelta import relativedelta
 # https://docs.python.org/3/library/datetime.html#aware-and-naive-objects
 
 
-def datetime_utc(*args, **kwargs) -> datetime.datetime:
-    """Return a datetime object but with UTC information from pytz.
-    :return: datetime object
-    """
-    kwargs["tzinfo"] = pytz.UTC
-    return datetime.datetime(*args, **kwargs)
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
-def from_timestamp(ts) -> datetime.datetime:
+def _wrapper(func: Callable[P, T]) -> Callable[P, T]:
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        kwargs["tzinfo"] = pytz.UTC
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+datetime_utc = _wrapper(datetime.datetime)
+"""
+Return a datetime object but with UTC information from pytz.
+"""
+
+
+def from_timestamp(ts: float) -> datetime.datetime:
     """Return a UTC datetime object from a timestamp.
 
     :return: datetime object

@@ -924,7 +924,6 @@ class TestLibraryAnnotator:
     ):
         vendor_id_fixture.initialize_adobe(annotator_fixture.db.default_library())
         patron = annotator_fixture.db.patron()
-        patron.last_loan_activity_sync = utc_now()
         annotator = LibraryLoanAndHoldAnnotator(
             None,
             annotator_fixture.lane,

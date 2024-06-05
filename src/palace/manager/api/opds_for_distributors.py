@@ -9,11 +9,7 @@ import feedparser
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 
-from palace.manager.api.circulation import (
-    FulfillmentInfo,
-    LoanInfo,
-    PatronActivityCirculationAPI,
-)
+from palace.manager.api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
@@ -80,9 +76,7 @@ class OPDSForDistributorsLibrarySettings(BaseSettings):
 
 
 class OPDSForDistributorsAPI(
-    PatronActivityCirculationAPI[
-        OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings
-    ],
+    BaseCirculationAPI[OPDSForDistributorsSettings, OPDSForDistributorsLibrarySettings],
     HasCollectionSelfTests,
 ):
     BEARER_TOKEN_CREDENTIAL_TYPE = "OPDS For Distributors Bearer Token"
@@ -355,29 +349,6 @@ class OPDSForDistributorsAPI(
             content=json.dumps(token_document),
             content_expires=credential.expires,
         )
-
-    def patron_activity(
-        self, patron: Patron, pin: str | None
-    ) -> list[LoanInfo | HoldInfo]:
-        # Look up loans for this collection in the database.
-        _db = Session.object_session(patron)
-        loans = (
-            _db.query(Loan)
-            .join(Loan.license_pool)
-            .filter(LicensePool.collection_id == self.collection_id)
-            .filter(Loan.patron == patron)
-        )
-        return [
-            LoanInfo(
-                loan.license_pool.collection,
-                loan.license_pool.data_source.name,
-                loan.license_pool.identifier.type,
-                loan.license_pool.identifier.identifier,
-                loan.start,
-                loan.end,
-            )
-            for loan in loans
-        ]
 
     def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         # All the books for this integration are available as simultaneous
