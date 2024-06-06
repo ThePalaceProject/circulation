@@ -29,6 +29,7 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -1159,7 +1160,7 @@ class IntegrationConfigurationFixture:
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
         self.db = db
-        self.discovery_registry = (
+        self.discovery_registry: DiscoveryRegistry = (
             services_fixture.services.integration_registry.discovery()
         )
 

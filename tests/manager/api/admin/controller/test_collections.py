@@ -31,6 +31,9 @@ from palace.manager.api.odl import ODLAPI
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.util import get_one
@@ -782,7 +785,9 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         services_fixture: ServicesFixture,
     ):
-        registry = services_fixture.services.integration_registry.license_providers()
+        registry: LicenseProvidersRegistry = (
+            services_fixture.services.integration_registry.license_providers()
+        )
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         controller = CollectionSettingsController(db.session, registry)
@@ -869,7 +874,9 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
         services_fixture: ServicesFixture,
     ):
-        registry = services_fixture.services.integration_registry.license_providers()
+        registry: LicenseProvidersRegistry = (
+            services_fixture.services.integration_registry.license_providers()
+        )
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         manager = MagicMock()
@@ -894,7 +901,9 @@ class TestCollectionSettings:
             def collection(self) -> None:
                 return None
 
-        registry = services_fixture.services.integration_registry.license_providers()
+        registry: LicenseProvidersRegistry = (
+            services_fixture.services.integration_registry.license_providers()
+        )
         registry.register(MockApi, canonical="Foo")  # type: ignore[arg-type]
 
         collection = db.collection(protocol="Foo")

@@ -14,6 +14,7 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.input import LibraryInputScript
 from palace.manager.service.container import Services
+from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -63,7 +64,9 @@ class LibraryRegistrationScript(LibraryInputScript):
         parsed = self.parse_command_line(self._db, cmd_args)
 
         url = parsed.registry_url
-        integration_registry = self.services.integration_registry.discovery()
+        integration_registry: DiscoveryRegistry = (
+            self.services.integration_registry.discovery()
+        )
         protocol = integration_registry.get_protocol(OpdsRegistrationService)
         registry = OpdsRegistrationService.for_protocol_goal_and_url(
             self._db, protocol, Goals.DISCOVERY_GOAL, url  # type: ignore[arg-type]
