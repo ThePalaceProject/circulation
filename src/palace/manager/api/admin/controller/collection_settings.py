@@ -21,10 +21,6 @@ from palace.manager.api.circulation import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasChildIntegrationConfiguration
-from palace.manager.integration.registry.base import IntegrationRegistry
-from palace.manager.integration.registry.license_providers import (
-    LicenseProvidersRegistry,
-)
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import (
@@ -40,9 +36,6 @@ class CollectionSettingsController(
     IntegrationSettingsSelfTestsController[CirculationApiType],
     AdminPermissionsControllerMixin,
 ):
-    def default_registry(self) -> IntegrationRegistry[CirculationApiType]:
-        return LicenseProvidersRegistry()
-
     def configured_service_info(
         self, service: IntegrationConfiguration
     ) -> dict[str, Any] | None:

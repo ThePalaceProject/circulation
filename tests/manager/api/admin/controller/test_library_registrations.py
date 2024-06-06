@@ -27,15 +27,16 @@ from tests.fixtures.database import (
 )
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 @pytest.fixture
 def controller(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> DiscoveryServiceLibraryRegistrationsController:
-    mock_manager = MagicMock()
-    mock_manager._db = db.session
-    return DiscoveryServiceLibraryRegistrationsController(mock_manager)
+    return DiscoveryServiceLibraryRegistrationsController(
+        db.session, services_fixture.services.integration_registry.discovery()
+    )
 
 
 class TestLibraryRegistration:

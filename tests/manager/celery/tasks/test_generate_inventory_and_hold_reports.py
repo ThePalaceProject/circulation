@@ -45,6 +45,7 @@ def test_job_run(
         library_id=1,
         email_address=email,
         send_email=send_email_mock,
+        registry=services_fixture.services.integration_registry.license_providers(),
     ).run()
     assert (
         f"Cannot generate inventory and holds report for library (id=1): library not found."
@@ -194,6 +195,7 @@ def test_job_run(
         email_address=email,
         send_email=send_email_mock,
         delete_attachments=False,
+        registry=services_fixture.services.integration_registry.license_providers(),
     )
 
     job.run()

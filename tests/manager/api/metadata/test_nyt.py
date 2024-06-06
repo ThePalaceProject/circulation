@@ -13,7 +13,7 @@ from palace.manager.api.metadata.nyt import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.metadata import MetadataRegistry
+from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition

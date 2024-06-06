@@ -4,10 +4,10 @@ import datetime
 from io import StringIO
 
 from palace.manager.core.selftest import SelfTestResult
-from palace.manager.integration.registry.license_providers import (
+from palace.manager.scripts.self_test import RunSelfTestsScript
+from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.scripts.self_test import RunSelfTestsScript
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

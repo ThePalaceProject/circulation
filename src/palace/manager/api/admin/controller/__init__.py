@@ -62,24 +62,36 @@ def setup_admin_controllers(manager: CirculationManager):
     manager.admin_lanes_controller = LanesController(manager)
     manager.admin_dashboard_controller = DashboardController(manager)
     manager.admin_patron_controller = PatronController(manager)
-    manager.admin_discovery_services_controller = DiscoveryServicesController(manager)
-    manager.admin_discovery_service_library_registrations_controller = (
-        DiscoveryServiceLibraryRegistrationsController(manager)
+    manager.admin_discovery_services_controller = DiscoveryServicesController(
+        manager._db, manager.services.integration_registry.discovery()
     )
-    manager.admin_metadata_services_controller = MetadataServicesController(manager)
+    manager.admin_discovery_service_library_registrations_controller = (
+        DiscoveryServiceLibraryRegistrationsController(
+            manager._db, manager.services.integration_registry.discovery()
+        )
+    )
+    manager.admin_metadata_services_controller = MetadataServicesController(
+        manager._db, manager.services.integration_registry.metadata()
+    )
     manager.admin_patron_auth_services_controller = PatronAuthServicesController(
-        manager
+        manager._db, manager.services.integration_registry.patron_auth()
     )
 
-    manager.admin_collection_settings_controller = CollectionSettingsController(manager)
+    manager.admin_collection_settings_controller = CollectionSettingsController(
+        manager._db, manager.services.integration_registry.license_providers()
+    )
     manager.admin_library_settings_controller = LibrarySettingsController(manager)
     manager.admin_individual_admin_settings_controller = (
         IndividualAdminSettingsController(manager._db)
     )
-    manager.admin_catalog_services_controller = CatalogServicesController(manager)
+    manager.admin_catalog_services_controller = CatalogServicesController(
+        manager._db, manager.services.integration_registry.catalog_services()
+    )
     manager.admin_announcement_service = AnnouncementSettings(manager._db)
     manager.admin_search_controller = AdminSearchController(manager)
     manager.admin_quicksight_controller = QuickSightController(
         manager._db, manager.services.config.sitewide.quicksight_authorized_arns()
     )
-    manager.admin_report_controller = ReportController(manager._db)
+    manager.admin_report_controller = ReportController(
+        manager._db, manager.services.integration_registry.license_providers()
+    )

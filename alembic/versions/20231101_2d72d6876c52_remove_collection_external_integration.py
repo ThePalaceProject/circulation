@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 from palace.manager.integration.base import HasChildIntegrationConfiguration
-from palace.manager.integration.registry.license_providers import (
+from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.session import json_serializer

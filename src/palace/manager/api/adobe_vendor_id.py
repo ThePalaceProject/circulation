@@ -16,7 +16,7 @@ from sqlalchemy.orm.session import Session
 from palace.manager.api.config import CannotLoadConfiguration
 from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.discovery_service_registration import (

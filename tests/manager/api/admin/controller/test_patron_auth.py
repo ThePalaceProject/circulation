@@ -42,12 +42,12 @@ from palace.manager.api.sip import SIP2AuthenticationProvider
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.authenticator import (
@@ -71,11 +71,11 @@ def common_args() -> list[tuple[str, str]]:
 
 
 class ControllerFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        mock_manager = MagicMock()
-        mock_manager._db = db.session
-        self.controller = PatronAuthServicesController(mock_manager)
-        self.registry = PatronAuthRegistry()
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        self.registry = services_fixture.services.integration_registry.patron_auth()
+        self.controller = PatronAuthServicesController(db.session, self.registry)
 
     def get_protocol(self, provider: type[AuthenticationProviderType]) -> str:
         result = self.registry.get_protocol(provider)
@@ -85,8 +85,10 @@ class ControllerFixture:
 
 
 @pytest.fixture
-def controller_fixture(db: DatabaseTransactionFixture) -> ControllerFixture:
-    return ControllerFixture(db)
+def controller_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> ControllerFixture:
+    return ControllerFixture(db, services_fixture)
 
 
 class TestPatronAuth:
@@ -137,7 +139,7 @@ class TestPatronAuth:
 
         assert auth_service.id == service.get("id")
         assert auth_service.name == service.get("name")
-        assert SimpleAuthenticationProvider == PatronAuthRegistry().get(
+        assert SimpleAuthenticationProvider == controller_fixture.registry.get(
             service.get("protocol")
         )
         assert "user" == service.get("settings").get("test_identifier")
@@ -181,7 +183,9 @@ class TestPatronAuth:
         [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
-        assert MilleniumPatronAPI == PatronAuthRegistry().get(service.get("protocol"))
+        assert MilleniumPatronAPI == controller_fixture.registry.get(
+            service.get("protocol")
+        )
         assert "user" == service.get("settings").get("test_identifier")
         assert "pass" == service.get("settings").get("test_password")
         assert "u*" == service.get("settings").get("identifier_regular_expression")
@@ -215,7 +219,7 @@ class TestPatronAuth:
         [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
-        assert SIP2AuthenticationProvider == PatronAuthRegistry().get(
+        assert SIP2AuthenticationProvider == controller_fixture.registry.get(
             service.get("protocol")
         )
         assert "url" == service.get("settings").get("url")
@@ -247,7 +251,7 @@ class TestPatronAuth:
         [service] = response_data.get("patron_auth_services", [])
 
         assert auth_service.id == service.get("id")
-        assert SAMLWebSSOAuthenticationProvider == PatronAuthRegistry().get(
+        assert SAMLWebSSOAuthenticationProvider == controller_fixture.registry.get(
             service.get("protocol")
         )
         [library] = service.get("libraries")

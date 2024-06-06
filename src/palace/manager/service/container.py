@@ -10,6 +10,9 @@ from palace.manager.service.email.configuration import EmailConfiguration
 from palace.manager.service.email.container import Email
 from palace.manager.service.fcm.configuration import FcmConfiguration
 from palace.manager.service.fcm.container import FcmContainer
+from palace.manager.service.integration_registry.container import (
+    IntegrationRegistryContainer,
+)
 from palace.manager.service.logging.configuration import LoggingConfiguration
 from palace.manager.service.logging.container import Logging
 from palace.manager.service.search.configuration import SearchConfiguration
@@ -56,6 +59,10 @@ class Services(DeclarativeContainer):
     fcm = Container(
         FcmContainer,
         config=config.fcm,
+    )
+
+    integration_registry = Container(
+        IntegrationRegistryContainer,
     )
 
 

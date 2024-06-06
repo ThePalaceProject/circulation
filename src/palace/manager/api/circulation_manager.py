@@ -38,9 +38,6 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
-from palace.manager.integration.registry.license_providers import (
-    LicenseProvidersRegistry,
-)
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.service.logging.configuration import LogLevel
@@ -262,7 +259,7 @@ class CirculationManager(LoggerMixin):
             message_prefix="load_settings - create collection apis",
         ):
             collection_apis = {}
-            registry = LicenseProvidersRegistry()
+            registry = self.services.integration_registry.license_providers()
             for collection in collections:
                 try:
                     api = registry[collection.protocol](self._db, collection)

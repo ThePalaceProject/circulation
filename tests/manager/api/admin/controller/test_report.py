@@ -1,7 +1,7 @@
 import logging
 from http import HTTPStatus
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Response
@@ -18,41 +18,47 @@ from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-from tests.fixtures.api_admin import AdminControllerFixture
-from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 
 
-class ReportControllerFixture(AdminControllerFixture):
-    def __init__(self, controller_fixture: ControllerFixture):
-        super().__init__(controller_fixture)
+class ReportControllerFixture:
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        self.controller = ReportController(
+            db.session,
+            services_fixture.services.integration_registry.license_providers(),
+        )
 
 
 @pytest.fixture
 def report_fixture(
-    controller_fixture: ControllerFixture,
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> ReportControllerFixture:
-    return ReportControllerFixture(controller_fixture)
+    return ReportControllerFixture(db, services_fixture)
 
 
 class TestReportController:
     def test_generate_inventory_and_hold_reports(
-        self, report_fixture: ReportControllerFixture
+        self,
+        report_fixture: ReportControllerFixture,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
         email_address = "admin@email.com"
-        ctrl = report_fixture.manager.admin_report_controller
-        db = report_fixture.ctrl.db
-        library = report_fixture.ctrl.db.default_library()
-        report_fixture.ctrl.library = library
+        ctrl = report_fixture.controller
+        library = db.default_library()
         library_id = library.id
         system_admin, _ = create(db.session, Admin, email=email_address)
         system_admin.add_role(AdminRole.SYSTEM_ADMIN)
 
         with (
-            report_fixture.request_context_with_library_and_admin(
+            flask_app_fixture.test_request_context(
                 f"/",
                 admin=system_admin,
+                library=library,
             ),
             patch(
                 "palace.manager.api.admin.controller.report.generate_inventory_and_hold_reports"
@@ -72,7 +78,8 @@ class TestReportController:
     )
     def test_generate_report_authorization(
         self,
-        mock_generate_reports,
+        mock_generate_reports: MagicMock,
+        report_fixture: ReportControllerFixture,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
         caplog: pytest.LogCaptureFixture,
@@ -86,7 +93,7 @@ class TestReportController:
         mock_generate_reports.delay.return_value = SimpleNamespace(id=task_id)
         log_message_suffix = f"Task Request Id: {task_id})"
 
-        controller = ReportController(db.session)
+        controller = report_fixture.controller
         method = controller.generate_inventory_report
 
         library1 = db.library()
@@ -151,9 +158,12 @@ class TestReportController:
         assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     def test_inventory_report_info(
-        self, db: DatabaseTransactionFixture, flask_app_fixture: FlaskAppFixture
+        self,
+        report_fixture: ReportControllerFixture,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        controller = ReportController(db.session)
+        controller = report_fixture.controller
 
         library1 = db.library()
         library2 = db.library()
@@ -254,13 +264,14 @@ class TestReportController:
     )
     def test_inventory_report_info_reportable_collections(
         self,
+        report_fixture: ReportControllerFixture,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
         protocol: str,
         settings: dict,
         expect_collection: bool,
     ):
-        controller = ReportController(db.session)
+        controller = report_fixture.controller
         sysadmin = flask_app_fixture.admin_user(role=AdminRole.SYSTEM_ADMIN)
 
         library = db.library()

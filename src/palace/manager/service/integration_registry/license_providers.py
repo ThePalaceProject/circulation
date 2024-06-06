@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import IntegrationRegistry
+from palace.manager.service.integration_registry.base import IntegrationRegistry
 
 if TYPE_CHECKING:
     from palace.manager.api.circulation import CirculationApiType  # noqa: autoflake

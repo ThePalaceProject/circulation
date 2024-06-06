@@ -1,6 +1,6 @@
 from palace.manager.core.marc import MARCExporter
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import IntegrationRegistry
+from palace.manager.service.integration_registry.base import IntegrationRegistry
 
 
 class CatalogServicesRegistry(IntegrationRegistry[MARCExporter]):

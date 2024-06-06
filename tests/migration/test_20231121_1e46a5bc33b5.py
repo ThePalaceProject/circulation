@@ -8,7 +8,9 @@ from palace.manager.core.marc import (
     MarcExporterSettings,
 )
 from palace.manager.integration.base import integration_settings_load
-from palace.manager.integration.registry.catalog_services import CatalogServicesRegistry
+from palace.manager.service.integration_registry.catalog_services import (
+    CatalogServicesRegistry,
+)
 from tests.migration.conftest import (
     CreateConfigSetting,
     CreateExternalIntegration,

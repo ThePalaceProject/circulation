@@ -31,23 +31,23 @@ from palace.manager.api.odl import ODLAPI
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
-from palace.manager.integration.registry.license_providers import (
-    LicenseProvidersRegistry,
-)
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 from tests.mocks.axis import MockAxis360API
 
 
 @pytest.fixture
-def controller(db: DatabaseTransactionFixture) -> CollectionSettingsController:
-    mock_manager = MagicMock()
-    mock_manager._db = db.session
-    return CollectionSettingsController(mock_manager)
+def controller(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> CollectionSettingsController:
+    return CollectionSettingsController(
+        db.session, services_fixture.services.integration_registry.license_providers()
+    )
 
 
 class TestCollectionSettings:
@@ -101,7 +101,7 @@ class TestCollectionSettings:
         assert data.get("collections") == []
 
         names = {p.get("name") for p in data.get("protocols", {})}
-        expected_names = {k for k, v in LicenseProvidersRegistry()}
+        expected_names = {k for k, v in controller.registry}
         assert names == expected_names
 
     def test_collections_get_collections_with_multiple_collections(
@@ -777,14 +777,15 @@ class TestCollectionSettings:
         assert excinfo.value.problem_detail == UNKNOWN_PROTOCOL
 
     def test_collection_self_tests_with_unsupported_protocol(
-        self, db: DatabaseTransactionFixture, flask_app_fixture: FlaskAppFixture
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        services_fixture: ServicesFixture,
     ):
-        registry = LicenseProvidersRegistry()
+        registry = services_fixture.services.integration_registry.license_providers()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
-        manager = MagicMock()
-        manager._db = db.session
-        controller = CollectionSettingsController(manager, registry)
+        controller = CollectionSettingsController(db.session, registry)
         assert collection.integration_configuration.id is not None
 
         with flask_app_fixture.test_request_context_system_admin("/"):
@@ -866,8 +867,9 @@ class TestCollectionSettings:
     def test_collection_self_tests_run_self_tests_unsupported_collection(
         self,
         db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
     ):
-        registry = LicenseProvidersRegistry()
+        registry = services_fixture.services.integration_registry.license_providers()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         manager = MagicMock()
@@ -879,6 +881,7 @@ class TestCollectionSettings:
     def test_collection_self_tests_post(
         self,
         db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
     ):
         mock = MagicMock()
 
@@ -891,13 +894,11 @@ class TestCollectionSettings:
             def collection(self) -> None:
                 return None
 
-        registry = LicenseProvidersRegistry()
+        registry = services_fixture.services.integration_registry.license_providers()
         registry.register(MockApi, canonical="Foo")  # type: ignore[arg-type]
 
         collection = db.collection(protocol="Foo")
-        manager = MagicMock()
-        manager._db = db.session
-        controller = CollectionSettingsController(manager, registry)
+        controller = CollectionSettingsController(db.session, registry)
 
         assert collection.integration_configuration.id is not None
         response = controller.self_tests_process_post(

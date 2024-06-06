@@ -1,6 +1,5 @@
 import json
 from contextlib import nullcontext
-from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -22,19 +21,21 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.core.marc import MARCExporter, MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.catalog_services import CatalogServicesRegistry
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 
 
 @pytest.fixture
-def controller(db: DatabaseTransactionFixture) -> CatalogServicesController:
-    mock_manager = MagicMock()
-    mock_manager._db = db.session
-    return CatalogServicesController(mock_manager)
+def controller(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> CatalogServicesController:
+    return CatalogServicesController(
+        db.session, services_fixture.services.integration_registry.catalog_services()
+    )
 
 
 class TestCatalogServicesController:
@@ -58,7 +59,7 @@ class TestCatalogServicesController:
             assert isinstance(protocols, list)
             assert 1 == len(protocols)
 
-            assert protocols[0].get("name") == CatalogServicesRegistry().get_protocol(
+            assert protocols[0].get("name") == controller.registry.get_protocol(
                 MARCExporter
             )
             assert "settings" in protocols[0]
@@ -74,7 +75,7 @@ class TestCatalogServicesController:
             include_summary=True, include_genres=True, organization_code="US-MaBoDPL"
         )
 
-        protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
+        protocol = controller.registry.get_protocol(MARCExporter)
         assert protocol is not None
         integration = db.integration_configuration(
             protocol,
@@ -203,7 +204,7 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
+        protocol = controller.registry.get_protocol(MARCExporter)
         assert protocol is not None
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
@@ -251,7 +252,7 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
+        protocol = controller.registry.get_protocol(MARCExporter)
         assert protocol is not None
 
         service = db.integration_configuration(
@@ -299,7 +300,7 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = CatalogServicesRegistry().get_protocol(MARCExporter)
+        protocol = controller.registry.get_protocol(MARCExporter)
         assert protocol is not None
 
         service = db.integration_configuration(

@@ -27,17 +27,19 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
 from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class MetadataServicesFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.registry = MetadataRegistry()
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        self.registry = services_fixture.services.integration_registry.metadata()
 
         novelist_protocol = self.registry.get_protocol(NoveListAPI)
         assert novelist_protocol is not None
@@ -47,9 +49,7 @@ class MetadataServicesFixture:
         assert nyt_protocol is not None
         self.nyt_protocol = nyt_protocol
 
-        manager = MagicMock()
-        manager._db = db.session
-        self.controller = MetadataServicesController(manager, self.registry)
+        self.controller = MetadataServicesController(db.session, self.registry)
         self.db = db
 
     def create_novelist_integration(
@@ -80,9 +80,9 @@ class MetadataServicesFixture:
 
 @pytest.fixture
 def metadata_services_fixture(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> MetadataServicesFixture:
-    return MetadataServicesFixture(db)
+    return MetadataServicesFixture(db, services_fixture)
 
 
 class TestMetadataServices:

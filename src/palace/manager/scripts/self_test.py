@@ -1,8 +1,5 @@
 import sys
 
-from palace.manager.integration.registry.license_providers import (
-    LicenseProvidersRegistry,
-)
 from palace.manager.scripts.input import LibraryInputScript
 
 
@@ -18,7 +15,7 @@ class RunSelfTestsScript(LibraryInputScript):
     def do_run(self, *args, **kwargs):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
-            api_map = LicenseProvidersRegistry()
+            api_map = self.services.integration_registry.license_providers()
             self.out.write("Testing %s\n" % library.name)
             for collection in library.collections:
                 try:

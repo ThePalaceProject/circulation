@@ -6,6 +6,7 @@ from typing import Any, Generic, NamedTuple, TypeVar
 
 import flask
 from flask import Response
+from sqlalchemy.orm import Session
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.problem_details import (
@@ -19,7 +20,6 @@ from palace.manager.api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import (
@@ -27,8 +27,8 @@ from palace.manager.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
 )
-from palace.manager.integration.registry.base import IntegrationRegistry
 from palace.manager.integration.settings import BaseSettings
+from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -57,18 +57,11 @@ class ChangedLibrariesTuple(NamedTuple):
 class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
     def __init__(
         self,
-        manager: CirculationManager,
-        registry: IntegrationRegistry[T] | None = None,
+        db: Session,
+        registry: IntegrationRegistry[T],
     ):
-        self._db = manager._db
-        self.registry = registry or self.default_registry()
-
-    @abstractmethod
-    def default_registry(self) -> IntegrationRegistry[T]:
-        """
-        Return the IntegrationRegistry for the controller's goal.
-        """
-        ...
+        self._db = db
+        self.registry = registry
 
     @memoize(ttls=1800)
     def _cached_protocols(self) -> dict[str, dict[str, Any]]:

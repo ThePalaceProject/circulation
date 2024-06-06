@@ -8,7 +8,7 @@ Create Date: 2024-01-04 16:24:32.895789+00:00
 from alembic import op
 
 from palace.manager.integration.base import HasChildIntegrationConfiguration
-from palace.manager.integration.registry.license_providers import (
+from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.sqlalchemy.session import json_serializer

@@ -4,10 +4,10 @@ import uuid
 
 from sqlalchemy.orm.attributes import flag_modified
 
-from palace.manager.integration.registry.license_providers import (
+from palace.manager.scripts.base import Script
+from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.lane import Lane

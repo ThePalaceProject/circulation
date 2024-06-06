@@ -8,7 +8,7 @@ from palace.manager.api.saml.provider import SAMLWebSSOAuthenticationProvider
 from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
 from palace.manager.api.sip import SIP2AuthenticationProvider
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
+from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -18,6 +18,7 @@ from tests.fixtures.database import (
     IntegrationConfigurationFixture,
     IntegrationLibraryConfigurationFixture,
 )
+from tests.fixtures.services import ServicesFixture
 from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
 
 AuthProviderFixture = tuple[
@@ -68,8 +69,8 @@ def create_auth_integration_configuration(
 
 
 @pytest.fixture()
-def patron_auth_registry() -> PatronAuthRegistry:
-    return PatronAuthRegistry()
+def patron_auth_registry(services_fixture: ServicesFixture) -> PatronAuthRegistry:
+    return services_fixture.services.integration_registry.patron_auth()  # type: ignore[no-any-return]
 
 
 class AuthProtocolFixture:

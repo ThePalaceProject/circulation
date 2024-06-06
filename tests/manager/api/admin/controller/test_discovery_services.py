@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
 
 import flask
 import pytest
@@ -22,11 +21,11 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.database import (
@@ -35,11 +34,24 @@ if TYPE_CHECKING:
     )
 
 
+class DiscoveryServicesControllerFixture:
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        self.registry = services_fixture.services.integration_registry.discovery()
+        self.protocol = self.registry.get_protocol(OpdsRegistrationService)
+        self.controller = DiscoveryServicesController(db.session, self.registry)
+        self.db = db
+
+    def process_discovery_services(self) -> Response | ProblemDetail:
+        return self.controller.process_discovery_services()
+
+
 @pytest.fixture
-def controller(db: DatabaseTransactionFixture) -> DiscoveryServicesController:
-    mock_manager = MagicMock()
-    mock_manager._db = db.session
-    return DiscoveryServicesController(mock_manager)
+def controller(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> DiscoveryServicesControllerFixture:
+    return DiscoveryServicesControllerFixture(db, services_fixture)
 
 
 class TestDiscoveryServices:
@@ -48,15 +60,10 @@ class TestDiscoveryServices:
     services.
     """
 
-    @property
-    def protocol(self):
-        registry = DiscoveryRegistry()
-        return registry.get_protocol(OpdsRegistrationService)
-
     def test_discovery_services_get_with_no_services_creates_default(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
     ):
         with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller.process_discovery_services()
@@ -65,9 +72,9 @@ class TestDiscoveryServices:
             json = response.get_json()
             [service] = json.get("discovery_services")
             protocols = json.get("protocols")
-            assert self.protocol in [p.get("name") for p in protocols]
+            assert controller.protocol in [p.get("name") for p in protocols]
             assert "settings" in protocols[0]
-            assert self.protocol == service.get("protocol")
+            assert controller.protocol == service.get("protocol")
             assert OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL == service.get(
                 "settings"
             ).get("url")
@@ -85,7 +92,7 @@ class TestDiscoveryServices:
     def test_discovery_services_get_with_one_service(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
@@ -108,7 +115,7 @@ class TestDiscoveryServices:
     def test_discovery_services_post_errors(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
@@ -137,7 +144,7 @@ class TestDiscoveryServices:
                 [
                     ("name", "Name"),
                     ("id", "123"),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                 ]
             )
             response = controller.process_discovery_services()
@@ -152,7 +159,7 @@ class TestDiscoveryServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", existing_integration.name),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://test.com"),
                 ]
             )
@@ -175,7 +182,7 @@ class TestDiscoveryServices:
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(existing_integration.id)),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                 ]
             )
             response = controller.process_discovery_services()
@@ -185,7 +192,7 @@ class TestDiscoveryServices:
         with flask_app_fixture.test_request_context("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "registry url"),
                 ]
             )
@@ -194,14 +201,14 @@ class TestDiscoveryServices:
     def test_discovery_services_post_create(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
     ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "Name"),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://registry.url"),
                 ]
             )
@@ -216,7 +223,7 @@ class TestDiscoveryServices:
         assert isinstance(service, IntegrationConfiguration)
         assert isinstance(response, Response)
         assert service.id == int(response.get_data(as_text=True))
-        assert self.protocol == service.protocol
+        assert controller.protocol == service.protocol
         assert (
             OpdsRegistrationService.settings_load(service).url == "http://registry.url"
         )
@@ -224,7 +231,7 @@ class TestDiscoveryServices:
     def test_discovery_services_post_edit(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         discovery_service = create_integration_configuration.discovery_service(
@@ -236,7 +243,7 @@ class TestDiscoveryServices:
                 [
                     ("name", "Name"),
                     ("id", str(discovery_service.id)),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://new_registry_url.com"),
                 ]
             )
@@ -245,7 +252,7 @@ class TestDiscoveryServices:
 
         assert isinstance(response, Response)
         assert discovery_service.id == int(response.get_data(as_text=True))
-        assert self.protocol == discovery_service.protocol
+        assert controller.protocol == discovery_service.protocol
         assert (
             "http://new_registry_url.com"
             == OpdsRegistrationService.settings_load(discovery_service).url
@@ -254,7 +261,7 @@ class TestDiscoveryServices:
     def test_check_name_unique(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
         existing_service = create_integration_configuration.discovery_service()
@@ -267,7 +274,7 @@ class TestDiscoveryServices:
                 [
                     ("name", str(existing_service.name)),
                     ("id", str(new_service.id)),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://test.com"),
                 ]
             )
@@ -280,7 +287,7 @@ class TestDiscoveryServices:
                 [
                     ("name", str(existing_service.name)),
                     ("id", str(existing_service.id)),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://test.com"),
                 ]
             )
@@ -294,7 +301,7 @@ class TestDiscoveryServices:
                 [
                     ("name", "New name"),
                     ("id", str(existing_service.id)),
-                    ("protocol", self.protocol),
+                    ("protocol", controller.protocol),
                     ("url", "http://test.com"),
                 ]
             )
@@ -305,7 +312,7 @@ class TestDiscoveryServices:
     def test_discovery_service_delete(
         self,
         flask_app_fixture: FlaskAppFixture,
-        controller: DiscoveryServicesController,
+        controller: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
         create_integration_configuration: IntegrationConfigurationFixture,
     ):
@@ -316,12 +323,12 @@ class TestDiscoveryServices:
         with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
                 AdminNotAuthorized,
-                controller.process_delete,
+                controller.controller.process_delete,
                 discovery_service.id,
             )
 
         with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
-            response = controller.process_delete(
+            response = controller.controller.process_delete(
                 discovery_service.id  # type: ignore[arg-type]
             )
             assert response.status_code == 200
