@@ -15,11 +15,11 @@ from palace.manager.celery.job import Job
 from palace.manager.celery.task import Task
 from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.license_providers import (
-    LicenseProvidersRegistry,
-)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.email.email import SendEmailCallable
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -29,10 +29,9 @@ from palace.manager.sqlalchemy.util import get_one
 
 
 def eligible_integrations(
-    integrations: list[IntegrationConfiguration],
+    integrations: list[IntegrationConfiguration], registry: LicenseProvidersRegistry
 ) -> list[IntegrationConfiguration]:
     """Subset a list of integrations to only those that are eligible for the inventory report."""
-    registry = LicenseProvidersRegistry()
 
     def is_eligible(integration: IntegrationConfiguration) -> bool:
         if integration.protocol is None:
@@ -44,7 +43,7 @@ def eligible_integrations(
 
 
 def library_report_integrations(
-    library: Library, session: Session
+    library: Library, session: Session, registry: LicenseProvidersRegistry
 ) -> list[IntegrationConfiguration]:
     """Return a list of collection integrations to report for the given library."""
 
@@ -61,7 +60,9 @@ def library_report_integrations(
             ),
         )
     ).all()
-    return sorted(eligible_integrations(integrations), key=lambda i: i.name or "")
+    return sorted(
+        eligible_integrations(integrations, registry), key=lambda i: i.name or ""
+    )
 
 
 class GenerateInventoryAndHoldsReportsJob(Job):
@@ -71,6 +72,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
         library_id: int,
         email_address: str,
         send_email: SendEmailCallable,
+        registry: LicenseProvidersRegistry,
         delete_attachments: bool = True,
     ):
         super().__init__(session_maker)
@@ -78,6 +80,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
         self.email_address = email_address
         self.delete_attachments = delete_attachments
         self.send_email = send_email
+        self.registry = registry
 
     def run(self) -> None:
         with self.transaction() as session:
@@ -102,7 +105,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
             integration_ids = [
                 integration.id
                 for integration in library_report_integrations(
-                    library=library, session=session
+                    library=library, session=session, registry=self.registry
                 )
             ]
 
@@ -329,4 +332,5 @@ def generate_inventory_and_hold_reports(
         library_id=library_id,
         email_address=email_address,
         send_email=task.services.email.send_email,
+        registry=task.services.integration_registry.license_providers(),
     ).run()

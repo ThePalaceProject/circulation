@@ -54,9 +54,9 @@ from palace.manager.api.sip import SIP2AuthenticationProvider
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import IntegrationRegistry
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.integration_registry.base import IntegrationRegistry
+from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.integration import (

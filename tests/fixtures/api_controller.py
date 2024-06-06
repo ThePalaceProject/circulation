@@ -23,7 +23,7 @@ from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
+from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
@@ -86,7 +86,9 @@ class ControllerFixture:
     ):
         self.db = db
         self.app = app
-        self.patron_auth_registry = PatronAuthRegistry()
+        self.patron_auth_registry: PatronAuthRegistry = (
+            services_fixture.services.integration_registry.patron_auth()
+        )
 
         # PRESERVE_CONTEXT_ON_EXCEPTION needs to be off in tests
         # to prevent one test failure from breaking later tests as well.

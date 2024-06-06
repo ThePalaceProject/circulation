@@ -36,8 +36,8 @@ from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.metadata import MetadataRegistry
 from palace.manager.service.container import container_instance
+from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource

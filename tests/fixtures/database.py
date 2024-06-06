@@ -29,7 +29,7 @@ from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -1156,8 +1156,13 @@ def temporary_directory_configuration() -> (
 
 
 class IntegrationConfigurationFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
         self.db = db
+        self.discovery_registry: DiscoveryRegistry = (
+            services_fixture.services.integration_registry.discovery()
+        )
 
     def __call__(
         self, protocol: str | None, goal: Goals, settings_dict: dict | None = None
@@ -1175,13 +1180,12 @@ class IntegrationConfigurationFixture:
     def discovery_service(
         self, protocol: str | None = None, url: str | None = None
     ) -> IntegrationConfiguration:
-        registry = DiscoveryRegistry()
         if protocol is None:
-            protocol = registry.get_protocol(OpdsRegistrationService)
+            protocol = self.discovery_registry.get_protocol(OpdsRegistrationService)
             assert protocol is not None
 
         if url is not None:
-            settings_obj = registry[protocol].settings_class().construct(url=url)  # type: ignore[arg-type]
+            settings_obj = self.discovery_registry[protocol].settings_class().construct(url=url)  # type: ignore[arg-type]
             settings_dict = settings_obj.dict()
         else:
             settings_dict = {}
@@ -1193,9 +1197,9 @@ class IntegrationConfigurationFixture:
 
 @pytest.fixture
 def create_integration_configuration(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> IntegrationConfigurationFixture:
-    fixture = IntegrationConfigurationFixture(db)
+    fixture = IntegrationConfigurationFixture(db, services_fixture)
     return fixture
 
 

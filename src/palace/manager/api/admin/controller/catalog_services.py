@@ -10,7 +10,6 @@ from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
 from palace.manager.core.marc import MARCExporter
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.catalog_services import CatalogServicesRegistry
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import (
@@ -25,9 +24,6 @@ class CatalogServicesController(
     IntegrationSettingsController[MARCExporter],
     AdminPermissionsControllerMixin,
 ):
-    def default_registry(self) -> CatalogServicesRegistry:
-        return CatalogServicesRegistry()
-
     def process_catalog_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
 

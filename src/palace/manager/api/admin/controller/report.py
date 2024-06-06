@@ -16,6 +16,9 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     library_report_integrations,
 )
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
+from palace.manager.service.integration_registry.license_providers import (
+    LicenseProvidersRegistry,
+)
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.library import Library
@@ -44,8 +47,9 @@ def _authorize_from_request(
 
 
 class ReportController(LoggerMixin):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, registry: LicenseProvidersRegistry):
         self._db = db
+        self.registry = registry
 
     def inventory_report_info(self) -> Response:
         """InventoryReportInfo response of reportable collections for a library.
@@ -58,7 +62,7 @@ class ReportController(LoggerMixin):
         collections = [
             integration.collection
             for integration in library_report_integrations(
-                library=library, session=self._db
+                library=library, session=self._db, registry=self.registry
             )
         ]
         info = InventoryReportInfo(

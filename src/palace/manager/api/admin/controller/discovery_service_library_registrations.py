@@ -11,11 +11,10 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.problem_details import MISSING_SERVICE, NO_SUCH_LIBRARY
-from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.discovery import DiscoveryRegistry
+from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
     RegistrationStage,
@@ -33,10 +32,10 @@ class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerM
     a OpdsRegistrationService.
     """
 
-    def __init__(self, manager: CirculationManager):
-        self._db: Session = manager._db
+    def __init__(self, db: Session, registry: DiscoveryRegistry):
+        self._db: Session = db
         self.goal = Goals.DISCOVERY_GOAL
-        self.registry = DiscoveryRegistry()
+        self.registry = registry
 
     def process_discovery_service_library_registrations(
         self,

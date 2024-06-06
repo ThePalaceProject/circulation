@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import (
+from palace.manager.service.integration_registry.base import (
     IntegrationRegistry,
     IntegrationRegistryException,
 )

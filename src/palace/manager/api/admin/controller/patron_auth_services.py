@@ -18,8 +18,6 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.authentication.base import AuthenticationProviderType
 from palace.manager.api.authentication.basic import BasicAuthenticationProvider
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import IntegrationRegistry
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import (
@@ -34,9 +32,6 @@ class PatronAuthServicesController(
     IntegrationSettingsSelfTestsController[AuthenticationProviderType],
     AdminPermissionsControllerMixin,
 ):
-    def default_registry(self) -> IntegrationRegistry[AuthenticationProviderType]:
-        return PatronAuthRegistry()
-
     @property
     def basic_auth_protocols(self) -> set[str]:
         return {

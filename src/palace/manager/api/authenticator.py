@@ -35,9 +35,9 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.registry.base import IntegrationRegistry
-from palace.manager.integration.registry.patron_auth import PatronAuthRegistry
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.integration_registry.base import IntegrationRegistry
+from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.model.announcements import Announcement
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
 from palace.manager.sqlalchemy.model.key import Key, KeyType

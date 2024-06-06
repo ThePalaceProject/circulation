@@ -31,7 +31,9 @@ class MetadataService(
     @classmethod
     @functools.cache
     def protocols(cls) -> list[str]:
-        from palace.manager.integration.registry.metadata import MetadataRegistry
+        from palace.manager.service.integration_registry.metadata import (
+            MetadataRegistry,
+        )
 
         registry = MetadataRegistry()
         protocols = registry.get_protocols(cls)

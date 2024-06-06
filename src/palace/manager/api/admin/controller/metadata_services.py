@@ -12,8 +12,6 @@ from palace.manager.api.admin.problem_details import DUPLICATE_INTEGRATION
 from palace.manager.api.metadata.base import MetadataServiceType
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
-from palace.manager.integration.registry.base import IntegrationRegistry
-from palace.manager.integration.registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.session import json_serializer
@@ -38,9 +36,6 @@ class MetadataServicesController(
             if existing_service is not None:
                 raise ProblemDetailException(DUPLICATE_INTEGRATION)
         return super().create_new_service(name, protocol)
-
-    def default_registry(self) -> IntegrationRegistry[MetadataServiceType]:
-        return MetadataRegistry()
 
     def process_metadata_services(self) -> Response | ProblemDetail:
         self.require_system_admin()
