@@ -2,10 +2,52 @@ import os
 from enum import Enum
 from urllib.parse import urljoin
 
+from pydantic import Field
 from requests import RequestException
 
+from palace.manager.util.flask_util import _snake_to_camel_case
 from palace.manager.util.http import HTTP, RequestNetworkException
 from palace.manager.util.log import LoggerMixin
+from palace.manager.util.settings import BaseSettingsRestrictEnvOverride
+
+
+class AdminClientFeatureFlags(BaseSettingsRestrictEnvOverride):
+    # The following CAN be overridden by environment variables.
+    reports_only_for_sysadmins: bool = Field(
+        True,
+        description="Show inventory reports only for sysadmins.",
+    )
+
+    # The following fields CANNOT be overridden by environment variables.
+    # Setting `const=True` ensures that the default value is not overridden.
+    # Add them to the one of the `environment_override_*` Config settings
+    # below to prevent them from being overridden.
+    # NB: Overriding the `env_prefix` with `env=...` here may lead to
+    #     incorrect values in warnings and exceptions, since `env_prefix`
+    #     is used to generate the full environment variable name.
+    enable_auto_list: bool = Field(
+        True,
+        const=True,
+        description="Enable auto-list of items.",
+    )
+    show_circ_events_download: bool = Field(
+        True,
+        const=True,
+        description="Show download button for Circulation Events.",
+    )
+
+    class Config:
+        # We use lower camel case aliases, since we're sending to JavaScript.
+        alias_generator = _snake_to_camel_case
+        env_prefix = "PALACE_ADMINUI_FEATURES_"
+        env_file = ".env"
+
+        # Restrict environment variable overrides.
+        #
+        environment_override_warning_fields: set[str] | None = {
+            "enable_auto_list",
+            "show_circ_events_download",
+        }
 
 
 class OperationalMode(str, Enum):
@@ -52,6 +94,9 @@ class Configuration(LoggerMixin):
 
     # Cache the package version after first lookup.
     _version: str | None = None
+
+    # Admin client feature flags
+    admin_feature_flags = AdminClientFeatureFlags()
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:
