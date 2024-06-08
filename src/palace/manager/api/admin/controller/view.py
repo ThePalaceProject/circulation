@@ -77,13 +77,15 @@ class ViewController(AdminController):
                 csrf_token=csrf_token,
                 sitewide_tos_href=Configuration.DEFAULT_TOS_HREF,
                 sitewide_tos_text=Configuration.DEFAULT_TOS_TEXT,
-                show_circ_events_download=AdminClientConfig.admin_feature_flags.show_circ_events_download,
+                show_circ_events_download=AdminClientConfig.admin_feature_flags().show_circ_events_download,
                 setting_up=setting_up,
                 email=email,
                 roles=roles,
                 admin_js=admin_js,
                 admin_css=admin_css,
-                feature_flags=AdminClientConfig.admin_feature_flags.json(by_alias=True),
+                feature_flags=AdminClientConfig.admin_feature_flags().json(
+                    by_alias=True
+                ),
             )
         )
 

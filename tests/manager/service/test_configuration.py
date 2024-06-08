@@ -7,6 +7,7 @@ from pyfakefs.fake_filesystem import FakeFilesystem
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.util.settings import ServiceConfigurationWithLimitedEnvOverride
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -119,3 +120,68 @@ class TestServiceConfiguration:
             # Ignore the type error, since it tells us this is immutable,
             # and we are testing that behavior at runtime.
             config.string_with_default = "new value"  # type: ignore[misc]
+
+
+class TestServiceConfigurationWithLimitedEnvOverride:
+    def test_unknown_field(self):
+        class MockConfiguration1(ServiceConfigurationWithLimitedEnvOverride):
+            existing_field: bool = True
+
+            class Config:
+                env_prefix = "MOCK_"
+                environment_override_error_fields = {"non_existing_field"}
+
+        with pytest.raises(CannotLoadConfiguration) as exc_info:
+            MockConfiguration1()
+        assert "The following are not the name of an existing field" in str(
+            exc_info.value
+        )
+        assert "non_existing_field" in str(exc_info.value)
+
+        class MockConfiguration2(ServiceConfigurationWithLimitedEnvOverride):
+            existing_field: bool = True
+
+            class Config:
+                env_prefix = "MOCK_"
+                environment_override_warning_fields = {"non_existing_field"}
+
+        with pytest.raises(CannotLoadConfiguration) as exc_info:
+            MockConfiguration2()
+        assert "The following are not the name of an existing field" in str(
+            exc_info.value
+        )
+        assert "non_existing_field" in str(exc_info.value)
+
+    def test_overlapping_fields(self):
+        class MockConfiguration(ServiceConfigurationWithLimitedEnvOverride):
+            field: bool = True
+            overlapping_field: bool = True
+
+            class Config:
+                env_prefix = "MOCK_"
+                environment_override_error_fields = {"field", "overlapping_field"}
+                environment_override_warning_fields = {"overlapping_field"}
+
+        with pytest.raises(CannotLoadConfiguration) as exc_info:
+            MockConfiguration()
+        assert "The following field names are specified in multiple settings" in str(
+            exc_info.value
+        )
+        assert "overlapping_field" in str(exc_info.value)
+
+    def test_environment_override_warning_fields(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        service_configuration_fixture: ServiceConfigurationFixture,
+    ):
+        class MockConfiguration(ServiceConfigurationWithLimitedEnvOverride):
+            field: bool = True
+            warning_field1: bool = True
+            warning_field2: bool = True
+
+            class Config:
+                env_prefix = "MOCK_"
+                environment_override_warning_fields = {
+                    "warning_field1",
+                    "warning_field2",
+                }

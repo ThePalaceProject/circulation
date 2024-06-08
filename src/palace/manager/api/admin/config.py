@@ -8,10 +8,10 @@ from requests import RequestException
 from palace.manager.util.flask_util import _snake_to_camel_case
 from palace.manager.util.http import HTTP, RequestNetworkException
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.settings import BaseSettingsRestrictEnvOverride
+from palace.manager.util.settings import ServiceConfigurationWithLimitedEnvOverride
 
 
-class AdminClientFeatureFlags(BaseSettingsRestrictEnvOverride):
+class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):
     # The following CAN be overridden by environment variables.
     reports_only_for_sysadmins: bool = Field(
         True,
@@ -37,17 +37,19 @@ class AdminClientFeatureFlags(BaseSettingsRestrictEnvOverride):
     )
 
     class Config:
-        # We use lower camel case aliases, since we're sending to JavaScript.
-        alias_generator = _snake_to_camel_case
-        env_prefix = "PALACE_ADMINUI_FEATURES_"
-        env_file = ".env"
+        env_prefix = "PALACE_ADMINUI_FEATURE_"
 
-        # Restrict environment variable overrides.
-        #
-        environment_override_warning_fields: set[str] | None = {
+        # We use lower camel case aliases, since we're sending to the web.
+        alias_generator = _snake_to_camel_case
+
+        # Add any fields that should not be overridden by environment variables here.
+        # - environment_override_warning_fields: warnings and ignore environment
+        # - environment_override_error_fields: raise exception
+        environment_override_warning_fields: set[str] = {
             "enable_auto_list",
             "show_circ_events_download",
         }
+        environment_override_error_fields: set[str] = set()
 
 
 class OperationalMode(str, Enum):
@@ -95,8 +97,15 @@ class Configuration(LoggerMixin):
     # Cache the package version after first lookup.
     _version: str | None = None
 
+    # Cache the feature flags after the first lookup.
+    _admin_ui_feature_flags: AdminClientFeatureFlags | None = None
+
     # Admin client feature flags
-    admin_feature_flags = AdminClientFeatureFlags()
+    @classmethod
+    def admin_feature_flags(cls) -> AdminClientFeatureFlags:
+        if not cls._admin_ui_feature_flags:
+            cls._admin_ui_feature_flags = AdminClientFeatureFlags()
+        return cls._admin_ui_feature_flags
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:
