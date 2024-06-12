@@ -67,9 +67,6 @@ class ViewController(AdminController):
         admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
-        # # We always have local_analytics
-        # show_circ_events_download = True
-
         response = Response(
             flask.render_template_string(
                 admin_template,
