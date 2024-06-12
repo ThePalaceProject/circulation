@@ -104,12 +104,6 @@ class Patron(Base, RedisKeyMixin):
     # system such as an ILS.
     last_external_sync = Column(DateTime(timezone=True))
 
-    # TODO: This field is no longer used. Its left here for backwards compatibility until
-    #   the release with this change is deployed. It should be removed after that.
-    _REMOVED_last_loan_activity_sync = Column(
-        "last_loan_activity_sync", DateTime(timezone=True), default=None
-    )
-
     # The time, if any, at which the user's authorization to borrow
     # books expires.
     authorization_expires = Column(Date, index=True)
