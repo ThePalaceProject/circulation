@@ -1,5 +1,6 @@
 import json
 from collections.abc import Generator
+from typing import Any
 
 import feedparser
 import flask
@@ -22,6 +23,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_ROLE,
 )
 from palace.manager.core.classifier import SimplifiedGenreClassifier
+from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.classification import (
@@ -77,29 +79,16 @@ def work_fixture(
 
 class TestWorkController:
     def test_details(self, work_fixture: WorkFixture):
-        def _links_for_rel(entry: str, rel: str):
+        def _links_for_rel(entry, rel: str) -> list[dict[str, Any]]:
             return [link for link in entry["links"] if link["rel"] == rel]
 
-        def _suppression_hrefs(entry) -> tuple(str, str, str, str):
-            return (
-                [
-                    link["href"]
-                    for link in _links_for_rel(
-                        entry, "http://palaceproject.io/terms/rel/suppress-for-library"
-                    )
-                ],
-                [
-                    link["href"]
-                    for link in _links_for_rel(
-                        entry,
-                        "http://palaceproject.io/terms/rel/unsuppress-for-library",
-                    )
-                ],
-            )
-
         [lp] = work_fixture.english_1.license_pools
+        work = lp.work
+        library = work_fixture.ctrl.db.default_library()
 
         lp.suppressed = False
+        assert library not in work.suppressed_for
+
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.details(
                 lp.identifier.type, lp.identifier.identifier
@@ -107,18 +96,33 @@ class TestWorkController:
             assert 200 == response.status_code
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
-            (
-                hide_for_coll_href,
-                unhide_for_coll_href,
-                hide_for_lib_href,
-                unhide_for_lib_href,
-            ) = _suppression_hrefs(entry)
-            assert 0 == len(unhide_for_coll_href)
-            assert 1 == len(hide_for_coll_href)
-            assert 0 == len(unhide_for_lib_href)
-            assert 1 == len(hide_for_lib_href)
-            assert lp.identifier.identifier in hide_for_coll_href[0]
-            assert lp.identifier.identifier in hide_for_lib_href[0]
+            hide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            )
+            unhide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            )
+            assert 1 == len(hide_for_library)
+            assert 0 == len(unhide_for_library)
+            assert lp.identifier.identifier in hide_for_library[0]["href"]
+
+        work.suppressed_for.append(library)
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.details(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 200 == response.status_code
+            feed = feedparser.parse(response.get_data())
+            [entry] = feed["entries"]
+            hide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            )
+            unhide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            )
+            assert 0 == len(hide_for_library)
+            assert 1 == len(unhide_for_library)
+            assert lp.identifier.identifier in unhide_for_library[0]["href"]
 
         lp.suppressed = True
         with work_fixture.request_context_with_library_and_admin("/"):
@@ -128,21 +132,14 @@ class TestWorkController:
             assert 200 == response.status_code
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
-            hide_for_coll_href = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/hide"
-            ]
-            unhide_for_coll_href = [
-                x["href"]
-                for x in entry["links"]
-                if x["rel"] == "http://librarysimplified.org/terms/rel/restore"
-            ]
-            assert 0 == len(hide_for_coll_href)
-            assert 1 == len(unhide_for_coll_href)
-            assert 0 == len(hide_for_lib_href)
-            assert 0 == len(unhide_for_lib_href)
-            assert lp.identifier.identifier in unhide_for_coll_href[0]
+            hide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+            )
+            unhide_for_library = _links_for_rel(
+                entry, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+            )
+            assert 0 == len(hide_for_library)
+            assert 0 == len(unhide_for_library)
 
         work_fixture.admin.remove_role(
             AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()

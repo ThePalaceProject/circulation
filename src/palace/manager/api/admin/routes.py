@@ -204,7 +204,7 @@ def edit(identifier_type, identifier):
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
-def suppress(identifier_type, identifier):
+def suppress_for_library(identifier_type, identifier):
     return app.manager.admin_work_controller.suppress(identifier_type, identifier)
 
 
@@ -215,7 +215,7 @@ def suppress(identifier_type, identifier):
 @returns_problem_detail
 @requires_admin
 @requires_csrf_token
-def unsuppress(identifier_type, identifier):
+def unsuppress_for_library(identifier_type, identifier):
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
