@@ -6,6 +6,7 @@ import flask
 from flask import Response, redirect
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from pydantic import parse_obj_as
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.circulation_exceptions import (
@@ -49,6 +50,14 @@ class LoanController(CirculationManagerController):
         """
         patron: Patron = flask.request.patron  # type: ignore[attr-defined]
 
+        try:
+            # Parse the refresh query parameter as a boolean.
+            refresh = parse_obj_as(bool, flask.request.args.get("refresh", "true"))
+        except ValueError:
+            # If we can't parse the refresh query parameter, default to True.
+            self.log.exception(f"Could not parse refresh query parameter.")
+            refresh = True
+
         # Save some time if we don't believe the patron's loans or holds have
         # changed since the last time the client requested this feed.
         response = self.handle_conditional_request(patron.last_loan_activity_sync)
@@ -64,7 +73,7 @@ class LoanController(CirculationManagerController):
 
         # First synchronize our local list of loans and holds with all
         # third-party loan providers.
-        if patron.authorization_identifier:
+        if patron.authorization_identifier and refresh:
             header = self.authorization_header()
             credential = self.manager.auth.get_credential_from_header(header)
             try:
