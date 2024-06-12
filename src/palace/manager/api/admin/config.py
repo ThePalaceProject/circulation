@@ -5,10 +5,12 @@ from urllib.parse import urljoin
 from pydantic import Field
 from requests import RequestException
 
+from palace.manager.service.configuration.limited_env_override import (
+    ServiceConfigurationWithLimitedEnvOverride,
+)
 from palace.manager.util.flask_util import _snake_to_camel_case
 from palace.manager.util.http import HTTP, RequestNetworkException
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.settings import ServiceConfigurationWithLimitedEnvOverride
 
 
 class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):

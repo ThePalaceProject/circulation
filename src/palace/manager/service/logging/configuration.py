@@ -9,7 +9,9 @@ import boto3
 from pydantic import PositiveInt, validator
 from watchtower import DEFAULT_LOG_STREAM_NAME
 
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 
 # TODO: Remove this when we drop support for Python 3.10
 if sys.version_info >= (3, 11):

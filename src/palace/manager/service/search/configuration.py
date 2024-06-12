@@ -1,6 +1,8 @@
 from pydantic import AnyHttpUrl
 
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 
 
 class SearchConfiguration(ServiceConfiguration):

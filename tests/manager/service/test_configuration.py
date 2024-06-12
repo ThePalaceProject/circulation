@@ -6,9 +6,13 @@ import pytest
 from pyfakefs.fake_filesystem import FakeFilesystem
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.limited_env_override import (
+    ServiceConfigurationWithLimitedEnvOverride,
+)
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.settings import ServiceConfigurationWithLimitedEnvOverride
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch

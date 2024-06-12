@@ -2,7 +2,9 @@ from typing import Any
 
 from pydantic import RedisDsn
 
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 
 
 class CeleryConfiguration(ServiceConfiguration):

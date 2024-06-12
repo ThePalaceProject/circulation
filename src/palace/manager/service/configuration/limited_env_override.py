@@ -6,7 +6,9 @@ from pydantic.env_settings import BaseSettings, SettingsSourceCallable
 from pydantic.fields import ModelField
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 from palace.manager.util.log import LoggerMixin
 
 
