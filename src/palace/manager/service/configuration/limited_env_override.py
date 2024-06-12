@@ -1,5 +1,4 @@
 import functools
-from collections.abc import Callable
 from typing import Any
 
 from pydantic.env_settings import BaseSettings, SettingsSourceCallable
@@ -35,9 +34,9 @@ class ServiceConfigurationWithLimitedEnvOverride(ServiceConfiguration, LoggerMix
         @classmethod
         def customise_sources(
             cls,
-            init_settings,
-            env_settings,
-            file_secret_settings,
+            init_settings: SettingsSourceCallable,
+            env_settings: SettingsSourceCallable,
+            file_secret_settings: SettingsSourceCallable,
         ) -> tuple[SettingsSourceCallable, ...]:
             # We have to wrap the environment settings source in our own function
             # so that we can report on/strip out fields that are not overridable
@@ -49,13 +48,13 @@ class ServiceConfigurationWithLimitedEnvOverride(ServiceConfiguration, LoggerMix
             )
 
 
-def _env_var_for(field: ModelField) -> str | None:
-    env_prefix = field.model_config.env_prefix  # type: ignore[attr-defined]
+def _env_var_for(field: ModelField) -> str:
+    env_prefix = field.model_config.env_prefix or ""  # type: ignore[attr-defined]
     return (env_prefix + field.name).upper()
 
 
 def _restrict_environment(
-    env_settings: Callable[[BaseSettings], dict[str, Any]], settings: BaseSettings
+    env_settings: SettingsSourceCallable, settings: BaseSettings
 ) -> dict[str, Any]:
     """Limit environment variables to those not restricted by the `environment_override_*` settings.
 
