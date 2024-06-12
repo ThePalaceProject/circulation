@@ -187,7 +187,7 @@ class TestViewController:
 
             match = html_feature_flags_re.search(html)
             assert match is not None
-            feature_flags = match.groups(0)[0]
+            feature_flags: str = match.groups(0)[0]  # type: ignore[assignment]
             assert '"enableAutoList": true' in feature_flags
             assert '"showCircEventsDownload": true' in feature_flags
             assert '"reportsOnlyForSysadmins": true' in feature_flags
