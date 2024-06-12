@@ -17,9 +17,7 @@ admin = """
         settingUp: {{ "true" if setting_up else "false" }},
         email: "{{ email }}",
         roles: [{% for role in roles %}{"role": "{{role.role}}"{% if role.library %}, "library": "{{role.library.short_name}}"{% endif %} },{% endfor %}],
-        featureFlags: {
-          enableAutoList: true,
-        },
+        featureFlags: {{ feature_flags| safe }},
     });
   </script>
 </body>

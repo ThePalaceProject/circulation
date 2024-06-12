@@ -67,9 +67,6 @@ class ViewController(AdminController):
         admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
-        # We always have local_analytics
-        show_circ_events_download = True
-
         response = Response(
             flask.render_template_string(
                 admin_template,
@@ -77,12 +74,15 @@ class ViewController(AdminController):
                 csrf_token=csrf_token,
                 sitewide_tos_href=Configuration.DEFAULT_TOS_HREF,
                 sitewide_tos_text=Configuration.DEFAULT_TOS_TEXT,
-                show_circ_events_download=show_circ_events_download,
+                show_circ_events_download=AdminClientConfig.admin_feature_flags().show_circ_events_download,
                 setting_up=setting_up,
                 email=email,
                 roles=roles,
                 admin_js=admin_js,
                 admin_css=admin_css,
+                feature_flags=AdminClientConfig.admin_feature_flags().json(
+                    by_alias=True
+                ),
             )
         )
 

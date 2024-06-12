@@ -12,7 +12,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import AnyHttpUrl
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 from palace.manager.service.storage.container import Storage
 from palace.manager.service.storage.s3 import S3Service
 from tests.fixtures.config import FixtureTestUrlConfiguration

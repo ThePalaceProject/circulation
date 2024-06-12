@@ -1,7 +1,9 @@
 import boto3
 from pydantic import AnyHttpUrl, parse_obj_as, validator
 
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 
 
 class StorageConfiguration(ServiceConfiguration):

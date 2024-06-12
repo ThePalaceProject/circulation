@@ -2,10 +2,56 @@ import os
 from enum import Enum
 from urllib.parse import urljoin
 
+from pydantic import Field
 from requests import RequestException
 
+from palace.manager.service.configuration.limited_env_override import (
+    ServiceConfigurationWithLimitedEnvOverride,
+)
+from palace.manager.util.flask_util import _snake_to_camel_case
 from palace.manager.util.http import HTTP, RequestNetworkException
 from palace.manager.util.log import LoggerMixin
+
+
+class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):
+    # The following CAN be overridden by environment variables.
+    reports_only_for_sysadmins: bool = Field(
+        True,
+        description="Show inventory reports only for sysadmins.",
+    )
+
+    # The following fields CANNOT be overridden by environment variables.
+    # Setting `const=True` ensures that the default value is not overridden.
+    # Add them to the one of the `environment_override_*` Config settings
+    # below to prevent them from being overridden.
+    # NB: Overriding the `env_prefix` with `env=...` here may lead to
+    #     incorrect values in warnings and exceptions, since `env_prefix`
+    #     is used to generate the full environment variable name.
+    enable_auto_list: bool = Field(
+        True,
+        const=True,
+        description="Enable auto-list of items.",
+    )
+    show_circ_events_download: bool = Field(
+        True,
+        const=True,
+        description="Show download button for Circulation Events.",
+    )
+
+    class Config:
+        env_prefix = "PALACE_ADMINUI_FEATURE_"
+
+        # We use lower camel case aliases, since we're sending to the web.
+        alias_generator = _snake_to_camel_case
+
+        # Add any fields that should not be overridden by environment variables here.
+        # - environment_override_warning_fields: warnings and ignore environment
+        # - environment_override_error_fields: raise exception
+        environment_override_warning_fields: set[str] = {
+            "enable_auto_list",
+            "show_circ_events_download",
+        }
+        environment_override_error_fields: set[str] = set()
 
 
 class OperationalMode(str, Enum):
@@ -52,6 +98,16 @@ class Configuration(LoggerMixin):
 
     # Cache the package version after first lookup.
     _version: str | None = None
+
+    # Cache the feature flags after the first lookup.
+    _admin_ui_feature_flags: AdminClientFeatureFlags | None = None
+
+    # Admin client feature flags
+    @classmethod
+    def admin_feature_flags(cls) -> AdminClientFeatureFlags:
+        if not cls._admin_ui_feature_flags:
+            cls._admin_ui_feature_flags = AdminClientFeatureFlags()
+        return cls._admin_ui_feature_flags
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:

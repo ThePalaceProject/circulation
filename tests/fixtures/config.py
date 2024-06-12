@@ -6,7 +6,9 @@ import os
 from pydantic import AnyUrl, Extra
 from typing_extensions import Self
 
-from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
+)
 
 
 @dataclasses.dataclass
