@@ -22,6 +22,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_MEDIUM,
     UNKNOWN_ROLE,
 )
+from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.core.classifier import SimplifiedGenreClassifier
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.constants import IdentifierType
@@ -39,7 +40,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks.flask import add_request_context
@@ -747,15 +748,6 @@ class TestWorkController:
             )
             assert isinstance(response, ProblemDetail)
 
-        # test no library
-        with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = None  # type: ignore[attr-defined]
-            response = work_fixture.manager.admin_work_controller.suppress(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 404 == response.status_code
-            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
-
         # test unauthorized
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
         with work_fixture.request_context_with_library_and_admin("/"):
@@ -765,6 +757,15 @@ class TestWorkController:
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            with pytest.raises(ProblemDetailException) as exc:
+                work_fixture.manager.admin_work_controller.suppress(
+                    lp.identifier.type, lp.identifier.identifier
+                )
+            assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     def test_unsuppress(self, work_fixture: WorkFixture):
         work = work_fixture.english_1
@@ -790,17 +791,8 @@ class TestWorkController:
             )
             assert isinstance(response, ProblemDetail)
 
-        # test no library
-        with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = None  # type: ignore[attr-defined]
-            response = work_fixture.manager.admin_work_controller.unsuppress(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert 404 == response.status_code
-            assert "No library specified" in str(response.detail)  # type: ignore[union-attr]
-
+        # test unauthorized
         work_fixture.admin.remove_role(AdminRole.LIBRARY_MANAGER, library=library)
-
         with work_fixture.request_context_with_library_and_admin("/"):
             pytest.raises(
                 AdminNotAuthorized,
@@ -808,6 +800,15 @@ class TestWorkController:
                 lp.identifier.type,
                 lp.identifier.identifier,
             )
+
+        # test no library
+        with work_fixture.request_context_with_library_and_admin("/"):
+            flask.request.library = None  # type: ignore[attr-defined]
+            with pytest.raises(ProblemDetailException) as exc:
+                work_fixture.manager.admin_work_controller.unsuppress(
+                    lp.identifier.type, lp.identifier.identifier
+                )
+            assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     def test_refresh_metadata(self, work_fixture: WorkFixture):
         wrangler = DataSource.lookup(
