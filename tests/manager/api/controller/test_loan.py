@@ -1506,6 +1506,36 @@ class TestLoanController:
             assert patron.last_loan_activity_sync > new_sync_time
 
     @pytest.mark.parametrize(
+        "refresh,expected_sync_call_count",
+        [
+            ["true", 1],
+            ["abc", 1],
+            ["t", 1],
+            ["1", 1],
+            [None, 1],
+            ["false", 0],
+            ["f", 0],
+            ["0", 0],
+        ],
+    )
+    def test_loans_refresh(
+        self,
+        loan_fixture: LoanFixture,
+        refresh: str | None,
+        expected_sync_call_count: int,
+    ):
+        url = f"loans/?refresh={refresh}" if refresh is not None else "/"
+        with (
+            loan_fixture.request_context_with_library(
+                url, headers=dict(Authorization=loan_fixture.valid_auth)
+            ),
+            patch.object(loan_fixture.manager.d_circulation, "sync_bookshelf") as sync,
+        ):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            loan_fixture.manager.loans.sync()
+            assert sync.call_count == expected_sync_call_count
+
+    @pytest.mark.parametrize(
         "target_loan_duration, "
         "db_loan_duration, "
         "opds_response_loan_duration, "
