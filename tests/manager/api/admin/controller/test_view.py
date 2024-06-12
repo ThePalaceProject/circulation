@@ -1,11 +1,17 @@
 import re
+from unittest.mock import patch
 
 import flask
+import pytest
+from _pytest.logging import LogCaptureFixture
+from _pytest.monkeypatch import MonkeyPatch
 from werkzeug.http import dump_cookie
 
+from palace.manager.api.admin.config import AdminClientFeatureFlags
 from palace.manager.api.admin.password_admin_authentication_provider import (
     PasswordAdminAuthenticationProvider,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.api_admin import AdminControllerFixture
@@ -163,3 +169,69 @@ class TestViewController:
                 % admin_ctrl_fixture.ctrl.db.default_library().short_name
                 in html
             )
+
+    def test_feature_flags_defaults(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        admin_ctrl_fixture.admin.password_hashed = None
+        html_feature_flags_re = re.compile(
+            r"featureFlags: {(.*)?}", re.MULTILINE | re.DOTALL
+        )
+
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+
+            match = html_feature_flags_re.search(html)
+            assert match is not None
+            feature_flags = match.groups(0)[0]
+            assert '"enableAutoList": true' in feature_flags
+            assert '"showCircEventsDownload": true' in feature_flags
+            assert '"reportsOnlyForSysadmins": true' in feature_flags
+
+    def test_feature_flags_overridden(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        monkeypatch: MonkeyPatch,
+        caplog: LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.warning)
+        admin_ctrl_fixture.admin.password_hashed = None
+        html_feature_flags_re = re.compile(
+            r"featureFlags: {(.*)?}", re.MULTILINE | re.DOTALL
+        )
+
+        monkeypatch.setenv("PALACE_ADMINUI_FEATURE_ENABLE_AUTO_LIST", "false")
+        monkeypatch.setenv("PALACE_ADMINUI_FEATURE_SHOW_CIRC_EVENTS_DOWNLOAD", "false")
+        monkeypatch.setenv("PALACE_ADMINUI_FEATURE_REPORTS_ONLY_FOR_SYSADMINS", "false")
+
+        with (
+            patch(
+                "palace.manager.api.admin.config.Configuration.admin_feature_flags"
+            ) as admin_feature_flags,
+            admin_ctrl_fixture.ctrl.app.test_request_context("/admin"),
+        ):
+            # Use fresh feature flags, instead of using a cached value.
+            admin_feature_flags.return_value = AdminClientFeatureFlags()
+            assert (
+                "Some `environment_override_warning_fields` are overridden in the environment. Please "
+                in caplog.text
+            )
+            assert "enable_auto_list" in caplog.text
+            assert "show_circ_events_download" in caplog.text
+            assert "reports_only_for_sysadmins" not in caplog.text
+
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+
+            match = html_feature_flags_re.search(html)
+            assert match is not None
+
+            feature_flags: str = match.groups(0)[0]  # type: ignore[assignment]
+            assert '"enableAutoList": true' in feature_flags
+            assert '"showCircEventsDownload": true' in feature_flags
+            assert '"reportsOnlyForSysadmins": false' in feature_flags

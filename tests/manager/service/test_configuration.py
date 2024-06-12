@@ -7,6 +7,7 @@ from pyfakefs.fake_filesystem import FakeFilesystem
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.configuration import ServiceConfiguration
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.settings import ServiceConfigurationWithLimitedEnvOverride
 
 if TYPE_CHECKING:
@@ -29,12 +30,16 @@ class ServiceConfigurationFixture:
         self.fs = fs
 
         # Make sure the environment is empty
-        self.monkeypatch.delenv("MOCK_STRING_WITHOUT_DEFAULT", raising=False)
-        self.monkeypatch.delenv("MOCK_INT_TYPE", raising=False)
-        self.monkeypatch.delenv("MOCK_STRING_WITH_DEFAULT", raising=False)
+        self.reset(
+            ["MOCK_STRING_WITHOUT_DEFAULT", "MOCK_INT_TYPE", "MOCK_STRING_WITH_DEFAULT"]
+        )
 
         # Make sure the .env file is empty
         self.env_file = fs.create_file(".env", contents="")
+
+    def reset(self, keys: list[str]):
+        for key in keys:
+            self.monkeypatch.delenv(key, raising=False)
 
     def set(self, key: str, value: str):
         if self.type == "env":
@@ -174,14 +179,75 @@ class TestServiceConfigurationWithLimitedEnvOverride:
         caplog: pytest.LogCaptureFixture,
         service_configuration_fixture: ServiceConfigurationFixture,
     ):
+        caplog.set_level(LogLevel.warning)
+
         class MockConfiguration(ServiceConfigurationWithLimitedEnvOverride):
-            field: bool = True
-            warning_field1: bool = True
+            field1: bool = True
             warning_field2: bool = True
 
             class Config:
                 env_prefix = "MOCK_"
                 environment_override_warning_fields = {
-                    "warning_field1",
                     "warning_field2",
                 }
+
+        service_configuration_fixture.reset(["MOCK_FIELD1", "MOCK_WARNING_FIELD2"])
+        config1 = MockConfiguration()
+
+        assert config1.field1 is True
+        assert config1.warning_field2 is True
+        assert (
+            "Some `environment_override_warning_fields` are overridden in the environment."
+            not in caplog.text
+        )
+        assert "warning_field2" not in caplog.text
+        assert "field1" not in caplog.text
+
+        service_configuration_fixture.set("MOCK_FIELD1", "false")
+        service_configuration_fixture.set("MOCK_WARNING_FIELD2", "false")
+        config2 = MockConfiguration()
+
+        assert config2.field1 is False
+        assert config2.warning_field2 is True
+        assert (
+            "Some `environment_override_warning_fields` are overridden in the environment."
+            in caplog.text
+        )
+        assert "warning_field2" in caplog.text
+        assert "field1" not in caplog.text
+
+        service_configuration_fixture.reset(["MOCK_FIELD1", "MOCK_WARNING_FIELD2"])
+
+    def test_environment_override_error_field(
+        self,
+        service_configuration_fixture: ServiceConfigurationFixture,
+    ):
+        class MockConfiguration(ServiceConfigurationWithLimitedEnvOverride):
+            field1: bool = True
+            error_field2: bool = True
+
+            class Config:
+                env_prefix = "MOCK_"
+                environment_override_error_fields = {
+                    "error_field2",
+                }
+
+        service_configuration_fixture.reset(["MOCK_FIELD1", "MOCK_ERROR_FIELD2"])
+        config1 = MockConfiguration()
+
+        assert config1.field1 is True
+        assert config1.error_field2 is True
+
+        service_configuration_fixture.set("MOCK_FIELD1", "false")
+        service_configuration_fixture.set("MOCK_ERROR_FIELD2", "false")
+        with pytest.raises(CannotLoadConfiguration) as exc_info:
+            MockConfiguration()
+
+        assert (
+            "Some `environment_override_error_fields` are overridden in the environment."
+            in str(exc_info.value)
+        )
+        assert "error_field2" in str(exc_info.value)
+        assert "field1" not in str(exc_info.value)
+
+        service_configuration_fixture.reset(["MOCK_FIELD1", "MOCK_ERROR_FIELD2"])
