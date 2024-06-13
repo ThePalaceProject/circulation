@@ -10,12 +10,13 @@ from palace.manager.service.redis.exception import RedisValueError
 from palace.manager.service.redis.key import RedisKeyGenerator
 
 # We do this right now because we are using types-redis, which defines Redis as a generic type,
-# even though it is not actually generic. Redis 5 now support type hints natively, so we we
+# even though it is not actually generic. Redis 5 now support type hints natively, so we
 # should be able to drop types-redis in the future.
-# Currently, the build in type hints are incomplete at best, so types-redis does a better job.
+# Currently, the built-in type hints are incomplete at best, so types-redis does a better job.
+# The types-redis package description on mypy has some more information and is a good place to
+# check in the future for updates: https://pypi.org/project/types-redis/.
 # This GitHub issue is tracking the progress of the biggest blocker we have for using the
-# built-in type hints:
-# https://github.com/redis/redis-py/issues/2399
+# built-in type hints: https://github.com/redis/redis-py/issues/2399
 if TYPE_CHECKING:
     RedisClient = redis.Redis[str]
     RedisPipeline = redis.client.Pipeline[str]
@@ -26,7 +27,7 @@ else:
 
 class RedisPrefixCheckMixin(ABC):
     """
-    A mixin that with functions to check that the keys used in a redis command have the expected
+    A mixin with functions to check that the keys used in a redis command have the expected
     prefix. This is useful for ensuring that keys are namespaced correctly in a multi-tenant
     environment.
 
@@ -89,18 +90,18 @@ class RedisPrefixCheckMixin(ABC):
 
     def _check_prefix(self, *args: Any) -> None:
         arg_list = list(args)
-        command = arg_list.pop(0)
+        command = arg_list.pop(0).upper()
         cmd_args = self._PREFIXED_COMMANDS.get(command)
-        if cmd_args is not None:
-            for key in cmd_args.key_args(arg_list):
-                if not key.startswith(self._prefix):
-                    raise RedisValueError(
-                        f"Key {key} does not start with prefix {self._prefix}. Command {command} args: {arg_list}"
-                    )
-        else:
+        if cmd_args is None:
             raise RedisValueError(
                 f"Command {command} is not checked for prefix. Args: {arg_list}"
             )
+
+        for key in cmd_args.key_args(arg_list):
+            if not key.startswith(self._prefix):
+                raise RedisValueError(
+                    f"Key {key} does not start with prefix {self._prefix}. Command {command} args: {arg_list}"
+                )
 
     @property
     @abstractmethod

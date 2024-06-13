@@ -31,8 +31,9 @@ def sync_patron_activity(
             status = patron_activity_status.status()
             state = status.state.name if status is not None else "UNKNOWN"
             task.log.info(
-                f"Patron activity sync not needed (state: {state}) for "
-                f"patron (id: {patron_id}) and collection (id: {collection_id})."
+                f"Patron activity sync task could not acquire lock. Task will not"
+                f"perform sync. Lock state ({state}) for patron (id: {patron_id}) and "
+                f"collection (id: {collection_id})."
             )
             return
 

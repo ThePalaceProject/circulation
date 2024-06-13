@@ -252,7 +252,6 @@ class TestCirculationAPI:
         # Contrast with the way NoAvailableCopies is handled in
         # test_loan_becomes_hold_if_no_available_copies.
         circulation_api.remote.queue_checkout(NoAvailableCopies())
-        circulation_api.remote.queue_checkout(NoAvailableCopies())
         with pytest.raises(CannotRenew) as excinfo:
             self.borrow(circulation_api)
         assert "You cannot renew a loan if other patrons have the work on hold." in str(
