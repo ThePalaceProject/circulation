@@ -39,8 +39,9 @@ def import_celery_tasks() -> None:
 
 @setup_logging.connect
 def celery_logger_setup(loglevel: int, logfile: str | None, **kwargs: Any) -> None:
+    services = container_instance()
     level = services.logging.config.level()  # type: ignore[attr-defined]
-    container_level = level.levelno if level else None
+    container_level = level.levelno if level is not None else None
     root_logger = logging.getLogger()
 
     # If celery requested a lower log level, then we update the root logger to use the lower level.
