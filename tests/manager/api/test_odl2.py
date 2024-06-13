@@ -86,6 +86,7 @@ class TestODL2Importer:
         # Arrange
         moby_dick_license = LicenseInfoHelper(
             license=LicenseHelper(
+                identifier="urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
                 concurrency=10,
                 checkouts=30,
                 expires="2016-04-25T12:25:21+02:00",
