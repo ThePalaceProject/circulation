@@ -13,20 +13,8 @@ from sqlalchemy.orm import Session
 from uritemplate import URITemplate
 from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
 from webpub_manifest_parser.core.analyzer import NodeFinder
-from webpub_manifest_parser.core.ast import (
-    ArrayOfCollectionsProperty,
-    Link,
-    Manifestlike,
-)
-from webpub_manifest_parser.core.properties import BooleanProperty
+from webpub_manifest_parser.core.ast import Link, Manifestlike
 from webpub_manifest_parser.errors import BaseError
-from webpub_manifest_parser.opds2 import (
-    ManifestParser,
-    OPDS2CollectionRolesRegistry,
-    OPDS2FeedParserFactory,
-    OPDS2SemanticAnalyzer,
-    OPDS2SyntaxAnalyzer,
-)
 from webpub_manifest_parser.opds2.registry import (
     OPDS2LinkRelationsRegistry,
     OPDS2MediaTypesRegistry,
@@ -80,6 +68,7 @@ from palace.manager.sqlalchemy.model.resource import (
     Hyperlink,
     Representation,
 )
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.opds_writer import OPDSFeed
 
@@ -140,53 +129,6 @@ class RWPMManifestParser:
             raise
 
         return result
-
-
-class PalaceOPDS2PresentationMetadata(opds2_ast.PresentationMetadata):  # type: ignore[misc]
-    time_tracking = BooleanProperty(
-        "http://palaceproject.io/terms/timeTracking", False, default_value=False
-    )
-
-
-class PalaceOPDS2Publication(opds2_ast.OPDS2Publication):  # type: ignore[misc]
-    metadata = opds2_ast.TypeProperty(
-        key="metadata", required=True, nested_type=PalaceOPDS2PresentationMetadata
-    )
-
-
-class PalaceOPDS2Feed(opds2_ast.OPDS2Feed):  # type: ignore[misc]
-    publications = ArrayOfCollectionsProperty(
-        "publications",
-        required=False,
-        role=OPDS2CollectionRolesRegistry.PUBLICATIONS,
-        collection_type=PalaceOPDS2Publication,
-    )
-
-
-class PalaceOPDS2SyntaxAnalyzer(OPDS2SyntaxAnalyzer):  # type: ignore[misc]
-    def _create_manifest(self) -> opds2_ast.OPDS2Feed:
-        return PalaceOPDS2Feed()
-
-
-class PalaceOPDS2FeedParserFactory(OPDS2FeedParserFactory):  # type: ignore[misc]
-    def create(self) -> ManifestParser:
-        """Create a new OPDS 2.0 parser.
-
-        :return: OPDS 2.0 parser
-        :rtype: Parser
-        """
-        media_types_registry = OPDS2MediaTypesRegistry()
-        link_relations_registry = OPDS2LinkRelationsRegistry()
-        collection_roles_registry = OPDS2CollectionRolesRegistry()
-        syntax_analyzer = (
-            PalaceOPDS2SyntaxAnalyzer()
-        )  # This is the only change from the base class
-        semantic_analyzer = OPDS2SemanticAnalyzer(
-            media_types_registry, link_relations_registry, collection_roles_registry
-        )
-        parser = ManifestParser(syntax_analyzer, semantic_analyzer)
-
-        return parser
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
@@ -741,6 +683,24 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         return self.parse_identifier(publication.metadata.identifier)  # type: ignore[no-any-return]
 
+    @classmethod
+    def _extract_availability(
+        cls, availability: opds2_ast.OPDS2AvailabilityInformation | None
+    ) -> bool:
+        """Extract the publication's availability from its availability information.
+
+        :return: Boolean value indicating whether the publication is available.
+        """
+        available = opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
+        if (
+            availability
+            and availability.state != available
+            and (not availability.until or availability.until > utc_now())
+        ):
+            return False
+
+        return True
+
     def _extract_publication_metadata(
         self,
         feed: opds2_ast.OPDS2Feed,
@@ -848,13 +808,20 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one
         rights_uri = RightsStatus.rights_uri_from_string("")
 
+        if self._extract_availability(publication.metadata.availability):
+            licenses_owned = LicensePool.UNLIMITED_ACCESS
+            licenses_available = LicensePool.UNLIMITED_ACCESS
+        else:
+            licenses_owned = 0
+            licenses_available = 0
+
         circulation_data = CirculationData(
             default_rights_uri=rights_uri,
             data_source=data_source_name,
             primary_identifier=identifier_data,
             links=links,
-            licenses_owned=LicensePool.UNLIMITED_ACCESS,
-            licenses_available=LicensePool.UNLIMITED_ACCESS,
+            licenses_owned=licenses_owned,
+            licenses_available=licenses_available,
             licenses_reserved=0,
             patrons_in_hold_queue=0,
             formats=[],

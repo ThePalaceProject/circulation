@@ -1,4 +1,5 @@
 import datetime
+import json
 
 import pytest
 from freezegun import freeze_time
@@ -28,6 +29,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicenseStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -84,7 +86,6 @@ class TestODL2Importer:
         # Arrange
         moby_dick_license = LicenseInfoHelper(
             license=LicenseHelper(
-                identifier="urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799",
                 concurrency=10,
                 checkouts=30,
                 expires="2016-04-25T12:25:21+02:00",
@@ -377,6 +378,122 @@ class TestODL2Importer:
             )
         )
         assert oa_ebook_delivery_mechanism is not None
+
+    @freeze_time("2016-01-01T00:00:00+00:00")
+    def test_import_availability(
+        self,
+        odl2_importer: ODL2Importer,
+        odl_mock_get: MockGet,
+        api_odl2_files_fixture: ODL2APIFilesFixture,
+    ) -> None:
+        """
+        Ensure that ODL2Importer2 correctly processes and imports a feed with an
+        open access book.
+        """
+        feed_json = json.loads(api_odl2_files_fixture.sample_text("feed.json"))
+
+        moby_dick_license_dict = feed_json["publications"][0]["licenses"][0]
+        test_book_license_dict = feed_json["publications"][2]["licenses"][0]
+
+        MOBY_DICK_LICENSE_ID = "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799"
+        TEST_BOOK_LICENSE_ID = "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9798"
+
+        moby_dick_license_dict["metadata"]["availability"] = {
+            "state": "unavailable",
+        }
+        test_book_license_dict["metadata"]["availability"] = {
+            "state": "unavailable",
+            "reason": "https://registry.opds.io/reason#preordered",
+            "until": "2016-01-20T00:00:00Z",
+        }
+
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        assert isinstance(pools, list)
+        assert 2 == len(pools)
+
+        [moby_dick_pool, test_book_pool] = pools
+
+        assert moby_dick_pool.identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_pool.identifier.type == "ISBN"
+        assert moby_dick_pool.licenses_owned == 0
+        assert moby_dick_pool.licenses_available == 0
+        assert len(moby_dick_pool.licenses) == 1
+        [moby_dick_license] = moby_dick_pool.licenses
+        assert moby_dick_license.identifier == MOBY_DICK_LICENSE_ID
+        assert moby_dick_license.is_available_for_borrowing is False
+        assert moby_dick_license.status == LicenseStatus.unavailable
+
+        assert test_book_pool.identifier.identifier == "http://example.org/test-book"
+        assert test_book_pool.identifier.type == "URI"
+        assert test_book_pool.licenses_owned == 0
+        assert test_book_pool.licenses_available == 0
+        assert len(test_book_pool.licenses) == 1
+        [test_book_license] = test_book_pool.licenses
+        assert test_book_license.identifier == TEST_BOOK_LICENSE_ID
+        assert test_book_license.is_available_for_borrowing is False
+        assert test_book_license.status == LicenseStatus.unavailable
+
+        # Harvest the feed again, but this time the status has changed
+        moby_dick_license_dict["metadata"]["availability"] = {
+            "state": "available",
+        }
+        del test_book_license_dict["metadata"]["availability"]
+
+        # Mock responses from license status server
+        odl_mock_get.add(
+            LicenseInfoHelper(
+                license=LicenseHelper(
+                    identifier=MOBY_DICK_LICENSE_ID,
+                    concurrency=10,
+                    checkouts=30,
+                    expires="2016-04-25T12:25:21+02:00",
+                ),
+                left=30,
+                available=10,
+            )
+        )
+        odl_mock_get.add(
+            LicenseInfoHelper(
+                license=LicenseHelper(
+                    identifier=TEST_BOOK_LICENSE_ID,
+                    concurrency=10,
+                ),
+                available=10,
+            )
+        )
+
+        # Harvest the feed again
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        assert isinstance(pools, list)
+        assert 2 == len(pools)
+
+        [moby_dick_pool, test_book_pool] = pools
+
+        assert moby_dick_pool.identifier.identifier == "978-3-16-148410-0"
+        assert moby_dick_pool.identifier.type == "ISBN"
+        assert moby_dick_pool.licenses_owned == 30
+        assert moby_dick_pool.licenses_available == 10
+        assert len(moby_dick_pool.licenses) == 1
+        [moby_dick_license] = moby_dick_pool.licenses
+        assert moby_dick_license.identifier == MOBY_DICK_LICENSE_ID
+        assert moby_dick_license.is_available_for_borrowing is True
+        assert moby_dick_license.status == LicenseStatus.available
+
+        assert test_book_pool.identifier.identifier == "http://example.org/test-book"
+        assert test_book_pool.identifier.type == "URI"
+        assert test_book_pool.licenses_owned == 10
+        assert test_book_pool.licenses_available == 10
+        assert len(test_book_pool.licenses) == 1
+        [test_book_license] = test_book_pool.licenses
+        assert test_book_license.identifier == TEST_BOOK_LICENSE_ID
+        assert test_book_license.is_available_for_borrowing is True
+        assert test_book_license.status == LicenseStatus.available
 
 
 class TestODL2API:

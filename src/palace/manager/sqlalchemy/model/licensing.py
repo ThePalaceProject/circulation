@@ -13,6 +13,7 @@ from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstr
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import or_
+from typing_extensions import Self
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import (
@@ -46,7 +47,9 @@ class LicenseStatus(PythonEnum):
     unavailable = "unavailable"
 
     @classmethod
-    def get(cls, value: str):
+    def get(cls, value: str | None) -> Self:
+        if value is None:
+            return cls.unavailable
         return cls.__members__.get(value.lower(), cls.unavailable)
 
 
@@ -246,7 +249,7 @@ class LicensePool(Base):
     )
 
     # The date this LicensePool was first created in our db
-    # (the date we first discovered that ​we had that book in ​our collection).
+    # (the date we first discovered that we had that book in our collection).
     availability_time = Column(DateTime(timezone=True), index=True)
 
     # A LicensePool may be superceded by some other LicensePool

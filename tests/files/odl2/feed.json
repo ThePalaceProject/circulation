@@ -231,14 +231,8 @@
               "text/html",
               "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction"
             ],
-            "price": {
-              "currency": "USD",
-              "value": 7.99
-            },
             "created": "2014-04-25T12:25:21+02:00",
             "terms": {
-              "checkouts": 30,
-              "expires": "2016-04-25T12:25:21+02:00",
               "concurrency": 10,
               "length": 5097600
             },

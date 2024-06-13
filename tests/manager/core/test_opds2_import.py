@@ -1,19 +1,16 @@
 import datetime
+import json
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pytest import LogCaptureFixture
 from requests import Response
+from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo
 from palace.manager.api.circulation_exceptions import CannotFulfill
-from palace.manager.core.opds2_import import (
-    OPDS2API,
-    OPDS2Importer,
-    PalaceOPDS2FeedParserFactory,
-    RWPMManifestParser,
-)
+from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierType,
@@ -31,6 +28,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 
@@ -124,7 +122,7 @@ def opds2_importer_fixture(
     )
     data.collection.data_source = data.data_source
     data.importer = OPDS2Importer(
-        db.session, data.collection, RWPMManifestParser(PalaceOPDS2FeedParserFactory())
+        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
     )
     return data
 
@@ -481,6 +479,177 @@ class TestOPDS2Importer(OPDS2Test):
 
         # Did the token endpoint get stored correctly?
         assert token_endpoint == "http://example.org/auth?userName={patron_id}"
+
+    def test_opds2_importer_imports_feeds_with_availability_info(
+        self,
+        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        """Ensure that OPDS2Importer correctly imports feeds with availability information."""
+        data, transaction, session = (
+            opds2_importer_fixture,
+            opds2_importer_fixture.transaction,
+            opds2_importer_fixture.transaction.session,
+        )
+        feed_json = json.loads(opds2_files_fixture.sample_text("feed.json"))
+
+        moby_dick_metadata = feed_json["publications"][0]["metadata"]
+        huckleberry_finn_metadata = feed_json["publications"][1]["metadata"]
+        postmodernism_metadata = feed_json["publications"][2]["metadata"]
+
+        week_ago = utc_now() - datetime.timedelta(days=7)
+        moby_dick_metadata["availability"] = {
+            "state": "unavailable",
+        }
+        huckleberry_finn_metadata["availability"] = {
+            "state": "available",
+        }
+        postmodernism_metadata["availability"] = {
+            "state": "unavailable",
+            "until": week_ago.isoformat(),
+        }
+
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        # Make we have the correct number of editions
+        assert isinstance(imported_editions, list)
+        assert len(imported_editions) == 3
+
+        # Make we have the correct number of licensepools
+        assert isinstance(pools, list)
+        assert len(pools) == 3
+
+        # Moby dick should be imported but is unavailable
+        moby_dick_edition = self._get_edition_by_identifier(
+            imported_editions, self.MOBY_DICK_ISBN_IDENTIFIER
+        )
+        assert isinstance(moby_dick_edition, Edition)
+
+        assert moby_dick_edition.title == "Moby-Dick"
+
+        moby_dick_license_pool = self._get_license_pool_by_identifier(
+            pools, self.MOBY_DICK_ISBN_IDENTIFIER
+        )
+        assert isinstance(moby_dick_license_pool, LicensePool)
+        assert moby_dick_license_pool.open_access
+        assert moby_dick_license_pool.licenses_owned == 0
+        assert moby_dick_license_pool.licenses_available == 0
+
+        # Adventures of Huckleberry Finn is imported and is available
+        huckleberry_finn_edition = self._get_edition_by_identifier(
+            imported_editions, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
+        )
+        assert isinstance(huckleberry_finn_edition, Edition)
+
+        assert huckleberry_finn_edition.title == "Adventures of Huckleberry Finn"
+
+        huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
+            pools, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
+        )
+        assert isinstance(huckleberry_finn_license_pool, LicensePool) is True
+        assert huckleberry_finn_license_pool.open_access is False
+        assert (
+            huckleberry_finn_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        )
+        assert (
+            huckleberry_finn_license_pool.licenses_available
+            == LicensePool.UNLIMITED_ACCESS
+        )
+
+        # Politics of postmodernism is unavailable, but it is past the until date, so it
+        # should be available
+        postmodernism_edition = self._get_edition_by_identifier(
+            imported_editions, self.POSTMODERNISM_PROQUEST_IDENTIFIER
+        )
+        assert isinstance(postmodernism_edition, Edition)
+
+        assert postmodernism_edition.title == "The Politics of Postmodernism"
+
+        postmodernism_license_pool = self._get_license_pool_by_identifier(
+            pools, self.POSTMODERNISM_PROQUEST_IDENTIFIER
+        )
+        assert isinstance(postmodernism_license_pool, LicensePool) is True
+        assert postmodernism_license_pool.open_access is False
+        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        assert (
+            postmodernism_license_pool.licenses_available
+            == LicensePool.UNLIMITED_ACCESS
+        )
+
+        # We harvest the feed again but this time the availability has changed
+        moby_dick_metadata["availability"]["state"] = "available"
+        moby_dick_metadata["modified"] = utc_now().isoformat()
+
+        huckleberry_finn_metadata["availability"]["state"] = "unavailable"
+        huckleberry_finn_metadata["modified"] = utc_now().isoformat()
+
+        del postmodernism_metadata["availability"]
+        postmodernism_metadata["modified"] = utc_now().isoformat()
+
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        # Make we have the correct number of editions
+        assert isinstance(imported_editions, list)
+        assert len(imported_editions) == 3
+
+        # Make we have the correct number of licensepools
+        assert isinstance(pools, list)
+        assert len(pools) == 3
+
+        # Moby dick should be imported and is now available
+        moby_dick_edition = self._get_edition_by_identifier(
+            imported_editions, self.MOBY_DICK_ISBN_IDENTIFIER
+        )
+        assert isinstance(moby_dick_edition, Edition)
+
+        assert moby_dick_edition.title == "Moby-Dick"
+
+        moby_dick_license_pool = self._get_license_pool_by_identifier(
+            pools, self.MOBY_DICK_ISBN_IDENTIFIER
+        )
+        assert isinstance(moby_dick_license_pool, LicensePool)
+        assert moby_dick_license_pool.open_access
+        assert moby_dick_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        assert moby_dick_license_pool.licenses_available == LicensePool.UNLIMITED_ACCESS
+
+        # Adventures of Huckleberry Finn is imported and is now unavailable
+        huckleberry_finn_edition = self._get_edition_by_identifier(
+            imported_editions, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
+        )
+        assert isinstance(huckleberry_finn_edition, Edition)
+
+        assert huckleberry_finn_edition.title == "Adventures of Huckleberry Finn"
+
+        huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
+            pools, self.HUCKLEBERRY_FINN_URI_IDENTIFIER
+        )
+        assert isinstance(huckleberry_finn_license_pool, LicensePool) is True
+        assert huckleberry_finn_license_pool.open_access is False
+        assert huckleberry_finn_license_pool.licenses_owned == 0
+        assert huckleberry_finn_license_pool.licenses_available == 0
+
+        # Politics of postmodernism is still available
+        postmodernism_edition = self._get_edition_by_identifier(
+            imported_editions, self.POSTMODERNISM_PROQUEST_IDENTIFIER
+        )
+        assert isinstance(postmodernism_edition, Edition)
+
+        assert postmodernism_edition.title == "The Politics of Postmodernism"
+
+        postmodernism_license_pool = self._get_license_pool_by_identifier(
+            pools, self.POSTMODERNISM_PROQUEST_IDENTIFIER
+        )
+        assert isinstance(postmodernism_license_pool, LicensePool) is True
+        assert postmodernism_license_pool.open_access is False
+        assert postmodernism_license_pool.licenses_owned == LicensePool.UNLIMITED_ACCESS
+        assert (
+            postmodernism_license_pool.licenses_available
+            == LicensePool.UNLIMITED_ACCESS
+        )
 
 
 class Opds2ApiFixture:
