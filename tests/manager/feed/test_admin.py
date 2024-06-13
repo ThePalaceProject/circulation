@@ -1,7 +1,7 @@
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.admin import AdminFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
-from palace.manager.feed.types import FeedData
+from palace.manager.feed.types import FeedData, Link
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.measurement import Measurement
@@ -79,34 +79,55 @@ class TestOPDS:
         patch_url_for: PatchedUrlFor,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
+        def _links_for_rel(links: list[Link], rel: str) -> list[Link]:
+            return [link for link in links if link.rel == rel]
+
         work = db.work(with_open_access_download=True)
         lp = work.license_pools[0]
+        library = db.default_library()
+
         lp.suppressed = False
-        db.session.commit()
+
+        assert library not in work.suppressed_for
 
         feed = OPDSAcquisitionFeed(
             "test",
             "url",
             [work],
-            AdminAnnotator(None, db.default_library()),
+            AdminAnnotator(None, library),
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
-        [suppress_link] = [
-            x
-            for x in entry.computed.other_links
-            if x.rel == "http://librarysimplified.org/terms/rel/hide"
-        ]
+
+        [suppress_link] = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+        )
+        unsuppress_links = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+        )
+        assert len(unsuppress_links) == 0
         assert suppress_link.href and lp.identifier.identifier in suppress_link.href
-        unsuppress_links = [
-            x
-            for x in entry.computed.other_links
-            if x.rel == "http://librarysimplified.org/terms/rel/restore"
-        ]
-        assert 0 == len(unsuppress_links)
+
+        work.suppressed_for.append(library)
+        feed = OPDSAcquisitionFeed(
+            "test",
+            "url",
+            [work],
+            AdminAnnotator(None, library),
+        )
+        [entry] = feed._feed.entries
+        assert entry.computed is not None
+
+        suppress_links = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+        )
+        [unsuppress_link] = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+        )
+        assert len(suppress_links) == 0
+        assert unsuppress_link.href and lp.identifier.identifier in suppress_link.href
 
         lp.suppressed = True
-        db.session.commit()
 
         feed = OPDSAcquisitionFeed(
             "test",
@@ -116,18 +137,14 @@ class TestOPDS:
         )
         [entry] = feed._feed.entries
         assert entry.computed is not None
-        [unsuppress_link] = [
-            x
-            for x in entry.computed.other_links
-            if x.rel == "http://librarysimplified.org/terms/rel/restore"
-        ]
-        assert unsuppress_link.href and lp.identifier.identifier in unsuppress_link.href
-        suppress_links = [
-            x
-            for x in entry.computed.other_links
-            if x.rel == "http://librarysimplified.org/terms/rel/hide"
-        ]
-        assert 0 == len(suppress_links)
+        suppress_links = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_SUPPRESS_FOR_LIBRARY
+        )
+        unsuppress_links = _links_for_rel(
+            entry.computed.other_links, AdminAnnotator.REL_UNSUPPRESS_FOR_LIBRARY
+        )
+        assert len(suppress_links) == 0
+        assert len(unsuppress_links) == 0
 
     def test_feed_includes_edit_link(
         self,

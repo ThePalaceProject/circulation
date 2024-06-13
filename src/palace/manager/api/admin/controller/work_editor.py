@@ -45,6 +45,7 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Lane
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -52,7 +53,7 @@ from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class WorkController(CirculationManagerController, AdminPermissionsControllerMixin):
@@ -375,10 +376,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
     ) -> Response | ProblemDetail:
         """Suppress a book at the level of a library."""
 
-        library = flask.request.library  # type: ignore[attr-defined]
-
+        library: Library | None = getattr(flask.request, "library")
         if library is None:
-            return self.no_library_response()
+            raise ProblemDetailException(LIBRARY_NOT_FOUND)
 
         self.require_library_manager(library)
 
@@ -402,10 +402,9 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
     ) -> Response | ProblemDetail:
         """Remove a book suppression from a book at the level of a library"""
 
-        library = flask.request.library  # type: ignore[attr-defined]
-
+        library: Library | None = getattr(flask.request, "library")
         if library is None:
-            return self.no_library_response()
+            raise ProblemDetailException(LIBRARY_NOT_FOUND)
 
         self.require_library_manager(library)
 
@@ -738,8 +737,3 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
                 lane.update_size(self._db, search_engine=self.search_engine)
 
             return Response(str(_("Success")), 200)
-
-    def no_library_response(self) -> ProblemDetail:
-        return LIBRARY_NOT_FOUND.detailed(
-            "A library must be specified in the request. No library specified."
-        )

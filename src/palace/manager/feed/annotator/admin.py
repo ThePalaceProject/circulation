@@ -10,12 +10,29 @@ from palace.manager.sqlalchemy.model.library import Library
 
 
 class AdminAnnotator(LibraryAnnotator):
+    REL_SUPPRESS_FOR_LIBRARY = "http://palaceproject.io/terms/rel/suppress-for-library"
+    REL_UNSUPPRESS_FOR_LIBRARY = (
+        "http://palaceproject.io/terms/rel/unsuppress-for-library"
+    )
+
+    # We do not currently support un/suppressing at the collection level via the API.
+    # These are the link `rels` that we used, in case we want to support them in the future.
+    # REL_SUPPRESS_FOR_COLLECTION = "http://librarysimplified.org/terms/rel/hide"
+    # REL_UNSUPPRESS_FOR_COLLECTION = "http://librarysimplified.org/terms/rel/restore"
+
     def __init__(self, circulation: CirculationAPI | None, library: Library) -> None:
         super().__init__(circulation, None, library)
 
     def annotate_work_entry(
         self, entry: WorkEntry, updated: datetime | None = None
     ) -> None:
+        """Annotate a work entry for the admin client feed.
+
+        This annotator supports links for un/suppressing works at the
+        library level, but not at the collection level. If a work is
+        already suppressed at the collection level, we don't add any
+        per-library un/suppression links to the feed.
+        """
         super().annotate_work_entry(entry)
         if not entry.computed:
             return
@@ -23,6 +40,7 @@ class AdminAnnotator(LibraryAnnotator):
 
         identifier = entry.identifier
         active_license_pool = entry.license_pool
+        work = entry.work
 
         # Find staff rating and add a tag for it.
         for measurement in identifier.measurements:
@@ -35,30 +53,33 @@ class AdminAnnotator(LibraryAnnotator):
                     self.rating(measurement.quantity_measured, measurement.value)
                 )
 
-        if active_license_pool and active_license_pool.suppressed:
-            entry.computed.other_links.append(
-                Link(
-                    href=self.url_for(
-                        "unsuppress",
-                        identifier_type=identifier.type,
-                        identifier=identifier.identifier,
-                        _external=True,
-                    ),
-                    rel="http://librarysimplified.org/terms/rel/restore",
+        if active_license_pool and not active_license_pool.suppressed:
+            if self.library in work.suppressed_for:
+                entry.computed.other_links.append(
+                    Link(
+                        href=self.url_for(
+                            "unsuppress_for_library",
+                            identifier_type=identifier.type,
+                            identifier=identifier.identifier,
+                            library_short_name=self.library.short_name,
+                            _external=True,
+                        ),
+                        rel=self.REL_UNSUPPRESS_FOR_LIBRARY,
+                    )
                 )
-            )
-        else:
-            entry.computed.other_links.append(
-                Link(
-                    href=self.url_for(
-                        "suppress",
-                        identifier_type=identifier.type,
-                        identifier=identifier.identifier,
-                        _external=True,
-                    ),
-                    rel="http://librarysimplified.org/terms/rel/hide",
+            else:
+                entry.computed.other_links.append(
+                    Link(
+                        href=self.url_for(
+                            "suppress_for_library",
+                            identifier_type=identifier.type,
+                            identifier=identifier.identifier,
+                            library_short_name=self.library.short_name,
+                            _external=True,
+                        ),
+                        rel=self.REL_SUPPRESS_FOR_LIBRARY,
+                    )
                 )
-            )
 
         entry.computed.other_links.append(
             Link(
