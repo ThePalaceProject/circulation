@@ -3,11 +3,11 @@ import json
 
 import pytest
 from freezegun import freeze_time
-from webpub_manifest_parser.core.ast import PresentationMetadata
 from webpub_manifest_parser.odl.ast import ODLPublication
 from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
+from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
 from palace.manager.api.circulation_exceptions import (
     HoldsNotPermitted,
@@ -224,7 +224,9 @@ class TestODL2Importer:
         huck_finn_semantic_error = (
             ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
                 node=ODLPublication(
-                    metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
+                    metadata=OPDS2PublicationMetadata(
+                        identifier="urn:isbn:9781234567897"
+                    )
                 ),
                 node_property=None,
             )
