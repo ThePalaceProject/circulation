@@ -364,6 +364,19 @@ class TestPatron:
             == repr(patron)
         )
 
+    def test_redis_key(self, db: DatabaseTransactionFixture):
+        patron = db.patron(external_identifier="a patron")
+        assert patron.redis_key() == f"Patron::{patron.id}"
+
+        # If we know the patron's ID, we can get the key without a database query.
+        assert Patron.redis_key_from_id(patron.id) == patron.redis_key()
+
+        # If the patron has no id, we raise an exception.
+        patron_no_id = Patron()
+        with pytest.raises(TypeError) as excinfo:
+            patron_no_id.redis_key()
+        assert "Patron must have an id to generate a redis key." in str(excinfo.value)
+
     def test_identifier_to_remote_service(self, db: DatabaseTransactionFixture):
         # Here's a patron.
         patron = db.patron()
@@ -488,33 +501,6 @@ class TestPatron:
         assert db.session.query(Hold).all() == []
         assert db.session.query(Annotation).all() == []
         assert db.session.query(Credential).all() == []
-
-    def test_loan_activity_max_age(self, db: DatabaseTransactionFixture):
-        # Currently, patron.loan_activity_max_age is a constant
-        # and cannot be changed.
-        assert 15 * 60 == db.patron().loan_activity_max_age
-
-    def test_last_loan_activity_sync(self, db: DatabaseTransactionFixture):
-        # Verify that last_loan_activity_sync is cleared out
-        # beyond a certain point.
-        patron = db.patron()
-        now = utc_now()
-        max_age = patron.loan_activity_max_age
-        recently = now - datetime.timedelta(seconds=max_age / 2)
-        long_ago = now - datetime.timedelta(seconds=max_age * 2)
-
-        # So long as last_loan_activity_sync is relatively recent,
-        # it's treated as a normal piece of data.
-        patron.last_loan_activity_sync = recently
-        assert recently == patron._last_loan_activity_sync
-        assert recently == patron.last_loan_activity_sync
-
-        # If it's _not_ relatively recent, attempting to access it
-        # doesn't clear it out, but accessor returns None
-        patron.last_loan_activity_sync = long_ago
-        assert long_ago == patron._last_loan_activity_sync
-        assert None == patron.last_loan_activity_sync
-        assert long_ago == patron._last_loan_activity_sync
 
     def test_root_lane(self, db: DatabaseTransactionFixture):
         root_1 = db.lane()

@@ -21,6 +21,7 @@ from sqlalchemy.sql.expression import and_, or_
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
+from palace.manager.service.redis.key import RedisKeyMixin
 from palace.manager.sqlalchemy.constants import DataSourceConstants, EditionConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.hybrid import hybrid_property
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class Collection(Base, HasSessionCache):
+class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     """A Collection is a set of LicensePools obtained through some mechanism."""
 

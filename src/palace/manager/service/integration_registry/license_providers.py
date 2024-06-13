@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy.orm import Session
+
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 
 if TYPE_CHECKING:
-    from palace.manager.api.circulation import CirculationApiType  # noqa: autoflake
+    from palace.manager.api.circulation import CirculationApiType
+    from palace.manager.sqlalchemy.model.collection import Collection
 
 
 class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
@@ -32,3 +35,9 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         self.register(ODL2API, canonical=ODL2API.label())
         self.register(OPDSAPI, canonical=OPDSAPI.label())
         self.register(OPDS2API, canonical=OPDS2API.label())
+
+    def from_collection(
+        self, db: Session, collection: Collection
+    ) -> CirculationApiType:
+        impl_cls = self[collection.protocol]
+        return impl_cls(db, collection)

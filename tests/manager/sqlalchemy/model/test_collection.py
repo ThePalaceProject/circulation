@@ -597,3 +597,20 @@ class TestCollection:
         # We've now deleted every LicensePool created for this test.
         assert 0 == db.session.query(LicensePool).count()
         assert [] == work2.license_pools
+
+    def test_redis_key(self, example_collection_fixture: ExampleCollectionFixture):
+        collection = example_collection_fixture.collection
+
+        # The key is based on the collection's ID.
+        assert collection.redis_key() == f"Collection::{collection.id}"
+
+        # If we know the collection's ID, we can get the key without a database query.
+        assert Collection.redis_key_from_id(collection.id) == collection.redis_key()
+
+        # A collection with no id raises an exception.
+        collection_no_id = Collection()
+        with pytest.raises(TypeError) as excinfo:
+            collection_no_id.redis_key()
+        assert "Collection must have an id to generate a redis key." in str(
+            excinfo.value
+        )

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, cast
 from unittest import mock
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pymarc import parse_xml_to_array
@@ -30,7 +30,6 @@ from palace.manager.api.circulation import (
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
-    PatronActivityThread,
 )
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -454,7 +453,7 @@ class TestBibliothecaAPI:
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             [x for x in bibliotheca_fixture.api.marc_request(start, end, 10, 20)]
 
-    def test_sync_bookshelf(self, bibliotheca_fixture: BibliothecaAPITestFixture):
+    def test_sync_patron_activity(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         db = bibliotheca_fixture.db
         patron = db.patron()
         circulation = CirculationAPI(
@@ -467,10 +466,7 @@ class TestBibliothecaAPI:
             200, content=bibliotheca_fixture.files.sample_data("checkouts.xml")
         )
 
-        with patch.object(
-            PatronActivityThread, "api", return_value=bibliotheca_fixture.api
-        ):
-            circulation.sync_bookshelf(patron, "dummy pin")
+        bibliotheca_fixture.api.sync_patron_activity(patron, "dummy pin")
 
         # The patron should have two loans and two holds.
         l1, l2 = patron.loans

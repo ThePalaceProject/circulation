@@ -1041,12 +1041,6 @@ class LicensePool(Base):
             create_method_kwargs=kwargs,
         )
 
-        if is_new:
-            # This action creates uncertainty about what the patron's
-            # loan activity actually is. We'll need to sync with the
-            # vendor APIs.
-            patron.last_loan_activity_sync = None
-
         if fulfillment:
             loan.fulfillment = fulfillment
         if external_identifier:
@@ -1066,11 +1060,6 @@ class LicensePool(Base):
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()
         hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
-        # This action creates uncertainty about what the patron's
-        # loan activity actually is. We'll need to sync with the
-        # vendor APIs.
-        if new:
-            patron.last_loan_activity_sync = None
         hold.update(start, end, position)
         if external_identifier:
             hold.external_identifier = external_identifier
