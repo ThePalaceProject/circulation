@@ -80,7 +80,10 @@ class TestSyncPatronActivity:
                 (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
             ).wait()
 
-        assert "Patron activity sync not needed (state: LOCKED)" in caplog.text
+        assert (
+            "Patron activity sync task could not acquire lock. "
+            "Task will not perform sync. Lock state (LOCKED)"
+        ) in caplog.text
         assert mock_session.call_count == 0
 
     def test_patron_not_found(
@@ -190,7 +193,10 @@ class TestSyncPatronActivity:
             (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
         ).wait()
 
-        assert "Patron activity sync not needed (state: FAILED)" in caplog.text
+        assert (
+            "Patron activity sync task could not acquire lock. "
+            "Task will not perform sync. Lock state (FAILED)"
+        ) in caplog.text
         sync_task_fixture.mock_registry.from_collection.assert_not_called()
 
         # But if we force it, we should run it again.
@@ -199,7 +205,7 @@ class TestSyncPatronActivity:
             (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin"),
             {"force": True},
         ).wait()
-        assert "Patron activity sync not needed" not in caplog.text
+        assert "Patron activity sync task could not acquire lock" not in caplog.text
         sync_task_fixture.mock_registry.from_collection.assert_called_once_with(
             sync_task_fixture.db.session, sync_task_fixture.collection
         )
