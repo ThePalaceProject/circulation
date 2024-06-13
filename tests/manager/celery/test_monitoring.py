@@ -248,6 +248,7 @@ class TestCloudwatch:
         cloudwatch_camera: CloudwatchCameraFixture,
         caplog: pytest.LogCaptureFixture,
     ):
+        caplog.set_level(LogLevel.warning)
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         mock_publish = create_autospec(cloudwatch.publish)
         cloudwatch.publish = mock_publish
