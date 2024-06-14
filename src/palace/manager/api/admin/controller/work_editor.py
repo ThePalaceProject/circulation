@@ -390,12 +390,18 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             # Something went wrong.
             return work
 
-        work.suppressed_for.append(library)
-        self.log.info(
-            f"Suppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
-        )
+        if library in work.suppressed_for:
+            # If the library is already suppressed, we don't need to do anything.
+            message = f"Already suppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
+        else:
+            # Otherwise, add the library to the suppressed list.
+            work.suppressed_for.append(library)
+            message = f"Suppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
 
-        return Response("", 200)
+        self.log.info(message)
+        return Response(
+            json.dumps({"message": message}), 200, mimetype="application/json"
+        )
 
     def unsuppress(
         self, identifier_type: str, identifier: str
@@ -416,12 +422,18 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
             # Something went wrong.
             return work
 
-        work.suppressed_for.remove(library)
-        self.log.info(
-            f"Unsuppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
-        )
+        if library not in work.suppressed_for:
+            # If the library is not suppressed, we don't need to do anything.
+            message = f"Already unsuppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
+        else:
+            # Otherwise, remove the library from the suppressed list.
+            work.suppressed_for.remove(library)
+            message = f"Unsuppressed {identifier_type}/{identifier} (work id: {work.id}) for library {library.short_name}."
 
-        return Response("", 200)
+        self.log.info(message)
+        return Response(
+            json.dumps({"message": message}), 200, mimetype="application/json"
+        )
 
     def refresh_metadata(self, identifier_type, identifier, provider=None):
         """Refresh the metadata for a book from the content server"""

@@ -741,6 +741,14 @@ class TestWorkController:
             assert 200 == response.status_code
             assert library in work.suppressed_for
 
+        # We should not fail if we suppress the already-suppressed work again.
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.suppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
+            assert 200 == response.status_code
+            assert library in work.suppressed_for
+
         # test non-existent id
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.suppress(
@@ -781,7 +789,14 @@ class TestWorkController:
             response = work_fixture.manager.admin_work_controller.unsuppress(
                 lp.identifier.type, lp.identifier.identifier
             )
+            assert 200 == response.status_code
+            assert library not in work.suppressed_for
 
+        # We should not fail if we unsuppress the already-unsuppressed work again.
+        with work_fixture.request_context_with_library_and_admin("/"):
+            response = work_fixture.manager.admin_work_controller.unsuppress(
+                lp.identifier.type, lp.identifier.identifier
+            )
             assert 200 == response.status_code
             assert library not in work.suppressed_for
 
