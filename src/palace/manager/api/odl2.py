@@ -218,13 +218,6 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
             feed, publication, data_source_name
         )
 
-        if (
-            metadata.circulation.licenses_owned == 0
-            and metadata.circulation.licenses_available == 0
-        ):
-            # This title is not available, so we don't need to process it.
-            return metadata
-
         if not publication.licenses:
             # This title is an open-access title, no need to process licenses.
             return metadata
@@ -234,6 +227,9 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
         medium = None
 
         skipped_license_formats = set(self.settings.skipped_license_formats)
+        publication_availability = self._extract_availability(
+            publication.metadata.availability
+        )
 
         for odl_license in publication.licenses:
             identifier = odl_license.metadata.identifier
@@ -263,13 +259,16 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
 
             if not license_info_document_link:
                 parsed_license = None
-            elif not self._extract_availability(odl_license.metadata.availability):
+            elif (
+                not self._extract_availability(odl_license.metadata.availability)
+                or not publication_availability
+            ):
                 # No need to fetch the license document, we already know that this title is not available.
                 parsed_license = LicenseData(
                     identifier=identifier,
                     checkout_url=None,
                     status_url=license_info_document_link,
-                    status=LicenseStatus.get(odl_license.metadata.availability.state),
+                    status=LicenseStatus.unavailable,
                     checkouts_available=0,
                 )
             else:
