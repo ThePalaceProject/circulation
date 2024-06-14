@@ -14,6 +14,7 @@ from palace.manager.celery.tasks.search import (
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.external_search import Filter
+from palace.manager.service.logging.configuration import LogLevel
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
@@ -216,6 +217,7 @@ def test_index_work_failures(
     caplog: pytest.LogCaptureFixture,
     db: DatabaseTransactionFixture,
 ):
+    caplog.set_level(LogLevel.info)
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
 
