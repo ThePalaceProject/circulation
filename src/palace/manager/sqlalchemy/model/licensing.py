@@ -46,9 +46,7 @@ class LicenseStatus(PythonEnum):
     unavailable = "unavailable"
 
     @classmethod
-    def get(cls, value: str | None) -> LicenseStatus:
-        if value is None:
-            return cls.unavailable
+    def get(cls, value: str):
         return cls.__members__.get(value.lower(), cls.unavailable)
 
 
@@ -248,7 +246,7 @@ class LicensePool(Base):
     )
 
     # The date this LicensePool was first created in our db
-    # (the date we first discovered that we had that book in our collection).
+    # (the date we first discovered that ​we had that book in ​our collection).
     availability_time = Column(DateTime(timezone=True), index=True)
 
     # A LicensePool may be superceded by some other LicensePool
