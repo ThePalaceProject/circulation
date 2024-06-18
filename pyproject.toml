@@ -247,7 +247,7 @@ nameparser = "^1.1"  # nameparser is for author name manipulations
 nltk = "3.8.1"  # nltk is a textblob dependency.
 opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
-palace-webpub-manifest-parser = {git = "https://github.com/ThePalaceProject/webpub-manifest-parser.git", branch = "feature/add-odl-availability-proposal"}
+palace-webpub-manifest-parser = "^3.2.0"
 pillow = "^10.0"
 pycryptodome = "^3.18"
 pydantic = {version = "^1.10.9", extras = ["dotenv", "email"]}
