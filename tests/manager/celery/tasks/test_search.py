@@ -8,15 +8,19 @@ from opensearchpy import OpenSearchException
 from palace.manager.celery.tasks.search import (
     get_migrate_search_chain,
     get_work_search_documents,
-    index_work,
+    index_works,
+    search_indexing,
     search_reindex,
     update_read_pointer,
 )
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.external_search import Filter
-from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.search import WaitingForIndexing
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import EndToEndSearchFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import MockSearchSchemaRevisionLatest
@@ -129,6 +133,13 @@ def test_search_reindex_failures(
     search_reindex.delay().wait()
     assert add_documents_mock.call_count == 3
 
+    # Unknown exception, we don't retry
+    add_documents_mock.reset_mock()
+    add_documents_mock.side_effect = Exception()
+    with pytest.raises(Exception):
+        search_reindex.delay().wait()
+    assert add_documents_mock.call_count == 1
+
 
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
 @patch("palace.manager.celery.tasks.search.get_work_search_documents")
@@ -174,70 +185,6 @@ def test_search_reindex_failures_multiple_batch(
     ]
     search_reindex.delay(batch_size=2).wait()
     assert add_documents_mock.call_count == 11
-
-
-def test_index_work(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    end_to_end_search_fixture: EndToEndSearchFixture,
-) -> None:
-    client = end_to_end_search_fixture.external_search.client
-    index = end_to_end_search_fixture.external_search_index
-
-    work1_id = db.work(with_open_access_download=True).id
-    work2_id = db.work(with_open_access_download=True).id
-
-    # The works are not in the search index.
-    client.indices.refresh()
-    results = index.query_works("")
-    assert len(results) == 0
-
-    # Index work2
-    index_work.delay(work2_id).wait()
-    client.indices.refresh()
-
-    # Check that it made it into the search index.
-    [result] = index.query_works("")
-    assert result.work_id == work2_id
-
-    # Index work1
-    index_work.delay(work1_id).wait()
-    client.indices.refresh()
-
-    # Check that both works are in the search index.
-    results = index.query_works("")
-    assert {result.work_id for result in results} == {work1_id, work2_id}
-
-
-@patch("palace.manager.celery.tasks.search.exponential_backoff")
-def test_index_work_failures(
-    mock_backoff: MagicMock,
-    celery_fixture: CeleryFixture,
-    services_fixture: ServicesFixture,
-    caplog: pytest.LogCaptureFixture,
-    db: DatabaseTransactionFixture,
-):
-    caplog.set_level(LogLevel.info)
-    # Make sure our backoff function doesn't delay the test.
-    mock_backoff.return_value = 0
-
-    # If we try to index a work that doesn't exist, we retry up to 4 times, then fail.
-    with pytest.raises(MaxRetriesExceededError):
-        index_work.delay(555).wait()
-    assert "Work 555 not found" in caplog.text
-
-    # If we fail to add documents, we should retry up to 4 times, then fail.
-    work = db.work(with_open_access_download=True)
-    add_document_mock = services_fixture.search_fixture.index_mock.add_document
-    add_document_mock.side_effect = OpenSearchException()
-    with pytest.raises(MaxRetriesExceededError):
-        index_work.delay(work.id).wait()
-    assert add_document_mock.call_count == 5
-
-    add_document_mock.reset_mock()
-    add_document_mock.side_effect = [OpenSearchException(), None]
-    index_work.delay(work.id).wait()
-    assert add_document_mock.call_count == 2
 
 
 def test_update_read_pointer(
@@ -335,3 +282,120 @@ def test_get_migrate_search_chain(
     # And we should have all the works in the new index
     client.indices.refresh()
     end_to_end_search_fixture.expect_results(works, "", ordered=False)
+
+
+class SearchIndexingFixture:
+    def __init__(self, redis_fixture: RedisFixture):
+        self.redis_fixture = redis_fixture
+        self.redis_client = redis_fixture.client
+
+        task = MagicMock()
+        task.request.root_id = "fake"
+        task.name = "palace.manager.celery.tasks.search.search_indexing"
+        self.lock = TaskLock(self.redis_client, task)
+
+        self.waiting = WaitingForIndexing(self.redis_client)
+        self.mock_works = {w_id for w_id in range(10)}
+
+    def add_works(self):
+        for work in self.mock_works:
+            self.waiting.add(work)
+
+
+@pytest.fixture
+def search_indexing_fixture(redis_fixture: RedisFixture) -> SearchIndexingFixture:
+    return SearchIndexingFixture(redis_fixture)
+
+
+def test_search_indexing_lock(
+    celery_fixture: CeleryFixture, search_indexing_fixture: SearchIndexingFixture
+):
+    search_indexing_fixture.lock.acquire()
+
+    with pytest.raises(BasePalaceException) as exc_info:
+        search_indexing.delay().wait()
+
+    assert "search_indexing is already running." in str(exc_info.value)
+
+
+@patch("palace.manager.celery.tasks.search.index_works")
+def test_search_indexing(
+    mock_index_works: MagicMock,
+    celery_fixture: CeleryFixture,
+    search_indexing_fixture: SearchIndexingFixture,
+):
+    # No works to index, so we should not call index_works
+    search_indexing.delay().wait()
+    assert search_indexing_fixture.lock.locked() is False
+    mock_index_works.delay.assert_not_called()
+
+    # Add some works to the waiting list and run the task
+    search_indexing_fixture.add_works()
+    search_indexing.delay().wait()
+    assert search_indexing_fixture.lock.locked() is False
+    assert mock_index_works.delay.call_count == 1
+    assert (
+        set(mock_index_works.delay.call_args.kwargs["works"])
+        == search_indexing_fixture.mock_works
+    )
+    assert search_indexing_fixture.waiting.get(10) == []
+
+    # Add some works to the waiting list and run the task with a smaller batch size, to test that
+    # we paginate through the works.
+    mock_index_works.reset_mock()
+    search_indexing_fixture.add_works()
+    search_indexing.delay(batch_size=5).wait()
+    assert search_indexing_fixture.lock.locked() is False
+    assert mock_index_works.delay.call_count == 2
+    for call_args in mock_index_works.delay.call_args_list:
+        assert set(call_args.kwargs["works"]) <= search_indexing_fixture.mock_works
+    assert search_indexing_fixture.waiting.get(10) == []
+
+
+def test_index_works(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+):
+    client = end_to_end_search_fixture.external_search.client
+    index = end_to_end_search_fixture.external_search_index
+
+    work1_id = db.work(with_open_access_download=True).id
+    work2_id = db.work(with_open_access_download=True).id
+
+    # The works are not in the search index.
+    client.indices.refresh()
+    results = index.query_works("")
+    assert len(results) == 0
+
+    # Index both works
+    index_works.delay([work1_id, work2_id]).wait()
+    client.indices.refresh()
+
+    # Check that both works are in the search index.
+    results = index.query_works("")
+    assert {result.work_id for result in results} == {work1_id, work2_id}
+
+
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_index_works_failures(
+    mock_backoff: MagicMock,
+    celery_fixture: CeleryFixture,
+    services_fixture: ServicesFixture,
+    db: DatabaseTransactionFixture,
+):
+    # Make sure our backoff function doesn't delay the test.
+    mock_backoff.return_value = 0
+
+    # If we fail to add documents, we should retry up to 4 times, then fail.
+    work = db.work(with_open_access_download=True)
+    add_document_mocks = services_fixture.search_fixture.index_mock.add_documents
+    add_document_mocks.side_effect = OpenSearchException()
+    with pytest.raises(MaxRetriesExceededError):
+        index_works.delay([work.id]).wait()
+    assert add_document_mocks.call_count == 5
+
+    add_document_mocks.reset_mock()
+    add_document_mocks.side_effect = [OpenSearchException(), [work.id], None]
+    index_works.delay([work.id]).wait()
+    assert add_document_mocks.call_count == 3

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -299,18 +300,22 @@ def external_search_fake_fixture(
         yield fixture
 
 
-class WorkExternalIndexingFixture:
+class WorkQueueIndexingFixture:
     """
     In normal operation, when external_index_needs_updating is called on Work, it
-    queues a task to index the Work in the external search index. We don't have
-    the full Celery setup in tests, so we need to mock this behavior.
+    adds the Work's ID to a set in Redis. This set is then used to determine which
+    Works need to be indexed in the search index.
+
+    For testing, we mock this out to just use a Python set. This allows us to
+    check whether a Work is queued for indexing without actually needing to
+    interact with Redis.
     """
 
     def __init__(self):
         self.queued_works = set()
-        self.patch = patch.object(Work, "queue_indexing_task", self.queue)
+        self.patch = patch.object(Work, "queue_indexing", self.queue)
 
-    def queue(self, work_id: int | None) -> None:
+    def queue(self, work_id: int | None, *, redis_client: Any = None) -> None:
         return self.queued_works.add(work_id)
 
     def clear(self):
@@ -343,6 +348,6 @@ class WorkExternalIndexingFixture:
 
 
 @pytest.fixture(scope="function")
-def work_external_indexing() -> Generator[WorkExternalIndexingFixture, None, None]:
-    with WorkExternalIndexingFixture.fixture() as fixture:
+def work_queue_indexing() -> Generator[WorkQueueIndexingFixture, None, None]:
+    with WorkQueueIndexingFixture.fixture() as fixture:
         yield fixture

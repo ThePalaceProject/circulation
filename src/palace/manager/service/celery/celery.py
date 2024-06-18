@@ -33,6 +33,10 @@ def beat_schedule() -> dict[str, Any]:
             "task": "search.search_reindex",
             "schedule": crontab(hour="0", minute="10"),  # Run every day at 12:10 AM
         },
+        "search_indexing": {
+            "task": "search.search_indexing",
+            "schedule": crontab(minute="*"),  # Run every minute
+        },
     }
 
 
