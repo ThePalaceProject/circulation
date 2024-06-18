@@ -28,6 +28,23 @@ from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import MockSearchSchemaRevisionLatest
 
 
+class SearchReindexTaskLockFixture:
+    def __init__(self, redis_fixture: RedisFixture):
+        self.redis_fixture = redis_fixture
+        self.redis_client = redis_fixture.client
+
+        self.task = MagicMock()
+        self.task.request.root_id = "fake"
+        self.task_lock = TaskLock(
+            self.redis_client, self.task, lock_name="search_reindex"
+        )
+
+
+@pytest.fixture
+def search_reindex_task_lock_fixture(redis_fixture: RedisFixture):
+    return SearchReindexTaskLockFixture(redis_fixture)
+
+
 def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
     work1 = db.work(with_open_access_download=True)
     work2 = db.work(with_open_access_download=True)
@@ -48,6 +65,7 @@ def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
 def test_search_reindex(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ) -> None:
     client = end_to_end_search_fixture.external_search.client
@@ -80,6 +98,23 @@ def test_search_reindex(
 
     # Check that all the works are in the search index.
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
+
+    # The lock has been released
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
+
+
+def test_search_reindex_lock(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+):
+    search_reindex_task_lock_fixture.task_lock.acquire()
+
+    with pytest.raises(BasePalaceException) as exc_info:
+        search_reindex.delay().wait()
+
+    assert "Another re-index task is already running." in str(exc_info.value)
 
 
 def test_fiction_query_returns_results(
@@ -116,6 +151,7 @@ def test_fiction_query_returns_results(
 def test_search_reindex_failures(
     mock_backoff: MagicMock,
     celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
 ):
     # Make sure our backoff function doesn't delay the test.
@@ -129,18 +165,21 @@ def test_search_reindex_failures(
         search_reindex.delay().wait()
     assert add_documents_mock.call_count == 5
     mock_backoff.assert_has_calls([call(0), call(1), call(2), call(3), call(4)])
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
     add_documents_mock.reset_mock()
     add_documents_mock.side_effect = [[1, 2, 3], OpenSearchException(), None]
     search_reindex.delay().wait()
     assert add_documents_mock.call_count == 3
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
-    # Unknown exception, we don't retry
+    # Unknown exception, we don't retry, but do release the lock.
     add_documents_mock.reset_mock()
     add_documents_mock.side_effect = Exception()
     with pytest.raises(Exception):
         search_reindex.delay().wait()
     assert add_documents_mock.call_count == 1
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
 
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
@@ -149,6 +188,7 @@ def test_search_reindex_failures_multiple_batch(
     mock_get_work_search_documents: MagicMock,
     mock_backoff: MagicMock,
     celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
 ):
     # When a batch succeeds, the retry count is reset.
@@ -187,6 +227,7 @@ def test_search_reindex_failures_multiple_batch(
     ]
     search_reindex.delay(batch_size=2).wait()
     assert add_documents_mock.call_count == 11
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
 
 def test_update_read_pointer(
@@ -242,6 +283,7 @@ def test_update_read_pointer_failures(
 def test_get_migrate_search_chain(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
     client = end_to_end_search_fixture.external_search.client
@@ -273,7 +315,21 @@ def test_get_migrate_search_chain(
     assert read_pointer.index == revision.name_for_index(service.base_revision_name)
     assert read_pointer.version == revision.version
 
+    # There is a lock on the search reindex task
+    search_reindex_task_lock_fixture.task_lock.acquire()
+
     # Run the migration task
+    with pytest.raises(BasePalaceException):
+        get_migrate_search_chain().delay().wait()
+
+    # The read pointer should still point to the old revision
+    read_pointer = service.read_pointer()
+    assert read_pointer is not None
+    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
+    assert read_pointer.version == revision.version
+
+    # Release the lock and try again
+    search_reindex_task_lock_fixture.task_lock.release()
     get_migrate_search_chain().delay().wait()
 
     # The read pointer should now point to the new revision

@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from celery import chain, shared_task
+from celery.exceptions import Ignore, Retry
 from opensearchpy import OpenSearchException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -69,31 +70,40 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
     task will do a batch, then requeue itself until all works have been indexed.
     """
     index = task.services.search.index()
+    redis_client = task.services.redis.client()
+    task_lock = TaskLock(redis_client, task, lock_name="search_reindex")
 
-    task.log.info(
-        f"Running search reindex at offset {offset} with batch size {batch_size}."
-    )
+    with task_lock.lock(
+        release_on_exit=False, ignored_exceptions=(Retry, Ignore)
+    ) as acquired:
+        if not acquired:
+            raise BasePalaceException("Another re-index task is already running.")
 
-    with (
-        task.session() as session,
-        elapsed_time_logging(
-            log_method=task.log.info,
-            message_prefix="Works queried from database",
-            skip_start=True,
-        ),
-    ):
-        documents = get_work_search_documents(session, batch_size, offset)
-
-    add_documents_to_index(task, index, documents)
-
-    if len(documents) == batch_size:
-        # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-        # to process the next batch.
-        raise task.replace(
-            search_reindex.s(offset=offset + batch_size, batch_size=batch_size)
+        task.log.info(
+            f"Running search reindex at offset {offset} with batch size {batch_size}."
         )
 
+        with (
+            task.session() as session,
+            elapsed_time_logging(
+                log_method=task.log.info,
+                message_prefix="Works queried from database",
+                skip_start=True,
+            ),
+        ):
+            documents = get_work_search_documents(session, batch_size, offset)
+
+        add_documents_to_index(task, index, documents)
+
+        if len(documents) == batch_size:
+            # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
+            # to process the next batch.
+            raise task.replace(
+                search_reindex.s(offset=offset + batch_size, batch_size=batch_size)
+            )
+
     task.log.info("Finished search reindex.")
+    task_lock.release()
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
