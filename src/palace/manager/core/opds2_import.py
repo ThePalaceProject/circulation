@@ -689,6 +689,14 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
     ) -> bool:
         """Extract the publication's availability from its availability information.
 
+        We default to a publication being available if no availability information is provided or if the provided
+        availability information is past the time specified in its `until` field. The `since` field on the
+        availability information is not used, it is assumed to be informational and always in the past if it is
+        present. This is based on a discussion with the OPDS 2.0 working group.
+
+        TODO: Update our handling of the `since` field based on the resolution of the discussion here:
+          https://github.com/opds-community/drafts/discussions/63#discussioncomment-9806140
+
         :return: Boolean value indicating whether the publication is available.
         """
         available = opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
