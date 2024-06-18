@@ -1,12 +1,16 @@
+import copy
 import datetime
+import functools
+import json
+import uuid
 
 import pytest
 from freezegun import freeze_time
-from webpub_manifest_parser.core.ast import PresentationMetadata
 from webpub_manifest_parser.odl.ast import ODLPublication
 from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
 )
+from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
 from palace.manager.api.circulation_exceptions import (
     HoldsNotPermitted,
@@ -28,6 +32,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicenseStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -222,7 +227,9 @@ class TestODL2Importer:
         huck_finn_semantic_error = (
             ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
                 node=ODLPublication(
-                    metadata=PresentationMetadata(identifier="urn:isbn:9781234567897")
+                    metadata=OPDS2PublicationMetadata(
+                        identifier="urn:isbn:9781234567897"
+                    )
                 ),
                 node_property=None,
             )
@@ -377,6 +384,186 @@ class TestODL2Importer:
             )
         )
         assert oa_ebook_delivery_mechanism is not None
+
+    @freeze_time("2016-01-01T00:00:00+00:00")
+    def test_import_availability(
+        self,
+        odl2_importer: ODL2Importer,
+        odl_mock_get: MockGet,
+        api_odl2_files_fixture: ODL2APIFilesFixture,
+    ) -> None:
+        """
+        Ensure that ODL2Importer2 correctly processes and imports a feed with an
+        open access book.
+        """
+        feed_json = json.loads(api_odl2_files_fixture.sample_text("feed.json"))
+
+        moby_dick_license_dict = feed_json["publications"][0]["licenses"][0]
+        test_book_license_dict = feed_json["publications"][2]["licenses"][0]
+
+        huck_finn_publication_dict = feed_json["publications"][1]
+        huck_finn_publication_dict["licenses"] = copy.deepcopy(
+            feed_json["publications"][0]["licenses"]
+        )
+        huck_finn_publication_dict["images"] = copy.deepcopy(
+            feed_json["publications"][0]["images"]
+        )
+        huck_finn_license_dict = huck_finn_publication_dict["licenses"][0]
+
+        MOBY_DICK_LICENSE_ID = "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9799"
+        TEST_BOOK_LICENSE_ID = "urn:uuid:f7847120-fc6f-11e3-8158-56847afe9798"
+        HUCK_FINN_LICENSE_ID = f"urn:uuid:{uuid.uuid4()}"
+
+        test_book_license_dict["metadata"]["availability"] = {
+            "state": "unavailable",
+            "reason": "https://registry.opds.io/reason#preordered",
+            "until": "2016-01-20T00:00:00Z",
+        }
+        huck_finn_license_dict["metadata"]["identifier"] = HUCK_FINN_LICENSE_ID
+        huck_finn_publication_dict["metadata"][
+            "title"
+        ] = "Adventures of Huckleberry Finn"
+
+        # Mock responses from license status server
+        def license_status_reply(
+            license_id: str,
+            concurrency: int = 10,
+            checkouts: int | None = 30,
+            expires: str | None = "2016-04-25T12:25:21+02:00",
+        ) -> LicenseInfoHelper:
+            return LicenseInfoHelper(
+                license=LicenseHelper(
+                    identifier=license_id,
+                    concurrency=concurrency,
+                    checkouts=checkouts,
+                    expires=expires,
+                ),
+                left=checkouts,
+                available=concurrency,
+            )
+
+        odl_mock_get.add(license_status_reply(MOBY_DICK_LICENSE_ID))
+        odl_mock_get.add(license_status_reply(HUCK_FINN_LICENSE_ID))
+
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        assert isinstance(pools, list)
+        assert 3 == len(pools)
+
+        [moby_dick_pool, huck_finn_pool, test_book_pool] = pools
+
+        def assert_pool(
+            pool: LicensePool,
+            identifier: str,
+            identifier_type: str,
+            licenses_owned: int,
+            licenses_available: int,
+            license_id: str,
+            available_for_borrowing: bool,
+            license_status: LicenseStatus,
+        ) -> None:
+            assert pool.identifier.identifier == identifier
+            assert pool.identifier.type == identifier_type
+            assert pool.licenses_owned == licenses_owned
+            assert pool.licenses_available == licenses_available
+            assert len(pool.licenses) == 1
+            [license_info] = pool.licenses
+            assert license_info.identifier == license_id
+            assert license_info.is_available_for_borrowing is available_for_borrowing
+            assert license_info.status == license_status
+
+        assert_moby_dick_pool = functools.partial(
+            assert_pool,
+            identifier="978-3-16-148410-0",
+            identifier_type="ISBN",
+            license_id=MOBY_DICK_LICENSE_ID,
+        )
+        assert_test_book_pool = functools.partial(
+            assert_pool,
+            identifier="http://example.org/test-book",
+            identifier_type="URI",
+            license_id=TEST_BOOK_LICENSE_ID,
+        )
+        assert_huck_finn_pool = functools.partial(
+            assert_pool,
+            identifier="9781234567897",
+            identifier_type="ISBN",
+            license_id=HUCK_FINN_LICENSE_ID,
+        )
+
+        assert_moby_dick_pool(
+            moby_dick_pool,
+            licenses_owned=30,
+            licenses_available=10,
+            available_for_borrowing=True,
+            license_status=LicenseStatus.available,
+        )
+
+        assert_test_book_pool(
+            test_book_pool,
+            licenses_owned=0,
+            licenses_available=0,
+            available_for_borrowing=False,
+            license_status=LicenseStatus.unavailable,
+        )
+
+        assert_huck_finn_pool(
+            huck_finn_pool,
+            licenses_owned=30,
+            licenses_available=10,
+            available_for_borrowing=True,
+            license_status=LicenseStatus.available,
+        )
+
+        # Harvest the feed again, but this time the status has changed
+        moby_dick_license_dict["metadata"]["availability"] = {
+            "state": "unavailable",
+        }
+        del test_book_license_dict["metadata"]["availability"]
+        huck_finn_publication_dict["metadata"]["availability"] = {
+            "state": "unavailable",
+        }
+
+        # Mock responses from license status server
+        odl_mock_get.add(
+            license_status_reply(TEST_BOOK_LICENSE_ID, checkouts=None, expires=None)
+        )
+
+        # Harvest the feed again
+        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
+            json.dumps(feed_json)
+        )
+
+        assert isinstance(pools, list)
+        assert 3 == len(pools)
+
+        [moby_dick_pool, huck_finn_pool, test_book_pool] = pools
+
+        assert_moby_dick_pool(
+            moby_dick_pool,
+            licenses_owned=0,
+            licenses_available=0,
+            available_for_borrowing=False,
+            license_status=LicenseStatus.unavailable,
+        )
+
+        assert_test_book_pool(
+            test_book_pool,
+            licenses_owned=10,
+            licenses_available=10,
+            available_for_borrowing=True,
+            license_status=LicenseStatus.available,
+        )
+
+        assert_huck_finn_pool(
+            huck_finn_pool,
+            licenses_owned=0,
+            licenses_available=0,
+            available_for_borrowing=False,
+            license_status=LicenseStatus.unavailable,
+        )
 
 
 class TestODL2API:

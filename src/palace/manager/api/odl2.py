@@ -21,7 +21,7 @@ from palace.manager.api.odl import (
     ODLLibrarySettings,
     ODLSettings,
 )
-from palace.manager.core.metadata_layer import FormatData, TimestampData
+from palace.manager.core.metadata_layer import FormatData, LicenseData, TimestampData
 from palace.manager.core.monitor import CollectionMonitor
 from palace.manager.core.opds2_import import (
     OPDS2Importer,
@@ -36,7 +36,11 @@ from palace.manager.integration.settings import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicenseStatus,
+    RightsStatus,
+)
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.util import first_or_default
@@ -213,103 +217,120 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
         metadata = super()._extract_publication_metadata(
             feed, publication, data_source_name
         )
+
+        if not publication.licenses:
+            # This title is an open-access title, no need to process licenses.
+            return metadata
+
         formats = []
         licenses = []
         medium = None
 
         skipped_license_formats = set(self.settings.skipped_license_formats)
+        publication_availability = self._extract_availability(
+            publication.metadata.availability
+        )
 
-        if publication.licenses:
-            for odl_license in publication.licenses:
-                identifier = odl_license.metadata.identifier
-                checkout_link = first_or_default(
-                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
-                )
-                if checkout_link:
-                    checkout_link = checkout_link.href
+        for odl_license in publication.licenses:
+            identifier = odl_license.metadata.identifier
 
-                license_info_document_link = first_or_default(
-                    odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
-                )
-                if license_info_document_link:
-                    license_info_document_link = license_info_document_link.href
+            checkout_link = first_or_default(
+                odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
+            )
+            if checkout_link:
+                checkout_link = checkout_link.href
 
-                expires = (
-                    to_utc(odl_license.metadata.terms.expires)
-                    if odl_license.metadata.terms
-                    else None
+            license_info_document_link = first_or_default(
+                odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
+            )
+            if license_info_document_link:
+                license_info_document_link = license_info_document_link.href
+
+            expires = (
+                to_utc(odl_license.metadata.terms.expires)
+                if odl_license.metadata.terms
+                else None
+            )
+            concurrency = (
+                int(odl_license.metadata.terms.concurrency)
+                if odl_license.metadata.terms
+                else None
+            )
+
+            if not license_info_document_link:
+                parsed_license = None
+            elif (
+                not self._extract_availability(odl_license.metadata.availability)
+                or not publication_availability
+            ):
+                # No need to fetch the license document, we already know that this title is not available.
+                parsed_license = LicenseData(
+                    identifier=identifier,
+                    checkout_url=None,
+                    status_url=license_info_document_link,
+                    status=LicenseStatus.unavailable,
+                    checkouts_available=0,
                 )
-                concurrency = (
-                    int(odl_license.metadata.terms.concurrency)
-                    if odl_license.metadata.terms
-                    else None
+            else:
+                parsed_license = self.get_license_data(
+                    license_info_document_link,
+                    checkout_link,
+                    identifier,
+                    expires,
+                    concurrency,
+                    self.http_get,
                 )
 
-                if not license_info_document_link:
-                    parsed_license = None
+            if parsed_license is not None:
+                licenses.append(parsed_license)
+
+            license_formats = set(odl_license.metadata.formats)
+            for license_format in license_formats:
+                if (
+                    skipped_license_formats
+                    and license_format in skipped_license_formats
+                ):
+                    continue
+
+                if not medium:
+                    medium = Edition.medium_from_media_type(license_format)
+
+                drm_schemes: list[str | None]
+                if license_format in self.LICENSE_FORMATS:
+                    # Special case to handle DeMarque audiobooks which include the protection
+                    # in the content type. When we see a license format of
+                    # application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction
+                    # it means that this audiobook title is available through the DeMarque streaming manifest
+                    # endpoint.
+                    drm_schemes = [
+                        self.LICENSE_FORMATS[license_format][self.DRM_SCHEME]
+                    ]
+                    license_format = self.LICENSE_FORMATS[license_format][
+                        self.CONTENT_TYPE
+                    ]
                 else:
-                    parsed_license = self.get_license_data(
-                        license_info_document_link,
-                        checkout_link,
-                        identifier,
-                        expires,
-                        concurrency,
-                        self.http_get,
+                    drm_schemes = (
+                        odl_license.metadata.protection.formats
+                        if odl_license.metadata.protection
+                        else []
                     )
 
-                if parsed_license is not None:
-                    licenses.append(parsed_license)
-
-                license_formats = set(odl_license.metadata.formats)
-                for license_format in license_formats:
-                    if (
-                        skipped_license_formats
-                        and license_format in skipped_license_formats
-                    ):
-                        continue
-
-                    if not medium:
-                        medium = Edition.medium_from_media_type(license_format)
-
-                    drm_schemes: list[str | None]
-                    if license_format in self.LICENSE_FORMATS:
-                        # Special case to handle DeMarque audiobooks which include the protection
-                        # in the content type. When we see a license format of
-                        # application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction
-                        # it means that this audiobook title is available through the DeMarque streaming manifest
-                        # endpoint.
-                        drm_schemes = [
-                            self.LICENSE_FORMATS[license_format][self.DRM_SCHEME]
-                        ]
-                        license_format = self.LICENSE_FORMATS[license_format][
-                            self.CONTENT_TYPE
-                        ]
-                    else:
-                        drm_schemes = (
-                            odl_license.metadata.protection.formats
-                            if odl_license.metadata.protection
-                            else []
+                for drm_scheme in drm_schemes or [None]:
+                    formats.append(
+                        FormatData(
+                            content_type=license_format,
+                            drm_scheme=drm_scheme,
+                            rights_uri=RightsStatus.IN_COPYRIGHT,
                         )
+                    )
 
-                    for drm_scheme in drm_schemes or [None]:
-                        formats.append(
-                            FormatData(
-                                content_type=license_format,
-                                drm_scheme=drm_scheme,
-                                rights_uri=RightsStatus.IN_COPYRIGHT,
-                            )
-                        )
-
-        # If we don't have any licenses, then this title is an open-access title.
-        # So we don't change the circulation data.
-        if len(licenses) != 0:
-            metadata.circulation.licenses = licenses
-            metadata.circulation.licenses_owned = None
-            metadata.circulation.licenses_available = None
-            metadata.circulation.licenses_reserved = None
-            metadata.circulation.patrons_in_hold_queue = None
-            metadata.circulation.formats.extend(formats)
-            metadata.medium = medium
+        metadata.circulation.licenses = licenses
+        metadata.circulation.licenses_owned = None
+        metadata.circulation.licenses_available = None
+        metadata.circulation.licenses_reserved = None
+        metadata.circulation.patrons_in_hold_queue = None
+        metadata.circulation.formats.extend(formats)
+        metadata.medium = medium
 
         return metadata
 

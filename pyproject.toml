@@ -247,7 +247,7 @@ nameparser = "^1.1"  # nameparser is for author name manipulations
 nltk = "3.8.1"  # nltk is a textblob dependency.
 opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
-palace-webpub-manifest-parser = "^3.1.1"
+palace-webpub-manifest-parser = "^3.2.0"
 pillow = "^10.0"
 pycryptodome = "^3.18"
 pydantic = {version = "^1.10.9", extras = ["dotenv", "email"]}
@@ -261,7 +261,7 @@ pyspellchecker = "0.8.1"
 python = ">=3.10,<4"
 python-dateutil = "2.9.0.post0"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
-pytz = "^2023.3"
+pytz = "^2024.1"
 pyyaml = "^6.0"
 redis = "^5.0.5"
 redmail = "^0.6.0"
