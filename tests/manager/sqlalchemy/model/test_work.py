@@ -243,7 +243,7 @@ class TestWork:
         work.presentation_ready = True
         index = external_search_fake_fixture.external_search
 
-        work.calculate_presentation(search_index_client=index)
+        work.calculate_presentation()
 
         # The author of the Work has not changed.
         assert "Alice Adder, Bob Bitshifter" == work.author
@@ -308,7 +308,7 @@ class TestWork:
         # knows it's no longer the champ.
         pool2.suppressed = True
 
-        work.calculate_presentation(search_index_client=index)
+        work.calculate_presentation()
 
         # The title of the Work is the title of its new primary work record.
         assert "The 1st Title" == work.title
@@ -348,7 +348,7 @@ class TestWork:
         staff_edition.author = Edition.UNKNOWN_AUTHOR
         staff_edition.sort_author = Edition.UNKNOWN_AUTHOR
 
-        work.calculate_presentation(search_index_client=index)
+        work.calculate_presentation()
 
         # The title of the Work got superseded.
         assert "The Staff Title" == work.title
@@ -495,7 +495,7 @@ class TestWork:
 
         search = external_search_fake_fixture.external_search
         presentation = work.presentation_edition
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
 
         # The work has not been added to the search index.
@@ -508,7 +508,7 @@ class TestWork:
         # Remove the title, and the work stops being presentation
         # ready.
         presentation.title = None
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert False == work.presentation_ready
 
         # The work has been queued for reindexing, so that the search
@@ -518,32 +518,32 @@ class TestWork:
 
         # Restore the title, and everything is fixed.
         presentation.title = "foo"
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
 
         # Remove the medium, and the work stops being presentation ready.
         presentation.medium = None
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert False == work.presentation_ready
 
         presentation.medium = Edition.BOOK_MEDIUM
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
 
         # Remove the language, and it stops being presentation ready.
         presentation.language = None
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert False == work.presentation_ready
 
         presentation.language = "eng"
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
 
         # Remove the fiction status, and the work is still
         # presentation ready. Fiction status used to make a difference, but
         # it no longer does.
         work.fiction = None
-        work.set_presentation_ready_based_on_content(search_index_client=search)
+        work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
 
     def test_assign_genres_from_weights(self, db: DatabaseTransactionFixture):
@@ -948,19 +948,25 @@ class TestWork:
             r = cover_link.resource
             r.votes_for_quality = r.voted_quality = 0
             r.update_quality()
-            work.calculate_presentation(search_index_client=index)
+            work.calculate_presentation()
             assert full_url == work.cover_full_url
             assert thumbnail_url == work.cover_thumbnail_url
 
         # Suppressing the cover removes the cover from the work.
         index = external_search_fake_fixture.external_search
-        Work.reject_covers(db.session, [work], search_index_client=index)
+        Work.reject_covers(
+            db.session,
+            [work],
+        )
         assert has_no_cover(work)
         reset_cover()
 
         # It also works with Identifiers.
         identifier = work.license_pools[0].identifier
-        Work.reject_covers(db.session, [identifier], search_index_client=index)
+        Work.reject_covers(
+            db.session,
+            [identifier],
+        )
         assert has_no_cover(work)
         reset_cover()
 
@@ -972,7 +978,10 @@ class TestWork:
         other_work_ed.set_cover(cover_link.resource)
         other_work = db.work(presentation_edition=other_work_ed)
 
-        Work.reject_covers(db.session, [work], search_index_client=index)
+        Work.reject_covers(
+            db.session,
+            [work],
+        )
         assert has_no_cover(other_edition)
         assert has_no_cover(other_work)
 

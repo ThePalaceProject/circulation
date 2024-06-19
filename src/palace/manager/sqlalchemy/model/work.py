@@ -667,7 +667,7 @@ class Work(Base, LoggerMixin):
         return query
 
     @classmethod
-    def reject_covers(cls, _db, works_or_identifiers, search_index_client=None):
+    def reject_covers(cls, _db, works_or_identifiers):
         """Suppresses the currently visible covers of a number of Works"""
         from palace.manager.sqlalchemy.model.licensing import LicensePool
         from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
@@ -725,9 +725,7 @@ class Work(Base, LoggerMixin):
         # cached OPDS entries.
         policy = PresentationCalculationPolicy.reset_cover()
         for work in works:
-            work.calculate_presentation(
-                policy=policy, search_index_client=search_index_client
-            )
+            work.calculate_presentation(policy=policy)
         for edition in editions:
             edition.calculate_presentation(policy=policy)
         _db.commit()
@@ -910,7 +908,6 @@ class Work(Base, LoggerMixin):
     def calculate_presentation(
         self,
         policy=None,
-        search_index_client=None,
         exclude_search=False,
         default_fiction=None,
         default_audience=None,
@@ -1240,9 +1237,7 @@ class Work(Base, LoggerMixin):
         """
         return self._reset_coverage(WorkCoverageRecord.CHOOSE_EDITION_OPERATION)
 
-    def set_presentation_ready(
-        self, as_of=None, search_index_client=None, exclude_search=False
-    ):
+    def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
 
         This assumes that we know the work has the minimal information
@@ -1259,7 +1254,7 @@ class Work(Base, LoggerMixin):
         if not exclude_search:
             self.external_index_needs_updating()
 
-    def set_presentation_ready_based_on_content(self, search_index_client=None):
+    def set_presentation_ready_based_on_content(self):
         """Set this work as presentation ready, if it appears to
         be ready based on its data.
 
@@ -1270,8 +1265,6 @@ class Work(Base, LoggerMixin):
         The absolute minimum data necessary is a title, a language,
         and a medium. We don't need a cover or an author -- we can
         fill in that info later if it exists.
-
-        TODO: search_index_client is redundant here.
         """
         if (
             not self.presentation_edition
@@ -1287,7 +1280,7 @@ class Work(Base, LoggerMixin):
             self.external_index_needs_updating()
             self.log.warning("Work is not presentation ready: %r", self)
         else:
-            self.set_presentation_ready(search_index_client=search_index_client)
+            self.set_presentation_ready()
 
     def calculate_quality(self, identifier_ids, default_quality=0):
         _db = Session.object_session(self)
