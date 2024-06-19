@@ -1,4 +1,6 @@
 import json
+import math
+from collections import Counter
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -341,15 +343,25 @@ def test_search_indexing(
     assert search_indexing_fixture.waiting.get(10) == []
 
     # Add some works to the waiting list and run the task with a smaller batch size, to test that
-    # we paginate through the works.
-    mock_index_works.reset_mock()
-    search_indexing_fixture.add_works()
-    search_indexing.delay(batch_size=5).wait()
-    assert search_indexing_fixture.lock.locked() is False
-    assert mock_index_works.delay.call_count == 2
-    for call_args in mock_index_works.delay.call_args_list:
-        assert set(call_args.kwargs["works"]) <= search_indexing_fixture.mock_works
-    assert search_indexing_fixture.waiting.get(10) == []
+    # we paginate through the works. We test with two different batch sizes, 3 and 5. To test the
+    # two exit conditions, where the last batch is less than the batch size, and where the last
+    # batch is equal to the batch size.
+    for batch_size in [3, 5]:
+        mock_index_works.reset_mock()
+        search_indexing_fixture.add_works()
+        search_indexing.delay(batch_size=batch_size).wait()
+        assert search_indexing_fixture.lock.locked() is False
+        assert mock_index_works.delay.call_count == math.ceil(
+            len(search_indexing_fixture.mock_works) / batch_size
+        )
+        indexed_works = []
+        for call_args in mock_index_works.delay.call_args_list:
+            indexed_works_for_call = call_args.kwargs["works"]
+            assert len(indexed_works_for_call) <= batch_size
+            indexed_works.extend(indexed_works_for_call)
+        assert all(count == 1 for count in Counter(indexed_works).values())
+        assert set(indexed_works) == search_indexing_fixture.mock_works
+        assert search_indexing_fixture.waiting.get(10) == []
 
 
 def test_index_works(

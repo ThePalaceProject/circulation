@@ -141,7 +141,7 @@ def search_indexing(task: Task, batch_size: int = 500) -> None:
             # to process the next batch.
             raise task.replace(search_indexing.s(batch_size=batch_size))
 
-        task.log.info(f"Finished queuing indexing tasks {len(works)}.")
+        task.log.info(f"Finished queuing indexing tasks.")
         return
 
 
