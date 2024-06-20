@@ -167,6 +167,8 @@ def last_update_time_change(target, value, oldvalue, initator):
     Among other things, this happens whenever the LicensePool's availability
     information changes.
     """
+    if value == oldvalue:
+        return
     target.external_index_needs_updating()
 
 

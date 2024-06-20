@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.log import elapsed_time_logging
@@ -33,6 +36,24 @@ def get_work_search_documents(
         )
     ]
     return Work.to_search_documents(session, works)
+
+
+def add_documents_to_index(
+    task: Task, index: ExternalSearchIndex, documents: Sequence[dict[str, Any]]
+) -> None:
+    try:
+        with elapsed_time_logging(
+            log_method=task.log.info,
+            message_prefix="Works added to index",
+            skip_start=True,
+        ):
+            failed_documents = index.add_documents(documents=documents)
+        if failed_documents:
+            raise FailedToIndex(f"Failed to index {len(failed_documents)} works.")
+    except (FailedToIndex, OpenSearchException) as e:
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.error(f"{e}. Retrying in {wait_time} seconds.")
+        raise task.retry(countdown=wait_time)
 
 
 class FailedToIndex(BasePalaceException):
@@ -63,19 +84,7 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
     ):
         documents = get_work_search_documents(session, batch_size, offset)
 
-    try:
-        with elapsed_time_logging(
-            log_method=task.log.info,
-            message_prefix="Works added to index",
-            skip_start=True,
-        ):
-            failed_documents = index.add_documents(documents=documents)
-        if failed_documents:
-            raise FailedToIndex(f"Failed to index {len(failed_documents)} works.")
-    except (FailedToIndex, OpenSearchException) as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(f"{e}. Retrying in {wait_time} seconds.")
-        raise task.retry(countdown=wait_time)
+    add_documents_to_index(task, index, documents)
 
     if len(documents) == batch_size:
         # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
@@ -113,34 +122,46 @@ def update_read_pointer(task: Task) -> None:
     )
 
 
+@shared_task(queue=QueueNames.default, bind=True)
+def search_indexing(task: Task, batch_size: int = 500) -> None:
+    redis_client = task.services.redis.client()
+    task_lock = TaskLock(redis_client, task)
+    with task_lock.lock() as acquired:
+        if not acquired:
+            raise BasePalaceException(f"{task.name} is already running.")
+
+        waiting = WaitingForIndexing(redis_client)
+        works = waiting.pop(batch_size)
+
+        if len(works) > 0:
+            index_works.delay(works=works)
+
+        if len(works) == batch_size:
+            # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
+            # to process the next batch.
+            raise task.replace(search_indexing.s(batch_size=batch_size))
+
+        task.log.info(f"Finished queuing indexing tasks.")
+        return
+
+
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
-def index_work(task: Task, work_id: int) -> None:
-    """
-    Index a single work into the search index.
-    """
+def index_works(task: Task, works: Sequence[int]) -> None:
     index = task.services.search.index()
-    with task.session() as session:
-        documents = Work.to_search_documents(session, [work_id])
 
-    if not documents:
-        # We were unable to find the work. It could have been deleted or maybe the transaction
-        # hasn't been committed yet. We'll wait a bit and try again.
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.warning(
-            f"Work {work_id} not found. Unable to index. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
+    task.log.info(f"Indexing {len(works)} works.")
 
-    try:
-        index.add_document(document=documents[0])
-    except OpenSearchException as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(
-            f"Failed to index work {work_id}: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
+    with (
+        task.session() as session,
+        elapsed_time_logging(
+            log_method=task.log.info,
+            message_prefix="Works queried from database",
+            skip_start=True,
+        ),
+    ):
+        documents = Work.to_search_documents(session, works)
 
-    task.log.info(f"Indexed work {work_id}.")
+    add_documents_to_index(task, index, documents)
 
 
 def get_migrate_search_chain() -> chain:

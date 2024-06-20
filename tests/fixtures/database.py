@@ -68,7 +68,7 @@ from tests.fixtures.config import FixtureTestUrlConfiguration, ToxPasswordUrlTup
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.search import WorkExternalIndexingFixture
+    from tests.fixtures.search import WorkQueueIndexingFixture
 
 
 class TestIdFixture:
@@ -1113,7 +1113,7 @@ def db(
     database_creation: DatabaseCreationFixture,
     database: DatabaseFixture,
     services_fixture: ServicesFixture,
-    work_external_indexing: WorkExternalIndexingFixture,
+    work_queue_indexing: WorkQueueIndexingFixture,
 ) -> Generator[DatabaseTransactionFixture, None, None]:
     with DatabaseTransactionFixture.fixture(database, services_fixture) as db:
         with (

@@ -11,7 +11,7 @@ from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import WorkExternalIndexingFixture
+from tests.fixtures.search import WorkQueueIndexingFixture
 
 
 class TestSiteConfigurationHasChanged:
@@ -135,7 +135,7 @@ class TestListeners:
     def test_licensepool_status_change(
         self,
         db: DatabaseTransactionFixture,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
         status_property_setter: Callable[..., None],
     ):
         work = db.work(with_license_pool=True)
@@ -143,24 +143,24 @@ class TestListeners:
 
         # Change the field
         status_property_setter(pool, True)
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # Then verify that if the field is 'set' to its existing value, this doesn't happen.
         status_property_setter(pool, True)
-        assert not work_external_indexing.is_queued(work, clear=True)
+        assert not work_queue_indexing.is_queued(work, clear=True)
 
     def test_work_suppressed_for_library(
         self,
         db: DatabaseTransactionFixture,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         work = db.work(with_license_pool=True)
         library = db.library()
 
         # Suppress the work for the library
         work.suppressed_for.append(library)
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # Unsuppress the work for the library
         work.suppressed_for.remove(library)
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)

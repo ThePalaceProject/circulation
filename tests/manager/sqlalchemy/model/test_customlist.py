@@ -9,7 +9,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.search import WorkExternalIndexingFixture
+from tests.fixtures.search import WorkQueueIndexingFixture
 
 
 class TestCustomList:
@@ -51,7 +51,7 @@ class TestCustomList:
     def test_add_entry(
         self,
         db: DatabaseTransactionFixture,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         custom_list = db.customlist(num_entries=0)[0]
         now = utc_now()
@@ -78,7 +78,7 @@ class TestCustomList:
         assert 2 == custom_list.size
 
         # When this happens, the work is scheduled for reindexing.
-        assert work_external_indexing.is_queued(work)
+        assert work_queue_indexing.is_queued(work)
 
         # A work can create an entry.
         work = db.work(with_open_access_download=True)
@@ -90,7 +90,7 @@ class TestCustomList:
         assert 3 == custom_list.size
 
         # When this happens, the work is scheduled for reindexing.
-        assert work_external_indexing.is_queued(work)
+        assert work_queue_indexing.is_queued(work)
 
         # Annotations can be passed to the entry.
         annotated_edition = db.edition()
@@ -268,7 +268,7 @@ class TestCustomList:
     def test_remove_entry(
         self,
         db: DatabaseTransactionFixture,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         custom_list, editions = db.customlist(num_entries=3)
         [first, second, third] = editions
@@ -283,7 +283,7 @@ class TestCustomList:
         assert 2 == custom_list.size
 
         # The editon's work has been scheduled for reindexing.
-        assert work_external_indexing.is_queued(first.work, clear=True)
+        assert work_queue_indexing.is_queued(first.work, clear=True)
 
         # An entry is also removed if any of its equivalent editions
         # are passed in.
@@ -315,7 +315,7 @@ class TestCustomList:
 
         # The 'removed' edition's work does not need to be reindexed
         # because it wasn't on the list to begin with.
-        assert not work_external_indexing.is_queued(first.work)
+        assert not work_queue_indexing.is_queued(first.work)
 
     def test_entries_for_work(self, db: DatabaseTransactionFixture):
         custom_list, editions = db.customlist(num_entries=2)

@@ -35,6 +35,7 @@ from sqlalchemy.sql.functions import func
 from palace.manager.core.classifier import Classifier, WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.service import SearchDocument
+from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
@@ -1200,22 +1201,23 @@ class Work(Base, LoggerMixin):
         )
         return record
 
-    def external_index_needs_updating(self):
+    def external_index_needs_updating(self) -> None:
         """Mark this work as needing to have its search document reindexed."""
-        return self.queue_indexing_task(self.id)
+        return self.queue_indexing(self.id)
 
     @staticmethod
-    def queue_indexing_task(work_id: int | None):
+    @inject
+    def queue_indexing(
+        work_id: int | None, *, redis_client: Redis = Provide["redis.client"]
+    ):
         """
-        Queue a task to index a Work.
-
-        This is a static method, so it can be easily mocked in tests,
-        when we don't want to actually queue a task.
+        Add a work to the set of works in redis waiting to be indexed.
         """
-        from palace.manager.celery.tasks.search import index_work
+        from palace.manager.service.redis.models.search import WaitingForIndexing
 
+        waiting = WaitingForIndexing(redis_client)
         if work_id is not None:
-            index_work.apply_async((work_id,), countdown=2)
+            waiting.add(work_id)
 
     def needs_full_presentation_recalculation(self):
         """Mark this work as needing to have its presentation completely

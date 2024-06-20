@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import opensearchpy
 import pytest
@@ -16,6 +16,7 @@ from palace.manager.core.equivalents_coverage import (
 )
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
@@ -37,11 +38,13 @@ from palace.manager.sqlalchemy.util import (
 from palace.manager.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import SampleCoversFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import (
     EndToEndSearchFixture,
     ExternalSearchFixtureFake,
-    WorkExternalIndexingFixture,
+    WorkQueueIndexingFixture,
 )
+from tests.fixtures.services import ServicesFixture
 
 
 class TestWork:
@@ -120,7 +123,7 @@ class TestWork:
         self,
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         # Test that:
         # - work coverage records are made on work creation and primary edition selection.
@@ -298,7 +301,7 @@ class TestWork:
             (wcr.QUALITY_OPERATION, success),
         }
         assert expect == {(x.operation, x.status) for x in records}
-        assert work_external_indexing.is_queued(work)
+        assert work_queue_indexing.is_queued(work)
 
         # Now mark the pool with the presentation edition as suppressed.
         # work.calculate_presentation() will call work.mark_licensepools_as_superceded(),
@@ -489,7 +492,7 @@ class TestWork:
         self,
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         work = db.work(with_license_pool=True)
 
@@ -502,7 +505,7 @@ class TestWork:
         assert [] == external_search_fake_fixture.service.documents_all()
 
         # But the work of adding it to the search engine has been queued.
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # This work is presentation ready because it has a title.
         # Remove the title, and the work stops being presentation
@@ -514,7 +517,7 @@ class TestWork:
         # The work has been queued for reindexing, so that the search
         # index will be updated to reflect the fact that the work is no
         # longer presentation-ready.
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # Restore the title, and everything is fixed.
         presentation.title = "foo"
@@ -1714,7 +1717,7 @@ class TestWork:
     def test_reindex_on_availability_change(
         self,
         db: DatabaseTransactionFixture,
-        work_external_indexing: WorkExternalIndexingFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
     ):
         # A change in a LicensePool's availability queues a task indicating that
         # the work needs to be re-indexed.
@@ -1723,40 +1726,40 @@ class TestWork:
         # indexing. (It will be indexed anyway, but it's not registered
         # as needing it.)
         no_licensepool = db.work()
-        assert not work_external_indexing.is_queued(no_licensepool)
+        assert not work_queue_indexing.is_queued(no_licensepool)
 
         # A Work with a LicensePool starts off in a state where it
         # needs to be indexed.
         work = db.work(with_open_access_download=True)
         [pool] = work.license_pools
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If it stops being open-access, it needs to be reindexed.
         pool.open_access = False
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If it becomes open-access again, it needs to be reindexed.
         pool.open_access = True
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If its last_update_time is changed, it needs to be
         # reindexed. (This happens whenever
         # LicensePool.update_availability is called, meaning that
         # patron transactions always trigger a reindex).
         work.last_update_time = utc_now()
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If its collection changes (which shouldn't happen), it needs
         # to be reindexed.
         collection2 = db.collection()
         pool.collection_id = collection2.id
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If a LicensePool is deleted (which also shouldn't happen),
         # its former Work needs to be reindexed.
         db.session.delete(pool)
         work = db.session.query(Work).filter(Work.id == work.id).one()
-        assert work_external_indexing.is_queued(work, clear=True)
+        assert work_queue_indexing.is_queued(work, clear=True)
 
         # If a LicensePool is moved in from another Work, _both_ Works
         # need to be reindexed.
@@ -1765,8 +1768,8 @@ class TestWork:
         work.license_pools.append(another_pool)
         assert [] == another_work.license_pools
 
-        assert work_external_indexing.is_queued(work)
-        assert work_external_indexing.is_queued(another_work)
+        assert work_queue_indexing.is_queued(work)
+        assert work_queue_indexing.is_queued(another_work)
 
     def test_reset_coverage(
         self,
@@ -2022,15 +2025,18 @@ class TestWork:
         assert db.session.query(Work).filter(Work.id == work.id).all() == []
         assert warning_is_present
 
-    @patch("palace.manager.celery.tasks.search.index_work")
-    def test_queue_indexing_tasks(self, index_work_mock: MagicMock):
-        # Test the method that queues up task to index a work.
-        Work.queue_indexing_task(555)
-        index_work_mock.apply_async.assert_called_once_with((555,), countdown=2)
+    def test_queue_indexing(
+        self, redis_fixture: RedisFixture, services_fixture: ServicesFixture
+    ):
+        # Test the method that adds a work to a redis set to wait for indexing
+        waiting = WaitingForIndexing(redis_fixture.client)
 
-        index_work_mock.reset_mock()
-        Work.queue_indexing_task(None)
-        index_work_mock.delay.assert_not_called()
+        with services_fixture.wired():
+            Work.queue_indexing(555)
+            assert waiting.pop(1) == [555]
+
+            Work.queue_indexing(None)
+            assert waiting.pop(1) == []
 
 
 class TestWorkConsolidation:
