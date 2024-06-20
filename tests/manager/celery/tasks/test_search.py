@@ -320,48 +320,48 @@ def test_search_indexing_lock(
     assert "search_indexing is already running." in str(exc_info.value)
 
 
+@pytest.mark.parametrize("batch_size", [3, 5, 500])
 @patch("palace.manager.celery.tasks.search.index_works")
 def test_search_indexing(
     mock_index_works: MagicMock,
+    batch_size: int,
     celery_fixture: CeleryFixture,
     search_indexing_fixture: SearchIndexingFixture,
 ):
     # No works to index, so we should not call index_works
-    search_indexing.delay().wait()
+    search_indexing.delay(batch_size=batch_size).wait()
     assert search_indexing_fixture.lock.locked() is False
     mock_index_works.delay.assert_not_called()
 
     # Add some works to the waiting list and run the task
+    mock_index_works.reset_mock()
     search_indexing_fixture.add_works()
-    search_indexing.delay().wait()
-    assert search_indexing_fixture.lock.locked() is False
-    assert mock_index_works.delay.call_count == 1
-    assert (
-        set(mock_index_works.delay.call_args.kwargs["works"])
-        == search_indexing_fixture.mock_works
-    )
-    assert search_indexing_fixture.waiting.get(10) == []
+    search_indexing.delay(batch_size=batch_size).wait()
 
-    # Add some works to the waiting list and run the task with a smaller batch size, to test that
-    # we paginate through the works. We test with two different batch sizes, 3 and 5. To test the
-    # two exit conditions, where the last batch is less than the batch size, and where the last
-    # batch is equal to the batch size.
-    for batch_size in [3, 5]:
-        mock_index_works.reset_mock()
-        search_indexing_fixture.add_works()
-        search_indexing.delay(batch_size=batch_size).wait()
-        assert search_indexing_fixture.lock.locked() is False
-        assert mock_index_works.delay.call_count == math.ceil(
-            len(search_indexing_fixture.mock_works) / batch_size
-        )
-        indexed_works = []
-        for call_args in mock_index_works.delay.call_args_list:
-            indexed_works_for_call = call_args.kwargs["works"]
+    # Lock is released
+    assert search_indexing_fixture.lock.locked() is False
+
+    # Index works was called the correct number of times
+    assert mock_index_works.delay.call_count == math.ceil(
+        len(search_indexing_fixture.mock_works) / batch_size
+    )
+
+    # All works were indexed
+    indexed_works = []
+    for idx, call_args in enumerate(mock_index_works.delay.call_args_list):
+        indexed_works_for_call = call_args.kwargs["works"]
+        if idx < len(mock_index_works.delay.call_args_list) - 1:
+            assert len(indexed_works_for_call) == batch_size
+        else:
             assert len(indexed_works_for_call) <= batch_size
-            indexed_works.extend(indexed_works_for_call)
-        assert all(count == 1 for count in Counter(indexed_works).values())
-        assert set(indexed_works) == search_indexing_fixture.mock_works
-        assert search_indexing_fixture.waiting.get(10) == []
+        indexed_works.extend(indexed_works_for_call)
+
+    # No work was indexed more than once
+    assert all(count == 1 for count in Counter(indexed_works).values())
+    assert set(indexed_works) == search_indexing_fixture.mock_works
+
+    # No works are left in the waiting list
+    assert search_indexing_fixture.waiting.get(10) == []
 
 
 def test_index_works(
