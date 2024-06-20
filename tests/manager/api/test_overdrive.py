@@ -2570,6 +2570,7 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             not_on_kindle, overdrive_api_fixture.collection
         )
+        assert loan_info is not None
         assert "2fadd2ac-a8ec-4938-a369-4c3260e8922b" == loan_info.identifier
 
         # Since there are two usable formats (Adobe EPUB and Adobe
@@ -2584,7 +2585,9 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             format_locked_in, overdrive_api_fixture.collection
         )
+        assert loan_info is not None
         delivery = loan_info.locked_to
+        assert delivery is not None
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
 
@@ -2598,8 +2601,9 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             no_format_locked_in, overdrive_api_fixture.collection
         )
-        assert loan_info != None
+        assert loan_info is not None
         delivery = loan_info.locked_to
+        assert delivery is not None
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
 
