@@ -49,6 +49,7 @@ from palace.manager.api.overdrive import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.metadata_layer import LinkData, TimestampData
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
@@ -144,6 +145,20 @@ def overdrive_api_fixture(
 
 
 class TestOverdriveAPI:
+    def test_patron_activity_exception_collection_none(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+        db.session.delete(overdrive_api_fixture.collection)
+        patron = db.patron()
+        with pytest.raises(BasePalaceException) as excinfo:
+            api.sync_patron_activity(patron, "pin")
+        assert "No collection available for Overdrive patron activity." in str(
+            excinfo.value
+        )
+
     def test_errors_not_retried(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,

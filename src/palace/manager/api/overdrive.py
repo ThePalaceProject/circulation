@@ -1449,6 +1449,12 @@ class OverdriveAPI(
     def patron_activity(
         self, patron: Patron, pin: str | None
     ) -> Iterable[LoanInfo | HoldInfo]:
+        collection = self.collection
+        if collection is None:
+            raise BasePalaceException(
+                "No collection available for Overdrive patron activity."
+            )
+
         try:
             loans = self.get_patron_checkouts(patron, pin)
             holds = self.get_patron_holds(patron, pin)
@@ -1466,11 +1472,6 @@ class OverdriveAPI(
             )
             loans = {}
             holds = {}
-        collection = self.collection
-        if collection is None:
-            raise BasePalaceException(
-                "No collection available for Overdrive patron activity."
-            )
 
         for checkout in loans.get("checkouts", []):
             loan_info = self.process_checkout_data(checkout, collection)
