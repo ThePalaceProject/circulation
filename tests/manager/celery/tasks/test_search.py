@@ -62,7 +62,9 @@ def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
     assert documents == []
 
 
+@pytest.mark.parametrize("batch_size", [2, 3, 500])
 def test_search_reindex(
+    batch_size: int,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
@@ -80,8 +82,9 @@ def test_search_reindex(
     client.indices.refresh()
     end_to_end_search_fixture.expect_results([], "")
 
-    # Index the works, use a small batch size to test the pagination.
-    search_reindex.delay(batch_size=2).wait()
+    # Index the works, we use different batch sizes to test pagination.
+    search_reindex.delay(batch_size=batch_size).wait()
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
     client.indices.refresh()
 
     # Check that the works are in the search index.
@@ -93,14 +96,12 @@ def test_search_reindex(
     end_to_end_search_fixture.expect_results([work2, work4], "", ordered=False)
 
     # Reindex the works.
-    search_reindex.delay().wait()
+    search_reindex.delay(batch_size=batch_size).wait()
+    assert search_reindex_task_lock_fixture.task_lock.locked() is False
     client.indices.refresh()
 
     # Check that all the works are in the search index.
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
-
-    # The lock has been released
-    assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
 
 def test_search_reindex_lock(
