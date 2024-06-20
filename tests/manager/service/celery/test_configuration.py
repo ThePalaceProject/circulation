@@ -50,3 +50,14 @@ class TestCeleryConfiguration:
         assert options.get("queue_order_strategy") == "y"
         assert "broker_transport_options_global_keyprefix" not in result
         assert "broker_transport_options_queue_order_strategy" not in result
+
+    def test_additional_options(
+        self, celery_configuration: CeleryConfFixture, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.setenv("PALACE_CELERY_TEST", "test")
+
+        config = celery_configuration()
+        result = config.dict()
+        assert "broker_url" in result
+        assert result.get("test") == "test"
+        assert "test" not in config.__fields__
