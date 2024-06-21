@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import MagicMock, call, create_autospec, patch
 from uuid import uuid4
 
 import pytest
@@ -233,10 +233,13 @@ class TestCloudwatch:
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         mock_publish = create_autospec(cloudwatch.publish)
         cloudwatch.publish = mock_publish
-        cloudwatch_camera.mock_get_redis.return_value.llen.side_effect = [1, 2]
+        cloudwatch_camera.mock_get_redis.return_value.llen.return_value = 10
         with freeze_time("2021-01-01"):
             cloudwatch.on_shutter(cloudwatch_camera.state)
         assert cloudwatch_camera.mock_get_redis.return_value.llen.call_count == 2
+        cloudwatch_camera.mock_get_redis.return_value.llen.assert_has_calls(
+            [call("queue1"), call("queue2")], any_order=True
+        )
         mock_publish.assert_called_once()
         [tasks, queues, time] = mock_publish.call_args.args
 
@@ -245,8 +248,8 @@ class TestCloudwatch:
             "task2": TaskStats(failed=1),
         }
         assert queues == {
-            "queue1": QueueStats(queued=1),
-            "queue2": QueueStats(queued=2),
+            "queue1": QueueStats(queued=10),
+            "queue2": QueueStats(queued=10),
         }
         assert time.isoformat() == "2021-01-01T00:00:00+00:00"
 
