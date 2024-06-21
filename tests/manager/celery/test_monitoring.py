@@ -1,4 +1,3 @@
-from functools import partial
 from unittest.mock import MagicMock, create_autospec, patch
 from uuid import uuid4
 
@@ -25,18 +24,27 @@ class CloudwatchCameraFixture:
         self.state = create_autospec(State)
         self.state.tasks = self.task_list(
             [
-                self.mock_task("task1", "queue1", runtime=1.0),
-                self.mock_task("task1", "queue1", runtime=2.0),
-                self.mock_task("task2", "queue2", succeeded=False, failed=True),
-                self.mock_task(
-                    "task2", "queue2", started=False, succeeded=False, uuid="uuid4"
-                ),
-                self.mock_task(
-                    "celery.built_in", "queue2", started=False, succeeded=False
-                ),
+                self.mock_task("task1", runtime=1.0),
+                self.mock_task("task1", runtime=2.0),
+                self.mock_task("task2", succeeded=False, failed=True),
+                self.mock_task("task2", started=False, succeeded=False, uuid="uuid4"),
+                self.mock_task("celery.built_in", started=False, succeeded=False),
             ]
         )
-        self.create_cloudwatch = partial(Cloudwatch, state=self.state, app=self.app)
+        self._mock_get_redis: MagicMock | None = None
+
+    def create_cloudwatch(self):
+        with patch.object(Cloudwatch, "get_redis_client") as mock_get_redis:
+            self._mock_get_redis = mock_get_redis
+            return Cloudwatch(state=self.state, app=self.app)
+
+    @property
+    def mock_get_redis(self):
+        if self._mock_get_redis is None:
+            raise ValueError(
+                "get_redis_client not mocked because create_cloudwatch was not called."
+            )
+        return self._mock_get_redis
 
     @staticmethod
     def task_list(tasks: list[Task]) -> dict[str, Task]:
@@ -50,7 +58,7 @@ class CloudwatchCameraFixture:
     def mock_task(
         self,
         name: str | None = None,
-        routing_key: str | None = None,
+        *,
         sent: bool = True,
         started: bool = True,
         succeeded: bool = True,
@@ -63,7 +71,6 @@ class CloudwatchCameraFixture:
         return Task(
             uuid=uuid,
             name=name,
-            routing_key=routing_key,
             sent=sent,
             started=started,
             succeeded=succeeded,
@@ -73,6 +80,7 @@ class CloudwatchCameraFixture:
 
     def configure_app(
         self,
+        broker_url: str = "redis://testtesttest:1234/1",
         region: str = "region",
         dry_run: bool = False,
         manager_name: str = "manager",
@@ -82,6 +90,7 @@ class CloudwatchCameraFixture:
     ) -> None:
         queues = queues or ["queue1", "queue2"]
         self.app.conf = {
+            "broker_url": broker_url,
             "cloudwatch_statistics_region": region,
             "cloudwatch_statistics_dryrun": dry_run,
             "broker_transport_options": {"global_keyprefix": manager_name},
@@ -172,40 +181,8 @@ class TestTaskStats:
 
 
 class TestQueueStats:
-    def test_update(self, cloudwatch_camera: CloudwatchCameraFixture):
-        stats = QueueStats()
-
-        assert len(stats.queued) == 0
-
-        mock_task = cloudwatch_camera.mock_task(sent=False, started=False)
-
-        # Task is not started or sent, so it should not be in the queue.
-        stats.update(mock_task)
-        assert len(stats.queued) == 0
-
-        # Task is both sent and started, so its being processed and should not be in the queue.
-        mock_task = cloudwatch_camera.mock_task(sent=True, started=True)
-        stats.update(mock_task)
-        assert len(stats.queued) == 0
-
-        # Task is sent but not started, so it should be in the queue.
-        mock_task = cloudwatch_camera.mock_task(sent=True, started=False)
-        stats.update(mock_task)
-        assert len(stats.queued) == 1
-
-        # If the task is sent again, it should still be in the queue, but not duplicated.
-        stats.update(mock_task)
-        assert len(stats.queued) == 1
-
-        # If the task is started, it should be removed from the queue, even if we no longer
-        # have its routing key.
-        mock_task.started = True
-        mock_task.routing_key = None
-        stats.update(mock_task)
-        assert len(stats.queued) == 0
-
     def test_metrics(self):
-        stats = QueueStats(queued={"uuid1", "uuid2"})
+        stats = QueueStats(queued=2)
         timestamp = MagicMock()
         dimensions = {"key": "value", "key2": "value2"}
         expected_dimensions = [
@@ -217,11 +194,6 @@ class TestQueueStats:
         assert metric["Timestamp"] == timestamp.isoformat()
         assert metric["Dimensions"] == expected_dimensions
         assert metric["Unit"] == "Count"
-
-        stats = QueueStats()
-        [metric] = stats.metrics(timestamp, dimensions)
-        assert metric["MetricName"] == "QueueWaiting"
-        assert metric["Value"] == 0
 
 
 class TestCloudwatch:
@@ -236,7 +208,18 @@ class TestCloudwatch:
         assert cloudwatch.manager_name == "manager"
         assert cloudwatch.namespace == "namespace"
         assert cloudwatch.upload_size == 100
-        assert cloudwatch.queues == {"queue1": QueueStats(), "queue2": QueueStats()}
+        assert cloudwatch.queues == {"queue1", "queue2"}
+        assert cloudwatch.redis_client == cloudwatch_camera.mock_get_redis.return_value
+        cloudwatch_camera.mock_get_redis.assert_called_once_with(
+            "redis://testtesttest:1234/1",
+            "manager",
+        )
+
+    def test__init__error(self, cloudwatch_camera: CloudwatchCameraFixture):
+        cloudwatch_camera.configure_app(broker_url="sqs://")
+        with pytest.raises(ValueError) as exc_info:
+            cloudwatch_camera.create_cloudwatch()
+        assert "Broker type 'sqs' is not supported." in str(exc_info.value)
 
     def test__init__dryrun(self, cloudwatch_camera: CloudwatchCameraFixture):
         cloudwatch_camera.configure_app(dry_run=True)
@@ -246,14 +229,14 @@ class TestCloudwatch:
     def test_on_shutter(
         self,
         cloudwatch_camera: CloudwatchCameraFixture,
-        caplog: pytest.LogCaptureFixture,
     ):
-        caplog.set_level(LogLevel.warning)
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         mock_publish = create_autospec(cloudwatch.publish)
         cloudwatch.publish = mock_publish
+        cloudwatch_camera.mock_get_redis.return_value.llen.side_effect = [1, 2]
         with freeze_time("2021-01-01"):
             cloudwatch.on_shutter(cloudwatch_camera.state)
+        assert cloudwatch_camera.mock_get_redis.return_value.llen.call_count == 2
         mock_publish.assert_called_once()
         [tasks, queues, time] = mock_publish.call_args.args
 
@@ -262,25 +245,23 @@ class TestCloudwatch:
             "task2": TaskStats(failed=1),
         }
         assert queues == {
-            "queue1": QueueStats(),
-            "queue2": QueueStats(queued={"uuid4"}),
+            "queue1": QueueStats(queued=1),
+            "queue2": QueueStats(queued=2),
         }
         assert time.isoformat() == "2021-01-01T00:00:00+00:00"
 
-        # We can also handle the case where we see a task with an unknown queue or unknown name.
+    def test_on_shutter_unknown_task_name(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+    ):
+        # We can also handle the case where we see a task with an unknown name.
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        mock_publish = create_autospec(cloudwatch.publish)
+        cloudwatch.publish = mock_publish
         cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
             [
                 cloudwatch_camera.mock_task(
-                    "task2",
-                    "unknown_queue",
-                    started=False,
-                    succeeded=False,
-                    uuid="uuid5",
-                    runtime=3.0,
-                ),
-                cloudwatch_camera.mock_task(
                     "unknown_task",
-                    "queue1",
                     failed=True,
                     succeeded=False,
                     uuid="uuid6",
@@ -288,66 +269,48 @@ class TestCloudwatch:
             ]
         )
         cloudwatch.on_shutter(cloudwatch_camera.state)
-        [tasks, queues, _] = mock_publish.call_args.args
+        [tasks, _, _] = mock_publish.call_args.args
         assert tasks == {
             "task1": TaskStats(),
             "task2": TaskStats(),
             "unknown_task": TaskStats(failed=1),
         }
-        assert queues == {
-            "queue1": QueueStats(),
-            "queue2": QueueStats(queued={"uuid4"}),
-            "unknown_queue": QueueStats(queued={"uuid5"}),
-        }
 
-        # We can handle tasks with no name or tasks with no routing key.
-        caplog.clear()
+    def test_on_shutter_no_task_name(
+        self,
+        cloudwatch_camera: CloudwatchCameraFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # We can handle tasks with no name
+        caplog.set_level(LogLevel.warning)
+        cloudwatch = cloudwatch_camera.create_cloudwatch()
+        mock_publish = create_autospec(cloudwatch.publish)
+        cloudwatch.publish = mock_publish
         cloudwatch_camera.state.tasks = cloudwatch_camera.task_list(
             [
-                cloudwatch_camera.mock_task(
-                    None, "unknown_queue", started=True, uuid="uuid7"
-                ),
-                cloudwatch_camera.mock_task(
-                    "task2", None, started=False, succeeded=False, uuid="uuid8"
-                ),
-                cloudwatch_camera.mock_task(None, None, started=True, uuid="uuid5"),
+                cloudwatch_camera.mock_task(None, started=True, uuid="uuid7"),
+                cloudwatch_camera.mock_task(None, started=True, uuid="uuid5"),
             ]
         )
         cloudwatch.on_shutter(cloudwatch_camera.state)
-        [tasks, queues, _] = mock_publish.call_args.args
+        [tasks, _, _] = mock_publish.call_args.args
         assert tasks == {
             "task1": TaskStats(),
             "task2": TaskStats(),
-            "unknown_task": TaskStats(),
-        }
-        assert queues == {
-            "queue1": QueueStats(),
-            "queue2": QueueStats(queued={"uuid4"}),
-            "unknown_queue": QueueStats(),
         }
 
-        # We log the information about tasks with no name or routing key.
+        # We log the information about tasks with no name
         (
             no_name_warning_1,
-            no_routing_key_warning_1,
             no_name_warning_2,
-            no_routing_key_warning_2,
         ) = caplog.messages
         assert (
-            "Task has no name. [routing_key]:unknown_queue, [sent]:True, [started]:True, [uuid]:uuid7."
+            "Task has no name. [sent]:True, [started]:True, [uuid]:uuid7."
             in no_name_warning_1
-        )
-        assert (
-            "Task has no routing_key. [name]:task2, [sent]:True, [started]:False, [uuid]:uuid8."
-            in no_routing_key_warning_1
         )
         assert (
             "Task has no name. [sent]:True, [started]:True, [uuid]:uuid5."
             in no_name_warning_2
-        )
-        assert (
-            "Task has no routing_key. [sent]:True, [started]:True, [uuid]:uuid5."
-            in no_routing_key_warning_2
         )
 
     def test_publish(
@@ -363,7 +326,7 @@ class TestCloudwatch:
         }
         timestamp = MagicMock()
         tasks = {"task1": TaskStats(succeeded=2, failed=5, runtime=[3.5, 2.2])}
-        queues = {"queue1": QueueStats(queued={"uuid1", "uuid2"})}
+        queues = {"queue1": QueueStats(queued=2)}
 
         cloudwatch.publish(tasks, queues, timestamp)
         mock_put_metric_data.assert_called_once()

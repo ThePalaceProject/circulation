@@ -184,7 +184,7 @@ module = [
     "html_sanitizer",
     "isbnlib",
     "jwcrypto",
-    "kombu",
+    "kombu.*",
     "lxml.*",
     "money",
     "multipledispatch",
