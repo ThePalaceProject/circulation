@@ -8,6 +8,7 @@ import logging
 import re
 import time
 import urllib.parse
+from collections.abc import Iterable
 from threading import RLock
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -52,7 +53,7 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.coverage import BibliographicCoverageProvider
-from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -1445,7 +1446,15 @@ class OverdriveAPI(
             return d
         return strptime_utc(d, cls.TIME_FORMAT)
 
-    def patron_activity(self, patron, pin):
+    def patron_activity(
+        self, patron: Patron, pin: str | None
+    ) -> Iterable[LoanInfo | HoldInfo]:
+        collection = self.collection
+        if collection is None:
+            raise BasePalaceException(
+                "No collection available for Overdrive patron activity."
+            )
+
         try:
             loans = self.get_patron_checkouts(patron, pin)
             holds = self.get_patron_holds(patron, pin)
@@ -1465,8 +1474,9 @@ class OverdriveAPI(
             holds = {}
 
         for checkout in loans.get("checkouts", []):
-            loan_info = self.process_checkout_data(checkout, self.collection)
-            yield loan_info
+            loan_info = self.process_checkout_data(checkout, collection)
+            if loan_info is not None:
+                yield loan_info
 
         for hold in holds.get("holds", []):
             overdrive_identifier = hold["reserveId"].lower()
@@ -1481,7 +1491,7 @@ class OverdriveAPI(
                 # 0, not whatever position Overdrive had for them.
                 position = 0
             yield HoldInfo(
-                self.collection,
+                collection,
                 DataSource.OVERDRIVE,
                 Identifier.OVERDRIVE_ID,
                 overdrive_identifier,
@@ -1491,7 +1501,9 @@ class OverdriveAPI(
             )
 
     @classmethod
-    def process_checkout_data(cls, checkout: dict[str, Any], collection: Collection):
+    def process_checkout_data(
+        cls, checkout: dict[str, Any], collection: Collection
+    ) -> LoanInfo | None:
         """Convert one checkout from Overdrive's list of checkouts
         into a LoanInfo object.
 

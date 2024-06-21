@@ -49,6 +49,7 @@ from palace.manager.api.overdrive import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.metadata_layer import LinkData, TimestampData
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
@@ -144,6 +145,20 @@ def overdrive_api_fixture(
 
 
 class TestOverdriveAPI:
+    def test_patron_activity_exception_collection_none(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+        db.session.delete(overdrive_api_fixture.collection)
+        patron = db.patron()
+        with pytest.raises(BasePalaceException) as excinfo:
+            api.sync_patron_activity(patron, "pin")
+        assert "No collection available for Overdrive patron activity." in str(
+            excinfo.value
+        )
+
     def test_errors_not_retried(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
@@ -2570,6 +2585,7 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             not_on_kindle, overdrive_api_fixture.collection
         )
+        assert loan_info is not None
         assert "2fadd2ac-a8ec-4938-a369-4c3260e8922b" == loan_info.identifier
 
         # Since there are two usable formats (Adobe EPUB and Adobe
@@ -2584,7 +2600,9 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             format_locked_in, overdrive_api_fixture.collection
         )
+        assert loan_info is not None
         delivery = loan_info.locked_to
+        assert delivery is not None
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
 
@@ -2598,8 +2616,9 @@ class TestExtractData:
         loan_info = MockOverdriveAPI.process_checkout_data(
             no_format_locked_in, overdrive_api_fixture.collection
         )
-        assert loan_info != None
+        assert loan_info is not None
         delivery = loan_info.locked_to
+        assert delivery is not None
         assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
 
