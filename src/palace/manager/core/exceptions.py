@@ -10,6 +10,10 @@ class BasePalaceException(Exception):
         self.message = message
 
 
+class PalaceValueError(BasePalaceException, ValueError):
+    ...
+
+
 class IntegrationException(BasePalaceException):
     """An exception that happens when the site's connection to a
     third-party service is broken.
