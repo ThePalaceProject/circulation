@@ -2,11 +2,9 @@ import json
 import re
 from collections.abc import Generator
 from importlib.abc import Traversable
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlparse
 
-import requests
 from jsonschema import Draft7Validator, validators
 from jsonschema.exceptions import ValidationError
 from jsonschema.protocols import Validator
@@ -26,14 +24,13 @@ def opds2_schema_resources() -> Traversable:
 @to_cached_resource(loads=json.loads)
 def opds2_cached_retrieve(uri: str) -> str:
     """
-    Fetch files from the resources directory or cache them.
+    Fetch files from the resources directory or from local cache.
 
     If the uri is a file:// uri, fetch the file from the resources directory. Otherwise,
-    fetch the file from the local cache in the 'cached' directory falling back to downloading
-    the file if it is not found and adding it to the cache.
+    fetch the file from the local cache in the 'cached' directory.
 
-    To refresh the cache, delete the 'cached' directory and re-run the tests. This will force
-    the function to download any necessary files into the cache.
+    To refresh the cache, delete the 'cached' directory uncomment the code below and re-run
+    the tests. This will force the function to download any necessary files into the cache.
     """
     parsed = urlparse(uri)
     resources = opds2_schema_resources()
@@ -44,10 +41,10 @@ def opds2_cached_retrieve(uri: str) -> str:
         netloc_dir = parsed.netloc
         filename = parsed.path.removeprefix("/").replace("/", "_")
         package_file = resources / "cached" / netloc_dir / filename
-        if not package_file.is_file():
-            cached_dir = cast(Path, resources / "cached" / netloc_dir)
-            cached_dir.mkdir(parents=True, exist_ok=True)
-            (cached_dir / filename).write_text(requests.get(uri).text)
+        # if not package_file.is_file():
+        #     cached_dir = cast(Path, resources / "cached" / netloc_dir)
+        #     cached_dir.mkdir(parents=True, exist_ok=True)
+        #     (cached_dir / filename).write_text(requests.get(uri).text)
 
     return package_file.read_text()
 
