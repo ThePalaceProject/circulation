@@ -32,8 +32,8 @@ def opds2_cached_retrieve(uri: str) -> str:
     fetch the file from the local cache in the 'cached' directory falling back to downloading
     the file if it is not found and adding it to the cache.
 
-    To refresh the cache, delete the 'cached' directory. This will force the function to
-    re-download the files.
+    To refresh the cache, delete the 'cached' directory and re-run the tests. This will force
+    the function to download any necessary files into the cache.
     """
     parsed = urlparse(uri)
     resources = opds2_schema_resources()
