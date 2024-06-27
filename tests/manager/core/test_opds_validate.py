@@ -1,5 +1,7 @@
 import json
 
+import pytest
+from jsonschema.exceptions import ValidationError
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
@@ -34,6 +36,31 @@ class TestOPDS2Validation(OPDS2Test):
 
         bookshelf_opds2 = json.loads(opds_files_fixture.sample_text("opds2_feed.json"))
         validator.import_one_feed(bookshelf_opds2)
+
+    def test_opds2_schema_fail(
+        self,
+        db: DatabaseTransactionFixture,
+        opds_files_fixture: OPDSFilesFixture,
+    ):
+        collection = db.collection(
+            protocol=OPDS2API.label(),
+            data_source_name=DataSource.FEEDBOOKS,
+            settings={
+                "external_account_id": "http://example.com/feed",
+            },
+        )
+        validator = OPDS2SchemaValidation(
+            db.session,
+            collection=collection,
+            import_class=OPDS2Importer,
+            parser=RWPMManifestParser(OPDS2FeedParserFactory()),
+        )
+
+        bookshelf_opds2 = json.loads(
+            opds_files_fixture.sample_text("opds2_bad_feed.json")
+        )
+        with pytest.raises(ValidationError):
+            validator.import_one_feed(bookshelf_opds2)
 
 
 class TestODL2Validation(OPDS2Test):
