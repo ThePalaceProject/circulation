@@ -2,7 +2,8 @@ import json
 import re
 from collections.abc import Generator
 from importlib.abc import Traversable
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import requests
@@ -25,19 +26,30 @@ def opds2_schema_resources() -> Traversable:
 @to_cached_resource(loads=json.loads)
 def opds2_cached_retrieve(uri: str) -> str:
     """
-    Fetch file from local filesystem if it has a file:// url, else fetch remotely.
+    Fetch files from the resources directory or cache them.
 
-    We use the to_cached_resource decorator, which caches the results of this function,
-    so each uri should only get fetched once.
+    If the uri is a file:// uri, fetch the file from the resources directory. Otherwise,
+    fetch the file from the local cache in the 'cached' directory falling back to downloading
+    the file if it is not found and adding it to the cache.
+
+    To refresh the cache, delete the 'cached' directory. This will force the function to
+    re-download the files.
     """
     parsed = urlparse(uri)
+    resources = opds2_schema_resources()
     if parsed.scheme == "file":
-        filename = "/".join([parsed.netloc, parsed.path])
-        package_file = opds2_schema_resources() / filename
-        with package_file.open("r") as fp:
-            return fp.read()
+        filename = f"{parsed.netloc}{parsed.path}"
+        package_file = resources / filename
     else:
-        return requests.get(uri).text
+        netloc_dir = parsed.netloc
+        filename = parsed.path.removeprefix("/").replace("/", "_")
+        package_file = resources / "cached" / netloc_dir / filename
+        if not package_file.is_file():
+            cached_dir = cast(Path, resources / "cached" / netloc_dir)
+            cached_dir.mkdir(parents=True, exist_ok=True)
+            (cached_dir / filename).write_text(requests.get(uri).text)
+
+    return package_file.read_text()
 
 
 def opds2_pattern_validator(
