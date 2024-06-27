@@ -1,13 +1,20 @@
 import json
-import os
+import re
+from collections.abc import Generator
 from importlib.abc import Traversable
+from typing import Any
+from urllib.parse import urlparse
 
 import requests
-from jsonschema import Draft7Validator, RefResolver
+from jsonschema import Draft7Validator, validators
 from jsonschema.exceptions import ValidationError
+from jsonschema.protocols import Validator
+from referencing import Registry
+from referencing.retrieval import to_cached_resource
 
 from palace.manager.api.odl2 import ODL2ImportMonitor
 from palace.manager.core.opds2_import import OPDS2ImportMonitor
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir
 
 
@@ -15,29 +22,80 @@ def opds2_schema_resources() -> Traversable:
     return resources_dir("opds2_schema")
 
 
-class OPDS2SchemaValidationMixin:
-    def get_ref_resolver(self, json_schema):
-        dir_ = os.path.dirname(os.path.realpath(__file__))
-        handlers = {
-            "https": OPDS2RefHandler.fetch_file,
-        }
+@to_cached_resource(loads=json.loads)
+def opds2_cached_retrieve(uri: str) -> str:
+    """
+    Fetch file from local filesystem if it has a file:// url, else fetch remotely.
 
-        resolver = RefResolver("file://" + dir_ + "/", json_schema, handlers=handlers)
-        return resolver
+    We use the to_cached_resource decorator, which caches the results of this function,
+    so each uri should only get fetched once.
+    """
+    parsed = urlparse(uri)
+    if parsed.scheme == "file":
+        filename = "/".join([parsed.netloc, parsed.path])
+        package_file = opds2_schema_resources() / filename
+        with package_file.open("r") as fp:
+            return fp.read()
+    else:
+        return requests.get(uri).text
 
-    def validate_schema(self, schema_path: str, feed: dict):
-        schema_file = opds2_schema_resources().joinpath(schema_path)
-        with schema_file.open() as fp:
-            opds2_schema = json.load(fp)
 
-        resolver = self.get_ref_resolver(opds2_schema)
-        schema_validator = Draft7Validator(opds2_schema, resolver=resolver)
+def opds2_pattern_validator(
+    validator: Validator, patrn: str, instance: Any, schema: dict[str, Any]
+) -> Generator[ValidationError, None, None]:
+    """
+    Validation function to validate a patten element.
+
+    The bulk of this function is copied from the jsonschema library. It was copied from
+    jsonschema._keywords.patten. They put their validation functions in a private module,
+    and the docs mention not to extending them. So we copied the function here.
+
+    The only change is the first line which does a regex replacement on the pattern from the
+    schema. We do this because the OPDS2 schema uses a regex pattern using named groups, which
+    is a valid PCRE pattern, but not valid in Python's re module. So we convert the named groups
+    to use the Python specific ?P<name> syntax.
+    """
+    patrn = re.sub(r"\?<(.+?)>", r"?P<\1>", patrn)
+    if validator.is_type(instance, "string") and not re.search(patrn, instance):
+        yield ValidationError(f"{instance!r} does not match {patrn!r}")
+
+
+def opds2_schema_registry() -> Registry:
+    """
+    Create a Registry that loads schemas with the opds2_cached_retrieve function.
+    """
+    # See https://github.com/python-jsonschema/referencing/issues/61 for details on
+    # why we needed the type ignore here.
+    return Registry(retrieve=opds2_cached_retrieve)  # type: ignore[call-arg]
+
+
+def opds2_schema_validator(schema: dict[str, Any]) -> Validator:
+    """
+    This returns a jsonschema Draft7Validator modified to use the opds2_pattern_validator
+    function for the pattern keyword.
+    """
+
+    registry = opds2_schema_registry()
+    validator_cls = validators.extend(
+        Draft7Validator,
+        version="draft7",
+        validators={
+            "pattern": opds2_pattern_validator,
+        },
+    )
+    return validator_cls(schema, registry=registry)
+
+
+class OPDS2SchemaValidationMixin(LoggerMixin):
+    def validate_schema(self, schema_url: str, feed: dict[str, Any]) -> None:
+        schema = {"$ref": schema_url}
+        schema_validator = opds2_schema_validator(schema)
         try:
-            schema_validator.validate(feed, opds2_schema)
+            schema_validator.validate(feed)
         except ValidationError as e:
-            self.log.error("Validation failed for feed")  # type: ignore
+            self.log.error("Validation failed for feed")
             for attr in ["message", "path", "schema_path", "validator_value"]:
-                self.log.error(f"{attr}: {getattr(e, attr, None)}")  # type: ignore
+                self.log.error(f"{attr}: {getattr(e, attr, None)}")
             raise
 
 
@@ -45,7 +103,7 @@ class OPDS2SchemaValidation(OPDS2ImportMonitor, OPDS2SchemaValidationMixin):
     def import_one_feed(self, feed):
         if type(feed) in (str, bytes):
             feed = json.loads(feed)
-        self.validate_schema("feed.schema.json", feed)
+        self.validate_schema("https://drafts.opds.io/schema/feed.schema.json", feed)
         return [], []
 
     def follow_one_link(self, url, do_get=None):
@@ -60,7 +118,7 @@ class OPDS2SchemaValidation(OPDS2ImportMonitor, OPDS2SchemaValidationMixin):
 class ODL2SchemaValidation(ODL2ImportMonitor, OPDS2SchemaValidationMixin):
     def import_one_feed(self, feed):
         feed = json.loads(feed)
-        self.validate_schema("odl-feed.schema.json", feed)
+        self.validate_schema("file://odl-feed.schema.json", feed)
         return [], []
 
     def follow_one_link(self, url, do_get=None):
@@ -70,17 +128,3 @@ class ODL2SchemaValidation(ODL2ImportMonitor, OPDS2SchemaValidationMixin):
 
     def feed_contains_new_data(self, feed):
         return True
-
-
-class OPDS2RefHandler:
-    @classmethod
-    def fetch_file(cls, name: str):
-        """Fetch file from local filesystem if present, else fetch remotely"""
-        filename = name.split("/")[-1]
-        package_file = opds2_schema_resources() / filename
-
-        if package_file.is_file():
-            with package_file.open("r") as fp:
-                return json.load(fp)
-        else:
-            return requests.get(name).json()
