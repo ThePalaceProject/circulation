@@ -15,7 +15,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.sqlalchemy.model.work import Work
-from tests.fixtures.files import FilesFixture
+from tests.fixtures.files import FilesFixture, ODL2APIFilesFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -93,19 +93,6 @@ class ODLAPIFilesFixture(FilesFixture):
 def api_odl_files_fixture() -> ODLAPIFilesFixture:
     """A fixture providing access to ODL files."""
     return ODLAPIFilesFixture()
-
-
-class ODL2APIFilesFixture(FilesFixture):
-    """A fixture providing access to ODL2 files."""
-
-    def __init__(self):
-        super().__init__("odl2")
-
-
-@pytest.fixture()
-def api_odl2_files_fixture() -> ODL2APIFilesFixture:
-    """A fixture providing access to ODL2 files."""
-    return ODL2APIFilesFixture()
 
 
 class MockGet:

@@ -42,7 +42,7 @@ def opds2_cached_retrieve(uri: str) -> str:
         filename = parsed.path.removeprefix("/").replace("/", "_")
         package_file = resources / "cached" / netloc_dir / filename
         # if not package_file.is_file():
-        #     cached_dir = cast(Path, resources / "cached" / netloc_dir)
+        #     cached_dir = resources / "cached" / netloc_dir
         #     cached_dir.mkdir(parents=True, exist_ok=True)
         #     (cached_dir / filename).write_text(requests.get(uri).text)
 

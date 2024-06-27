@@ -16,9 +16,9 @@ from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.http import HTTP
-from tests.fixtures.api_odl import ODL2APIFilesFixture, ODLAPIFilesFixture
+from tests.fixtures.api_odl import ODLAPIFilesFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import FilesFixture
+from tests.fixtures.files import FilesFixture, ODL2APIFilesFixture
 from tests.mocks.mock import MockRequestsResponse
 
 

@@ -39,13 +39,9 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
-from tests.fixtures.api_odl import (
-    LicenseHelper,
-    LicenseInfoHelper,
-    MockGet,
-    ODL2APIFilesFixture,
-)
+from tests.fixtures.api_odl import LicenseHelper, LicenseInfoHelper, MockGet
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import ODL2APIFilesFixture
 from tests.fixtures.odl import ODL2APITestFixture, ODL2TestFixture
 
 

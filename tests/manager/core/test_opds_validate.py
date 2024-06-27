@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 
 import pytest
 from jsonschema.exceptions import ValidationError
@@ -10,15 +11,24 @@ from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, RWPMManife
 from palace.manager.core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import OPDSFilesFixture
-from tests.manager.core.test_opds2_import import OPDS2Test
+from tests.fixtures.files import ODL2APIFilesFixture, OPDS2FilesFixture
 
 
-class TestOPDS2Validation(OPDS2Test):
+class TestOPDS2Validation:
+    @pytest.mark.parametrize(
+        "feed_name, fail",
+        [
+            ("feed.json", False),
+            ("feed2.json", False),
+            ("bad_feed.json", True),
+        ],
+    )
     def test_opds2_schema(
         self,
+        feed_name: str,
+        fail: bool,
         db: DatabaseTransactionFixture,
-        opds_files_fixture: OPDSFilesFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
     ):
         collection = db.collection(
             protocol=OPDS2API.label(),
@@ -34,40 +44,27 @@ class TestOPDS2Validation(OPDS2Test):
             parser=RWPMManifestParser(OPDS2FeedParserFactory()),
         )
 
-        bookshelf_opds2 = json.loads(opds_files_fixture.sample_text("opds2_feed.json"))
-        validator.import_one_feed(bookshelf_opds2)
+        context = pytest.raises(ValidationError) if fail else nullcontext()
 
-    def test_opds2_schema_fail(
-        self,
-        db: DatabaseTransactionFixture,
-        opds_files_fixture: OPDSFilesFixture,
-    ):
-        collection = db.collection(
-            protocol=OPDS2API.label(),
-            data_source_name=DataSource.FEEDBOOKS,
-            settings={
-                "external_account_id": "http://example.com/feed",
-            },
-        )
-        validator = OPDS2SchemaValidation(
-            db.session,
-            collection=collection,
-            import_class=OPDS2Importer,
-            parser=RWPMManifestParser(OPDS2FeedParserFactory()),
-        )
-
-        bookshelf_opds2 = json.loads(
-            opds_files_fixture.sample_text("opds2_bad_feed.json")
-        )
-        with pytest.raises(ValidationError):
-            validator.import_one_feed(bookshelf_opds2)
+        feed = json.loads(opds2_files_fixture.sample_text(feed_name))
+        with context:
+            validator.import_one_feed(feed)
 
 
-class TestODL2Validation(OPDS2Test):
+class TestODL2Validation:
+    @pytest.mark.parametrize(
+        "feed_name, fail",
+        [
+            ("feed.json", True),
+            ("feed2.json", False),
+        ],
+    )
     def test_odl2_schema(
         self,
+        feed_name: str,
+        fail: bool,
         db: DatabaseTransactionFixture,
-        opds_files_fixture: OPDSFilesFixture,
+        api_odl2_files_fixture: ODL2APIFilesFixture,
     ):
         collection = db.collection(
             protocol=ODL2API.label(),
@@ -85,6 +82,9 @@ class TestODL2Validation(OPDS2Test):
             parser=RWPMManifestParser(ODLFeedParserFactory()),
         )
 
-        bookshelf_odl2 = opds_files_fixture.sample_text("odl2_feed.json")
-        imported, failures = validator.import_one_feed(bookshelf_odl2)
-        assert (len(imported), len(failures)) == (0, 0)
+        context = pytest.raises(ValidationError) if fail else nullcontext()
+
+        feed = api_odl2_files_fixture.sample_text(feed_name)
+        with context:
+            imported, failures = validator.import_one_feed(feed)
+            assert (len(imported), len(failures)) == (0, 0)
