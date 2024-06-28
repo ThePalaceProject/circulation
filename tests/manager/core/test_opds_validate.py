@@ -21,6 +21,7 @@ class TestOPDS2Validation:
             ("feed.json", False),
             ("feed2.json", False),
             ("bad_feed.json", True),
+            ("bad_feed2.json", True),
         ],
     )
     def test_opds2_schema(

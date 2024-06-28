@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from jsonschema import Draft7Validator, validators
+from jsonschema._utils import extras_msg
 from jsonschema.exceptions import ValidationError
 from jsonschema.protocols import Validator
 from referencing import Registry
@@ -49,6 +50,17 @@ def opds2_cached_retrieve(uri: str) -> str:
     return package_file.read_text()
 
 
+def opds2_regex_replace(pattern: str) -> str:
+    """
+    Replace named groups in a regex pattern.
+
+    The OPDS2 schema uses a regex pattern using named groups, which is a valid PCRE pattern,
+    but not valid in Python's re module. This function converts the named groups to use the
+    Python specific ?P<name> syntax.
+    """
+    return re.sub(r"\?<(.+?)>", r"?P<\1>", pattern)
+
+
 def opds2_pattern_validator(
     validator: Validator, patrn: str, instance: Any, schema: dict[str, Any]
 ) -> Generator[ValidationError, None, None]:
@@ -56,17 +68,88 @@ def opds2_pattern_validator(
     Validation function to validate a patten element.
 
     The bulk of this function is copied from the jsonschema library. It was copied from
-    jsonschema._keywords.patten. They put their validation functions in a private module,
+    jsonschema._keywords.pattern. They put their validation functions in a private module,
     and the docs mention not to extending them. So we copied the function here.
-
-    The only change is the first line which does a regex replacement on the pattern from the
-    schema. We do this because the OPDS2 schema uses a regex pattern using named groups, which
-    is a valid PCRE pattern, but not valid in Python's re module. So we convert the named groups
-    to use the Python specific ?P<name> syntax.
     """
-    patrn = re.sub(r"\?<(.+?)>", r"?P<\1>", patrn)
+    patrn = opds2_regex_replace(patrn)
     if validator.is_type(instance, "string") and not re.search(patrn, instance):
         yield ValidationError(f"{instance!r} does not match {patrn!r}")
+
+
+def opds2_pattern_properties_validator(
+    validator: Validator,
+    patternProperties: dict[str, Any],
+    instance: dict[str, Any],
+    schema: dict[str, Any],
+) -> Generator[ValidationError, None, None]:
+    """
+    Validation function to validate a pattenProperties element.
+
+    The bulk of this function is copied from the jsonschema library. It was copied from
+    jsonschema._keywords.patternProperties. They put their validation functions in a private module,
+    and the docs mention not to extending them. So we copied the function here.
+    """
+    if not validator.is_type(instance, "object"):
+        return
+
+    for pattern, subschema in patternProperties.items():
+        pattern = opds2_regex_replace(pattern)
+        for k, v in instance.items():
+            if re.search(pattern, k):
+                yield from validator.descend(
+                    v,
+                    subschema,
+                    path=k,
+                    schema_path=pattern,
+                )
+
+
+def opds2_additional_properties_validator(
+    validator: Validator,
+    aP: dict[str, Any],
+    instance: dict[str, Any],
+    schema: dict[str, Any],
+) -> Generator[ValidationError, None, None]:
+    """
+    Validation function to validate a pattenProperties element.
+
+    The bulk of this function is copied from the jsonschema library. It was copied from
+    jsonschema._keywords.additionalProperties. They put their validation functions in a private module,
+    and the docs mention not to extending them. So we copied the function here.
+    """
+
+    def additional_properties(
+        instance: dict[str, Any], schema: dict[str, Any]
+    ) -> Generator[str, None, None]:
+        properties = schema.get("properties", {})
+        patterns = "|".join(schema.get("patternProperties", {}))
+        patterns = opds2_regex_replace(patterns)
+        for property in instance:
+            if property not in properties:
+                if patterns and re.search(patterns, property):
+                    continue
+                yield property
+
+    if not validator.is_type(instance, "object"):
+        return
+
+    extras = set(additional_properties(instance, schema))
+
+    if validator.is_type(aP, "object"):
+        for extra in extras:
+            yield from validator.descend(instance[extra], aP, path=extra)
+    elif not aP and extras:
+        if "patternProperties" in schema:
+            verb = "does" if len(extras) == 1 else "do"
+            joined = ", ".join(repr(each) for each in sorted(extras))
+            patterns = ", ".join(
+                repr(each) for each in sorted(schema["patternProperties"])
+            )
+            error = f"{joined} {verb} not match any of the regexes: {patterns}"
+            yield ValidationError(error)
+        else:
+            error = "Additional properties are not allowed (%s %s unexpected)"
+            yield ValidationError(error % extras_msg(sorted(extras, key=str)))
 
 
 def opds2_schema_registry() -> Registry:
@@ -90,6 +173,8 @@ def opds2_schema_validator(schema: dict[str, Any]) -> Validator:
         version="draft7",
         validators={
             "pattern": opds2_pattern_validator,
+            "patternProperties": opds2_pattern_properties_validator,
+            "additionalProperties": opds2_additional_properties_validator,
         },
     )
     return validator_cls(schema, registry=registry)
