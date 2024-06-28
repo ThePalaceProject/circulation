@@ -5,8 +5,9 @@ from importlib.abc import Traversable
 from typing import Any
 from urllib.parse import urlparse
 
-from jsonschema import Draft7Validator, validators
-from jsonschema._keywords import additionalProperties, pattern, patternProperties
+from jsonschema import Draft7Validator
+from jsonschema import _keywords as kw
+from jsonschema import validators
 from jsonschema.exceptions import ValidationError
 from jsonschema.protocols import Validator
 from referencing import Registry
@@ -68,7 +69,7 @@ def opds2_pattern_validator(
     Validation function to validate a patten element.
     """
     patrn = opds2_regex_replace(patrn)
-    yield from pattern(validator, patrn, instance, schema)
+    yield from kw.pattern(validator, patrn, instance, schema)
 
 
 def opds2_pattern_properties_validator(
@@ -84,7 +85,7 @@ def opds2_pattern_properties_validator(
         opds2_regex_replace(pattern): subschema
         for pattern, subschema in patrnProps.items()
     }
-    yield from patternProperties(validator, filtered_patterns, instance, schema)
+    yield from kw.patternProperties(validator, filtered_patterns, instance, schema)
 
 
 def opds2_additional_properties_validator(
@@ -102,7 +103,7 @@ def opds2_additional_properties_validator(
             opds2_regex_replace(patrn): subschema
             for patrn, subschema in schema["patternProperties"].items()
         }
-    yield from additionalProperties(validator, aP, instance, schema)
+    yield from kw.additionalProperties(validator, aP, instance, schema)
 
 
 def opds2_schema_registry() -> Registry:
