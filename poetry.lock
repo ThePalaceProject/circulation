@@ -4662,20 +4662,6 @@ files = [
 Flask = ">=2.0.0"
 
 [[package]]
-name = "types-jsonschema"
-version = "4.22.0.20240610"
-description = "Typing stubs for jsonschema"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "types-jsonschema-4.22.0.20240610.tar.gz", hash = "sha256:f82ab9fe756e3a2642ea9712c46b403ce61eb380b939b696cff3252af42f65b0"},
-    {file = "types_jsonschema-4.22.0.20240610-py3-none-any.whl", hash = "sha256:89996b9bd1928f820a0e252b2844be21cd2e55d062b6fa1048d88453006ad89e"},
-]
-
-[package.dependencies]
-referencing = "*"
-
-[[package]]
 name = "types-pillow"
 version = "10.2.0.20240520"
 description = "Typing stubs for Pillow"
@@ -5114,4 +5100,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "006150fca1ace2a66cff9b7235ded77eeb0b230799d72bbe0b3995274b74e14e"
+content-hash = "2ad7b9a81d027739db571992819c396529fa4b048bc1dcf2b0557c3efafa0819"

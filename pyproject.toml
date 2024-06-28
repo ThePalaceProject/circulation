@@ -183,6 +183,7 @@ module = [
     "greenlet",
     "html_sanitizer",
     "isbnlib",
+    "jsonschema.*",
     "jwcrypto",
     "kombu.*",
     "lxml.*",
@@ -238,6 +239,7 @@ fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "^2.1.0"
 isbnlib = "^3.10.14"
 itsdangerous = "^2.1.2"
+jsonschema = "^4.22.0"
 jwcrypto = "^1.4.2"
 levenshtein = "^0.25"
 lxml = {extras = ["html-clean"], version = "^5.2.1"}
@@ -304,7 +306,6 @@ pytest-xdist = "^3.5.0"
 requests-mock = "1.12.1"
 types-aws-xray-sdk = "^2.11.0.13"
 types-Flask-Cors = "^4.0.0"
-types-jsonschema = "^4.17.0.5"
 types-Pillow = "^10.0.0"
 types-psycopg2 = "^2.9.21"
 types-python-dateutil = "^2.8.19"
