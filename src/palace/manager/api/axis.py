@@ -381,7 +381,10 @@ class Axis360API(
         base_url = self.base_url
         url = base_url + self.audiobook_metadata_endpoint
         params = dict(fndcontentid=findaway_content_id)
-        response = self.request(url, "POST", params=params)
+        # We set an explicit timeout because this request can take a long time and
+        # the default was too short. Ideally B&T would fix this on their end, but
+        # in the meantime we need to work around it.
+        response = self.request(url, "POST", params=params, timeout=15)
         return response
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
