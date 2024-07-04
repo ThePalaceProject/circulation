@@ -384,7 +384,7 @@ class Axis360API(
         # We set an explicit timeout because this request can take a long time and
         # the default was too short. Ideally B&T would fix this on their end, but
         # in the meantime we need to work around it.
-        response = self.request(url, "POST", params=params, timeout=10)
+        response = self.request(url, "POST", params=params, timeout=15)
         return response
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
