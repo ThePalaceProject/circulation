@@ -186,6 +186,10 @@ named._add("sequence_number", "AY")
 named._add("screen_message", "AF", allow_multiple=True)
 named._add("print_line", "AG")
 
+# This is a standard field for items, but Evergreen allows it to
+# be returned in a Patron Information response (64) message.
+named._add("permanent_location", "AQ")
+
 # SIP extensions defined by Georgia Public Library Service's SIP
 # server, used by Evergreen and Koha.
 named._add("sipserver_patron_expiration", "PA")
@@ -712,6 +716,7 @@ class SIPClient(Constants, LoggerMixin):
             named.screen_message,
             named.print_line,
             # Add common extension fields.
+            named.permanent_location,
             named.sipserver_patron_expiration,
             named.polaris_patron_expiration,
             named.sipserver_patron_class,

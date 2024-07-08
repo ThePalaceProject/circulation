@@ -13,7 +13,10 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.api.problem_details import INVALID_CREDENTIALS
+from palace.manager.api.problem_details import (
+    INVALID_CREDENTIALS,
+    PATRON_OF_ANOTHER_LIBRARY,
+)
 from palace.manager.api.sip.client import Sip2Encoding, SIPClient
 from palace.manager.api.sip.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
@@ -24,7 +27,7 @@ from palace.manager.integration.settings import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class SIP2Settings(BasicAuthProviderSettings):
@@ -192,6 +195,19 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
             description="A specific identifier for the library or branch, if used in patron authentication",
         ),
     )
+    # Used with SIP2, when it is available in the patron information response.
+    patron_location_restriction: str | None = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Patron Location Restriction",
+            description=(
+                "A code for the library or branch which, when specified, "
+                "must exactly match the permanent location for the patron."
+                "<br>If an ILS does not include a location for patrons, specifying"
+                "a value here will always result in authentication failure."
+            ),
+        ),
+    )
 
 
 class SIP2AuthenticationProvider(
@@ -241,6 +257,7 @@ class SIP2AuthenticationProvider(
         self.ssl_verification = settings.ssl_verification
         self.dialect = settings.ils
         self.institution_id = library_settings.institution_id
+        self.patron_location_restriction = library_settings.patron_location_restriction
         self._client = client
 
         # Check if patrons should be blocked based on SIP status
@@ -332,7 +349,23 @@ class SIP2AuthenticationProvider(
             # passing it on.
             password = None
         info = self.patron_information(username, password)
+        self._enforce_patron_location_restriction(info)
         return self.info_to_patrondata(info)
+
+    def _enforce_patron_location_restriction(
+        self, info: dict[str, Any] | ProblemDetail
+    ) -> None:
+        """Raise an exception if patron location does not match the restriction.
+
+        If a location restriction is specified for the library against which the
+        patron is attempting to authenticate, then the authentication will fail unless
+        the location associated with the patron exactly matches that of the library.
+        """
+        if (
+            self.patron_location_restriction is not None
+            and info.get("permanent_location") != self.patron_location_restriction
+        ):
+            raise ProblemDetailException(PATRON_OF_ANOTHER_LIBRARY)
 
     def _run_self_tests(self, _db):
         def makeConnection(sip):
