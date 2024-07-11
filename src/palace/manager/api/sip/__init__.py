@@ -362,7 +362,8 @@ class SIP2AuthenticationProvider(
         the location associated with the patron exactly matches that of the library.
         """
         if (
-            self.patron_location_restriction is not None
+            not isinstance(info, ProblemDetail)
+            and self.patron_location_restriction is not None
             and info.get("permanent_location") != self.patron_location_restriction
         ):
             raise ProblemDetailException(PATRON_OF_ANOTHER_LIBRARY)
