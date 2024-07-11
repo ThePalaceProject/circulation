@@ -12,7 +12,10 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     Keyboards,
 )
-from palace.manager.api.problem_details import INVALID_CREDENTIALS
+from palace.manager.api.problem_details import (
+    INVALID_CREDENTIALS,
+    PATRON_OF_ANOTHER_LIBRARY,
+)
 from palace.manager.api.sip import (
     SIP2AuthenticationProvider,
     SIP2LibrarySettings,
@@ -21,7 +24,7 @@ from palace.manager.api.sip import (
 from palace.manager.api.sip.client import Sip2Encoding
 from palace.manager.api.sip.dialect import Dialect
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.sip import MockSIPClient
 
@@ -105,6 +108,9 @@ class TestSIP2AuthenticationProvider:
     evergreen_hold_privileges_denied = b"64   Y          00020161021    143002000000000000000100000000AA12345|AEBooth Excessive Fines Test|BHUSD|BV100.00|BDChildrens Circ Desk 1 Newtown, CT USA 06470|AQNEWTWN|BLY|PA20191004|PCAdult|PIAllowed|XI863718|AOBiblioTest|AY2AZ0000"
     evergreen_card_reported_lost = b"64    Y        00020161021    143002000000000000000100000000AA12345|AEBooth Excessive Fines Test|BHUSD|BV100.00|BDChildrens Circ Desk 1 Newtown, CT USA 06470|AQNEWTWN|BLY|PA20191004|PCAdult|PIAllowed|XI863718|AOBiblioTest|AY2AZ0000"
     evergreen_inactive_account = b"64YYYY          00020161021    143028000000000000000000000000AE|AA12345|BLN|AOBiblioTest|AY2AZ0000"
+    evergreen_patron_with_location = b"64  Y           00020161021    151441000000000000000000000000AOgapines|AAuser|AEPatron Name|BHUSD|BDCirc Desk, Anytown, Anystate USA 00000|AQTestLoc|BLY|PA20250520|PB19640101|PCDigital Only|PIFiltered|XI5784348|AY2AZ0000"
+    evergreen_patron_wo_location = b"64  Y           00020161021    151441000000000000000000000000AOgapines|AAuser|AEPatron Name|BHUSD|BDCirc Desk, Anytown, Anystate USA 00000|BLY|PA20250520|PB19640101|PCDigital Only|PIFiltered|XI5784348|AY2AZ0000"
+    evergreen_patron_with_wrong_loc = b"64  Y           00020161021    151441000000000000000000000000AOgapines|AAuser|AEPatron Name|BHUSD|BDCirc Desk, Anytown, Anystate USA 00000|AQOtherLoc|BLY|PA20250520|PB19640101|PCDigital Only|PIFiltered|XI5784348|AY2AZ0000"
 
     polaris_valid_pin = b"64              00120161121    143327000000000000000000000000AO3|AA25891000331441|AEFalk, Jen|BZ0050|CA0075|CB0075|BLY|CQY|BHUSD|BV9.25|CC9.99|BD123 Charlotte Hall, MD 20622|BEfoo@bar.com|BF501-555-1212|BC19710101    000000|PA1|PEHALL|PSSt. Mary's|U1|U2|U3|U4|U5|PZ20622|PX20180609    235959|PYN|FA0.00|AFPatron status is ok.|AGPatron status is ok.|AY2AZ94F3"
 
@@ -333,6 +339,39 @@ class TestSIP2AuthenticationProvider:
         request = client.requests[-1]
         assert b"user2" in request
         assert b"some password" not in request
+
+    def test_remote_authenticate_location_restriction(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2Settings],
+    ):
+        # This patron authentication library instance is configured with "TestLoc".
+        library_settings = create_library_settings(
+            patron_location_restriction="TestLoc"
+        )
+        provider = create_provider(library_settings=library_settings)
+        client = cast(MockSIPClient, provider.client)
+
+        # This patron has the CORRECT location.
+        client.queue_response(self.evergreen_patron_with_location)
+        client.queue_response(self.end_session_response)
+        patrondata = provider.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
+        assert "Patron Name" == patrondata.personal_name
+
+        # This patron does NOT have an associated location.
+        client.queue_response(self.evergreen_patron_wo_location)
+        client.queue_response(self.end_session_response)
+        with pytest.raises(ProblemDetailException) as exc:
+            provider.remote_authenticate("user", "pass")
+        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY
+
+        # This patron has the WRONG location.
+        client.queue_response(self.evergreen_patron_with_wrong_loc)
+        client.queue_response(self.end_session_response)
+        with pytest.raises(ProblemDetailException) as exc:
+            provider.remote_authenticate("user", "pass")
+        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY
 
     def test_encoding(
         self,
