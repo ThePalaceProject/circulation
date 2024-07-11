@@ -201,9 +201,9 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
         form=ConfigurationFormItem(
             label="Patron Location Restriction",
             description=(
-                "A code for the library or branch which, when specified, "
+                "A code for the library or branch, which, when specified, "
                 "must exactly match the permanent location for the patron."
-                "<br>If an ILS does not include a location for patrons, specifying"
+                "<br>If an ILS does not return a location for its patrons, specifying "
                 "a value here will always result in authentication failure."
             ),
         ),
