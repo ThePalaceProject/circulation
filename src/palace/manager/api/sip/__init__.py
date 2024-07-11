@@ -358,8 +358,9 @@ class SIP2AuthenticationProvider(
         """Raise an exception if patron location does not match the restriction.
 
         If a location restriction is specified for the library against which the
-        patron is attempting to authenticate, then the authentication will fail unless
-        the location associated with the patron exactly matches that of the library.
+        patron is attempting to authenticate, then the authentication will fail
+        if either (1) the patron does not have an associated location or (2) the
+        patron's location does not exactly match the one configured.
         """
         if (
             not isinstance(info, ProblemDetail)
