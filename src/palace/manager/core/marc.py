@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytz
 from pydantic import NonNegativeInt
-from pymarc import Field, Record, Subfield
+from pymarc import Field, Indicators, Record, Subfield
 from sqlalchemy import select
 from sqlalchemy.engine import ScalarResult
 from sqlalchemy.orm.session import Session
@@ -233,7 +233,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="020",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield(code="a", value=isbn.identifier),
                     ],
@@ -277,7 +277,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="245",
-                indicators=["0", str(non_filing_characters)],
+                indicators=Indicators("0", str(non_filing_characters)),
                 subfields=subfields,
             )
         )
@@ -293,7 +293,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="100",
-                    indicators=["1", " "],
+                    indicators=Indicators("1", " "),
                     subfields=[
                         Subfield("a", str(edition.sort_author)),
                     ],
@@ -307,7 +307,7 @@ class Annotator(LoggerMixin):
                     record.add_field(
                         Field(
                             tag="700",
-                            indicators=["1", " "],
+                            indicators=Indicators("1", " "),
                             subfields=[
                                 Subfield("a", str(contributor.sort_name)),
                                 Subfield("e", contribution.role),
@@ -325,7 +325,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="264",
-                    indicators=[" ", "1"],
+                    indicators=Indicators(" ", "1"),
                     subfields=[
                         Subfield("a", "[Place of publication not identified]"),
                         Subfield("b", str(edition.publisher or "")),
@@ -340,7 +340,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="264",
-                indicators=[" ", "2"],
+                indicators=Indicators(" ", "2"),
                 subfields=[Subfield("b", str(pool.data_source.name))],
             )
         )
@@ -352,7 +352,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="300",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", "1 online resource"),
                     ],
@@ -362,7 +362,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="336",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", "text"),
                         Subfield("b", "txt"),
@@ -374,7 +374,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="300",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", "1 sound file"),
                         Subfield("b", "digital"),
@@ -385,7 +385,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="336",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", "spoken word"),
                         Subfield("b", "spw"),
@@ -397,7 +397,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="337",
-                indicators=[" ", " "],
+                indicators=Indicators(" ", " "),
                 subfields=[
                     Subfield("a", "computer"),
                     Subfield("b", "c"),
@@ -409,7 +409,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="338",
-                indicators=[" ", " "],
+                indicators=Indicators(" ", " "),
                 subfields=[
                     Subfield("a", "online resource"),
                     Subfield("b", "cr"),
@@ -427,7 +427,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="347",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", file_type),
                         Subfield("2", "rda"),
@@ -446,7 +446,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="380",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[
                         Subfield("a", "eBook"),
                         Subfield("2", "tlcgt"),
@@ -461,7 +461,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="385",
-                indicators=[" ", " "],
+                indicators=Indicators(" ", " "),
                 subfields=[
                     Subfield("a", audience),
                     Subfield("2", "tlctarget"),
@@ -478,7 +478,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="490",
-                    indicators=["0", " "],
+                    indicators=Indicators("0", " "),
                     subfields=subfields,
                 )
             )
@@ -488,7 +488,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="538",
-                indicators=[" ", " "],
+                indicators=Indicators(" ", " "),
                 subfields=[Subfield("a", "Mode of access: World Wide Web.")],
             )
         )
@@ -502,7 +502,7 @@ class Annotator(LoggerMixin):
                 record.add_field(
                     Field(
                         tag="538",
-                        indicators=[" ", " "],
+                        indicators=Indicators(" ", " "),
                         subfields=[
                             Subfield("a", format),
                         ],
@@ -517,7 +517,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="520",
-                    indicators=[" ", " "],
+                    indicators=Indicators(" ", " "),
                     subfields=[Subfield("a", stripped)],
                 )
             )
@@ -531,7 +531,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="650",
-                    indicators=["0", "7"],
+                    indicators=Indicators("0", "7"),
                     subfields=[
                         Subfield("a", genre.name),
                         Subfield("2", "Library Simplified"),
@@ -545,7 +545,7 @@ class Annotator(LoggerMixin):
         record.add_field(
             Field(
                 tag="655",
-                indicators=[" ", "0"],
+                indicators=Indicators(" ", "0"),
                 subfields=[
                     Subfield("a", "Electronic books."),
                 ],
@@ -576,7 +576,7 @@ class Annotator(LoggerMixin):
             record.add_field(
                 Field(
                     tag="856",
-                    indicators=["4", "0"],
+                    indicators=Indicators("4", "0"),
                     subfields=[Subfield(code="u", value=url)],
                 )
             )
