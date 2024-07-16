@@ -86,6 +86,7 @@ class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
                 "barcode": "Barcode",
                 "patrontype": "Patron Type",
             },
+            type=ConfigurationFormItemType.SELECT,
         ),
     )
 
