@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from pymarc import MARCReader, Record
+from pymarc import Indicators, MARCReader, Record
 from pytest import LogCaptureFixture
 
 from palace.manager.core.marc import Annotator, MARCExporter
@@ -202,9 +202,11 @@ class TestAnnotator:
         assert field.value() == expected
 
     @staticmethod
-    def _check_field(record, tag, expected_subfields, expected_indicators=None):
+    def _check_field(
+        record, tag, expected_subfields, expected_indicators: Indicators | None = None
+    ):
         if not expected_indicators:
-            expected_indicators = [" ", " "]
+            expected_indicators = Indicators(" ", " ")
         [field] = record.get_fields(tag)
         assert field.indicators == expected_indicators
         for subfield, value in expected_subfields.items():
@@ -294,7 +296,7 @@ class TestAnnotator:
                 "b": edition.subtitle,
                 "c": edition.author,
             },
-            ["0", "4"],
+            Indicators("0", "4"),
         )
 
         # If there's no subtitle or no author, those subfields are left out.
@@ -310,7 +312,7 @@ class TestAnnotator:
             {
                 "a": edition.title,
             },
-            ["0", "4"],
+            Indicators("0", "4"),
         )
         assert [] == field.get_subfields("b")
         assert [] == field.get_subfields("c")
@@ -327,7 +329,9 @@ class TestAnnotator:
         record = Record()
         Annotator.add_contributors(record, edition)
         assert [] == record.get_fields("700")
-        self._check_field(record, "100", {"a": edition.sort_author}, ["1", " "])
+        self._check_field(
+            record, "100", {"a": edition.sort_author}, Indicators("1", " ")
+        )
 
         # Edition with two authors and a translator gets three 700 fields and no 100 fields.
         edition = db.edition(authors=[author, author2])
@@ -338,7 +342,7 @@ class TestAnnotator:
         assert [] == record.get_fields("100")
         fields = record.get_fields("700")
         for field in fields:
-            assert ["1", " "] == field.indicators
+            assert Indicators("1", " ") == field.indicators
         [author_field, author2_field, translator_field] = sorted(
             fields, key=lambda x: x.get_subfields("a")[0]
         )
@@ -364,7 +368,7 @@ class TestAnnotator:
                 "b": edition.publisher,
                 "c": "1894",
             },
-            [" ", "1"],
+            Indicators(" ", "1"),
         )
 
         # If there's no publisher, the field is left out.
@@ -377,7 +381,9 @@ class TestAnnotator:
         edition, pool = db.edition(with_license_pool=True)
         record = Record()
         Annotator.add_distributor(record, pool)
-        self._check_field(record, "264", {"b": pool.data_source.name}, [" ", "2"])
+        self._check_field(
+            record, "264", {"b": pool.data_source.name}, Indicators(" ", "2")
+        )
 
     def test_add_physical_description(self, db: DatabaseTransactionFixture):
         book = db.edition()
@@ -506,7 +512,7 @@ class TestAnnotator:
                 "a": edition.series,
                 "v": str(edition.series_position),
             },
-            ["0", " "],
+            Indicators("0", " "),
         )
 
         # If there's no series position, the same field is used without
@@ -520,7 +526,7 @@ class TestAnnotator:
             {
                 "a": edition.series,
             },
-            ["0", " "],
+            Indicators("0", " "),
         )
         [field] = record.get_fields("490")
         assert [] == field.get_subfields("v")
@@ -556,9 +562,9 @@ class TestAnnotator:
         assert 2 == len(fields)
         [pdf, epub] = sorted(fields, key=lambda x: x.get_subfields("a")[0])
         assert "Adobe PDF eBook" == pdf.get_subfields("a")[0]
-        assert [" ", " "] == pdf.indicators
+        assert Indicators(" ", " ") == pdf.indicators
         assert "EPUB eBook" == epub.get_subfields("a")[0]
-        assert [" ", " "] == epub.indicators
+        assert Indicators(" ", " ") == epub.indicators
 
     def test_add_summary(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
@@ -587,17 +593,19 @@ class TestAnnotator:
         [fantasy_field, romance_field] = sorted(
             fields, key=lambda x: x.get_subfields("a")[0]
         )
-        assert ["0", "7"] == fantasy_field.indicators
+        assert Indicators("0", "7") == fantasy_field.indicators
         assert "Fantasy" == fantasy_field.get_subfields("a")[0]
         assert "Library Simplified" == fantasy_field.get_subfields("2")[0]
-        assert ["0", "7"] == romance_field.indicators
+        assert Indicators("0", "7") == romance_field.indicators
         assert "Romance" == romance_field.get_subfields("a")[0]
         assert "Library Simplified" == romance_field.get_subfields("2")[0]
 
     def test_add_ebooks_subject(self):
         record = Record()
         Annotator.add_ebooks_subject(record)
-        self._check_field(record, "655", {"a": "Electronic books."}, [" ", "0"])
+        self._check_field(
+            record, "655", {"a": "Electronic books."}, Indicators(" ", "0")
+        )
 
     def test_add_web_client_urls_empty(self):
         record = MagicMock(spec=Record)
@@ -617,8 +625,8 @@ class TestAnnotator:
         fields = record.get_fields("856")
         assert len(fields) == 2
         [field1, field2] = fields
-        assert field1.indicators == ["4", "0"]
-        assert field2.indicators == ["4", "0"]
+        assert field1.indicators == Indicators("4", "0")
+        assert field2.indicators == Indicators("4", "0")
 
         # The URL for a work is constructed as:
         # - <cm-base>/<lib-short-name>/works/<qualified-identifier>
