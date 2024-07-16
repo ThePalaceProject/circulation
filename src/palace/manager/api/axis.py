@@ -374,7 +374,13 @@ class Axis360API(
         """Make a call to the getFulfillmentInfoAPI."""
         url = self.base_url + self.fulfillment_endpoint
         params = dict(TransactionID=transaction_id)
-        return self.request(url, "POST", params=params)
+        # We set an explicit timeout because this request can take a long time and
+        # the default was too short. Ideally B&T would fix this on their end, but
+        # in the meantime we need to work around it.
+        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
+        #   of this endpoint and we can remove this. We should be able to query
+        #   our logs to see how long these requests are taking.
+        return self.request(url, "POST", params=params, timeout=15)
 
     def get_audiobook_metadata(self, findaway_content_id: str) -> RequestsResponse:
         """Make a call to the getaudiobookmetadata endpoint."""
@@ -384,6 +390,9 @@ class Axis360API(
         # We set an explicit timeout because this request can take a long time and
         # the default was too short. Ideally B&T would fix this on their end, but
         # in the meantime we need to work around it.
+        # TODO: Revisit this timeout. Hopefully B&T will fix the performance
+        #   of this endpoint and we can remove this. We should be able to query
+        #   our logs to see how long these requests are taking.
         response = self.request(url, "POST", params=params, timeout=15)
         return response
 
