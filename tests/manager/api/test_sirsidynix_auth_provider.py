@@ -1,11 +1,10 @@
-from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
-from typing import Any
-from unittest.mock import MagicMock, call, patch
+from typing import Any, Literal
+from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
-from pytest import MonkeyPatch
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import LibraryIdentifierRestriction
@@ -18,186 +17,223 @@ from palace.manager.api.sirsidynix_authentication_provider import (
     SirsiDynixHorizonAuthSettings,
     SirsiDynixPatronData,
 )
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import MockRequestsResponse
 
 
-@pytest.fixture
-def mock_library_id() -> int:
-    return 20
+@dataclass
+class MockedSirsiApi:
+    provider: SirsiDynixHorizonAuthenticationProvider
+    api_patron_login: MagicMock
+    api_read_patron_data: MagicMock
+    api_patron_status_info: MagicMock
 
 
-@pytest.fixture
-def mock_integration_id() -> int:
-    return 20
+class SirsiAuthFixture:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.app_id = "UNITTEST"
+        monkeypatch.setenv(Configuration.SIRSI_DYNIX_APP_ID, self.app_id)
 
+        self.library_id = "libraryid"
+        self.library_settings = partial(
+            SirsiDynixHorizonAuthLibrarySettings,
+            library_id=self.library_id,
+        )
 
-@pytest.fixture
-def create_library_settings() -> Callable[..., SirsiDynixHorizonAuthLibrarySettings]:
-    return partial(
-        SirsiDynixHorizonAuthLibrarySettings,
-        library_id="libraryid",
-    )
+        self.url = "http://example.org/sirsi/"
+        self.test_identifier = "barcode"
+        self.client_id = "clientid"
 
+        self.settings = partial(
+            SirsiDynixHorizonAuthSettings,
+            url=self.url,
+            test_identifier=self.test_identifier,
+            client_id=self.client_id,
+        )
 
-@pytest.fixture
-def create_settings() -> Callable[..., SirsiDynixHorizonAuthSettings]:
-    return partial(
-        SirsiDynixHorizonAuthSettings,
-        url="http://example.org/sirsi/",
-        test_identifier="barcode",
-        client_id="clientid",
-    )
+        self.mock_library_id = 20
+        self.mock_integration_id = 20
+        self.provider = partial(
+            SirsiDynixHorizonAuthenticationProvider,
+            library_id=self.mock_library_id,
+            integration_id=self.mock_integration_id,
+            settings=self.settings(),
+            library_settings=self.library_settings(),
+        )
 
+        self.mock_request = create_autospec(HTTP.request_with_timeout)
+        monkeypatch.setattr(HTTP, "request_with_timeout", self.mock_request)
 
-@pytest.fixture
-def create_provider(
-    mock_library_id: int,
-    mock_integration_id: int,
-    create_settings: Callable[..., SirsiDynixHorizonAuthSettings],
-    create_library_settings: Callable[..., SirsiDynixHorizonAuthLibrarySettings],
-    monkeypatch: MonkeyPatch,
-) -> Callable[..., SirsiDynixHorizonAuthenticationProvider]:
-    monkeypatch.setenv(Configuration.SIRSI_DYNIX_APP_ID, "UNITTEST")
-    return partial(
-        SirsiDynixHorizonAuthenticationProvider,
-        library_id=mock_library_id,
-        integration_id=mock_integration_id,
-        settings=create_settings(),
-        library_settings=create_library_settings(),
-    )
+        self.mock_session = MagicMock()
 
-
-class TestSirsiDynixAuthenticationProvider:
-    def _headers(self, api):
+    def headers(self, api: SirsiDynixHorizonAuthenticationProvider) -> dict[str, str]:
         return {
             "SD-Originating-App-Id": api.sirsi_app_id,
             "SD-Working-LibraryID": api.sirsi_library_id,
             "x-sirs-clientID": api.sirsi_client_id,
         }
 
-    def test_settings(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
-    ):
+    def provider_mocked_api(self) -> MockedSirsiApi:
+        provider = self.provider()
+
+        api_patron_login = create_autospec(
+            provider.api_patron_login,
+            return_value={"patronKey": "test", "sessionToken": "xxx"},
+        )
+        api_read_patron_data = create_autospec(
+            provider.api_read_patron_data,
+            return_value={
+                "fields": {
+                    "displayName": "Test User",
+                    "approved": True,
+                    "patronType": {"key": "testtype"},
+                }
+            },
+        )
+        api_patron_status_info = create_autospec(
+            provider.api_patron_status_info,
+            return_value={
+                "fields": {
+                    "estimatedFines": {
+                        "amount": "50.00",
+                        "currencyCode": "USD",
+                    }
+                }
+            },
+        )
+
+        provider.api_patron_login = api_patron_login
+        provider.api_read_patron_data = api_read_patron_data
+        provider.api_patron_status_info = api_patron_status_info
+
+        return MockedSirsiApi(
+            provider=provider,
+            api_patron_login=api_patron_login,
+            api_read_patron_data=api_read_patron_data,
+            api_patron_status_info=api_patron_status_info,
+        )
+
+    def run_self_tests(
+        self, api: SirsiDynixHorizonAuthenticationProvider
+    ) -> list[SelfTestResult]:
+        return list(api._run_self_tests(self.mock_session))
+
+
+@pytest.fixture
+def sirsi_auth_fixture(monkeypatch: pytest.MonkeyPatch) -> SirsiAuthFixture:
+    return SirsiAuthFixture(monkeypatch)
+
+
+class TestSirsiDynixAuthenticationProvider:
+    def test_settings(self, sirsi_auth_fixture: SirsiAuthFixture):
         # trailing slash appended to the preset server url
-        provider = create_provider()
+        provider = sirsi_auth_fixture.provider()
         assert provider.server_url == "http://example.org/sirsi/"
         assert provider.sirsi_client_id == "clientid"
         assert provider.sirsi_app_id == "UNITTEST"
         assert provider.sirsi_library_id == "libraryid"
 
-    def test_api_patron_login(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
-    ):
-        provider = create_provider()
+    def test_api_patron_login(self, sirsi_auth_fixture: SirsiAuthFixture):
+        provider = sirsi_auth_fixture.provider()
         response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
-        with patch(
-            "palace.manager.api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
-        ) as mock_request:
-            mock_request.return_value = MockRequestsResponse(200, content=response_dict)
-            response = provider.api_patron_login("username", "pwd")
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
+            200, content=response_dict
+        )
+        response = provider.api_patron_login("username", "pwd")
 
-            assert mock_request.call_count == 1
-            assert mock_request.call_args == call(
-                "POST",
-                "http://example.org/sirsi/user/patron/login",
-                json=dict(login="username", password="pwd"),
-                headers=self._headers(provider),
-                max_retry_count=0,
-            )
-            assert response == response_dict
+        assert sirsi_auth_fixture.mock_request.call_count == 1
+        assert sirsi_auth_fixture.mock_request.call_args == call(
+            "POST",
+            "http://example.org/sirsi/user/patron/login",
+            json=dict(login="username", password="pwd"),
+            headers=sirsi_auth_fixture.headers(provider),
+            max_retry_count=0,
+        )
+        assert response == response_dict
 
-            mock_request.return_value = MockRequestsResponse(401, content=response_dict)
-            assert provider.api_patron_login("username", "pwd") is False
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
+            401, content=response_dict
+        )
+        assert provider.api_patron_login("username", "pwd") is False
 
-    def test_remote_authenticate(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
-    ):
-        provider = create_provider()
-        with patch(
-            "palace.manager.api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
-        ) as mock_request:
-            response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
-            mock_request.return_value = MockRequestsResponse(200, content=response_dict)
+    def test_remote_authenticate(self, sirsi_auth_fixture: SirsiAuthFixture):
+        provider = sirsi_auth_fixture.provider()
+        response_dict = {"sessionToken": "xxxx", "patronKey": "test"}
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
+            200, content=response_dict
+        )
 
-            response = provider.remote_authenticate("username", "pwd")
-            assert type(response) == SirsiDynixPatronData
-            assert response.authorization_identifier == "username"
-            assert response.username == "username"
-            assert response.permanent_id == "test"
+        response = provider.remote_authenticate("username", "pwd")
+        assert type(response) == SirsiDynixPatronData
+        assert response.authorization_identifier == "username"
+        assert response.username == "username"
+        assert response.permanent_id == "test"
 
-            mock_request.return_value = MockRequestsResponse(401, content=response_dict)
-            assert provider.remote_authenticate("username", "pwd") is None
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
+            401, content=response_dict
+        )
+        assert provider.remote_authenticate("username", "pwd") is None
 
     def test_remote_authenticate_username_password_none(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
+        self, sirsi_auth_fixture: SirsiAuthFixture
     ):
-        provider = create_provider()
+        provider = sirsi_auth_fixture.provider()
         response = provider.remote_authenticate(None, "pwd")
         assert response is None
 
         response = provider.remote_authenticate("username", None)
         assert response is None
 
-    def test_remote_patron_lookup(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
-    ):
-        provider = create_provider()
+    def test_remote_patron_lookup(self, sirsi_auth_fixture: SirsiAuthFixture):
+        provider_mock = sirsi_auth_fixture.provider_mocked_api()
         # Test the happy path, patron OK, some fines
-        ok_patron_resp = {
-            "fields": {
-                "displayName": "Test User",
-                "approved": True,
-                "patronType": {"key": "testtype"},
-            }
-        }
-        patron_status_resp = {
-            "fields": {
-                "estimatedFines": {
-                    "amount": "50.00",
-                    "currencyCode": "USD",
-                }
-            }
-        }
-        provider.api_read_patron_data = MagicMock(return_value=ok_patron_resp)
-        provider.api_patron_status_info = MagicMock(return_value=patron_status_resp)
-        patrondata = provider.remote_patron_lookup(
+        patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
 
-        assert provider.api_read_patron_data.call_count == 1
-        assert provider.api_patron_status_info.call_count == 1
+        assert provider_mock.api_read_patron_data.call_count == 1
+        assert provider_mock.api_patron_status_info.call_count == 1
         assert isinstance(patrondata, PatronData)
         assert patrondata.personal_name == "Test User"
         assert patrondata.fines == 50.00
         assert patrondata.block_reason == PatronData.NO_VALUE
         assert patrondata.library_identifier == "testtype"
 
-        # Test the defensive code
+    def test_remote_patron_lookup_bad_patrondata(
+        self, sirsi_auth_fixture: SirsiAuthFixture
+    ):
         # Test no session token
-        patrondata = provider.remote_patron_lookup(
-            SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
+        provider = sirsi_auth_fixture.provider_mocked_api().provider
+        assert (
+            provider.remote_patron_lookup(
+                SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
+            )
+            is None
         )
-        assert patrondata == None
 
         # Test incorrect patrondata type
-        patrondata = provider.remote_patron_lookup(PatronData(permanent_id="xxxx"))
-        assert patrondata == None
+        assert provider.remote_patron_lookup(PatronData(permanent_id="xxxx")) is None
 
+    def test_remote_patron_lookup_bad_patron_read_data(
+        self, sirsi_auth_fixture: SirsiAuthFixture
+    ):
         # Test bad patron read data
+        provider_mock = sirsi_auth_fixture.provider_mocked_api()
         bad_patron_resp = {"bad": "yes"}
-        provider.api_read_patron_data = MagicMock(return_value=bad_patron_resp)
-        patrondata = provider.remote_patron_lookup(
+        provider_mock.api_read_patron_data.return_value = bad_patron_resp
+        patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
-        assert patrondata == None
+        assert patrondata is None
 
         not_approved_patron_resp = {
             "fields": {"approved": False, "patronType": {"key": "testtype"}}
         }
-        provider.api_read_patron_data = MagicMock(return_value=not_approved_patron_resp)
-        patrondata = provider.remote_patron_lookup(
+        provider_mock.api_read_patron_data.return_value = not_approved_patron_resp
+        patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert isinstance(patrondata, PatronData)
@@ -207,27 +243,28 @@ class TestSirsiDynixAuthenticationProvider:
         bad_prefix_patron_resp = {
             "fields": {"approved": True, "patronType": {"key": "testblocked"}}
         }
-        provider.sirsi_disallowed_suffixes = ["blocked"]
-        provider.api_read_patron_data = MagicMock(return_value=bad_prefix_patron_resp)
-        patrondata = provider.remote_patron_lookup(
+        provider_mock.provider.sirsi_disallowed_suffixes = ["blocked"]
+        provider_mock.api_read_patron_data.return_value = bad_prefix_patron_resp
+        patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert isinstance(patrondata, PatronData)
         assert patrondata.block_reason == SirsiBlockReasons.PATRON_BLOCKED
         assert patrondata.library_identifier == "testblocked"
 
+    def test_remote_patron_lookup_bad_patron_status_info(
+        self, sirsi_auth_fixture: SirsiAuthFixture
+    ):
         # Test bad patron status info
-        provider.api_read_patron_data.return_value = ok_patron_resp
-        provider.api_patron_status_info.return_value = False
-        patrondata = provider.remote_patron_lookup(
+        provider_mock = sirsi_auth_fixture.provider_mocked_api()
+        provider_mock.api_patron_status_info.return_value = False
+        patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
         assert patrondata is None
 
-    def test__request(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
-    ):
-        provider = create_provider()
+    def test__request(self, sirsi_auth_fixture: SirsiAuthFixture):
+        provider = sirsi_auth_fixture.provider()
         # Leading slash on the path is not allowed, as it overwrites the urljoin prefix
         with pytest.raises(ValueError):
             provider._request("GET", "/leadingslash")
@@ -255,19 +292,18 @@ class TestSirsiDynixAuthenticationProvider:
     def test_full_auth_request(
         self,
         db: DatabaseTransactionFixture,
-        create_library_settings: Callable[..., SirsiDynixHorizonAuthLibrarySettings],
-        create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider],
-        restriction_type,
-        restriction,
-        expected,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        restriction_type: LibraryIdentifierRestriction,
+        restriction: str,
+        expected: Literal[True] | PatronData,
     ):
         library = db.default_library()
-        library_settings = create_library_settings(
+        library_settings = sirsi_auth_fixture.library_settings(
             library_identifier_field="patronType",
             library_identifier_restriction_type=restriction_type,
             library_identifier_restriction_criteria=restriction,
         )
-        provider = create_provider(
+        provider = sirsi_auth_fixture.provider(
             library_id=library.id,
             library_settings=library_settings,
         )
@@ -296,11 +332,8 @@ class TestSirsiDynixAuthenticationProvider:
         else:
             assert patron == expected
 
-    def test_blocked_patron_status_info(
-        self,
-        create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider],
-    ):
-        provider = create_provider()
+    def test_blocked_patron_status_info(self, sirsi_auth_fixture: SirsiAuthFixture):
+        provider = sirsi_auth_fixture.provider()
         patron_info = {
             "itemsCheckedOutCount": 0,
             "itemsCheckedOutMax": 25,
@@ -363,34 +396,37 @@ class TestSirsiDynixAuthenticationProvider:
             assert isinstance(data, SirsiDynixPatronData)
             assert data.block_reason == reason
 
+    @pytest.mark.parametrize(
+        "api_method, uri",
+        [
+            ("api_read_patron_data", "user/patron/key/patronkey"),
+            (
+                "api_patron_status_info",
+                "user/patronStatusInfo/key/patronkey",
+            ),
+        ],
+    )
     def test_api_methods(
-        self, create_provider: Callable[..., SirsiDynixHorizonAuthenticationProvider]
+        self, sirsi_auth_fixture: SirsiAuthFixture, api_method: str, uri: str
     ):
         """The patron data and patron status methods are almost identical in functionality
         They just hit different APIs, so we only test the difference in endpoints
         """
-        provider = create_provider()
-        api_methods = [
-            ("api_read_patron_data", "http://localhost/user/patron/key/patronkey"),
-            (
-                "api_patron_status_info",
-                "http://localhost/user/patronStatusInfo/key/patronkey",
-            ),
-        ]
-        with patch(
-            "palace.manager.api.sirsidynix_authentication_provider.HTTP.request_with_timeout"
-        ) as mock_request:
-            for api_method, uri in api_methods:
-                test_method = getattr(provider, api_method)
+        provider = sirsi_auth_fixture.provider()
+        test_method = getattr(provider, api_method)
 
-                mock_request.return_value = MockRequestsResponse(
-                    200, content=dict(success=True)
-                )
-                response = test_method("patronkey", "sessiontoken")
-                args = mock_request.call_args
-                args.args == ("GET", uri)
-                assert response == dict(success=True)
+        response_content = {"success": True}
 
-                mock_request.return_value = MockRequestsResponse(400)
-                response = test_method("patronkey", "sessiontoken")
-                assert response == False
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(
+            200, content=response_content
+        )
+        assert test_method("patronkey", "sessiontoken") == response_content
+        assert sirsi_auth_fixture.mock_request.call_count == 1
+        assert sirsi_auth_fixture.mock_request.call_args.args == (
+            "GET",
+            sirsi_auth_fixture.url + uri,
+        )
+
+        # Test failure
+        sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(400)
+        assert test_method("patronkey", "sessiontoken") is False
