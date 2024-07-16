@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
@@ -430,3 +431,106 @@ class TestSirsiDynixAuthenticationProvider:
         # Test failure
         sirsi_auth_fixture.mock_request.return_value = MockRequestsResponse(400)
         assert test_method("patronkey", "sessiontoken") is False
+
+    def test__run_self_tests(self, sirsi_auth_fixture: SirsiAuthFixture):
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.provider.testing_patron_or_bust = MagicMock(
+            return_value=(MagicMock(), "test")
+        )
+        [
+            login_result,
+            patron_data_result,
+            patron_status_result,
+            auth_result,
+            sync_result,
+        ] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+
+        # We display a result for login
+        assert login_result.name == "Login Patron"
+        assert login_result.success is True
+
+        # We display a result for patron data and return the patrons fields as json
+        assert patron_data_result.name == "Read Patron Data"
+        assert patron_data_result.success is True
+        assert json.loads(
+            patron_data_result.result
+        ) == mocked_provider.api_read_patron_data.return_value.get("fields")
+
+        # We display a result for patron status and return the patrons fields as json
+        assert patron_status_result.name == "Patron Status Info"
+        assert patron_status_result.success is True
+        assert json.loads(
+            patron_status_result.result
+        ) == mocked_provider.api_patron_status_info.return_value.get("fields")
+
+        # And we return the results from the super class as well
+        assert auth_result.name == "Authenticating test patron"
+        assert auth_result.success is True
+
+        assert sync_result.name == "Syncing patron metadata"
+        assert sync_result.success is True
+
+    def test__run_self_tests_no_barcode(self, sirsi_auth_fixture: SirsiAuthFixture):
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.provider.test_username = None
+        [test_result] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        assert test_result.success is False
+        assert str(test_result.exception) == "No test patron username configured."
+
+    def test__run_self_tests_patron_login(self, sirsi_auth_fixture: SirsiAuthFixture):
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.api_patron_login.return_value = False
+        [test_result] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        assert test_result.success is False
+        assert str(test_result.exception) == "Could not authenticate test patron"
+
+    @pytest.mark.parametrize(
+        "api_read_patron_data_resp, expected_exception",
+        [
+            [False, "Could not fetch Patron Data"],
+            [{"bad": "data"}, "Field data 'fields' not found in Patron Data."],
+            [{"fields": "bad data"}, 'Field data is not a dict (data: "bad data").'],
+        ],
+    )
+    def test__run_self_tests_read_patron_data(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        api_read_patron_data_resp: dict[str, Any] | bool,
+        expected_exception: str,
+    ):
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.api_read_patron_data.return_value = api_read_patron_data_resp
+        [login_result, patron_data_result] = sirsi_auth_fixture.run_self_tests(
+            mocked_provider.provider
+        )
+        assert login_result.success is True
+        assert patron_data_result.success is False
+        assert str(patron_data_result.exception) == expected_exception
+
+    @pytest.mark.parametrize(
+        "api_patron_status_info_resp, expected_exception",
+        [
+            [False, "Could not fetch Patron Status"],
+            [{}, "Field data 'fields' not found in Patron Status."],
+            [{"fields": ["a", "b"]}, 'Field data is not a dict (data: ["a", "b"]).'],
+        ],
+    )
+    def test__run_self_tests_patron_status_info(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        api_patron_status_info_resp: dict[str, Any] | bool,
+        expected_exception: str,
+    ):
+        mocked_provider = sirsi_auth_fixture.provider_mocked_api()
+        mocked_provider.api_patron_status_info.return_value = (
+            api_patron_status_info_resp
+        )
+        [
+            login_result,
+            patron_data_result,
+            patron_status_result,
+        ] = sirsi_auth_fixture.run_self_tests(mocked_provider.provider)
+        assert login_result.success is True
+        assert patron_data_result.success is True
+        assert patron_status_result.success is False
+        assert str(patron_status_result.exception) == expected_exception

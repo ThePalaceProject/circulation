@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Callable, Generator
 from gettext import gettext as _
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urljoin
 
 from pydantic import HttpUrl
+from sqlalchemy.orm import Session
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
@@ -14,6 +17,8 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderSettings,
 )
 from palace.manager.core.config import Configuration
+from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.selftest import SelfTestResult
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -272,7 +277,9 @@ class SirsiDynixHorizonAuthenticationProvider(
             method, url, headers=headers, json=json, max_retry_count=0
         )
 
-    def api_patron_login(self, username: str, password: str) -> Literal[False] | dict:
+    def api_patron_login(
+        self, username: str, password: str
+    ) -> Literal[False] | dict[str, Any]:
         """API request to verify credentials of a user.
 
         :param username: The login username
@@ -290,7 +297,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def api_read_patron_data(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict:
+    ) -> Literal[False] | dict[str, Any]:
         """API request to pull basic patron information
 
         :param patron_key: The permanent external identifier for a patron
@@ -308,7 +315,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def api_patron_status_info(
         self, patron_key: str, session_token: str
-    ) -> Literal[False] | dict:
+    ) -> Literal[False] | dict[str, Any]:
         """API request to pull patron status information, like fines
 
         :param patron_key: The permanent external identifier for a patron
@@ -325,6 +332,83 @@ class SirsiDynixHorizonAuthenticationProvider(
             )
             return False
         return response.json()
+
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+        """Verify the credentials of the test patron for this integration,
+        and update its metadata.
+        """
+
+        test_username = self.test_username
+        test_password = self.test_password or ""
+
+        if test_username is None:
+            yield self.test_failure(
+                "Configuration", "No test patron username configured."
+            )
+            return
+
+        def login(username: str, password: str) -> dict[str, Any]:
+            result = self.api_patron_login(username, password)
+            if result is False:
+                raise BasePalaceException("Could not authenticate test patron")
+            return result
+
+        yield (
+            test_result := self.run_test(
+                "Login Patron", login, test_username, test_password
+            )
+        )
+        if not test_result.success:
+            return
+
+        patron_key = test_result.result.get("patronKey")
+        session_token = test_result.result.get("sessionToken")
+
+        def read_data(
+            name: str,
+            func: Callable[[str, str], Literal[False] | dict[str, Any]],
+            patron_key: str,
+            session_token: str,
+        ) -> str:
+            result = func(patron_key, session_token)
+            if result is False:
+                raise BasePalaceException(f"Could not fetch {name}")
+            fields = result.get("fields")
+            if fields is None:
+                raise BasePalaceException(f"Field data 'fields' not found in {name}.")
+            if not isinstance(fields, dict):
+                raise BasePalaceException(
+                    f"Field data is not a dict (data: {json.dumps(fields)})."
+                )
+            return json.dumps(fields, indent=4)
+
+        yield (
+            test_result := self.run_test(
+                "Read Patron Data",
+                read_data,
+                "Patron Data",
+                self.api_read_patron_data,
+                patron_key,
+                session_token,
+            )
+        )
+        if not test_result.success:
+            return
+
+        yield (
+            test_result := self.run_test(
+                "Patron Status Info",
+                read_data,
+                "Patron Status",
+                self.api_patron_status_info,
+                patron_key,
+                session_token,
+            )
+        )
+        if not test_result.success:
+            return
+
+        yield from super()._run_self_tests(_db)
 
 
 class SirsiDynixPatronData(PatronData):
