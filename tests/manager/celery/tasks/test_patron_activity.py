@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
+from palace.manager.api.circulation import HoldInfo, LoanInfo
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.service.integration_registry.license_providers import (
@@ -162,7 +163,37 @@ class TestSyncPatronActivity:
             sync_task_fixture.db.session, sync_task_fixture.collection
         )
 
-    def test_success(self, sync_task_fixture: SyncTaskFixture):
+    def test_success(
+        self, sync_task_fixture: SyncTaskFixture, db: DatabaseTransactionFixture
+    ):
+        loan_pool = db.licensepool(None, collection=sync_task_fixture.collection)
+        hold_pool = db.licensepool(None, collection=sync_task_fixture.collection)
+
+        sync_task_fixture.mock_collection_api.add_remote_loan(
+            LoanInfo(
+                collection=sync_task_fixture.collection,
+                data_source_name=loan_pool.data_source,
+                identifier_type=loan_pool.identifier.type,
+                identifier=loan_pool.identifier.identifier,
+                start_date=None,
+                end_date=None,
+            )
+        )
+        sync_task_fixture.mock_collection_api.add_remote_hold(
+            HoldInfo(
+                collection=sync_task_fixture.collection,
+                data_source_name=hold_pool.data_source,
+                identifier_type=hold_pool.identifier.type,
+                identifier=hold_pool.identifier.identifier,
+                hold_position=1,
+                start_date=None,
+                end_date=None,
+            )
+        )
+
+        assert sync_task_fixture.patron.loans == []
+        assert sync_task_fixture.patron.holds == []
+
         sync_patron_activity.apply_async(
             (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
         ).wait()
@@ -179,6 +210,17 @@ class TestSyncPatronActivity:
             sync_task_fixture.patron,
             "pin",
         )
+
+        assert len(sync_task_fixture.patron.loans) == 1
+        [loan] = sync_task_fixture.patron.loans
+        assert loan.license_pool == loan_pool
+        assert loan.patron == sync_task_fixture.patron
+
+        assert len(sync_task_fixture.patron.holds) == 1
+        [hold] = sync_task_fixture.patron.holds
+        assert hold.license_pool == hold_pool
+        assert hold.patron == sync_task_fixture.patron
+        assert hold.position == 1
 
     def test_force(
         self, sync_task_fixture: SyncTaskFixture, caplog: pytest.LogCaptureFixture
