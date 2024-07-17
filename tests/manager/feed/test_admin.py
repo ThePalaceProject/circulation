@@ -172,19 +172,26 @@ class TestOPDS:
         patch_url_for: PatchedUrlFor,
         external_search_fake_fixture: ExternalSearchFixtureFake,
     ):
+        library = db.default_library()
+
         # Test the ability to show a paginated feed of suppressed works.
-
+        # Only works suppressed at the library level will be included.
         work1 = db.work(with_open_access_download=True)
-        work1.license_pools[0].suppressed = True
-
         work2 = db.work(with_open_access_download=True)
-        work2.license_pools[0].suppressed = True
+        work1.suppressed_for.append(library)
+        work2.suppressed_for.append(library)
 
-        # This work won't be included in the feed since its
-        # suppressed pool is superceded.
+        # This work won't be included in the feed, since its
+        # license pool is superceded.
         work3 = db.work(with_open_access_download=True)
-        work3.license_pools[0].suppressed = True
         work3.license_pools[0].superceded = True
+        work3.suppressed_for.append(library)
+
+        # This work won't be included in the feed, since it is
+        # also suppressed at the collection (license pool) level.
+        work4 = db.work(with_open_access_download=True)
+        work4.license_pools[0].suppressed = True
+        work4.suppressed_for.append(library)
 
         pagination = Pagination(size=1)
         annotator = MockAnnotator(db.default_library())
@@ -193,6 +200,7 @@ class TestOPDS:
         def make_page(pagination):
             return AdminFeed.suppressed(
                 _db=db.session,
+                library=library,
                 title="Hidden works",
                 url=db.fresh_url(),
                 annotator=annotator,
