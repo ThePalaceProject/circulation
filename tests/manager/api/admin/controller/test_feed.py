@@ -8,11 +8,12 @@ from palace.manager.sqlalchemy.model.admin import AdminRole
 
 class TestFeedController:
     def test_suppressed(self, admin_librarian_fixture):
+        library = admin_librarian_fixture.ctrl.library
+
         suppressed_work = admin_librarian_fixture.ctrl.db.work(
             with_open_access_download=True
         )
-        suppressed_work.license_pools[0].suppressed = True
-
+        suppressed_work.suppressed_for.append(library)
         unsuppressed_work = admin_librarian_fixture.ctrl.db.work()
 
         with (

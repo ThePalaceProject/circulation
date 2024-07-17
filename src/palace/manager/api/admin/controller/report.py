@@ -5,12 +5,15 @@ import flask
 from flask import Request, Response
 from sqlalchemy.orm import Session
 
+from palace.manager.api.admin.controller.util import (
+    required_admin_from_request,
+    required_library_from_request,
+)
 from palace.manager.api.admin.model.inventory_report import (
     InventoryReportCollectionInfo,
     InventoryReportInfo,
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
-from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     generate_inventory_and_hold_reports,
     library_report_integrations,
@@ -35,14 +38,10 @@ def _authorize_from_request(
     :return: A 2-tuple of admin and library, if the admin is authorized for the library.
     :raise: ProblemDetailException, if no library or if admin not authorized for the library.
     """
-    library: Library | None = getattr(request, "library")
-    if library is None:
-        raise ProblemDetailException(LIBRARY_NOT_FOUND)
-
-    admin: Admin = getattr(request, "admin")
+    library = required_library_from_request(request)
+    admin = required_admin_from_request(request)
     if not admin.is_librarian(library):
         raise ProblemDetailException(ADMIN_NOT_AUTHORIZED)
-
     return admin, library
 
 
