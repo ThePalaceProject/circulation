@@ -455,7 +455,7 @@ class InterestLevelClassifier(Classifier):
         if identifier in ("lg", "mg+", "mg"):
             return cls.AUDIENCE_CHILDREN
         elif identifier == "ug":
-            return cls.AUDIENCE_YOUNG_ADULT
+            return cls.AUDIENCE_ADULT
         else:
             return None
 

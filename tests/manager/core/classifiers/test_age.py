@@ -169,7 +169,8 @@ class TestInterestLevelClassifier:
         assert Classifier.AUDIENCE_CHILDREN == f("lg")
         assert Classifier.AUDIENCE_CHILDREN == f("mg")
         assert Classifier.AUDIENCE_CHILDREN == f("mg+")
-        assert Classifier.AUDIENCE_YOUNG_ADULT == f("ug")
+        assert f("ug") is None
+        assert f("anything") is None
 
     def test_target_age(self):
         def f(t):
