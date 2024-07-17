@@ -1,11 +1,14 @@
-from sqlalchemy import and_
+from sqlalchemy import and_, false
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.work import Work
 
 
 class AdminFeed(OPDSAcquisitionFeed):
@@ -13,6 +16,7 @@ class AdminFeed(OPDSAcquisitionFeed):
     def suppressed(
         cls,
         _db: Session,
+        library: Library,
         title: str,
         url: str,
         annotator: AdminAnnotator,
@@ -22,13 +26,16 @@ class AdminFeed(OPDSAcquisitionFeed):
 
         q = (
             _db.query(LicensePool)
+            .join(Work)
+            .join(Edition)
             .filter(
                 and_(
-                    LicensePool.suppressed == True,
-                    LicensePool.superceded == False,
+                    LicensePool.suppressed == false(),
+                    LicensePool.superceded == false(),
+                    Work.suppressed_for.contains(library),
                 )
             )
-            .order_by(LicensePool.id)
+            .order_by(Edition.title)
         )
         pools = _pagination.modify_database_query(_db, q).all()
 

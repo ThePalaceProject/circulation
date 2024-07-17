@@ -4,6 +4,7 @@ import flask
 from flask import url_for
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
+from palace.manager.api.admin.controller.util import required_library_from_request
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
@@ -16,15 +17,17 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 class FeedController(CirculationManagerController, AdminPermissionsControllerMixin):
     def suppressed(self):
-        self.require_librarian(flask.request.library)
+        library = required_library_from_request(flask.request)
+        self.require_librarian(library)
 
         this_url = url_for("suppressed", _external=True)
-        annotator = AdminAnnotator(self.circulation, flask.request.library)
+        annotator = AdminAnnotator(self.circulation, library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
             return pagination
         opds_feed = AdminFeed.suppressed(
             _db=self._db,
+            library=library,
             title="Hidden Books",
             url=this_url,
             annotator=annotator,
