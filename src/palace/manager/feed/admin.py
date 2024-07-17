@@ -25,8 +25,8 @@ class AdminFeed(OPDSAcquisitionFeed):
         _pagination = pagination or Pagination.default()
 
         q = (
-            _db.query(LicensePool)
-            .join(Work)
+            _db.query(Work)
+            .join(LicensePool)
             .join(Edition)
             .filter(
                 and_(
@@ -35,11 +35,10 @@ class AdminFeed(OPDSAcquisitionFeed):
                     Work.suppressed_for.contains(library),
                 )
             )
-            .order_by(Edition.title)
+            .order_by(Edition.sort_title)
         )
-        pools = _pagination.modify_database_query(_db, q).all()
+        works = _pagination.modify_database_query(_db, q).all()
 
-        works = [pool.work for pool in pools]
         feed = cls(title, url, works, annotator, pagination=_pagination)
         feed.generate_feed()
 
@@ -65,8 +64,7 @@ class AdminFeed(OPDSAcquisitionFeed):
                 rel="first",
             )
 
-        previous_page = _pagination.previous_page
-        if previous_page:
+        if previous_page := _pagination.previous_page:
             feed.add_link(
                 annotator.suppressed_url(previous_page),
                 rel="previous",
