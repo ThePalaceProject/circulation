@@ -1097,10 +1097,16 @@ class JSONQuery(Query):
             value = list(transformed)[0] if len(transformed) > 0 else value
             return value
 
+        @staticmethod
+        def audience(value: str) -> str:
+            """Transform audience to format used by search indexer"""
+            return value.replace(" ", "")
+
     VALUE_TRANSORMS = {
         "data_source": ValueTransforms.data_source,
         "published": ValueTransforms.published,
         "language": ValueTransforms.language,
+        "audience": ValueTransforms.audience,
     }
 
     def __init__(self, query: str | dict, filter=None):
