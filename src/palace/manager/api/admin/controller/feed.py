@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import flask
-from flask import url_for
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.controller.util import required_library_from_request
@@ -20,16 +19,13 @@ class FeedController(CirculationManagerController, AdminPermissionsControllerMix
         library = required_library_from_request(flask.request)
         self.require_librarian(library)
 
-        this_url = url_for("suppressed", _external=True)
         annotator = AdminAnnotator(self.circulation, library)
         pagination = load_pagination_from_request()
         if isinstance(pagination, ProblemDetail):
             return pagination
         opds_feed = AdminFeed.suppressed(
             _db=self._db,
-            library=library,
             title="Hidden Books",
-            url=this_url,
             annotator=annotator,
             pagination=pagination,
         )
