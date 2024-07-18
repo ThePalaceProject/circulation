@@ -822,8 +822,8 @@ class PatronActivityCirculationAPI(
                 # This was just created, we shouldn't delete it.
                 continue
             self.log.info(
-                "Deleting %s (%r) for patron (%s)"
-                % (item.__class__.__name__, item, item.patron.authorization_identifier)
+                f"Deleting {item.__class__.__name__} ({item.id}) on license pool (id: {item.license_pool_id}) "
+                f"for patron ({item.patron.authorization_identifier})"
             )
             self._db.delete(item)
 
