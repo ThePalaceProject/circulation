@@ -37,7 +37,7 @@ def sync_patron_activity(
             )
             return
 
-        with task.session() as session:
+        with task.transaction() as session:
             patron = get_one(session, Patron, id=patron_id)
             collection = get_one(session, Collection, id=collection_id)
 
