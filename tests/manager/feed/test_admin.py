@@ -1,3 +1,5 @@
+import urllib
+
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.admin import AdminFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
@@ -14,11 +16,11 @@ class TestOPDS:
     def links(self, feed: FeedData, rel=None):
         all_links = feed.links + feed.facet_links + feed.breadcrumbs
         links = sorted(all_links, key=lambda x: (x.rel, getattr(x, "title", None)))
-        r = []
-        for l in links:
-            if not rel or l.rel == rel or (isinstance(rel, list) and l.rel in rel):
-                r.append(l)
-        return r
+        return [
+            lnk
+            for lnk in links
+            if not rel or lnk.rel == rel or (isinstance(rel, list) and lnk.rel in rel)
+        ]
 
     def test_feed_includes_staff_rating(
         self,
@@ -174,6 +176,13 @@ class TestOPDS:
     ):
         library = db.default_library()
 
+        def library_in(url: str) -> bool:
+            # Ensure library represented in href from `patch_url_for`.
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            [short_name] = query.get("library_short_name", [])
+            return short_name == library.short_name
+
         # Test the ability to show a paginated feed of suppressed works.
         # Only works suppressed at the library level will be included.
         work1 = db.work(with_open_access_download=True)
@@ -194,71 +203,75 @@ class TestOPDS:
         work4.suppressed_for.append(library)
 
         pagination = Pagination(size=1)
-        annotator = MockAnnotator(db.default_library())
+        pagination_page_1 = pagination
+        pagination_page_2 = pagination_page_1.next_page
+        pagination_page_3 = pagination_page_2.next_page
+
+        annotator = AdminAnnotator(None, db.default_library())
         titles = [work1.title, work2.title]
 
-        def make_page(pagination):
+        def make_page(_pagination: Pagination):
             return AdminFeed.suppressed(
                 _db=db.session,
-                library=library,
                 title="Hidden works",
-                url=db.fresh_url(),
                 annotator=annotator,
-                pagination=pagination,
+                pagination=_pagination,
             )
 
-        feed = make_page(pagination)._feed
-        assert 1 == len(feed.entries)
-        assert feed.entries[0].computed.title.text in titles
-        titles.remove(feed.entries[0].computed.title.text)
+        # The start and first page URLs should always be the same.
+        expected_start_url = annotator.suppressed_url()
+        expected_first_url = annotator.suppressed_url_with_pagination(pagination_page_1)
+
+        first_page = make_page(pagination_page_1)._feed
+        assert 1 == len(first_page.entries)
+        assert first_page.entries[0].computed.title.text in titles
+        titles.remove(first_page.entries[0].computed.title.text)
         [remaining_title] = titles
 
         # Make sure the links are in place.
-        [start] = self.links(feed, "start")
-        assert annotator.groups_url(None) == start.href
-        assert annotator.top_level_title() == start.title
+        [start1] = self.links(first_page, "start")
+        assert expected_start_url == start1.href
+        assert annotator.top_level_title() == start1.title
+        assert library_in(start1.href)
 
-        [up] = self.links(feed, "up")
-        assert annotator.groups_url(None) == up.href
-        assert annotator.top_level_title() == up.title
+        [next_link1] = self.links(first_page, "next")
+        assert (
+            annotator.suppressed_url_with_pagination(pagination_page_1.next_page)
+            == next_link1.href
+        )
+        assert library_in(next_link1.href)
 
-        [next_link] = self.links(feed, "next")
-        assert annotator.suppressed_url(pagination.next_page) == next_link.href
+        # This was the first page, so no first or previous link.
+        assert len(self.links(first_page, "first")) == 0
+        assert len(self.links(first_page, "previous")) == 0
 
-        # This was the first page, so no previous link.
-        assert [] == self.links(feed, "previous")
-
-        # Now get the second page and make sure it has a 'previous' link.
-        second_page = make_page(pagination.next_page)._feed
-        [previous] = self.links(second_page, "previous")
-        assert annotator.suppressed_url(pagination) == previous.href
+        # Now get the second page and make sure it has a 'previous' link, but no 'next' link.
+        second_page = make_page(pagination_page_2)._feed
+        [start2] = self.links(second_page, "start")
+        [first2] = self.links(second_page, "first")
+        [previous2] = self.links(second_page, "previous")
+        assert len(self.links(second_page, "next")) == 0
+        assert expected_start_url == start2.href
+        assert expected_first_url == first2.href
+        assert (
+            annotator.suppressed_url_with_pagination(pagination_page_1)
+            == previous2.href
+        )
+        assert library_in(previous2.href)
         assert 1 == len(second_page.entries)
         assert remaining_title == second_page.entries[0].computed.title.text
 
-        # The third page is empty.
-        third_page = make_page(pagination.next_page.next_page)._feed
-        [previous] = self.links(third_page, "previous")
-        assert annotator.suppressed_url(pagination.next_page) == previous.href
+        # A normal crawl should not get here; but, for testing purposes,
+        # we force a third page, which should be empty.
+        third_page = make_page(pagination_page_3)._feed
+        [start3] = self.links(third_page, "start")
+        [first3] = self.links(third_page, "first")
+        [previous3] = self.links(third_page, "previous")
+        assert len(self.links(third_page, "next")) == 0
+        assert expected_start_url == start3.href
+        assert expected_first_url == first3.href
+        assert (
+            annotator.suppressed_url_with_pagination(pagination_page_2)
+            == previous3.href
+        )
         assert 0 == len(third_page.entries)
-
-
-class MockAnnotator(AdminAnnotator):
-    def __init__(self, library):
-        super().__init__(None, library)
-
-    def groups_url(self, lane):
-        if lane:
-            name = lane.name
-        else:
-            name = ""
-        return "http://groups/%s" % name
-
-    def suppressed_url(self, pagination):
-        base = "http://suppressed/"
-        sep = "?"
-        if pagination:
-            base += sep + pagination.query_string
-        return base
-
-    def annotate_feed(self, feed):
-        super().annotate_feed(feed)
