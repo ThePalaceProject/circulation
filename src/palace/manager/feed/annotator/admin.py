@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from palace.manager.api.circulation import CirculationAPI
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
@@ -93,7 +94,7 @@ class AdminAnnotator(LibraryAnnotator):
             )
         )
 
-    def suppressed_url(self, **kwargs) -> str:
+    def suppressed_url(self, **kwargs: dict[str, Any]) -> str:
         return self.url_for(
             "suppressed",
             library_short_name=self.library.short_name,
