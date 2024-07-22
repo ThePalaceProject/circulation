@@ -147,8 +147,6 @@ class InterestLevelClassifier(Classifier):
     def audience(cls, identifier, name):
         if identifier in ("lg", "mg+", "mg"):
             return cls.AUDIENCE_CHILDREN
-        elif identifier == "ug":
-            return cls.AUDIENCE_YOUNG_ADULT
         else:
             return None
 
