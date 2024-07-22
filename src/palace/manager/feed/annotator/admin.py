@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from palace.manager.api.circulation import CirculationAPI
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
@@ -93,9 +94,17 @@ class AdminAnnotator(LibraryAnnotator):
             )
         )
 
-    def suppressed_url(self, pagination: Pagination) -> str:
+    def suppressed_url(self, **kwargs: dict[str, Any]) -> str:
+        return self.url_for(
+            "suppressed",
+            library_short_name=self.library.short_name,
+            _external=True,
+            **kwargs,
+        )
+
+    def suppressed_url_with_pagination(self, pagination: Pagination) -> str:
         kwargs = dict(list(pagination.items()))
-        return self.url_for("suppressed", _external=True, **kwargs)
+        return self.suppressed_url(**kwargs)
 
     def annotate_feed(self, feed: FeedData) -> None:
         # Add a 'search' link.
