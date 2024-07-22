@@ -22,7 +22,7 @@ from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy import select
 from sqlalchemy.orm import Query, Session
-from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -1998,7 +1998,8 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
             # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
             book_changed = False
             book_succeeded = False
-            for attempt in range(OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES):
+            max_retries = OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES
+            for attempt in range(max_retries):
                 if book_succeeded:
                     break
 
@@ -2007,15 +2008,15 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
                     self._db.commit()
                     book_succeeded = True
                     book_changed = is_changed
-                except StaleDataError as e:
+                except (StaleDataError, ObjectDeletedError) as e:
                     self.log.exception("encountered stale data exception: ", exc_info=e)
                     self._db.rollback()
-                    if attempt + 1 == OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES:
+                    if attempt + 1 == max_retries:
                         progress.exception = e
                     else:
                         time.sleep(1)
                         self.log.warning(
-                            f"retrying book {book} (attempt {attempt} of {OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES})"
+                            f"retrying book {book} (attempt {attempt} of {max_retries})"
                         )
 
             if self.should_stop(start, book, book_changed):

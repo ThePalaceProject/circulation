@@ -10,6 +10,7 @@ import urllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Mapping, Sequence
 from datetime import timedelta
+from time import sleep
 from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
 from urllib.parse import urlparse
 
@@ -21,6 +22,7 @@ from lxml.etree import _Element, _ElementTree
 from pydantic import validator
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.admin.validator import Validator
 from palace.manager.api.circulation import (
@@ -734,8 +736,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     SERVICE_NAME = "Axis 360 Circulation Monitor"
     INTERVAL_SECONDS = 60
-    DEFAULT_BATCH_SIZE = 50
-
+    MAX_RETRIES = 5
     PROTOCOL = Axis360API.label()
 
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
@@ -773,11 +774,28 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
             covered by this Monitor.
         """
         count = 0
+        max_retries = self.MAX_RETRIES
         for bibliographic, circulation in self.api.recent_activity(start):
-            self.process_book(bibliographic, circulation)
-            count += 1
-            if count % self.batch_size == 0:
-                self._db.commit()
+            book_succeeded = False
+            for attempt in range(max_retries):
+                if book_succeeded:
+                    break
+
+                try:
+                    self.process_book(bibliographic, circulation)
+                    self._db.commit()
+                    count += 1
+                    book_succeeded = True
+                except (StaleDataError, ObjectDeletedError) as e:
+                    self.log.exception("encountered stale data exception: ", exc_info=e)
+                    self._db.rollback()
+                    if attempt + 1 == max_retries:
+                        progress.exception = e
+                    else:
+                        sleep(1)
+                        self.log.warning(
+                            f"retrying book {bibliographic} (attempt {attempt} of {max_retries})"
+                        )
         progress.achievements = "Modified titles: %d." % count
 
     def process_book(
