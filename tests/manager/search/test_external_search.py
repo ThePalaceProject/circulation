@@ -5002,6 +5002,10 @@ class TestJSONQuery:
         q = self._jq(self._leaf("language", "eng"))
         assert q.search_query.to_dict() == {"term": {"language": "eng"}}
 
+        # Test audience value transform
+        q = self._jq(self._leaf("audience", "Young Adult"))
+        assert q.search_query.to_dict() == {"term": {"audience": "YoungAdult"}}
+
     def test_operator_restrictions(self):
         q = self._jq(self._leaf("data_source", DataSource.GUTENBERG, "gt"))
         with pytest.raises(QueryParseException) as exc:
