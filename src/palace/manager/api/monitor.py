@@ -1,6 +1,5 @@
 from sqlalchemy import and_, or_
 
-from palace.manager.api.odl import ODLAPI
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.core.monitor import ReaperMonitor
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -12,7 +11,6 @@ from palace.manager.util.datetime_helpers import utc_now
 
 class LoanlikeReaperMonitor(ReaperMonitor):
     SOURCE_OF_TRUTH_PROTOCOLS = [
-        ODLAPI.label(),
         OPDSForDistributorsAPI.label(),
     ]
 

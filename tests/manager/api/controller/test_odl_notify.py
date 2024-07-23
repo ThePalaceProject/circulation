@@ -5,8 +5,7 @@ from unittest.mock import create_autospec
 import flask
 import pytest
 
-from palace.manager.api.odl import ODLAPI
-from palace.manager.api.odl2 import ODL2API
+from palace.manager.api.odl2.api import ODL2API
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
@@ -23,7 +22,7 @@ class ODLFixture:
 
         """Create a mock ODL collection to use in tests."""
         self.collection, _ = Collection.by_name_and_protocol(
-            self.db.session, "Test ODL Collection", ODLAPI.label()
+            self.db.session, "Test ODL Collection", ODL2API.label()
         )
         self.collection.integration_configuration.settings_dict = {
             "username": "a",
@@ -55,7 +54,7 @@ class ODLFixture:
 
     @staticmethod
     def integration_protocol():
-        return ODLAPI.label()
+        return ODL2API.label()
 
 
 @pytest.fixture(scope="function")
@@ -70,13 +69,12 @@ class TestODLNotificationController:
     @pytest.mark.parametrize(
         "api_cls",
         [
-            pytest.param(ODLAPI, id="ODL 1.x collection"),
             pytest.param(ODL2API, id="ODL 2.x collection"),
         ],
     )
     def test_notify_success(
         self,
-        api_cls: type[ODLAPI] | type[ODL2API],
+        api_cls: type[ODL2API],
         controller_fixture: ControllerFixture,
         odl_fixture: ODLFixture,
     ):

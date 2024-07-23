@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import copy
 import datetime
 import functools
 import json
 import uuid
 
+import dateutil
 import pytest
 from freezegun import freeze_time
 from webpub_manifest_parser.odl.ast import ODLPublication
@@ -12,12 +15,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
-from palace.manager.api.circulation_exceptions import (
-    HoldsNotPermitted,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-)
-from palace.manager.api.odl2 import ODL2HoldReaper, ODL2Importer
+from palace.manager.api.odl2.reaper import ODL2HoldReaper
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
@@ -31,52 +29,27 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
-    LicensePoolDeliveryMechanism,
     LicenseStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import create
+from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
-from tests.fixtures.api_odl import LicenseHelper, LicenseInfoHelper, MockGet
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import ODL2APIFilesFixture
-from tests.fixtures.odl import ODL2APITestFixture, ODL2TestFixture
+from tests.fixtures.odl2 import (
+    LicenseHelper,
+    LicenseInfoHelper,
+    ODL2APIFixture,
+    ODL2ImporterFixture,
+)
 
 
 class TestODL2Importer:
-    @staticmethod
-    def _get_delivery_mechanism_by_drm_scheme_and_content_type(
-        delivery_mechanisms: list[LicensePoolDeliveryMechanism],
-        content_type: str,
-        drm_scheme: str | None,
-    ) -> DeliveryMechanism | None:
-        """Find a license pool in the list by its identifier.
-
-        :param delivery_mechanisms: List of delivery mechanisms
-        :param content_type: Content type
-        :param drm_scheme: DRM scheme
-
-        :return: Delivery mechanism with the specified DRM scheme and content type (if any)
-        """
-        for delivery_mechanism in delivery_mechanisms:
-            mechanism = delivery_mechanism.delivery_mechanism
-
-            if (
-                mechanism.drm_scheme == drm_scheme
-                and mechanism.content_type == content_type
-            ):
-                return mechanism
-
-        return None
-
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import(
         self,
-        odl2_importer: ODL2Importer,
-        odl_mock_get: MockGet,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
+        odl2_importer_fixture: ODL2ImporterFixture,
     ) -> None:
         """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 2.x.
 
@@ -94,17 +67,23 @@ class TestODL2Importer:
             available=10,
         )
 
-        odl_mock_get.add(moby_dick_license)
-        feed = api_odl2_files_fixture.sample_text("feed.json")
+        odl2_importer_fixture.queue_response(moby_dick_license)
 
-        config = odl2_importer.collection.integration_configuration
-        odl2_importer.ignored_identifier_types = [IdentifierConstants.URI]
+        config = odl2_importer_fixture.collection.integration_configuration
+        odl2_importer_fixture.importer.ignored_identifier_types = [
+            IdentifierConstants.URI
+        ]
         DatabaseTransactionFixture.set_settings(
             config, odl2_skipped_license_formats=["text/html"]
         )
 
         # Act
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file("feed.json")
 
         # Assert
 
@@ -165,7 +144,7 @@ class TestODL2Importer:
         assert 2 == len(moby_dick_license_pool.delivery_mechanisms)
 
         moby_dick_epub_adobe_drm_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 moby_dick_license_pool.delivery_mechanisms,
                 MediaTypes.EPUB_MEDIA_TYPE,
                 DeliveryMechanism.ADOBE_DRM,
@@ -174,7 +153,7 @@ class TestODL2Importer:
         assert moby_dick_epub_adobe_drm_delivery_mechanism is not None
 
         moby_dick_epub_lcp_drm_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 moby_dick_license_pool.delivery_mechanisms,
                 MediaTypes.EPUB_MEDIA_TYPE,
                 DeliveryMechanism.LCP_DRM,
@@ -236,21 +215,22 @@ class TestODL2Importer:
     def test_import_audiobook_with_streaming(
         self,
         db: DatabaseTransactionFixture,
-        odl2_importer: ODL2Importer,
-        odl_mock_get: MockGet,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
+        odl2_importer_fixture: ODL2ImporterFixture,
     ) -> None:
         """Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook."""
-        license = api_odl2_files_fixture.sample_text("license-audiobook.json")
-        feed = api_odl2_files_fixture.sample_text("feed-audiobook-streaming.json")
-        odl_mock_get.add(license)
+        odl2_importer_fixture.queue_fixture_file("license-audiobook.json")
 
         db.set_settings(
-            odl2_importer.collection.integration_configuration,
+            odl2_importer_fixture.collection.integration_configuration,
             odl2_skipped_license_formats=["text/html"],
         )
 
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file("feed-audiobook-streaming.json")
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -274,7 +254,7 @@ class TestODL2Importer:
         assert 2 == len(license_pool.delivery_mechanisms)
 
         lcp_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 license_pool.delivery_mechanisms,
                 MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
                 DeliveryMechanism.LCP_DRM,
@@ -283,7 +263,7 @@ class TestODL2Importer:
         assert lcp_delivery_mechanism is not None
 
         feedbooks_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 license_pool.delivery_mechanisms,
                 MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
@@ -294,19 +274,22 @@ class TestODL2Importer:
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_no_streaming(
         self,
-        odl2_importer: ODL2Importer,
-        odl_mock_get: MockGet,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
+        odl2_importer_fixture: ODL2ImporterFixture,
     ) -> None:
         """
         Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook
         that is not available for streaming.
         """
-        license = api_odl2_files_fixture.sample_text("license-audiobook.json")
-        feed = api_odl2_files_fixture.sample_text("feed-audiobook-no-streaming.json")
-        odl_mock_get.add(license)
+        odl2_importer_fixture.queue_fixture_file("license-audiobook.json")
 
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file(
+            "feed-audiobook-no-streaming.json"
+        )
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -330,7 +313,7 @@ class TestODL2Importer:
         assert 1 == len(license_pool.delivery_mechanisms)
 
         lcp_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 license_pool.delivery_mechanisms,
                 MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
                 DeliveryMechanism.LCP_DRM,
@@ -341,15 +324,18 @@ class TestODL2Importer:
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_open_access(
         self,
-        odl2_importer: ODL2Importer,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
+        odl2_importer_fixture: ODL2ImporterFixture,
     ) -> None:
         """
         Ensure that ODL2Importer2 correctly processes and imports a feed with an
         open access book.
         """
-        feed = api_odl2_files_fixture.sample_text("oa-title.json")
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(feed)
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file("oa-title.json")
 
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
@@ -373,7 +359,7 @@ class TestODL2Importer:
         assert 1 == len(license_pool.delivery_mechanisms)
 
         oa_ebook_delivery_mechanism = (
-            self._get_delivery_mechanism_by_drm_scheme_and_content_type(
+            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
                 license_pool.delivery_mechanisms,
                 MediaTypes.EPUB_MEDIA_TYPE,
                 None,
@@ -384,15 +370,9 @@ class TestODL2Importer:
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_availability(
         self,
-        odl2_importer: ODL2Importer,
-        odl_mock_get: MockGet,
-        api_odl2_files_fixture: ODL2APIFilesFixture,
+        odl2_importer_fixture: ODL2ImporterFixture,
     ) -> None:
-        """
-        Ensure that ODL2Importer2 correctly processes and imports a feed with an
-        open access book.
-        """
-        feed_json = json.loads(api_odl2_files_fixture.sample_text("feed.json"))
+        feed_json = json.loads(odl2_importer_fixture.files.sample_text("feed.json"))
 
         moby_dick_license_dict = feed_json["publications"][0]["licenses"][0]
         test_book_license_dict = feed_json["publications"][2]["licenses"][0]
@@ -438,12 +418,15 @@ class TestODL2Importer:
                 available=concurrency,
             )
 
-        odl_mock_get.add(license_status_reply(MOBY_DICK_LICENSE_ID))
-        odl_mock_get.add(license_status_reply(HUCK_FINN_LICENSE_ID))
+        odl2_importer_fixture.queue_response(license_status_reply(MOBY_DICK_LICENSE_ID))
+        odl2_importer_fixture.queue_response(license_status_reply(HUCK_FINN_LICENSE_ID))
 
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
-            json.dumps(feed_json)
-        )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.importer.import_from_feed(json.dumps(feed_json))
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -523,14 +506,17 @@ class TestODL2Importer:
         }
 
         # Mock responses from license status server
-        odl_mock_get.add(
+        odl2_importer_fixture.queue_response(
             license_status_reply(TEST_BOOK_LICENSE_ID, checkouts=None, expires=None)
         )
 
         # Harvest the feed again
-        imported_editions, pools, works, failures = odl2_importer.import_from_feed(
-            json.dumps(feed_json)
-        )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = odl2_importer_fixture.importer.import_from_feed(json.dumps(feed_json))
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -561,105 +547,298 @@ class TestODL2Importer:
             license_status=LicenseStatus.unavailable,
         )
 
-
-class TestODL2API:
-    def test_loan_limit(self, odl2_api_test_fixture: ODL2APITestFixture):
-        """Test the loan limit collection setting"""
-        odl2api = odl2_api_test_fixture
-        # Set the loan limit
-        odl2api.api.loan_limit = 1
-
-        response = odl2api.checkout(
-            patron=odl2api.patron, pool=odl2api.work.active_license_pool()
-        )
-        # Did the loan take place correctly?
-        assert (
-            response[0].identifier
-            == odl2api.work.presentation_edition.primary_identifier.identifier
-        )
-
-        # Second loan for the patron should fail due to the loan limit
-        work2: Work = odl2api.fixture.work(odl2api.collection)
-        with pytest.raises(PatronLoanLimitReached) as exc:
-            odl2api.checkout(patron=odl2api.patron, pool=work2.active_license_pool())
-        assert exc.value.limit == 1
-
-    def test_hold_limit(
-        self, db: DatabaseTransactionFixture, odl2_api_test_fixture: ODL2APITestFixture
+    @pytest.mark.parametrize(
+        "license",
+        [
+            pytest.param(
+                LicenseInfoHelper(
+                    license=LicenseHelper(
+                        concurrency=1, expires="2021-01-01T00:01:00+01:00"
+                    ),
+                    left=52,
+                    available=1,
+                ),
+                id="expiration_date_in_the_past",
+            ),
+            pytest.param(
+                LicenseInfoHelper(
+                    license=LicenseHelper(
+                        concurrency=1,
+                    ),
+                    left=0,
+                    available=1,
+                ),
+                id="left_is_zero",
+            ),
+            pytest.param(
+                LicenseInfoHelper(
+                    license=LicenseHelper(
+                        concurrency=1,
+                    ),
+                    available=1,
+                    status="unavailable",
+                ),
+                id="status_unavailable",
+            ),
+        ],
+    )
+    @freeze_time("2021-01-01T00:00:00+00:00")
+    def test_odl_importer_expired_licenses(
+        self,
+        odl2_importer_fixture: ODL2ImporterFixture,
+        license: LicenseInfoHelper,
     ):
-        """Test the hold limit collection setting"""
-        odl2api = odl2_api_test_fixture
+        """Ensure ODLImporter imports expired licenses, but does not count them."""
+        # Import the test feed with an expired ODL license.
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file(licenses=[license])
 
-        patron1 = db.patron()
+        # The importer created 1 edition and 1 work with no failures.
+        assert failures == {}
+        assert len(imported_editions) == 1
+        assert len(imported_works) == 1
 
-        # First checkout with patron1, then place a hold with the test patron
-        pool = odl2api.work.active_license_pool()
-        response = odl2api.checkout(patron=patron1, pool=pool)
-        assert (
-            response[0].identifier
-            == odl2api.work.presentation_edition.primary_identifier.identifier
+        # Ensure that the license pool was successfully created, with no available copies.
+        assert len(imported_pools) == 1
+
+        [imported_pool] = imported_pools
+        assert imported_pool.licenses_owned == 0
+        assert imported_pool.licenses_available == 0
+        assert len(imported_pool.licenses) == 1
+
+        # Ensure the license was imported and is expired.
+        [imported_license] = imported_pool.licenses
+        assert imported_license.is_inactive is True
+
+    def test_odl_importer_reimport_expired_licenses(
+        self,
+        odl2_importer_fixture: ODL2ImporterFixture,
+    ):
+        license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
+        licenses = [
+            LicenseInfoHelper(
+                license=LicenseHelper(concurrency=1, expires=license_expiry),
+                available=1,
+            )
+        ]
+
+        # First import the license when it is not expired
+        with freeze_time(license_expiry - datetime.timedelta(days=1)):
+            # Import the test feed.
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+
+            # The importer created 1 edition and 1 work with no failures.
+            assert failures == {}
+            assert len(imported_editions) == 1
+            assert len(imported_works) == 1
+            assert len(imported_pools) == 1
+
+            # Ensure that the license pool was successfully created, with available copies.
+            [imported_pool] = imported_pools
+            assert imported_pool.licenses_owned == 1
+            assert imported_pool.licenses_available == 1
+            assert len(imported_pool.licenses) == 1
+
+            # Ensure the license was imported and is not expired.
+            [imported_license] = imported_pool.licenses
+            assert imported_license.is_inactive is False
+
+        # Reimport the license when it is expired
+        with freeze_time(license_expiry + datetime.timedelta(days=1)):
+            # Import the test feed.
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+
+            # The importer created 1 edition and 1 work with no failures.
+            assert failures == {}
+            assert len(imported_editions) == 1
+            assert len(imported_works) == 1
+            assert len(imported_pools) == 1
+
+            # Ensure that the license pool was successfully created, with no available copies.
+            [imported_pool] = imported_pools
+            assert imported_pool.licenses_owned == 0
+            assert imported_pool.licenses_available == 0
+            assert len(imported_pool.licenses) == 1
+
+            # Ensure the license was imported and is expired.
+            [imported_license] = imported_pool.licenses
+            assert imported_license.is_inactive is True
+
+    @freeze_time("2021-01-01T00:00:00+00:00")
+    def test_odl_importer_multiple_expired_licenses(
+        self,
+        odl2_importer_fixture: ODL2ImporterFixture,
+    ):
+        """Ensure ODLImporter imports expired licenses
+        and does not count them in the total number of available licenses."""
+
+        # 1.1. Import the test feed with three inactive ODL licenses and two active licenses.
+        inactive = [
+            LicenseInfoHelper(
+                # Expired
+                # (expiry date in the past)
+                license=LicenseHelper(
+                    concurrency=1,
+                    expires=datetime_helpers.utc_now() - datetime.timedelta(days=1),
+                ),
+                available=1,
+            ),
+            LicenseInfoHelper(
+                # Expired
+                # (left is 0)
+                license=LicenseHelper(concurrency=1),
+                available=1,
+                left=0,
+            ),
+            LicenseInfoHelper(
+                # Expired
+                # (status is unavailable)
+                license=LicenseHelper(concurrency=1),
+                available=1,
+                status="unavailable",
+            ),
+        ]
+        active = [
+            LicenseInfoHelper(
+                # Valid
+                license=LicenseHelper(concurrency=1),
+                available=1,
+            ),
+            LicenseInfoHelper(
+                # Valid
+                license=LicenseHelper(concurrency=5),
+                available=5,
+                left=40,
+            ),
+        ]
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = odl2_importer_fixture.import_fixture_file(licenses=active + inactive)
+
+        assert failures == {}
+
+        # License pool was successfully created
+        assert len(imported_pools) == 1
+        [imported_pool] = imported_pools
+
+        # All licenses were imported
+        assert len(imported_pool.licenses) == 5
+
+        # Make sure that the license statistics are correct and include only active licenses.
+        assert imported_pool.licenses_owned == 41
+        assert imported_pool.licenses_available == 6
+
+        # Correct number of active and inactive licenses
+        assert sum(not l.is_inactive for l in imported_pool.licenses) == len(active)
+        assert sum(l.is_inactive for l in imported_pool.licenses) == len(inactive)
+
+    def test_odl_importer_reimport_multiple_licenses(
+        self,
+        odl2_importer_fixture: ODL2ImporterFixture,
+    ):
+        """Ensure ODLImporter correctly imports licenses that have already been imported."""
+
+        # 1.1. Import the test feed with ODL licenses that are not expired.
+        license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
+
+        date = LicenseInfoHelper(
+            license=LicenseHelper(
+                concurrency=1,
+                expires=license_expiry,
+            ),
+            available=1,
         )
-
-        # Set the hold limit to zero (holds disallowed) and ensure hold fails.
-        odl2api.api.hold_limit = 0
-        with pytest.raises(HoldsNotPermitted) as exc:
-            odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        assert exc.value.problem_detail.title is not None
-        assert exc.value.problem_detail.detail is not None
-        assert "Holds not permitted" in exc.value.problem_detail.title
-        assert "Holds are not permitted" in exc.value.problem_detail.detail
-
-        # Set the hold limit to 1.
-        odl2api.api.hold_limit = 1
-
-        hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        # Hold was successful
-        assert hold_response.hold_position == 1
-        create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
-
-        # Second work should fail for the test patron due to the hold limit
-        work2: Work = odl2api.fixture.work(odl2api.collection)
-        # Generate a license
-        odl2api.fixture.license(work2)
-
-        # Do the same, patron1 checkout and test patron hold
-        pool = work2.active_license_pool()
-        response = odl2api.checkout(patron=patron1, pool=pool)
-        assert (
-            response[0].identifier
-            == work2.presentation_edition.primary_identifier.identifier
+        left = LicenseInfoHelper(
+            license=LicenseHelper(concurrency=2), available=1, left=5
         )
+        perpetual = LicenseInfoHelper(license=LicenseHelper(concurrency=1), available=0)
+        licenses = [date, left, perpetual]
 
-        # Hold should fail
-        with pytest.raises(PatronHoldLimitReached) as exc2:
-            odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        assert exc2.value.limit == 1
+        # Import with all licenses valid
+        with freeze_time(license_expiry - datetime.timedelta(days=1)):
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
 
-        # Set the hold limit to None (unlimited) and ensure hold succeeds.
-        odl2api.api.hold_limit = None
-        hold_response = odl2api.api.place_hold(odl2api.patron, "pin", pool, "")
-        assert hold_response.hold_position == 1
-        create(db.session, Hold, patron_id=odl2api.patron.id, license_pool=pool)
-        # Verify that there are now two holds that  our test patron has both of them.
-        assert 2 == db.session.query(Hold).count()
-        assert (
-            2
-            == db.session.query(Hold)
-            .filter(Hold.patron_id == odl2api.patron.id)
-            .count()
-        )
+            # No failures in the import
+            assert failures == {}
+
+            assert len(imported_pools) == 1
+
+            [imported_pool] = imported_pools
+            assert len(imported_pool.licenses) == 3
+            assert imported_pool.licenses_available == 2
+            assert imported_pool.licenses_owned == 7
+
+            # No licenses are expired
+            assert sum(not l.is_inactive for l in imported_pool.licenses) == len(
+                licenses
+            )
+
+        # Expire the first two licenses
+
+        # The first one is expired by changing the time
+        with freeze_time(license_expiry + datetime.timedelta(days=1)):
+            # The second one is expired by setting left to 0
+            left.left = 0
+
+            # The perpetual license has a copy available
+            perpetual.available = 1
+
+            # Reimport
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+
+            # No failures in the import
+            assert failures == {}
+
+            assert len(imported_pools) == 1
+
+            [imported_pool] = imported_pools
+            assert len(imported_pool.licenses) == 3
+            assert imported_pool.licenses_available == 1
+            assert imported_pool.licenses_owned == 1
+
+            # One license not expired
+            assert sum(not l.is_inactive for l in imported_pool.licenses) == 1
+
+            # Two licenses expired
+            assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
 
 class TestODL2HoldReaper:
     def test_run_once(
-        self, odl2_test_fixture: ODL2TestFixture, db: DatabaseTransactionFixture
+        self, odl2_api_fixture: ODL2APIFixture, db: DatabaseTransactionFixture
     ):
-        library = odl2_test_fixture.library()
-        collection = odl2_test_fixture.collection(library)
-        work = odl2_test_fixture.work(collection)
-        license = odl2_test_fixture.license(work)
-        api = odl2_test_fixture.api(collection)
-        pool = odl2_test_fixture.pool(license)
+        collection = odl2_api_fixture.collection
+        work = odl2_api_fixture.work
+        license = odl2_api_fixture.setup_license(work, concurrency=3, available=3)
+        api = odl2_api_fixture.api
+        pool = license.license_pool
 
         data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
         DatabaseTransactionFixture.set_settings(
@@ -671,7 +850,6 @@ class TestODL2HoldReaper:
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
 
-        license.setup(concurrency=3, available=3)
         expired_hold1, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)
         expired_hold2, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)
         expired_hold3, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)

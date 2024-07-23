@@ -10,7 +10,7 @@ from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.odl2 import ODL2API
+from palace.manager.api.odl2.api import ODL2API
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import (

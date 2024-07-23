@@ -7,7 +7,6 @@ from palace.manager.api.monitor import (
     LoanlikeReaperMonitor,
     LoanReaper,
 )
-from palace.manager.api.odl import ODLAPI
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Annotation
@@ -22,10 +21,7 @@ class TestLoanlikeReaperMonitor:
         """Verify that well-known source of truth protocols
         will be exempt from the reaper.
         """
-        for i in (
-            ODLAPI.label(),
-            OPDSForDistributorsAPI.label(),
-        ):
+        for i in (OPDSForDistributorsAPI.label(),):
             assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS
 
     def test_reaping(self, db: DatabaseTransactionFixture):

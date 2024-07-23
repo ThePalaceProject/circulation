@@ -4,24 +4,18 @@ import binascii
 import datetime
 import json
 import uuid
-from abc import ABC
-from collections.abc import Callable
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal
 
 import dateutil
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
-from flask_babel import lazy_gettext as _
-from lxml.etree import Element
-from pydantic import AnyHttpUrl, HttpUrl, PositiveInt
 from requests import Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.expression import or_
 from uritemplate import URITemplate
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
-    BaseCirculationEbookLoanSettings,
     FulfillmentInfo,
     HoldInfo,
     LoanInfo,
@@ -34,149 +28,44 @@ from palace.manager.api.circulation_exceptions import (
     CannotLoan,
     CurrentlyAvailable,
     FormatNotAvailable,
+    HoldsNotPermitted,
     NoAvailableCopies,
     NoLicenses,
     NotCheckedOut,
     NotOnHold,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
 )
-from palace.manager.api.lcp.hash import Hasher, HasherFactory, HashingAlgorithm
+from palace.manager.api.lcp.hash import Hasher, HasherFactory
+from palace.manager.api.odl2.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl2.settings import ODL2LibrarySettings, ODL2Settings
 from palace.manager.core.lcp.credential import (
     LCPCredentialFactory,
     LCPHashedPassphrase,
     LCPUnhashedPassphrase,
 )
-from palace.manager.core.metadata_layer import FormatData, LicenseData
-from palace.manager.core.opds_import import (
-    BaseOPDSImporter,
-    OPDSImporter,
-    OPDSImporterSettings,
-    OPDSImportMonitor,
-    OPDSXMLParser,
-)
-from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
-)
 from palace.manager.service.container import Services
-from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    LicenseStatus,
-    RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.sqlalchemy.model.resource import (
-    HttpResponseTuple,
-    Hyperlink,
-    Representation,
-)
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import to_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException
 
 
-class ODLAPIConstants:
-    DEFAULT_PASSPHRASE_HINT = "View the help page for more information."
-    DEFAULT_PASSPHRASE_HINT_URL = "https://lyrasis.zendesk.com/"
-
-
-class ODLSettings(OPDSImporterSettings):
-    external_account_id: AnyHttpUrl = FormField(
-        form=ConfigurationFormItem(
-            label=_("ODL feed URL"),
-            required=True,
-        ),
-    )
-
-    username: str = FormField(
-        form=ConfigurationFormItem(
-            label=_("Library's API username"),
-            required=True,
-        )
-    )
-
-    password: str = FormField(
-        form=ConfigurationFormItem(
-            label=_("Library's API password"),
-            required=True,
-        ),
-    )
-
-    default_reservation_period: PositiveInt | None = FormField(
-        default=Collection.STANDARD_DEFAULT_RESERVATION_PERIOD,
-        form=ConfigurationFormItem(
-            label=_("Default Reservation Period (in Days)"),
-            description=_(
-                "The number of days a patron has to check out a book after a hold becomes available."
-            ),
-            type=ConfigurationFormItemType.NUMBER,
-            required=False,
-        ),
-    )
-
-    passphrase_hint: str = FormField(
-        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT,
-        form=ConfigurationFormItem(
-            label=_("Passphrase hint"),
-            description=_(
-                "Hint displayed to the user when opening an LCP protected publication."
-            ),
-            type=ConfigurationFormItemType.TEXT,
-            required=True,
-        ),
-    )
-
-    passphrase_hint_url: HttpUrl = FormField(
-        default=ODLAPIConstants.DEFAULT_PASSPHRASE_HINT_URL,
-        form=ConfigurationFormItem(
-            label=_("Passphrase hint URL"),
-            description=_(
-                "Hint URL available to the user when opening an LCP protected publication."
-            ),
-            type=ConfigurationFormItemType.TEXT,
-            required=True,
-        ),
-    )
-
-    encryption_algorithm: HashingAlgorithm = FormField(
-        default=HashingAlgorithm.SHA256,
-        form=ConfigurationFormItem(
-            label=_("Passphrase encryption algorithm"),
-            description=_("Algorithm used for encrypting the passphrase."),
-            type=ConfigurationFormItemType.SELECT,
-            required=False,
-            options={alg: alg.name for alg in HashingAlgorithm},
-        ),
-    )
-
-
-class ODLLibrarySettings(BaseCirculationEbookLoanSettings):
-    pass
-
-
-SettingsType = TypeVar("SettingsType", bound=ODLSettings, covariant=True)
-LibrarySettingsType = TypeVar(
-    "LibrarySettingsType", bound=ODLLibrarySettings, covariant=True
-)
-
-
-class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType], ABC):
+class ODL2API(PatronActivityCirculationAPI[ODL2Settings, ODL2LibrarySettings]):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
     keep track of individual copies rather than just license pools, and
     manage its own holds queues.
-
-    In addition to circulating books to patrons of a library on the current circulation
-    manager, this API can be used to circulate books to patrons of external libraries.
     """
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
@@ -210,6 +99,22 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         EXPIRED_STATUS,
     ]
 
+    @classmethod
+    def settings_class(cls) -> type[ODL2Settings]:
+        return ODL2Settings
+
+    @classmethod
+    def library_settings_class(cls) -> type[ODL2LibrarySettings]:
+        return ODL2LibrarySettings
+
+    @classmethod
+    def label(cls) -> str:
+        return "ODL 2.0"
+
+    @classmethod
+    def description(cls) -> str:
+        return "Import books from a distributor that uses OPDS2 + ODL (Open Distribution to Libraries)."
+
     @inject
     def __init__(
         self,
@@ -218,6 +123,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         analytics: Any = Provide[Services.analytics.analytics],
     ) -> None:
         super().__init__(_db, collection)
+
         if collection.protocol != self.label():
             raise ValueError(
                 "Collection protocol is %s, but passed into %s!"
@@ -236,6 +142,9 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Hasher | None = None
+
+        self.loan_limit = self.settings.loan_limit
+        self.hold_limit = self.settings.hold_limit
 
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
@@ -462,6 +371,17 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
     def _checkout(
         self, patron: Patron, licensepool: LicensePool, hold: Hold | None = None
     ) -> Loan:
+        # If the loan limit is not None or 0
+        if self.loan_limit:
+            loans = list(
+                filter(
+                    lambda x: x.license_pool.collection.id == self.collection_id,
+                    patron.loans,
+                )
+            )
+            if len(loans) >= self.loan_limit:
+                raise PatronLoanLimitReached(limit=self.loan_limit)
+
         _db = Session.object_session(patron)
 
         if not any(l for l in licensepool.licenses if not l.is_inactive):
@@ -576,7 +496,7 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         # For DeMarque audiobook content, we need to translate the type property
         # to reflect what we have stored in our delivery mechanisms.
         if drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
-            drm_scheme = ODLImporter.FEEDBOOKS_AUDIO
+            drm_scheme = FEEDBOOKS_AUDIO
 
         return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
 
@@ -803,6 +723,18 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
         return self._place_hold(patron, licensepool)
 
     def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
+        if self.hold_limit is not None:
+            holds = list(
+                filter(
+                    lambda x: x.license_pool.collection.id == self.collection_id,
+                    patron.holds,
+                )
+            )
+            if self.hold_limit == 0:
+                raise HoldsNotPermitted()
+            if len(holds) >= self.hold_limit:
+                raise PatronHoldLimitReached(limit=self.hold_limit)
+
         _db = Session.object_session(patron)
 
         # Make sure pool info is updated.
@@ -967,366 +899,3 @@ class BaseODLAPI(PatronActivityCirculationAPI[SettingsType, LibrarySettingsType]
 
     def update_availability(self, licensepool: LicensePool) -> None:
         pass
-
-
-class ODLAPI(
-    BaseODLAPI[ODLSettings, ODLLibrarySettings],
-):
-    """ODL (Open Distribution to Libraries) is a specification that allows
-    libraries to manage their own loans and holds. It offers a deeper level
-    of control to the library, but it requires the circulation manager to
-    keep track of individual copies rather than just license pools, and
-    manage its own holds queues.
-
-    In addition to circulating books to patrons of a library on the current circulation
-    manager, this API can be used to circulate books to patrons of external libraries.
-    """
-
-    @classmethod
-    def settings_class(cls) -> type[ODLSettings]:
-        return ODLSettings
-
-    @classmethod
-    def library_settings_class(cls) -> type[ODLLibrarySettings]:
-        return ODLLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return "ODL"
-
-    @classmethod
-    def description(cls) -> str:
-        return "Import books from a distributor that uses ODL (Open Distribution to Libraries)."
-
-
-class ODLXMLParser(OPDSXMLParser):
-    NAMESPACES = dict(OPDSXMLParser.NAMESPACES, odl="http://opds-spec.org/odl")
-
-
-class BaseODLImporter(BaseOPDSImporter[SettingsType], ABC):
-    FEEDBOOKS_AUDIO = "{}; protection={}".format(
-        MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-        DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-    )
-
-    CONTENT_TYPE = "content-type"
-    DRM_SCHEME = "drm-scheme"
-
-    LICENSE_FORMATS = {
-        FEEDBOOKS_AUDIO: {
-            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-        }
-    }
-
-    @classmethod
-    def fetch_license_info(
-        cls, document_link: str, do_get: Callable[..., HttpResponseTuple]
-    ) -> dict[str, Any] | None:
-        status_code, _, response = do_get(document_link, headers={})
-        if status_code in (200, 201):
-            license_info_document = json.loads(response)
-            return license_info_document  # type: ignore[no-any-return]
-        else:
-            cls.logger().warning(
-                f"License Info Document is not available. "
-                f"Status link {document_link} failed with {status_code} code."
-            )
-            return None
-
-    @classmethod
-    def parse_license_info(
-        cls,
-        license_info_document: dict[str, Any],
-        license_info_link: str,
-        checkout_link: str | None,
-    ) -> LicenseData | None:
-        """Check the license's attributes passed as parameters:
-        - if they're correct, turn them into a LicenseData object
-        - otherwise, return a None
-
-        :param license_info_document: License Info Document
-        :param license_info_link: Link to fetch License Info Document
-        :param checkout_link: License's checkout link
-
-        :return: LicenseData if all the license's attributes are correct, None, otherwise
-        """
-
-        identifier = license_info_document.get("identifier")
-        document_status = license_info_document.get("status")
-        document_checkouts = license_info_document.get("checkouts", {})
-        document_left = document_checkouts.get("left")
-        document_available = document_checkouts.get("available")
-        document_terms = license_info_document.get("terms", {})
-        document_expires = document_terms.get("expires")
-        document_concurrency = document_terms.get("concurrency")
-        document_format = license_info_document.get("format")
-
-        if identifier is None:
-            cls.logger().error("License info document has no identifier.")
-            return None
-
-        expires = None
-        if document_expires is not None:
-            expires = dateutil.parser.parse(document_expires)
-            expires = to_utc(expires)
-
-        if document_status is not None:
-            status = LicenseStatus.get(document_status)
-            if status.value != document_status:
-                cls.logger().warning(
-                    f"Identifier # {identifier} unknown status value "
-                    f"{document_status} defaulting to {status.value}."
-                )
-        else:
-            status = LicenseStatus.unavailable
-            cls.logger().warning(
-                f"Identifier # {identifier} license info document does not have "
-                f"required key 'status'."
-            )
-
-        if document_available is not None:
-            available = int(document_available)
-        else:
-            available = 0
-            cls.logger().warning(
-                f"Identifier # {identifier} license info document does not have "
-                f"required key 'checkouts.available'."
-            )
-
-        left = None
-        if document_left is not None:
-            left = int(document_left)
-
-        concurrency = None
-        if document_concurrency is not None:
-            concurrency = int(document_concurrency)
-
-        content_types = None
-        if document_format is not None:
-            if isinstance(document_format, str):
-                content_types = [document_format]
-            elif isinstance(document_format, list):
-                content_types = document_format
-
-        return LicenseData(
-            identifier=identifier,
-            checkout_url=checkout_link,
-            status_url=license_info_link,
-            expires=expires,
-            checkouts_left=left,
-            checkouts_available=available,
-            status=status,
-            terms_concurrency=concurrency,
-            content_types=content_types,
-        )
-
-    @classmethod
-    def get_license_data(
-        cls,
-        license_info_link: str,
-        checkout_link: str | None,
-        feed_license_identifier: str | None,
-        feed_license_expires: datetime.datetime | None,
-        feed_concurrency: int | None,
-        do_get: Callable[..., HttpResponseTuple],
-    ) -> LicenseData | None:
-        license_info_document = cls.fetch_license_info(license_info_link, do_get)
-
-        if not license_info_document:
-            return None
-
-        parsed_license = cls.parse_license_info(
-            license_info_document, license_info_link, checkout_link
-        )
-
-        if not parsed_license:
-            return None
-
-        if parsed_license.identifier != feed_license_identifier:
-            # There is a mismatch between the license info document and
-            # the feed we are importing. Since we don't know which to believe
-            # we log an error and continue.
-            cls.logger().error(
-                f"Mismatch between license identifier in the feed ({feed_license_identifier}) "
-                f"and the identifier in the license info document "
-                f"({parsed_license.identifier}) ignoring license completely."
-            )
-            return None
-
-        if parsed_license.expires != feed_license_expires:
-            cls.logger().error(
-                f"License identifier {feed_license_identifier}. Mismatch between license "
-                f"expiry in the feed ({feed_license_expires}) and the expiry in the license "
-                f"info document ({parsed_license.expires}) setting license status "
-                f"to unavailable."
-            )
-            parsed_license.status = LicenseStatus.unavailable
-
-        if parsed_license.terms_concurrency != feed_concurrency:
-            cls.logger().error(
-                f"License identifier {feed_license_identifier}. Mismatch between license "
-                f"concurrency in the feed ({feed_concurrency}) and the "
-                f"concurrency in the license info document ("
-                f"{parsed_license.terms_concurrency}) setting license status "
-                f"to unavailable."
-            )
-            parsed_license.status = LicenseStatus.unavailable
-
-        return parsed_license
-
-
-class ODLImporter(OPDSImporter, BaseODLImporter[ODLSettings]):
-    """Import information and formats from an ODL feed.
-
-    The only change from OPDSImporter is that this importer extracts
-    format information from 'odl:license' tags.
-    """
-
-    NAME = ODLAPI.label()
-    PARSER_CLASS = ODLXMLParser
-
-    # The media type for a License Info Document, used to get information
-    # about the license.
-    LICENSE_INFO_DOCUMENT_MEDIA_TYPE = "application/vnd.odl.info+json"
-
-    @classmethod
-    def settings_class(cls) -> type[ODLSettings]:
-        return ODLSettings
-
-    @classmethod
-    def _detail_for_elementtree_entry(
-        cls,
-        parser: OPDSXMLParser,
-        entry_tag: Element,
-        feed_url: str | None = None,
-        do_get: Callable[..., HttpResponseTuple] | None = None,
-    ) -> dict[str, Any]:
-        do_get = do_get or Representation.cautious_http_get
-
-        # TODO: Review for consistency when updated ODL spec is ready.
-        subtag = parser.text_of_optional_subtag
-        data = OPDSImporter._detail_for_elementtree_entry(parser, entry_tag, feed_url)
-        formats = []
-        licenses = []
-
-        odl_license_tags = parser._xpath(entry_tag, "odl:license") or []
-        medium = None
-        for odl_license_tag in odl_license_tags:
-            identifier = subtag(odl_license_tag, "dcterms:identifier")
-            full_content_type = subtag(odl_license_tag, "dcterms:format")
-
-            if not medium:
-                medium = Edition.medium_from_media_type(full_content_type)
-
-            # By default, dcterms:format includes the media type of a
-            # DRM-free resource.
-            content_type = full_content_type
-            drm_schemes: list[str | None] = []
-
-            # But it may instead describe an audiobook protected with
-            # the Feedbooks access-control scheme.
-            if full_content_type == cls.FEEDBOOKS_AUDIO:
-                content_type = MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-                drm_schemes.append(DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM)
-
-            # Additional DRM schemes may be described in <odl:protection>
-            # tags.
-            protection_tags = parser._xpath(odl_license_tag, "odl:protection") or []
-            for protection_tag in protection_tags:
-                drm_scheme = subtag(protection_tag, "dcterms:format")
-                if drm_scheme:
-                    drm_schemes.append(drm_scheme)
-
-            for drm_scheme in drm_schemes or [None]:
-                formats.append(
-                    FormatData(
-                        content_type=content_type,
-                        drm_scheme=drm_scheme,
-                        rights_uri=RightsStatus.IN_COPYRIGHT,
-                    )
-                )
-
-            data["medium"] = medium
-
-            checkout_link = None
-            for link_tag in parser._xpath(odl_license_tag, "odl:tlink") or []:
-                rel = link_tag.attrib.get("rel")
-                if rel == Hyperlink.BORROW:
-                    checkout_link = link_tag.attrib.get("href")
-                    break
-
-            # Look for a link to the License Info Document for this license.
-            odl_status_link = None
-            for link_tag in parser._xpath(odl_license_tag, "atom:link") or []:
-                attrib = link_tag.attrib
-                rel = attrib.get("rel")
-                type = attrib.get("type", "")
-                if rel == "self" and type.startswith(
-                    cls.LICENSE_INFO_DOCUMENT_MEDIA_TYPE
-                ):
-                    odl_status_link = attrib.get("href")
-                    break
-
-            expires = None
-            concurrent_checkouts = None
-
-            terms = parser._xpath(odl_license_tag, "odl:terms")
-            if terms:
-                concurrent_checkouts = subtag(terms[0], "odl:concurrent_checkouts")
-                expires = subtag(terms[0], "odl:expires")
-
-            concurrent_checkouts_int = (
-                int(concurrent_checkouts) if concurrent_checkouts is not None else None
-            )
-            expires_datetime = (
-                to_utc(dateutil.parser.parse(expires)) if expires is not None else None
-            )
-
-            if not odl_status_link:
-                parsed_license = None
-            else:
-                parsed_license = cls.get_license_data(
-                    odl_status_link,
-                    checkout_link,
-                    identifier,
-                    expires_datetime,
-                    concurrent_checkouts_int,
-                    do_get,
-                )
-
-            if parsed_license is not None:
-                licenses.append(parsed_license)
-
-        if not data.get("circulation"):
-            data["circulation"] = dict()
-        if not data["circulation"].get("formats"):
-            data["circulation"]["formats"] = []
-        data["circulation"]["formats"].extend(formats)
-        if not data["circulation"].get("licenses"):
-            data["circulation"]["licenses"] = []
-        data["circulation"]["licenses"].extend(licenses)
-        data["circulation"]["licenses_owned"] = None
-        data["circulation"]["licenses_available"] = None
-        data["circulation"]["licenses_reserved"] = None
-        data["circulation"]["patrons_in_hold_queue"] = None
-        return data
-
-
-class ODLImportMonitor(OPDSImportMonitor):
-    """Import information from an ODL feed."""
-
-    PROTOCOL = ODLImporter.NAME
-    SERVICE_NAME = "ODL Import Monitor"
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        import_class: type[OPDSImporter],
-        **import_class_kwargs: Any,
-    ):
-        # Always force reimport ODL collections to get up to date license information
-        super().__init__(
-            _db, collection, import_class, force_reimport=True, **import_class_kwargs
-        )

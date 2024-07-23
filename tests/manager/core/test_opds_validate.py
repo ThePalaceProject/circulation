@@ -6,7 +6,8 @@ from jsonschema.exceptions import ValidationError
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from palace.manager.api.odl2 import ODL2API, ODL2Importer
+from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl2.importer import ODL2Importer
 from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
 from palace.manager.core.opds_schema import ODL2SchemaValidation, OPDS2SchemaValidation
 from palace.manager.sqlalchemy.model.datasource import DataSource
