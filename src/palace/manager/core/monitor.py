@@ -480,7 +480,6 @@ class SweepMonitor(CollectionMonitor):
         # last _successful_ batch.
         run_started_at = utc_now()
         timestamp.start = run_started_at
-        self._db.commit()
         total_processed = 0
         while True:
             old_offset = offset
@@ -525,27 +524,27 @@ class SweepMonitor(CollectionMonitor):
     )
     def process_batch(self, offset):
         """Process one batch of work."""
-        offset = offset or 0
+        tx = self._db.begin_nested()
+        try:
+            offset = offset or 0
+            items = self.fetch_batch(offset).all()
+            if items:
+                self.process_items(items)
 
-        if self._db.dirty:
-            # If an update failed on a previous attempt due to stale or missing data, the session should be dirty.
-            # Therefore, we should roll it back before trying again.
-            # I've put the rollback here rather than in a @retry before_sleep hook because I could neither
-            # figure out how to cleanly reference the db session from within class or module  level method on
-            # the one hand, nor pass an instance method reference to the hook.
-            self._db.rollback()
+                # We've completed a batch. Return the ID of the last item
+                # in the batch so we don't do this work again.
 
-        items = self.fetch_batch(offset).all()
-        if items:
-            self.process_items(items)
-            self._db.commit()
-            # We've completed a batch. Return the ID of the last item
-            # in the batch so we don't do this work again.
-            return items[-1].id, len(items)
-        else:
-            # There are no more items in this database table, so we
-            # are done with the sweep. Reset the counter.
-            return 0, 0
+                result = (items[-1].id, len(items))
+            else:
+                # There are no more items in this database table, so we
+                # are done with the sweep. Reset the counter.
+                result = (0, 0)
+
+            tx.commit()
+            return result
+        except Exception as e:
+            tx.rollback()
+            raise e
 
     def process_items(self, items):
         """Process a list of items."""
