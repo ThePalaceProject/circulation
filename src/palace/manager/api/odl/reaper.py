@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.core.monitor import CollectionMonitor
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -13,22 +13,22 @@ from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class ODL2HoldReaper(CollectionMonitor):
+class OPDS2WithODLHoldReaper(CollectionMonitor):
     """Check for holds that have expired and delete them, and update
     the holds queues for their pools."""
 
     SERVICE_NAME = "ODL2 Hold Reaper"
-    PROTOCOL = ODL2API.label()
+    PROTOCOL = OPDS2WithODLApi.label()
 
     def __init__(
         self,
         _db: Session,
         collection: Collection,
-        api: ODL2API | None = None,
+        api: OPDS2WithODLApi | None = None,
         **kwargs: Any,
     ):
         super().__init__(_db, collection, **kwargs)
-        self.api = api or ODL2API(_db, collection)
+        self.api = api or OPDS2WithODLApi(_db, collection)
 
     def run_once(self, progress: TimestampData) -> TimestampData:
         # Find holds that have expired.

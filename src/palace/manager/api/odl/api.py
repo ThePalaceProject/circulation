@@ -37,8 +37,11 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
-from palace.manager.api.odl2.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl2.settings import ODL2LibrarySettings, ODL2Settings
+from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl.settings import (
+    OPDS2WithODLLibrarySettings,
+    OPDS2WithODLSettings,
+)
 from palace.manager.core.lcp.credential import (
     LCPCredentialFactory,
     LCPHashedPassphrase,
@@ -60,7 +63,9 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException
 
 
-class ODL2API(PatronActivityCirculationAPI[ODL2Settings, ODL2LibrarySettings]):
+class OPDS2WithODLApi(
+    PatronActivityCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings]
+):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
     of control to the library, but it requires the circulation manager to
@@ -100,12 +105,12 @@ class ODL2API(PatronActivityCirculationAPI[ODL2Settings, ODL2LibrarySettings]):
     ]
 
     @classmethod
-    def settings_class(cls) -> type[ODL2Settings]:
-        return ODL2Settings
+    def settings_class(cls) -> type[OPDS2WithODLSettings]:
+        return OPDS2WithODLSettings
 
     @classmethod
-    def library_settings_class(cls) -> type[ODL2LibrarySettings]:
-        return ODL2LibrarySettings
+    def library_settings_class(cls) -> type[OPDS2WithODLLibrarySettings]:
+        return OPDS2WithODLLibrarySettings
 
     @classmethod
     def label(cls) -> str:

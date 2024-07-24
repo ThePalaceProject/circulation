@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from palace.manager.api.odl2.api import ODL2API
-from palace.manager.api.odl2.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl2.settings import ODL2Settings
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl.settings import OPDS2WithODLSettings
 from palace.manager.core.metadata_layer import FormatData, LicenseData
 from palace.manager.core.opds2_import import (
     OPDS2Importer,
@@ -36,11 +36,11 @@ if TYPE_CHECKING:
     from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
 
-class ODL2Importer(OPDS2Importer):
+class OPDS2WithODLImporter(OPDS2Importer):
     """Import information and formats from an ODL feed.
 
     The only change from OPDS2Importer is that this importer extracts
-    FormatData and LicenseData from ODL 2.x's "licenses" arrays.
+    FormatData and LicenseData from ODL "licenses" collection.
     """
 
     DRM_SCHEME = "drm-scheme"
@@ -51,11 +51,11 @@ class ODL2Importer(OPDS2Importer):
             DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
         }
     }
-    NAME = ODL2API.label()
+    NAME = OPDS2WithODLApi.label()
 
     @classmethod
-    def settings_class(cls) -> type[ODL2Settings]:
-        return ODL2Settings
+    def settings_class(cls) -> type[OPDS2WithODLSettings]:
+        return OPDS2WithODLSettings
 
     def __init__(
         self,
@@ -65,7 +65,7 @@ class ODL2Importer(OPDS2Importer):
         data_source_name: str | None = None,
         http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
-        """Initialize a new instance of ODL2Importer class.
+        """Initialize a new instance of OPDS2WithODLImporter class.
 
         :param db: Database session
         :type db: sqlalchemy.orm.session.Session
@@ -384,17 +384,17 @@ class ODL2Importer(OPDS2Importer):
         return parsed_license
 
 
-class ODL2ImportMonitor(OPDS2ImportMonitor):
+class OPDS2WithODLImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
-    PROTOCOL = ODL2API.label()
+    PROTOCOL = OPDS2WithODLApi.label()
     SERVICE_NAME = "ODL 2.x Import Monitor"
 
     def __init__(
         self,
         _db: Session,
         collection: Collection,
-        import_class: type[ODL2Importer],
+        import_class: type[OPDS2WithODLImporter],
         **import_class_kwargs: Any,
     ) -> None:
         # Always force reimport ODL collections to get up to date license information

@@ -91,7 +91,7 @@ module = [
     "palace.manager.api.enki",
     "palace.manager.api.lcp.hash",
     "palace.manager.api.metadata.*",
-    "palace.manager.api.odl2.*",
+    "palace.manager.api.odl.*",
     "palace.manager.api.opds_for_distributors",
     "palace.manager.core.marc",
     "palace.manager.core.opds2_import",

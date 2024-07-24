@@ -19,7 +19,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         from palace.manager.api.axis import Axis360API
         from palace.manager.api.bibliotheca import BibliothecaAPI
         from palace.manager.api.enki import EnkiAPI
-        from palace.manager.api.odl2.api import ODL2API
+        from palace.manager.api.odl.api import OPDS2WithODLApi
         from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
         from palace.manager.api.overdrive import OverdriveAPI
         from palace.manager.core.opds2_import import OPDS2API
@@ -30,7 +30,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         self.register(Axis360API, canonical=Axis360API.label())
         self.register(EnkiAPI, canonical=EnkiAPI.label())
         self.register(OPDSForDistributorsAPI, canonical=OPDSForDistributorsAPI.label())
-        self.register(ODL2API, canonical=ODL2API.label())
+        self.register(OPDS2WithODLApi, canonical=OPDS2WithODLApi.label())
         self.register(OPDSAPI, canonical=OPDSAPI.label())
         self.register(OPDS2API, canonical=OPDS2API.label())
 

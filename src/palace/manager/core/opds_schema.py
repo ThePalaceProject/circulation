@@ -13,7 +13,7 @@ from jsonschema.protocols import Validator
 from referencing import Registry
 from referencing.retrieval import to_cached_resource
 
-from palace.manager.api.odl2.importer import ODL2ImportMonitor
+from palace.manager.api.odl.importer import OPDS2WithODLImportMonitor
 from palace.manager.core.opds2_import import OPDS2ImportMonitor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir
@@ -163,7 +163,9 @@ class OPDS2SchemaValidation(OPDS2ImportMonitor, OPDS2SchemaValidationMixin):
         return True
 
 
-class ODL2SchemaValidation(ODL2ImportMonitor, OPDS2SchemaValidationMixin):
+class OPDS2WithODLSchemaValidation(
+    OPDS2WithODLImportMonitor, OPDS2SchemaValidationMixin
+):
     def import_one_feed(self, feed):
         feed = json.loads(feed)
         self.validate_schema("file://odl-feed.schema.json", feed)

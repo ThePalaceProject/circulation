@@ -16,7 +16,7 @@ from webpub_manifest_parser.odl.semantic import (
 )
 from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
-from palace.manager.api.odl2.importer import ODL2Importer
+from palace.manager.api.odl.importer import OPDS2WithODLImporter
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import LicenseData
 from palace.manager.sqlalchemy.constants import (
@@ -36,16 +36,20 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.odl2 import LicenseHelper, LicenseInfoHelper, ODL2ImporterFixture
+from tests.fixtures.odl import (
+    LicenseHelper,
+    LicenseInfoHelper,
+    OPDS2WithODLImporterFixture,
+)
 
 
-class TestODL2Importer:
+class TestOPDS2WithODLImporter:
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
-        """Ensure that ODL2Importer2 correctly processes and imports the ODL feed encoded using OPDS 2.x.
+        """Ensure that OPDSWithODLImporter correctly processes and imports the ODL feed encoded using OPDS 2.x.
 
         NOTE: `freeze_time` decorator is required to treat the licenses in the ODL feed as non-expired.
         """
@@ -61,14 +65,14 @@ class TestODL2Importer:
             available=10,
         )
 
-        odl2_importer_fixture.queue_response(moby_dick_license)
+        opds2_with_odl_importer_fixture.queue_response(moby_dick_license)
 
-        config = odl2_importer_fixture.collection.integration_configuration
-        odl2_importer_fixture.importer.ignored_identifier_types = [
+        config = opds2_with_odl_importer_fixture.collection.integration_configuration
+        opds2_with_odl_importer_fixture.importer.ignored_identifier_types = [
             IdentifierConstants.URI
         ]
         DatabaseTransactionFixture.set_settings(
-            config, odl2_skipped_license_formats=["text/html"]
+            config, skipped_license_formats=["text/html"]
         )
 
         # Act
@@ -77,7 +81,7 @@ class TestODL2Importer:
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file("feed.json")
+        ) = opds2_with_odl_importer_fixture.import_fixture_file("feed.json")
 
         # Assert
 
@@ -137,21 +141,17 @@ class TestODL2Importer:
 
         assert 2 == len(moby_dick_license_pool.delivery_mechanisms)
 
-        moby_dick_epub_adobe_drm_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                moby_dick_license_pool.delivery_mechanisms,
-                MediaTypes.EPUB_MEDIA_TYPE,
-                DeliveryMechanism.ADOBE_DRM,
-            )
+        moby_dick_epub_adobe_drm_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            moby_dick_license_pool.delivery_mechanisms,
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
         )
         assert moby_dick_epub_adobe_drm_delivery_mechanism is not None
 
-        moby_dick_epub_lcp_drm_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                moby_dick_license_pool.delivery_mechanisms,
-                MediaTypes.EPUB_MEDIA_TYPE,
-                DeliveryMechanism.LCP_DRM,
-            )
+        moby_dick_epub_lcp_drm_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            moby_dick_license_pool.delivery_mechanisms,
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
         )
         assert moby_dick_epub_lcp_drm_delivery_mechanism is not None
 
@@ -209,14 +209,14 @@ class TestODL2Importer:
     def test_import_audiobook_with_streaming(
         self,
         db: DatabaseTransactionFixture,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
-        """Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook."""
-        odl2_importer_fixture.queue_fixture_file("license-audiobook.json")
+        """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
+        opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
 
         db.set_settings(
-            odl2_importer_fixture.collection.integration_configuration,
-            odl2_skipped_license_formats=["text/html"],
+            opds2_with_odl_importer_fixture.collection.integration_configuration,
+            skipped_license_formats=["text/html"],
         )
 
         (
@@ -224,7 +224,9 @@ class TestODL2Importer:
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file("feed-audiobook-streaming.json")
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "feed-audiobook-streaming.json"
+        )
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -247,41 +249,37 @@ class TestODL2Importer:
 
         assert 2 == len(license_pool.delivery_mechanisms)
 
-        lcp_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
-                DeliveryMechanism.LCP_DRM,
-            )
+        lcp_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
         )
         assert lcp_delivery_mechanism is not None
 
-        feedbooks_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
-            )
+        feedbooks_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
         )
         assert feedbooks_delivery_mechanism is not None
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_no_streaming(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
         """
-        Ensure that ODL2Importer2 correctly processes and imports a feed with an audiobook
+        Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook
         that is not available for streaming.
         """
-        odl2_importer_fixture.queue_fixture_file("license-audiobook.json")
+        opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
 
         (
             imported_editions,
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file(
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
             "feed-audiobook-no-streaming.json"
         )
 
@@ -306,22 +304,20 @@ class TestODL2Importer:
 
         assert 1 == len(license_pool.delivery_mechanisms)
 
-        lcp_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                license_pool.delivery_mechanisms,
-                MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
-                DeliveryMechanism.LCP_DRM,
-            )
+        lcp_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            MediaTypes.AUDIOBOOK_PACKAGE_LCP_MEDIA_TYPE,
+            DeliveryMechanism.LCP_DRM,
         )
         assert lcp_delivery_mechanism is not None
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_open_access(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
         """
-        Ensure that ODL2Importer2 correctly processes and imports a feed with an
+        Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
         open access book.
         """
         (
@@ -329,7 +325,7 @@ class TestODL2Importer:
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file("oa-title.json")
+        ) = opds2_with_odl_importer_fixture.import_fixture_file("oa-title.json")
 
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
@@ -352,21 +348,21 @@ class TestODL2Importer:
 
         assert 1 == len(license_pool.delivery_mechanisms)
 
-        oa_ebook_delivery_mechanism = (
-            odl2_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
-                license_pool.delivery_mechanisms,
-                MediaTypes.EPUB_MEDIA_TYPE,
-                None,
-            )
+        oa_ebook_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            MediaTypes.EPUB_MEDIA_TYPE,
+            None,
         )
         assert oa_ebook_delivery_mechanism is not None
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_availability(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ) -> None:
-        feed_json = json.loads(odl2_importer_fixture.files.sample_text("feed.json"))
+        feed_json = json.loads(
+            opds2_with_odl_importer_fixture.files.sample_text("feed.json")
+        )
 
         moby_dick_license_dict = feed_json["publications"][0]["licenses"][0]
         test_book_license_dict = feed_json["publications"][2]["licenses"][0]
@@ -412,15 +408,21 @@ class TestODL2Importer:
                 available=concurrency,
             )
 
-        odl2_importer_fixture.queue_response(license_status_reply(MOBY_DICK_LICENSE_ID))
-        odl2_importer_fixture.queue_response(license_status_reply(HUCK_FINN_LICENSE_ID))
+        opds2_with_odl_importer_fixture.queue_response(
+            license_status_reply(MOBY_DICK_LICENSE_ID)
+        )
+        opds2_with_odl_importer_fixture.queue_response(
+            license_status_reply(HUCK_FINN_LICENSE_ID)
+        )
 
         (
             imported_editions,
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.importer.import_from_feed(json.dumps(feed_json))
+        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -500,7 +502,7 @@ class TestODL2Importer:
         }
 
         # Mock responses from license status server
-        odl2_importer_fixture.queue_response(
+        opds2_with_odl_importer_fixture.queue_response(
             license_status_reply(TEST_BOOK_LICENSE_ID, checkouts=None, expires=None)
         )
 
@@ -510,7 +512,9 @@ class TestODL2Importer:
             pools,
             works,
             failures,
-        ) = odl2_importer_fixture.importer.import_from_feed(json.dumps(feed_json))
+        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -579,17 +583,17 @@ class TestODL2Importer:
     @freeze_time("2021-01-01T00:00:00+00:00")
     def test_odl_importer_expired_licenses(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
         license: LicenseInfoHelper,
     ):
-        """Ensure ODLImporter imports expired licenses, but does not count them."""
+        """Ensure OPDSWithODLImporter imports expired licenses, but does not count them."""
         # Import the test feed with an expired ODL license.
         (
             imported_editions,
             imported_pools,
             imported_works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file(licenses=[license])
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=[license])
 
         # The importer created 1 edition and 1 work with no failures.
         assert failures == {}
@@ -610,7 +614,7 @@ class TestODL2Importer:
 
     def test_odl_importer_reimport_expired_licenses(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ):
         license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
         licenses = [
@@ -628,7 +632,7 @@ class TestODL2Importer:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -654,7 +658,7 @@ class TestODL2Importer:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -675,9 +679,9 @@ class TestODL2Importer:
     @freeze_time("2021-01-01T00:00:00+00:00")
     def test_odl_importer_multiple_expired_licenses(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ):
-        """Ensure ODLImporter imports expired licenses
+        """Ensure OPDSWithODLImporter imports expired licenses
         and does not count them in the total number of available licenses."""
 
         # 1.1. Import the test feed with three inactive ODL licenses and two active licenses.
@@ -724,7 +728,9 @@ class TestODL2Importer:
             imported_pools,
             imported_works,
             failures,
-        ) = odl2_importer_fixture.import_fixture_file(licenses=active + inactive)
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            licenses=active + inactive
+        )
 
         assert failures == {}
 
@@ -745,9 +751,9 @@ class TestODL2Importer:
 
     def test_odl_importer_reimport_multiple_licenses(
         self,
-        odl2_importer_fixture: ODL2ImporterFixture,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
     ):
-        """Ensure ODLImporter correctly imports licenses that have already been imported."""
+        """Ensure OPDSWithODLImporter correctly imports licenses that have already been imported."""
 
         # 1.1. Import the test feed with ODL licenses that are not expired.
         license_expiry = dateutil.parser.parse("2021-01-01T00:01:00+00:00")
@@ -772,7 +778,7 @@ class TestODL2Importer:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # No failures in the import
             assert failures == {}
@@ -805,7 +811,7 @@ class TestODL2Importer:
                 imported_pools,
                 imported_works,
                 failures,
-            ) = odl2_importer_fixture.import_fixture_file(licenses=licenses)
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # No failures in the import
             assert failures == {}
@@ -824,7 +830,7 @@ class TestODL2Importer:
             assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
     def test_parse_license_info(self):
-        """Ensure that ODL2Importer correctly parses license information."""
+        """Ensure that OPDS2WithODLImporter correctly parses license information."""
 
         def license_info_dict() -> dict[str, Any]:
             return LicenseInfoHelper(available=10, license=LicenseHelper()).dict
@@ -838,7 +844,9 @@ class TestODL2Importer:
             available=10, left=4, license=LicenseHelper(concurrency=11, expires=expiry)
         )
         license_dict = license_helper.dict
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.checkouts_available == 10
         assert parsed.checkouts_left == 4
         assert parsed.terms_concurrency == 11
@@ -850,48 +858,62 @@ class TestODL2Importer:
         license_dict = license_info_dict()
         license_dict.pop("identifier")
         assert (
-            ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+            OPDS2WithODLImporter.parse_license_info(
+                license_dict, info_link, checkout_link
+            )
             is None
         )
 
         # No status
         license_dict = license_info_dict()
         license_dict.pop("status")
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.status == LicenseStatus.unavailable
 
         # Bad status
         license_dict = license_info_dict()
         license_dict["status"] = "bad"
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.status == LicenseStatus.unavailable
 
         # No available
         license_dict = license_info_dict()
         license_dict["checkouts"].pop("available")
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.checkouts_available == 0
 
         # No concurrency
         license_dict = license_info_dict()
         license_dict["terms"].pop("concurrency")
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.terms_concurrency is None
 
         # Format str
         license_dict = license_info_dict()
         license_dict["format"] = "single format"
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.content_types == ["single format"]
 
         # Format list
         license_dict = license_info_dict()
         license_dict["format"] = ["format1", "format2"]
-        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        parsed = OPDS2WithODLImporter.parse_license_info(
+            license_dict, info_link, checkout_link
+        )
         assert parsed.content_types == ["format1", "format2"]
 
     def test_fetch_license_info(self):
-        """Ensure that ODL2Importer correctly retrieves license data from an OPDS2 feed."""
+        """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
         responses: list[HttpResponseTuple] = []
         requests: list[str] = []
@@ -903,13 +925,18 @@ class TestODL2Importer:
         # Bad status code
         responses.append((400, {}, b"Bad Request"))
 
-        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) is None
+        assert (
+            OPDS2WithODLImporter.fetch_license_info("http://example.org/feed", get)
+            is None
+        )
         assert len(requests) == 1
         assert requests.pop() == "http://example.org/feed"
 
         # 200 status - json decodes body and returns it
         responses.append((200, {}, json.dumps(["a", "b"]).encode("utf-8")))
-        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) == [
+        assert OPDS2WithODLImporter.fetch_license_info(
+            "http://example.org/feed", get
+        ) == [
             "a",
             "b",
         ]
@@ -918,9 +945,9 @@ class TestODL2Importer:
 
         # 201 status - json decodes body and returns it
         responses.append((201, {}, json.dumps({"test": "123"}).encode("utf-8")))
-        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) == {
-            "test": "123"
-        }
+        assert OPDS2WithODLImporter.fetch_license_info(
+            "http://example.org/feed", get
+        ) == {"test": "123"}
         assert len(requests) == 1
         assert requests.pop() == "http://example.org/feed"
 
@@ -934,7 +961,7 @@ class TestODL2Importer:
             return resp[0], {}, resp[1].encode("utf-8")
 
         def get_license_data() -> LicenseData | None:
-            return ODL2Importer.get_license_data(
+            return OPDS2WithODLImporter.get_license_data(
                 "license_info_link",
                 "checkout_link",
                 "identifier",
