@@ -5,6 +5,7 @@ import datetime
 import functools
 import json
 import uuid
+from typing import Any
 
 import dateutil
 import pytest
@@ -15,34 +16,27 @@ from webpub_manifest_parser.odl.semantic import (
 )
 from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
-from palace.manager.api.odl2.reaper import ODL2HoldReaper
+from palace.manager.api.odl2.importer import ODL2Importer
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.core.metadata_layer import LicenseData
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
     MediaTypes,
 )
-from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicenseStatus,
 )
-from palace.manager.sqlalchemy.model.patron import Hold
-from palace.manager.sqlalchemy.model.resource import Hyperlink
+from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.odl2 import (
-    LicenseHelper,
-    LicenseInfoHelper,
-    ODL2APIFixture,
-    ODL2ImporterFixture,
-)
+from tests.fixtures.odl2 import LicenseHelper, LicenseInfoHelper, ODL2ImporterFixture
 
 
 class TestODL2Importer:
@@ -829,53 +823,195 @@ class TestODL2Importer:
             # Two licenses expired
             assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
+    def test_parse_license_info(self):
+        """Ensure that ODL2Importer correctly parses license information."""
 
-class TestODL2HoldReaper:
-    def test_run_once(
-        self, odl2_api_fixture: ODL2APIFixture, db: DatabaseTransactionFixture
-    ):
-        collection = odl2_api_fixture.collection
-        work = odl2_api_fixture.work
-        license = odl2_api_fixture.setup_license(work, concurrency=3, available=3)
-        api = odl2_api_fixture.api
-        pool = license.license_pool
+        def license_info_dict() -> dict[str, Any]:
+            return LicenseInfoHelper(available=10, license=LicenseHelper()).dict
 
-        data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
+        info_link = "http://example.org/info"
+        checkout_link = "http://example.org/checkout"
+
+        # All fields present
+        expiry = utc_now() + datetime.timedelta(days=1)
+        license_helper = LicenseInfoHelper(
+            available=10, left=4, license=LicenseHelper(concurrency=11, expires=expiry)
         )
-        reaper = ODL2HoldReaper(db.session, collection, api=api)
+        license_dict = license_helper.dict
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.checkouts_available == 10
+        assert parsed.checkouts_left == 4
+        assert parsed.terms_concurrency == 11
+        assert parsed.expires == expiry
+        assert parsed.status == LicenseStatus.available
+        assert parsed.identifier == license_helper.license.identifier
 
-        now = utc_now()
-        yesterday = now - datetime.timedelta(days=1)
+        # No identifier
+        license_dict = license_info_dict()
+        license_dict.pop("identifier")
+        assert (
+            ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+            is None
+        )
 
-        expired_hold1, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)
-        expired_hold2, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)
-        expired_hold3, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=0)
-        current_hold, ignore = pool.on_hold_to(db.patron(), position=3)
-        # This hold has an end date in the past, but its position is greater than 0
-        # so the end date is not reliable.
-        bad_end_date, ignore = pool.on_hold_to(db.patron(), end=yesterday, position=4)
+        # No status
+        license_dict = license_info_dict()
+        license_dict.pop("status")
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.status == LicenseStatus.unavailable
 
-        progress = reaper.run_once(reaper.timestamp().to_data())
+        # Bad status
+        license_dict = license_info_dict()
+        license_dict["status"] = "bad"
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.status == LicenseStatus.unavailable
 
-        # The expired holds have been deleted and the other holds have been updated.
-        assert 2 == db.session.query(Hold).count()
-        assert [current_hold, bad_end_date] == db.session.query(Hold).order_by(
-            Hold.start
-        ).all()
-        assert 0 == current_hold.position
-        assert 0 == bad_end_date.position
-        assert current_hold.end > now
-        assert bad_end_date.end > now
-        assert 1 == pool.licenses_available
-        assert 2 == pool.licenses_reserved
+        # No available
+        license_dict = license_info_dict()
+        license_dict["checkouts"].pop("available")
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.checkouts_available == 0
 
-        # The TimestampData returned reflects what work was done.
-        assert "Holds deleted: 3. License pools updated: 1" == progress.achievements
+        # No concurrency
+        license_dict = license_info_dict()
+        license_dict["terms"].pop("concurrency")
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.terms_concurrency is None
 
-        # The TimestampData does not include any timing information --
-        # that will be applied by run().
-        assert None == progress.start
-        assert None == progress.finish
+        # Format str
+        license_dict = license_info_dict()
+        license_dict["format"] = "single format"
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.content_types == ["single format"]
+
+        # Format list
+        license_dict = license_info_dict()
+        license_dict["format"] = ["format1", "format2"]
+        parsed = ODL2Importer.parse_license_info(license_dict, info_link, checkout_link)
+        assert parsed.content_types == ["format1", "format2"]
+
+    def test_fetch_license_info(self):
+        """Ensure that ODL2Importer correctly retrieves license data from an OPDS2 feed."""
+
+        responses: list[HttpResponseTuple] = []
+        requests: list[str] = []
+
+        def get(url: str, *args: Any, **kwargs: Any) -> HttpResponseTuple:
+            requests.append(url)
+            return responses.pop(0)
+
+        # Bad status code
+        responses.append((400, {}, b"Bad Request"))
+
+        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) is None
+        assert len(requests) == 1
+        assert requests.pop() == "http://example.org/feed"
+
+        # 200 status - json decodes body and returns it
+        responses.append((200, {}, json.dumps(["a", "b"]).encode("utf-8")))
+        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) == [
+            "a",
+            "b",
+        ]
+        assert len(requests) == 1
+        assert requests.pop() == "http://example.org/feed"
+
+        # 201 status - json decodes body and returns it
+        responses.append((201, {}, json.dumps({"test": "123"}).encode("utf-8")))
+        assert ODL2Importer.fetch_license_info("http://example.org/feed", get) == {
+            "test": "123"
+        }
+        assert len(requests) == 1
+        assert requests.pop() == "http://example.org/feed"
+
+    def test_get_license_data(self, monkeypatch: pytest.MonkeyPatch):
+        expires = utc_now() + datetime.timedelta(days=1)
+
+        responses: list[tuple[int, str]] = []
+
+        def get(url: str, *args: Any, **kwargs: Any) -> HttpResponseTuple:
+            resp = responses.pop(0)
+            return resp[0], {}, resp[1].encode("utf-8")
+
+        def get_license_data() -> LicenseData | None:
+            return ODL2Importer.get_license_data(
+                "license_info_link",
+                "checkout_link",
+                "identifier",
+                expires,
+                12,
+                get,
+            )
+
+        # Bad status code returns None
+        responses.append((400, "Bad Request"))
+        assert get_license_data() is None
+
+        # Bad data returns None
+        responses.append((200, "{}"))
+        assert get_license_data() is None
+
+        # Identifier mismatch returns None
+        responses.append(
+            (
+                200,
+                LicenseInfoHelper(
+                    available=10, license=LicenseHelper(identifier="other")
+                ).json,
+            )
+        )
+        assert get_license_data() is None
+
+        # Expiry mismatch makes license unavailable
+        responses.append(
+            (
+                200,
+                LicenseInfoHelper(
+                    available=10,
+                    license=LicenseHelper(
+                        identifier="identifier",
+                        concurrency=12,
+                        expires=expires + datetime.timedelta(minutes=1),
+                    ),
+                ).json,
+            )
+        )
+        license_data = get_license_data()
+        assert license_data is not None
+        assert license_data.status == LicenseStatus.unavailable
+
+        # Concurrency mismatch makes license unavailable
+        responses.append(
+            (
+                200,
+                LicenseInfoHelper(
+                    available=10,
+                    license=LicenseHelper(
+                        identifier="identifier", concurrency=11, expires=expires
+                    ),
+                ).json,
+            )
+        )
+        license_data = get_license_data()
+        assert license_data is not None
+        assert license_data.status == LicenseStatus.unavailable
+
+        # Good data returns LicenseData
+        responses.append(
+            (
+                200,
+                LicenseInfoHelper(
+                    available=10,
+                    license=LicenseHelper(
+                        identifier="identifier", concurrency=12, expires=expires
+                    ),
+                ).json,
+            )
+        )
+        license_data = get_license_data()
+        assert license_data is not None
+        assert license_data.status == LicenseStatus.available
+        assert license_data.checkouts_available == 10
+        assert license_data.expires == expires
+        assert license_data.identifier == "identifier"
+        assert license_data.terms_concurrency == 12

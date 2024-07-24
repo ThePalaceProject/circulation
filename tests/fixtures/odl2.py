@@ -179,7 +179,7 @@ class LicenseHelper:
 
     def __init__(
         self,
-        identifier: str | None = None,
+        identifier: str | None = "",
         checkouts: int | None = None,
         concurrency: int | None = None,
         expires: datetime.datetime | str | None = None,
@@ -191,13 +191,12 @@ class LicenseHelper:
         :param concurrency: Number of concurrent checkouts allowed
         :param expires: Date & time when a license expires
         """
-        self.identifier: str = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
-        self.checkouts: int | None = checkouts
-        self.concurrency: int | None = concurrency
-        if isinstance(expires, datetime.datetime):
-            self.expires = expires.isoformat()
-        else:
-            self.expires: str | None = expires  # type: ignore
+        self.identifier = identifier if identifier else f"urn:uuid:{uuid.uuid1()}"
+        self.checkouts = checkouts
+        self.concurrency = concurrency
+        self.expires = (
+            expires.isoformat() if isinstance(expires, datetime.datetime) else expires
+        )
 
 
 class LicenseInfoHelper:
@@ -217,7 +216,17 @@ class LicenseInfoHelper:
         self.available: int = available
 
     def __str__(self) -> str:
-        """Return a JSON representation of a part of the License Info Document."""
+        """Return a JSON representation of the License Info Document."""
+        return self.json
+
+    @property
+    def json(self) -> str:
+        """Return a JSON representation of the License Info Document."""
+        return json.dumps(self.dict)
+
+    @property
+    def dict(self) -> dict[str, Any]:
+        """Return a dictionary representation of the License Info Document."""
         output: dict[str, Any] = {
             "identifier": self.license.identifier,
             "status": self.status,
@@ -232,7 +241,7 @@ class LicenseInfoHelper:
             output["terms"]["expires"] = self.license.expires
         if self.left is not None:
             output["checkouts"]["left"] = self.left
-        return json.dumps(output)
+        return output
 
 
 class ODL2ImporterFixture:
