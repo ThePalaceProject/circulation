@@ -696,19 +696,12 @@ class TestSweepMonitor:
 
             def process_item(self, item):
                 self.process_item_invocation_count += 1
-                if (
-                    self.process_item_invocation_count
-                    % SweepMonitor.MAXIMUM_BATCH_RETRIES
-                    == 1
-                ):
+                if self.process_item_invocation_count == 1:
                     raise StaleDataError("stale data")
-                if (
-                    self.process_item_invocation_count
-                    % SweepMonitor.MAXIMUM_BATCH_RETRIES
-                    == 2
-                ):
+                elif self.process_item_invocation_count == 2:
                     raise ObjectDeletedError({}, "object deleted")
-                super().process_item(item)
+                else:
+                    super().process_item(item)
 
         monitor = FailOnFirstTwoCallsSucceedOnThird(db.session)
         timestamp = monitor.timestamp()
