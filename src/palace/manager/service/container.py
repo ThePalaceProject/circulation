@@ -80,7 +80,7 @@ def wire_container(container: Services) -> None:
             "palace.manager.api.bibliotheca",
             "palace.manager.api.circulation_manager",
             "palace.manager.api.enki",
-            "palace.manager.api.odl",
+            "palace.manager.api.odl2",
             "palace.manager.api.overdrive",
             "palace.manager.feed.annotator.circulation",
             "palace.manager.feed.acquisition",

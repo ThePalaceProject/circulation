@@ -1,162 +1,56 @@
 from __future__ import annotations
 
-import logging
+import datetime
+import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from flask_babel import lazy_gettext as _
-from pydantic import NonNegativeInt, PositiveInt
+import dateutil
 from sqlalchemy.orm import Session
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
-from palace.manager.api.circulation_exceptions import (
-    HoldsNotPermitted,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-)
-from palace.manager.api.odl import (
-    BaseODLAPI,
-    BaseODLImporter,
-    ODLLibrarySettings,
-    ODLSettings,
-)
-from palace.manager.core.metadata_layer import FormatData, LicenseData, TimestampData
-from palace.manager.core.monitor import CollectionMonitor
+from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl2.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl2.settings import ODL2Settings
+from palace.manager.core.metadata_layer import FormatData, LicenseData
 from palace.manager.core.opds2_import import (
     OPDS2Importer,
-    OPDS2ImporterSettings,
     OPDS2ImportMonitor,
     RWPMManifestParser,
 )
-from palace.manager.integration.settings import (
-    ConfigurationFormItem,
-    ConfigurationFormItemType,
-    FormField,
-)
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
-    LicensePool,
+    DeliveryMechanism,
     LicenseStatus,
     RightsStatus,
 )
-from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.util import first_or_default
-from palace.manager.util.datetime_helpers import to_utc, utc_now
+from palace.manager.util.datetime_helpers import to_utc
 
 if TYPE_CHECKING:
     from webpub_manifest_parser.core.ast import Metadata
     from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
-    from palace.manager.api.circulation import HoldInfo
-    from palace.manager.sqlalchemy.model.patron import Loan, Patron
 
-
-class ODL2Settings(ODLSettings, OPDS2ImporterSettings):
-    skipped_license_formats: list[str] = FormField(
-        default=["text/html"],
-        alias="odl2_skipped_license_formats",
-        form=ConfigurationFormItem(
-            label=_("Skipped license formats"),
-            description=_(
-                "List of license formats that will NOT be imported into Circulation Manager."
-            ),
-            type=ConfigurationFormItemType.LIST,
-            required=False,
-        ),
-    )
-
-    loan_limit: PositiveInt | None = FormField(
-        default=None,
-        alias="odl2_loan_limit",
-        form=ConfigurationFormItem(
-            label=_("Loan limit per patron"),
-            description=_(
-                "The maximum number of books a patron can have loaned out at any given time."
-            ),
-            type=ConfigurationFormItemType.NUMBER,
-            required=False,
-        ),
-    )
-
-    hold_limit: NonNegativeInt | None = FormField(
-        default=None,
-        alias="odl2_hold_limit",
-        form=ConfigurationFormItem(
-            label=_("Hold limit per patron"),
-            description=_(
-                "The maximum number of books from this collection that a patron can "
-                "have on hold at any given time. "
-                "<br>A value of 0 means that holds are NOT permitted."
-                "<br>No value means that no limit is imposed by this setting."
-            ),
-            type=ConfigurationFormItemType.NUMBER,
-            required=False,
-        ),
-    )
-
-
-class ODL2API(BaseODLAPI[ODL2Settings, ODLLibrarySettings]):
-    @classmethod
-    def settings_class(cls) -> type[ODL2Settings]:
-        return ODL2Settings
-
-    @classmethod
-    def library_settings_class(cls) -> type[ODLLibrarySettings]:
-        return ODLLibrarySettings
-
-    @classmethod
-    def label(cls) -> str:
-        return "ODL 2.0"
-
-    @classmethod
-    def description(cls) -> str:
-        return "Import books from a distributor that uses OPDS2 + ODL (Open Distribution to Libraries)."
-
-    def __init__(self, _db: Session, collection: Collection) -> None:
-        super().__init__(_db, collection)
-        self.loan_limit = self.settings.loan_limit
-        self.hold_limit = self.settings.hold_limit
-
-    def _checkout(
-        self, patron: Patron, licensepool: LicensePool, hold: Hold | None = None
-    ) -> Loan:
-        # If the loan limit is not None or 0
-        if self.loan_limit:
-            loans = list(
-                filter(
-                    lambda x: x.license_pool.collection.id == self.collection_id,
-                    patron.loans,
-                )
-            )
-            if len(loans) >= self.loan_limit:
-                raise PatronLoanLimitReached(limit=self.loan_limit)
-        return super()._checkout(patron, licensepool, hold)
-
-    def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
-        if self.hold_limit is not None:
-            holds = list(
-                filter(
-                    lambda x: x.license_pool.collection.id == self.collection_id,
-                    patron.holds,
-                )
-            )
-            if self.hold_limit == 0:
-                raise HoldsNotPermitted()
-            if len(holds) >= self.hold_limit:
-                raise PatronHoldLimitReached(limit=self.hold_limit)
-        return super()._place_hold(patron, licensepool)
-
-
-class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
+class ODL2Importer(OPDS2Importer):
     """Import information and formats from an ODL feed.
 
     The only change from OPDS2Importer is that this importer extracts
     FormatData and LicenseData from ODL 2.x's "licenses" arrays.
     """
 
+    DRM_SCHEME = "drm-scheme"
+    CONTENT_TYPE = "content-type"
+    LICENSE_FORMATS = {
+        FEEDBOOKS_AUDIO: {
+            CONTENT_TYPE: MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DRM_SCHEME: DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
+        }
+    }
     NAME = ODL2API.label()
 
     @classmethod
@@ -198,7 +92,6 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
             data_source_name,
             http_get,
         )
-        self._logger = logging.getLogger(__name__)
 
     def _extract_publication_metadata(
         self,
@@ -226,7 +119,7 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
         licenses = []
         medium = None
 
-        skipped_license_formats = set(self.settings.skipped_license_formats)
+        skipped_license_formats = set(self.settings.skipped_license_formats)  # type: ignore[attr-defined]
         publication_availability = self._extract_availability(
             publication.metadata.availability
         )
@@ -334,6 +227,162 @@ class ODL2Importer(BaseODLImporter[ODL2Settings], OPDS2Importer):
 
         return metadata
 
+    @classmethod
+    def fetch_license_info(
+        cls, document_link: str, do_get: Callable[..., HttpResponseTuple]
+    ) -> dict[str, Any] | None:
+        status_code, _, response = do_get(document_link, headers={})
+        if status_code in (200, 201):
+            license_info_document = json.loads(response)
+            return license_info_document  # type: ignore[no-any-return]
+        else:
+            cls.logger().warning(
+                f"License Info Document is not available. "
+                f"Status link {document_link} failed with {status_code} code."
+            )
+            return None
+
+    @classmethod
+    def parse_license_info(
+        cls,
+        license_info_document: dict[str, Any],
+        license_info_link: str,
+        checkout_link: str | None,
+    ) -> LicenseData | None:
+        """Check the license's attributes passed as parameters:
+        - if they're correct, turn them into a LicenseData object
+        - otherwise, return a None
+
+        :param license_info_document: License Info Document
+        :param license_info_link: Link to fetch License Info Document
+        :param checkout_link: License's checkout link
+
+        :return: LicenseData if all the license's attributes are correct, None, otherwise
+        """
+
+        identifier = license_info_document.get("identifier")
+        document_status = license_info_document.get("status")
+        document_checkouts = license_info_document.get("checkouts", {})
+        document_left = document_checkouts.get("left")
+        document_available = document_checkouts.get("available")
+        document_terms = license_info_document.get("terms", {})
+        document_expires = document_terms.get("expires")
+        document_concurrency = document_terms.get("concurrency")
+        document_format = license_info_document.get("format")
+
+        if identifier is None:
+            cls.logger().error("License info document has no identifier.")
+            return None
+
+        expires = None
+        if document_expires is not None:
+            expires = dateutil.parser.parse(document_expires)
+            expires = to_utc(expires)
+
+        if document_status is not None:
+            status = LicenseStatus.get(document_status)
+            if status.value != document_status:
+                cls.logger().warning(
+                    f"Identifier # {identifier} unknown status value "
+                    f"{document_status} defaulting to {status.value}."
+                )
+        else:
+            status = LicenseStatus.unavailable
+            cls.logger().warning(
+                f"Identifier # {identifier} license info document does not have "
+                f"required key 'status'."
+            )
+
+        if document_available is not None:
+            available = int(document_available)
+        else:
+            available = 0
+            cls.logger().warning(
+                f"Identifier # {identifier} license info document does not have "
+                f"required key 'checkouts.available'."
+            )
+
+        left = None
+        if document_left is not None:
+            left = int(document_left)
+
+        concurrency = None
+        if document_concurrency is not None:
+            concurrency = int(document_concurrency)
+
+        content_types = None
+        if document_format is not None:
+            if isinstance(document_format, str):
+                content_types = [document_format]
+            elif isinstance(document_format, list):
+                content_types = document_format
+
+        return LicenseData(
+            identifier=identifier,
+            checkout_url=checkout_link,
+            status_url=license_info_link,
+            expires=expires,
+            checkouts_left=left,
+            checkouts_available=available,
+            status=status,
+            terms_concurrency=concurrency,
+            content_types=content_types,
+        )
+
+    @classmethod
+    def get_license_data(
+        cls,
+        license_info_link: str,
+        checkout_link: str | None,
+        feed_license_identifier: str | None,
+        feed_license_expires: datetime.datetime | None,
+        feed_concurrency: int | None,
+        do_get: Callable[..., HttpResponseTuple],
+    ) -> LicenseData | None:
+        license_info_document = cls.fetch_license_info(license_info_link, do_get)
+
+        if not license_info_document:
+            return None
+
+        parsed_license = cls.parse_license_info(
+            license_info_document, license_info_link, checkout_link
+        )
+
+        if not parsed_license:
+            return None
+
+        if parsed_license.identifier != feed_license_identifier:
+            # There is a mismatch between the license info document and
+            # the feed we are importing. Since we don't know which to believe
+            # we log an error and continue.
+            cls.logger().error(
+                f"Mismatch between license identifier in the feed ({feed_license_identifier}) "
+                f"and the identifier in the license info document "
+                f"({parsed_license.identifier}) ignoring license completely."
+            )
+            return None
+
+        if parsed_license.expires != feed_license_expires:
+            cls.logger().error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"expiry in the feed ({feed_license_expires}) and the expiry in the license "
+                f"info document ({parsed_license.expires}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        if parsed_license.terms_concurrency != feed_concurrency:
+            cls.logger().error(
+                f"License identifier {feed_license_identifier}. Mismatch between license "
+                f"concurrency in the feed ({feed_concurrency}) and the "
+                f"concurrency in the license info document ("
+                f"{parsed_license.terms_concurrency}) setting license status "
+                f"to unavailable."
+            )
+            parsed_license.status = LicenseStatus.unavailable
+
+        return parsed_license
+
 
 class ODL2ImportMonitor(OPDS2ImportMonitor):
     """Import information from an ODL feed."""
@@ -352,49 +401,3 @@ class ODL2ImportMonitor(OPDS2ImportMonitor):
         super().__init__(
             _db, collection, import_class, force_reimport=True, **import_class_kwargs
         )
-
-
-class ODL2HoldReaper(CollectionMonitor):
-    """Check for holds that have expired and delete them, and update
-    the holds queues for their pools."""
-
-    SERVICE_NAME = "ODL2 Hold Reaper"
-    PROTOCOL = ODL2API.label()
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api: ODL2API | None = None,
-        **kwargs: Any,
-    ):
-        super().__init__(_db, collection, **kwargs)
-        self.api = api or ODL2API(_db, collection)
-
-    def run_once(self, progress: TimestampData) -> TimestampData:
-        # Find holds that have expired.
-        expired_holds = (
-            self._db.query(Hold)
-            .join(Hold.license_pool)
-            .filter(LicensePool.collection_id == self.api.collection_id)
-            .filter(Hold.end < utc_now())
-            .filter(Hold.position == 0)
-        )
-
-        changed_pools = set()
-        total_deleted_holds = 0
-        for hold in expired_holds:
-            changed_pools.add(hold.license_pool)
-            self._db.delete(hold)
-            # log circulation event:  hold expired
-            total_deleted_holds += 1
-
-        for pool in changed_pools:
-            self.api.update_licensepool(pool)
-
-        message = "Holds deleted: %d. License pools updated: %d" % (
-            total_deleted_holds,
-            len(changed_pools),
-        )
-        progress = TimestampData(achievements=message)
-        return progress

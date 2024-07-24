@@ -5,7 +5,7 @@ OPDS import collections."""
 
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 
-from palace.manager.api.odl2 import ODL2Importer
+from palace.manager.api.odl2.importer import ODL2Importer
 from palace.manager.core.opds2_import import RWPMManifestParser
 from palace.manager.core.opds_schema import ODL2SchemaValidation
 from palace.manager.scripts.monitor import RunCollectionMonitorScript

@@ -78,10 +78,6 @@ HOME=/var/www/circulation
 #
 30 5 * * * root bin/run opds2_import_monitor >> /var/log/cron.log 2>&1
 
-# OPDS 1.x + ODL
-#
-15 * * * * root bin/run odl_import_monitor >> /var/log/cron.log 2>&1
-
 # OPDS 2.x + ODL import
 #
 45 * * * * root bin/run odl2_import_monitor >> /var/log/cron.log 2>&1

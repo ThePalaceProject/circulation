@@ -13,7 +13,7 @@ from jsonschema.protocols import Validator
 from referencing import Registry
 from referencing.retrieval import to_cached_resource
 
-from palace.manager.api.odl2 import ODL2ImportMonitor
+from palace.manager.api.odl2.importer import ODL2ImportMonitor
 from palace.manager.core.opds2_import import OPDS2ImportMonitor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.resources import resources_dir

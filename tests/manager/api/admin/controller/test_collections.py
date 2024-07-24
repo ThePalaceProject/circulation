@@ -27,7 +27,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_PROTOCOL,
 )
 from palace.manager.api.axis import Axis360API
-from palace.manager.api.odl import ODLAPI
+from palace.manager.api.odl2.api import ODL2API
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
@@ -595,13 +595,13 @@ class TestCollectionSettings:
         assert parent == collection.parent
 
         library = db.default_library()
-        collection2 = db.collection(name="Collection 2", protocol=ODLAPI.label())
+        collection2 = db.collection(name="Collection 2", protocol=ODL2API.label())
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection2.integration_configuration.id)),
                     ("name", "Collection 2"),
-                    ("protocol", ODLAPI.label()),
+                    ("protocol", ODL2API.label()),
                     ("external_account_id", "http://test.com/feed"),
                     ("username", "user"),
                     ("password", "password"),
