@@ -780,7 +780,6 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         count = 0
         for bibliographic, circulation in self.api.recent_activity(start):
             self.process_book(bibliographic, circulation)
-            self._db.commit()
             count += 1
         progress.achievements = "Modified titles: %d." % count
 
@@ -796,6 +795,14 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     def process_book(
         self, bibliographic: Metadata, circulation: CirculationData
     ) -> tuple[Edition, LicensePool]:
+        if self._db.dirty:
+            # If an update failed on a previous attempt due to stale or missing data, the session should be dirty.
+            # Therefore, we should roll it back before trying again.
+            # I've put the rollback here rather than in a @retry before_sleep hook because I could neither
+            # figure out how to cleanly reference the db session from within class or module  level method on
+            # the one hand, nor pass an instance method reference to the hook.
+            self._db.rollback()
+
         edition, new_edition, license_pool, new_license_pool = self.api.update_book(
             bibliographic, circulation
         )
@@ -807,6 +814,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
             self.bibliographic_coverage_provider.handle_success(identifier)
             self.bibliographic_coverage_provider.add_coverage_record_for(identifier)
 
+        self._db.commit()
         return edition, license_pool
 
 

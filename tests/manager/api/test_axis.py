@@ -64,8 +64,9 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http import RemoteIntegrationException
@@ -1007,6 +1008,13 @@ class TestCirculationMonitor:
             identifier_type=Identifier.AXIS_360_ID,
             identifier_id="0003642860",
         )
+
+        axis360.db.session.commit()
+
+        licensepool, _ = get_one_or_create(
+            axis360.db.session, LicensePool, id=licensepool.id
+        )
+
         # We start off with availability information based on the
         # default for test data.
         assert 1 == licensepool.licenses_owned
@@ -1015,12 +1023,15 @@ class TestCirculationMonitor:
             type=licensepool.identifier.type,
             identifier=licensepool.identifier.identifier,
         )
+
         metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
+
         monitor = Axis360CirculationMonitor(
             axis360.db.session,
             axis360.collection,
             api_class=MockAxis360API,
         )
+
         edition, licensepool = monitor.process_book(metadata, axis360.AVAILABILITY_DATA)
 
         # Now we have information based on the CirculationData.

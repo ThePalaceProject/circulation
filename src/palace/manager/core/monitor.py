@@ -480,7 +480,7 @@ class SweepMonitor(CollectionMonitor):
         # last _successful_ batch.
         run_started_at = utc_now()
         timestamp.start = run_started_at
-
+        self._db.commit()
         total_processed = 0
         while True:
             old_offset = offset
@@ -514,9 +514,27 @@ class SweepMonitor(CollectionMonitor):
         # update.
         return TimestampData(counter=offset, achievements=achievements)
 
+    @retry(
+        retry=(
+            retry_if_exception_type(StaleDataError)
+            | retry_if_exception_type(ObjectDeletedError)
+        ),
+        stop=stop_after_attempt(MAXIMUM_BATCH_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        reraise=True,
+    )
     def process_batch(self, offset):
         """Process one batch of work."""
         offset = offset or 0
+
+        if self._db.dirty:
+            # If an update failed on a previous attempt due to stale or missing data, the session should be dirty.
+            # Therefore, we should roll it back before trying again.
+            # I've put the rollback here rather than in a @retry before_sleep hook because I could neither
+            # figure out how to cleanly reference the db session from within class or module  level method on
+            # the one hand, nor pass an instance method reference to the hook.
+            self._db.rollback()
+
         items = self.fetch_batch(offset).all()
         if items:
             self.process_items(items)
@@ -529,15 +547,6 @@ class SweepMonitor(CollectionMonitor):
             # are done with the sweep. Reset the counter.
             return 0, 0
 
-    @retry(
-        retry=(
-            retry_if_exception_type(StaleDataError)
-            | retry_if_exception_type(ObjectDeletedError)
-        ),
-        stop=stop_after_attempt(MAXIMUM_BATCH_RETRIES),
-        wait=wait_exponential(multiplier=1, min=1, max=60),
-        reraise=True,
-    )
     def process_items(self, items):
         """Process a list of items."""
         for item in items:
