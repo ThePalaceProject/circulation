@@ -21,8 +21,9 @@ class TestLoanlikeReaperMonitor:
         """Verify that well-known source of truth protocols
         will be exempt from the reaper.
         """
-        for i in (OPDSForDistributorsAPI.label(),):
-            assert i in LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS
+        assert LoanlikeReaperMonitor.SOURCE_OF_TRUTH_PROTOCOLS == [
+            OPDSForDistributorsAPI.label()
+        ]
 
     def test_reaping(self, db: DatabaseTransactionFixture):
         # This patron stopped using the circulation manager a long time
