@@ -3,12 +3,17 @@ from __future__ import annotations
 import datetime
 import logging
 import traceback
-from time import sleep
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import defer
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 from sqlalchemy.sql.expression import and_, or_
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.metadata_layer import TimestampData
@@ -443,7 +448,7 @@ class SweepMonitor(CollectionMonitor):
     # Items will be processed in batches of this size.
     DEFAULT_BATCH_SIZE = 100
 
-    MAXIMUM_BATCH_RETRIES = 3
+    MAXIMUM_BATCH_RETRIES = 10
 
     DEFAULT_COUNTER = 0
 
@@ -514,23 +519,8 @@ class SweepMonitor(CollectionMonitor):
         offset = offset or 0
         items = self.fetch_batch(offset).all()
         if items:
-            batch_succeeded = False
-            for attempt in range(self.MAXIMUM_BATCH_RETRIES):
-                if batch_succeeded:
-                    break
-
-                try:
-                    self.process_items(items)
-                    batch_succeeded = True
-                except (ObjectDeletedError, StaleDataError) as e:
-                    self.log.exception("encountered stale data exception: ", exc_info=e)
-                    if attempt + 1 == self.MAXIMUM_BATCH_RETRIES:
-                        raise e
-                    else:
-                        sleep(1)
-                        self.log.warning(
-                            f"retrying batch (attempt {attempt} of {self.MAXIMUM_BATCH_RETRIES})"
-                        )
+            self.process_items(items)
+            self._db.commit()
             # We've completed a batch. Return the ID of the last item
             # in the batch so we don't do this work again.
             return items[-1].id, len(items)
@@ -539,6 +529,15 @@ class SweepMonitor(CollectionMonitor):
             # are done with the sweep. Reset the counter.
             return 0, 0
 
+    @retry(
+        retry=(
+            retry_if_exception_type(StaleDataError)
+            | retry_if_exception_type(ObjectDeletedError)
+        ),
+        stop=stop_after_attempt(MAXIMUM_BATCH_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        reraise=True,
+    )
     def process_items(self, items):
         """Process a list of items."""
         for item in items:

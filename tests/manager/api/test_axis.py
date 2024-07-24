@@ -7,9 +7,10 @@ import ssl
 import urllib
 from functools import partial
 from typing import TYPE_CHECKING, cast
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import (
     AudiobookMetadataParser,
@@ -1024,6 +1025,47 @@ class TestCirculationMonitor:
 
         # Now we have information based on the CirculationData.
         assert 9 == licensepool.licenses_owned
+
+    # def test_retry_failure
+
+    def test_retry(self, axis360: Axis360Fixture):
+        monitor = Axis360CirculationMonitor(
+            axis360.db.session,
+            axis360.collection,
+            api_class=MockAxis360API,
+        )
+
+        edition, licensepool = axis360.db.edition(
+            with_license_pool=True,
+            identifier_type=Identifier.AXIS_360_ID,
+            identifier_id="012345678",
+        )
+        identifier = IdentifierData(
+            type=licensepool.identifier.type,
+            identifier=licensepool.identifier.identifier,
+        )
+
+        metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
+
+        with patch("tests.mocks.axis.MockAxis360API.update_book") as update_book, patch(
+            "tests.mocks.axis.MockAxis360API.recent_activity"
+        ) as recent_activity:
+            update_book.side_effect = [
+                ObjectDeletedError({}, "object deleted"),
+                StaleDataError("stale data"),
+            ]
+
+            update_book.return_value = (edition, False, licensepool, False)
+            recent_activity.return_value = [(metadata, metadata.circulation)]
+            monitor = Axis360CirculationMonitor(
+                axis360.db.session,
+                axis360.collection,
+                api_class=MockAxis360API,
+            )
+
+            monitor.run()
+
+            assert update_book.call_count == 3
 
 
 class TestReaper:
