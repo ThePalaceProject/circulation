@@ -9,7 +9,7 @@ from flask_babel import lazy_gettext as _
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
-from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
@@ -32,7 +32,7 @@ class ODLNotificationController(CirculationManagerController):
             return NO_ACTIVE_LOAN.detailed(_("No loan was found for this identifier."))
 
         collection = loan.license_pool.collection
-        if collection.protocol != ODL2API.label():
+        if collection.protocol != OPDS2WithODLApi.label():
             return INVALID_LOAN_FOR_ODL_NOTIFICATION
 
         api = self.manager.circulation_apis[library.id].api_for_license_pool(

@@ -3,13 +3,13 @@ from typing import Any
 from requests import Response
 from sqlalchemy.orm import Session
 
-from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.http import HTTP
 from tests.mocks.mock import MockRequestsResponse
 
 
-class MockODL2API(ODL2API):
+class MockOPDS2WithODLApi(OPDS2WithODLApi):
     def __init__(
         self,
         _db: Session,

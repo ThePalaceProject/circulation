@@ -69,17 +69,17 @@ def opds2_files_fixture() -> OPDS2FilesFixture:
     return OPDS2FilesFixture()
 
 
-class ODL2APIFilesFixture(FilesFixture):
-    """A fixture providing access to ODL2 files."""
+class OPDS2WithODLFilesFixture(FilesFixture):
+    """A fixture providing access to OPDS2 + ODL files."""
 
     def __init__(self):
-        super().__init__("odl2")
+        super().__init__("odl")
 
 
 @pytest.fixture()
-def api_odl2_files_fixture() -> ODL2APIFilesFixture:
-    """A fixture providing access to ODL2 files."""
-    return ODL2APIFilesFixture()
+def opds2_with_odl_files_fixture() -> OPDS2WithODLFilesFixture:
+    """A fixture providing access to OPDS2 + ODL files."""
+    return OPDS2WithODLFilesFixture()
 
 
 class SampleCoversFixture(FilesFixture):

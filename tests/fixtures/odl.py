@@ -10,8 +10,8 @@ import pytest
 from jinja2 import Template
 
 from palace.manager.api.circulation import LoanInfo
-from palace.manager.api.odl2.api import ODL2API
-from palace.manager.api.odl2.importer import ODL2Importer
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.importer import OPDS2WithODLImporter
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -26,11 +26,11 @@ from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import FilesFixture, ODL2APIFilesFixture
-from tests.mocks.odl2 import MockODL2API
+from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
+from tests.mocks.odl import MockOPDS2WithODLApi
 
 
-class ODL2APIFixture:
+class OPDS2WithODLApiFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
@@ -43,7 +43,7 @@ class ODL2APIFixture:
         self.collection = self.create_collection(self.library)
         self.work = self.create_work(self.collection)
         self.license = self.setup_license()
-        self.api = MockODL2API(self.db.session, self.collection)
+        self.api = MockOPDS2WithODLApi(self.db.session, self.collection)
         self.patron = db.patron()
         self.pool = self.license.license_pool
 
@@ -53,8 +53,8 @@ class ODL2APIFixture:
     def create_collection(self, library: Library) -> Collection:
         collection, _ = Collection.by_name_and_protocol(
             self.db.session,
-            f"Test {ODL2API.__name__} Collection",
-            ODL2API.label(),
+            f"Test {OPDS2WithODLApi.__name__} Collection",
+            OPDS2WithODLApi.label(),
         )
         collection.integration_configuration.settings_dict = {
             "username": "a",
@@ -96,7 +96,7 @@ class ODL2APIFixture:
         self._checkin(self.api, patron=patron, pool=pool)
 
     @staticmethod
-    def _checkin(api: MockODL2API, patron: Patron, pool: LicensePool) -> None:
+    def _checkin(api: MockOPDS2WithODLApi, patron: Patron, pool: LicensePool) -> None:
         """Create a function that, when evaluated, performs a checkin."""
 
         lsd = json.dumps(
@@ -136,7 +136,7 @@ class ODL2APIFixture:
 
     @staticmethod
     def _checkout(
-        api: MockODL2API,
+        api: MockOPDS2WithODLApi,
         patron: Patron,
         pool: LicensePool,
         db: DatabaseTransactionFixture,
@@ -167,11 +167,11 @@ class ODL2APIFixture:
 
 
 @pytest.fixture(scope="function")
-def odl2_api_fixture(
+def opds2_with_odl_api_fixture(
     db: DatabaseTransactionFixture,
-    api_odl2_files_fixture: ODL2APIFilesFixture,
-) -> ODL2APIFixture:
-    return ODL2APIFixture(db, api_odl2_files_fixture)
+    opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
+) -> OPDS2WithODLApiFixture:
+    return OPDS2WithODLApiFixture(db, opds2_with_odl_files_fixture)
 
 
 class LicenseHelper:
@@ -244,11 +244,11 @@ class LicenseInfoHelper:
         return output
 
 
-class ODL2ImporterFixture:
+class OPDS2WithODLImporterFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        api_fixture: ODL2APIFixture,
+        api_fixture: OPDS2WithODLApiFixture,
     ):
         self.db = db
         self.api_fixture = api_fixture
@@ -258,7 +258,7 @@ class ODL2ImporterFixture:
 
         self.collection = api_fixture.collection
 
-        self.importer = ODL2Importer(
+        self.importer = OPDS2WithODLImporter(
             db.session,
             collection=self.collection,
             http_get=self.get_response,
@@ -325,8 +325,8 @@ class ODL2ImporterFixture:
 
 
 @pytest.fixture
-def odl2_importer_fixture(
+def opds2_with_odl_importer_fixture(
     db: DatabaseTransactionFixture,
-    odl2_api_fixture: ODL2APIFixture,
-) -> ODL2ImporterFixture:
-    return ODL2ImporterFixture(db, odl2_api_fixture)
+    opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+) -> OPDS2WithODLImporterFixture:
+    return OPDS2WithODLImporterFixture(db, opds2_with_odl_api_fixture)

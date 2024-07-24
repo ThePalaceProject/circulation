@@ -14,7 +14,7 @@ from palace.manager.integration.settings import (
 from palace.manager.sqlalchemy.model.collection import Collection
 
 
-class ODL2Settings(OPDS2ImporterSettings):
+class OPDS2WithODLSettings(OPDS2ImporterSettings):
     encryption_algorithm: HashingAlgorithm = FormField(
         default=HashingAlgorithm.SHA256,
         form=ConfigurationFormItem(
@@ -119,5 +119,5 @@ class ODL2Settings(OPDS2ImporterSettings):
     )
 
 
-class ODL2LibrarySettings(BaseCirculationEbookLoanSettings):
+class OPDS2WithODLLibrarySettings(BaseCirculationEbookLoanSettings):
     pass

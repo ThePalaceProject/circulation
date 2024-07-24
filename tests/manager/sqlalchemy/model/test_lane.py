@@ -10,7 +10,7 @@ from opensearchpy.exceptions import OpenSearchException
 from sqlalchemy import and_, text
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.odl2.api import ODL2API
+from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import (
@@ -2663,17 +2663,17 @@ class TestWorkList:
         w1.license_pools[0].licenses_available = 0
         collection1: Collection = w1.license_pools[0].collection
         integration1 = collection1.integration_configuration
-        odl2api_required_settings = dict(
+        opds2_with_odl_required_settings = dict(
             external_account_id="http://account_id",
             data_source="distributor X",
             username="user",
             password="pw",
         )
         setting_under_test = dict(hold_limit=0)
-        settings = ODL2API.settings_class()(
-            **odl2api_required_settings | setting_under_test
+        settings = OPDS2WithODLApi.settings_class()(
+            **opds2_with_odl_required_settings | setting_under_test
         )
-        ODL2API.settings_update(integration1, settings)
+        OPDS2WithODLApi.settings_update(integration1, settings)
         db.session.commit()
 
         class MockHit:
@@ -2718,7 +2718,7 @@ class TestWorkList:
         assert [[w2], [w1]] == m(db.session, [[hit2], [hit1]])
 
         # Now both collections are restricted and have no availability
-        ODL2API.settings_update(
+        OPDS2WithODLApi.settings_update(
             alternate_collection.integration_configuration, settings
         )
         assert [[w2], []] == m(db.session, [[hit2], [hit1]])
