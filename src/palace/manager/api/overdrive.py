@@ -6,7 +6,6 @@ import datetime
 import json
 import logging
 import re
-import time
 import urllib.parse
 from collections.abc import Iterable
 from threading import RLock
@@ -23,6 +22,12 @@ from requests.structures import CaseInsensitiveDict
 from sqlalchemy import select
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -1956,7 +1961,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     basic Editions for any new LicensePools that show up.
     """
 
-    MAXIMUM_BOOK_RETRIES = 3
+    MAXIMUM_BOOK_RETRIES = 5
     SERVICE_NAME = "Overdrive Circulation Monitor"
     PROTOCOL = OverdriveAPI.label()
     OVERLAP = datetime.timedelta(minutes=1)
@@ -1995,34 +2000,40 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
             if not book:
                 continue
 
-            # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
             book_changed = False
-            book_succeeded = False
-            max_retries = OverdriveCirculationMonitor.MAXIMUM_BOOK_RETRIES
-            for attempt in range(max_retries):
-                if book_succeeded:
-                    break
-
-                try:
-                    _, _, is_changed = self.api.update_licensepool(book)
-                    self._db.commit()
-                    book_succeeded = True
-                    book_changed = is_changed
-                except (StaleDataError, ObjectDeletedError) as e:
-                    self.log.exception("encountered stale data exception: ", exc_info=e)
-                    self._db.rollback()
-                    if attempt + 1 == max_retries:
-                        progress.exception = e
-                    else:
-                        time.sleep(1)
-                        self.log.warning(
-                            f"retrying book {book} (attempt {attempt} of {max_retries})"
-                        )
+            try:
+                book_changed = self.process_book(book, progress)
+                self._db.commit()
+            except Exception as e:
+                progress.exception = e
 
             if self.should_stop(start, book, book_changed):
                 break
 
         progress.achievements = "Books processed: %d." % total_books
+
+    @retry(
+        retry=(
+            retry_if_exception_type(StaleDataError)
+            | retry_if_exception_type(ObjectDeletedError)
+        ),
+        stop=stop_after_attempt(MAXIMUM_BOOK_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        reraise=True,
+    )
+    def process_book(self, book, progress):
+        # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
+        book_changed = False
+        tx = self._db.begin_nested()
+        try:
+            _, _, is_changed = self.api.update_licensepool(book)
+            tx.commit()
+            book_changed = is_changed
+        except Exception as e:
+            self.log.exception("exception on update_licensepool: ", exc_info=e)
+            tx.rollback()
+            raise e
+        return book_changed
 
     def should_stop(self, start, api_description, is_changed):
         pass

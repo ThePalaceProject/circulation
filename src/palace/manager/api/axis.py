@@ -780,6 +780,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         count = 0
         for bibliographic, circulation in self.api.recent_activity(start):
             self.process_book(bibliographic, circulation)
+            self._db.commit()
             count += 1
         progress.achievements = "Modified titles: %d." % count
 
@@ -796,7 +797,6 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         self, bibliographic: Metadata, circulation: CirculationData
     ) -> tuple[Edition, LicensePool]:
         tx = self._db.begin_nested()
-
         try:
             edition, new_edition, license_pool, new_license_pool = self.api.update_book(
                 bibliographic, circulation

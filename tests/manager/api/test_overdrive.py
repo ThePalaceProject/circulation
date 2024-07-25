@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from requests import Response
-from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.circulation import (
     CirculationAPI,
@@ -3034,8 +3034,10 @@ class TestOverdriveCirculationMonitor:
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
 
-                if current_count < 2:
+                if current_count < 1:
                     raise StaleDataError("Ouch!")
+                elif current_count < 2:
+                    raise ObjectDeletedError({}, "Ouch Deleted!")
 
                 pool, is_new, is_changed = self.licensepools.pop(0)
                 self.update_licensepool_calls.append((book_id, pool))
