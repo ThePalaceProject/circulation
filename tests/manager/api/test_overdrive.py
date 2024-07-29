@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from requests import Response
-from sqlalchemy.orm.exc import StaleDataError
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.circulation import (
     CirculationAPI,
@@ -3034,8 +3034,10 @@ class TestOverdriveCirculationMonitor:
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
 
-                if current_count < 2:
+                if current_count < 1:
                     raise StaleDataError("Ouch!")
+                elif current_count < 2:
+                    raise ObjectDeletedError({}, "Ouch Deleted!")
 
                 pool, is_new, is_changed = self.licensepools.pop(0)
                 self.update_licensepool_calls.append((book_id, pool))
@@ -3098,7 +3100,7 @@ class TestOverdriveCirculationMonitor:
                 current_count = self.tries.get(str(book_id)) or 0
                 current_count = current_count + 1
                 self.tries[str(book_id)] = current_count
-                raise StaleDataError("Ouch!")
+                raise Exception("Generic exception that will cause bypass retries")
 
         class MockAnalytics(Analytics):
             def __init__(self):
@@ -3113,6 +3115,7 @@ class TestOverdriveCirculationMonitor:
             api_class=MockAPI,
             analytics=MockAnalytics(),
         )
+
         api = monitor.api
 
         # A MockAnalytics object was created and is ready to receive analytics
@@ -3132,10 +3135,64 @@ class TestOverdriveCirculationMonitor:
         cutoff = object()
         monitor.catch_up_from(start, cutoff, progress)
 
-        assert api.tries["1"] == 3
-        assert api.tries["2"] == 3
-        assert api.tries["3"] == 3
+        assert api.tries["1"] == 1
+        assert api.tries["2"] == 1
+        assert api.tries["3"] == 1
         assert progress.is_failure
+
+    def test_retries_for_retryable_errors(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """If  individual books fail due to retryable conditions, confirm success"""
+        db = overdrive_api_fixture.db
+        book1 = 1
+        book2 = 2
+
+        class MockAPI:
+            tries: dict[str, int] = {}
+
+            def __init__(self, *ignore, **kwignore):
+                self.licensepools = []
+                self.update_licensepool_calls = []
+
+            def recently_changed_ids(self, start, cutoff):
+                return [book1, book2]
+
+            def update_licensepool(self, book_id):
+                current_count = self.tries.get(str(book_id)) or 0
+                current_count = current_count + 1
+                self.tries[str(book_id)] = current_count
+                if book_id == 1:
+                    if current_count == 1:
+                        raise StaleDataError("stale data")
+                elif book_id == 2:
+                    if current_count == 1:
+                        raise ObjectDeletedError({}, "object deleted")
+
+                return None, None, False
+
+        monitor = OverdriveCirculationMonitor(
+            db.session,
+            overdrive_api_fixture.collection,
+            api_class=MockAPI,
+        )
+
+        api = monitor.api
+
+        lp1 = db.licensepool(None)
+        lp1.last_checked = utc_now()
+        lp2 = db.licensepool(None)
+        api.licensepools.append((lp1, True, True))
+        api.licensepools.append((lp2, False, False))
+
+        progress = TimestampData()
+        start = object()
+        cutoff = object()
+        monitor.catch_up_from(start, cutoff, progress)
+
+        for b in [book1, book2]:
+            assert api.tries[str(b)] == 2
+        assert not progress.is_failure
 
 
 class TestNewTitlesOverdriveCollectionMonitor:

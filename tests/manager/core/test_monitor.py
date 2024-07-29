@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive import OverdriveAPI
@@ -680,6 +681,37 @@ class TestSweepMonitor:
 
         # cleanup() is only called when the sweep completes successfully.
         assert [] == monitor.cleanup_called
+
+    def test_retries(
+        self,
+        db: DatabaseTransactionFixture,
+        sweep_monitor_fixture: SweepMonitorFixture,
+    ):
+        identifier = db.identifier()
+
+        class FailOnFirstTwoCallsSucceedOnThird(MockSweepMonitor):
+            def __init__(self, _db, **kwargs):
+                super().__init__(_db, **kwargs)
+                self.process_item_invocation_count = 0
+
+            def process_item(self, item):
+                self.process_item_invocation_count += 1
+                if self.process_item_invocation_count == 1:
+                    raise StaleDataError("stale data")
+                elif self.process_item_invocation_count == 2:
+                    raise ObjectDeletedError({}, "object deleted")
+                else:
+                    super().process_item(item)
+
+        monitor = FailOnFirstTwoCallsSucceedOnThird(db.session)
+        timestamp = monitor.timestamp()
+        monitor.run()
+        # we expect that process should have been called 3 times total
+        assert monitor.process_item_invocation_count == 3
+        # there shouldn't be an exception saved since it ultimately succeeded.
+        assert timestamp.exception is None
+        assert "Records processed: 1." == timestamp.achievements
+        assert [identifier] == monitor.processed
 
 
 class TestIdentifierSweepMonitor:

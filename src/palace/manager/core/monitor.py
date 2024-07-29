@@ -6,7 +6,14 @@ import traceback
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import defer
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 from sqlalchemy.sql.expression import and_, or_
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.metadata_layer import TimestampData
@@ -441,6 +448,8 @@ class SweepMonitor(CollectionMonitor):
     # Items will be processed in batches of this size.
     DEFAULT_BATCH_SIZE = 100
 
+    MAXIMUM_BATCH_RETRIES = 10
+
     DEFAULT_COUNTER = 0
 
     # The model class corresponding to the database table that this
@@ -471,7 +480,6 @@ class SweepMonitor(CollectionMonitor):
         # last _successful_ batch.
         run_started_at = utc_now()
         timestamp.start = run_started_at
-
         total_processed = 0
         while True:
             old_offset = offset
@@ -505,19 +513,38 @@ class SweepMonitor(CollectionMonitor):
         # update.
         return TimestampData(counter=offset, achievements=achievements)
 
+    @retry(
+        retry=(
+            retry_if_exception_type(StaleDataError)
+            | retry_if_exception_type(ObjectDeletedError)
+        ),
+        stop=stop_after_attempt(MAXIMUM_BATCH_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        reraise=True,
+    )
     def process_batch(self, offset):
         """Process one batch of work."""
-        offset = offset or 0
-        items = self.fetch_batch(offset).all()
-        if items:
-            self.process_items(items)
-            # We've completed a batch. Return the ID of the last item
-            # in the batch so we don't do this work again.
-            return items[-1].id, len(items)
-        else:
-            # There are no more items in this database table, so we
-            # are done with the sweep. Reset the counter.
-            return 0, 0
+        tx = self._db.begin_nested()
+        try:
+            offset = offset or 0
+            items = self.fetch_batch(offset).all()
+            if items:
+                self.process_items(items)
+
+                # We've completed a batch. Return the ID of the last item
+                # in the batch so we don't do this work again.
+
+                result = (items[-1].id, len(items))
+            else:
+                # There are no more items in this database table, so we
+                # are done with the sweep. Reset the counter.
+                result = (0, 0)
+
+            tx.commit()
+            return result
+        except Exception as e:
+            tx.rollback()
+            raise e
 
     def process_items(self, items):
         """Process a list of items."""

@@ -21,6 +21,13 @@ from lxml.etree import _Element, _ElementTree
 from pydantic import validator
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from palace.manager.api.admin.validator import Validator
 from palace.manager.api.circulation import (
@@ -734,8 +741,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
 
     SERVICE_NAME = "Axis 360 Circulation Monitor"
     INTERVAL_SECONDS = 60
-    DEFAULT_BATCH_SIZE = 50
-
+    MAX_RETRIES = 10
     PROTOCOL = Axis360API.label()
 
     DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
@@ -756,7 +762,6 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         else:
             self.api = api_class(_db, collection)
 
-        self.batch_size = self.DEFAULT_BATCH_SIZE
         self.bibliographic_coverage_provider = Axis360BibliographicCoverageProvider(
             collection, api_class=self.api
         )
@@ -775,26 +780,40 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
         count = 0
         for bibliographic, circulation in self.api.recent_activity(start):
             self.process_book(bibliographic, circulation)
+            self._db.commit()
             count += 1
-            if count % self.batch_size == 0:
-                self._db.commit()
         progress.achievements = "Modified titles: %d." % count
 
+    @retry(
+        retry=(
+            retry_if_exception_type(StaleDataError)
+            | retry_if_exception_type(ObjectDeletedError)
+        ),
+        stop=stop_after_attempt(MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        reraise=True,
+    )
     def process_book(
         self, bibliographic: Metadata, circulation: CirculationData
     ) -> tuple[Edition, LicensePool]:
-        edition, new_edition, license_pool, new_license_pool = self.api.update_book(
-            bibliographic, circulation
-        )
-        if new_license_pool or new_edition:
-            # At this point we have done work equivalent to that done by
-            # the Axis360BibliographicCoverageProvider. Register that the
-            # work has been done so we don't have to do it again.
-            identifier = edition.primary_identifier
-            self.bibliographic_coverage_provider.handle_success(identifier)
-            self.bibliographic_coverage_provider.add_coverage_record_for(identifier)
+        tx = self._db.begin_nested()
+        try:
+            edition, new_edition, license_pool, new_license_pool = self.api.update_book(
+                bibliographic, circulation
+            )
+            if new_license_pool or new_edition:
+                # At this point we have done work equivalent to that done by
+                # the Axis360BibliographicCoverageProvider. Register that the
+                # work has been done so we don't have to do it again.
+                identifier = edition.primary_identifier
+                self.bibliographic_coverage_provider.handle_success(identifier)
+                self.bibliographic_coverage_provider.add_coverage_record_for(identifier)
 
-        return edition, license_pool
+            tx.commit()
+            return edition, license_pool
+        except Exception as e:
+            tx.rollback()
+            raise e
 
 
 class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
