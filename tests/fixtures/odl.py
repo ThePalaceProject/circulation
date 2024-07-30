@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from jinja2 import Template
+from requests import Response
 
 from palace.manager.api.circulation import LoanInfo
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -23,7 +24,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
-from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
@@ -264,8 +264,11 @@ class OPDS2WithODLImporterFixture:
             http_get=self.get_response,
         )
 
-    def get_response(self, *args: Any, **kwargs: Any) -> HttpResponseTuple:
-        return 200, {}, self.responses.pop(0)
+    def get_response(self, *args: Any, **kwargs: Any) -> Response:
+        resp = Response()
+        resp.status_code = 200
+        resp._content = self.responses.pop(0)
+        return resp
 
     def queue_response(self, item: LicenseInfoHelper | str | bytes) -> None:
         if isinstance(item, LicenseInfoHelper):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, Any
@@ -63,11 +63,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.model.resource import (
-    HttpResponseTuple,
-    Hyperlink,
-    Representation,
-)
+from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.opds_writer import OPDSFeed
@@ -282,7 +278,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         collection: Collection,
         parser: RWPMManifestParser,
         data_source_name: str | None = None,
-        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
 
@@ -298,7 +293,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             NOTE: If `collection` is provided, its .data_source will take precedence over any value provided here.
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
         """
-        super().__init__(db, collection, data_source_name, http_get)
+        super().__init__(db, collection, data_source_name)
         self._parser = parser
         self.ignored_identifier_types = self.settings.ignored_identifier_types
 

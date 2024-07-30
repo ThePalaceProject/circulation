@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import datetime
-import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import dateutil
+from requests import Response
 from sqlalchemy.orm import Session
 from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
@@ -27,9 +27,9 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicenseStatus,
     RightsStatus,
 )
-from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.util import first_or_default
 from palace.manager.util.datetime_helpers import to_utc
+from palace.manager.util.http import HTTP
 
 if TYPE_CHECKING:
     from webpub_manifest_parser.core.ast import Metadata
@@ -63,7 +63,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         collection: Collection,
         parser: RWPMManifestParser | None = None,
         data_source_name: str | None = None,
-        http_get: Callable[..., HttpResponseTuple] | None = None,
+        http_get: Callable[..., Response] | None = None,
     ):
         """Initialize a new instance of OPDS2WithODLImporter class.
 
@@ -90,8 +90,9 @@ class OPDS2WithODLImporter(OPDS2Importer):
             collection,
             parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
             data_source_name,
-            http_get,
         )
+
+        self.http_get = http_get or HTTP.get_with_timeout
 
     def _extract_publication_metadata(
         self,
@@ -229,16 +230,16 @@ class OPDS2WithODLImporter(OPDS2Importer):
 
     @classmethod
     def fetch_license_info(
-        cls, document_link: str, do_get: Callable[..., HttpResponseTuple]
+        cls, document_link: str, do_get: Callable[..., Response]
     ) -> dict[str, Any] | None:
-        status_code, _, response = do_get(document_link, headers={})
-        if status_code in (200, 201):
-            license_info_document = json.loads(response)
+        resp = do_get(document_link, headers={})
+        if resp.status_code in (200, 201):
+            license_info_document = resp.json()
             return license_info_document  # type: ignore[no-any-return]
         else:
             cls.logger().warning(
                 f"License Info Document is not available. "
-                f"Status link {document_link} failed with {status_code} code."
+                f"Status link {document_link} failed with {resp.status_code} code."
             )
             return None
 
@@ -337,7 +338,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         feed_license_identifier: str | None,
         feed_license_expires: datetime.datetime | None,
         feed_concurrency: int | None,
-        do_get: Callable[..., HttpResponseTuple],
+        do_get: Callable[..., Response],
     ) -> LicenseData | None:
         license_info_document = cls.fetch_license_info(license_info_link, do_get)
 

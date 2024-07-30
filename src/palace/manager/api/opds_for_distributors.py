@@ -38,7 +38,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
-from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Hyperlink
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
@@ -446,7 +446,7 @@ class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
 
         self.api = OPDSForDistributorsAPI(_db, collection)
 
-    def _get(self, url: str, headers: Mapping[str, str]) -> HttpResponseTuple:
+    def _get(self, url: str, headers: Mapping[str, str]) -> Response:
         """Make a normal HTTP request for an OPDS feed, but add in an
         auth header with the credentials for the collection.
         """

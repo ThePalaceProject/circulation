@@ -69,7 +69,7 @@ from tests.fixtures.library import LibraryFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockPatronActivityCirculationAPI
-from tests.mocks.mock import DummyHTTPClient
+from tests.mocks.mock import MockRepresentationHTTPClient
 
 
 class LoanFixture(CirculationControllerFixture):
@@ -423,7 +423,7 @@ class TestLoanController:
             # external request to obtain the book.
             loan_fixture.pool.open_access = False
 
-            http = DummyHTTPClient()
+            http = MockRepresentationHTTPClient()
 
             fulfillment = FulfillmentInfo(
                 loan_fixture.pool.collection,
@@ -602,7 +602,7 @@ class TestLoanController:
             assert None == loan.fulfillment
 
             # We can still use the other mechanism too.
-            http = DummyHTTPClient()
+            http = MockRepresentationHTTPClient()
             http.queue_response(200, content="I am an ACSM file")
 
             loan_fixture.manager.d_circulation.queue_fulfill(

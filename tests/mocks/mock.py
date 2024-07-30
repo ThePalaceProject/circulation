@@ -1,5 +1,8 @@
 import json
 import logging
+from typing import Any
+
+from requests import Request, Response
 
 from palace.manager.core.coverage import (
     BibliographicCoverageProvider,
@@ -9,6 +12,7 @@ from palace.manager.core.coverage import (
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 
 
 def _normalize_level(level):
@@ -212,14 +216,42 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
         return []
 
 
-class DummyHTTPClient:
-    def __init__(self):
-        self.responses = []
-        self.requests = []
+class MockHTTPClient:
+    def __init__(self) -> None:
+        self.responses: list[Response] = []
+        self.requests: list[str] = []
 
     def queue_response(
-        self, response_code, media_type="text/html", other_headers=None, content=""
+        self,
+        response_code: int,
+        media_type: str | None = None,
+        other_headers: dict[str, str] | None = None,
+        content: str | bytes = "",
     ):
+        """Queue a response of the type produced by HTTP.get_with_timeout."""
+        headers = dict(other_headers or {})
+        if media_type:
+            headers["Content-Type"] = media_type
+
+        self.responses.append(MockRequestsResponse(response_code, headers, content))
+
+    def do_get(self, url: str, *args: Any, **kwargs: Any) -> Response:
+        self.requests.append(url)
+        return self.responses.pop(0)
+
+
+class MockRepresentationHTTPClient:
+    def __init__(self) -> None:
+        self.responses: list[HttpResponseTuple] = []
+        self.requests: list[str | tuple[str, str]] = []
+
+    def queue_response(
+        self,
+        response_code: int,
+        media_type: str | None = "text/html",
+        other_headers: dict[str, str] | None = None,
+        content: str | bytes = "",
+    ) -> None:
         """Queue a response of the type produced by
         Representation.simple_http_get.
         """
@@ -235,21 +267,13 @@ class DummyHTTPClient:
                 headers[k.lower()] = v
         self.responses.append((response_code, headers, content))
 
-    def queue_requests_response(
-        self, response_code, media_type="text/html", other_headers=None, content=""
-    ):
-        """Queue a response of the type produced by HTTP.get_with_timeout."""
-        headers = dict(other_headers or {})
-        if media_type:
-            headers["Content-Type"] = media_type
-        response = MockRequestsResponse(response_code, headers, content)
-        self.responses.append(response)
-
-    def do_get(self, url, *args, **kwargs):
+    def do_get(self, url: str, *args: Any, **kwargs: Any) -> HttpResponseTuple:
         self.requests.append(url)
         return self.responses.pop(0)
 
-    def do_post(self, url, data, *wargs, **kwargs):
+    def do_post(
+        self, url: str, data: str, *wargs: Any, **kwargs: Any
+    ) -> HttpResponseTuple:
         self.requests.append((url, data))
         return self.responses.pop(0)
 
@@ -265,41 +289,40 @@ class MockRequestsRequest:
         self.headers = headers or dict()
 
 
-class MockRequestsResponse:
+class MockRequestsResponse(Response):
     """A mock object that simulates an HTTP response from the
     `requests` library.
     """
 
-    def __init__(self, status_code, headers={}, content=None, url=None, request=None):
+    def __init__(
+        self,
+        status_code: int,
+        headers: dict[str, str] | None = None,
+        content: Any = None,
+        url: str | None = None,
+        request: Request | None = None,
+    ):
+        super().__init__()
+
         self.status_code = status_code
-        self.headers = headers
+        if headers is not None:
+            for k, v in headers.items():
+                self.headers[k] = v
+
         # We want to enforce that the mocked content is a bytestring
         # just like a real response.
-        if content and isinstance(content, str):
-            self.content = content.encode("utf-8")
-        else:
-            self.content = content
+        if content is not None:
+            if isinstance(content, str):
+                content_bytes = content.encode("utf-8")
+            elif isinstance(content, bytes):
+                content_bytes = content
+            else:
+                content_bytes = json.dumps(content).encode("utf-8")
+            self._content = content_bytes
+
         if request and not url:
             url = request.url
         self.url = url or "http://url/"
         self.encoding = "utf-8"
-        self.request = request
-
-    def json(self):
-        content = self.content
-        # The queued content might be a JSON string or it might
-        # just be the object you'd get from loading a JSON string.
-        if isinstance(content, (str, bytes)):
-            content = json.loads(self.content)
-        return content
-
-    @property
-    def text(self):
-        if isinstance(self.content, bytes):
-            return self.content.decode("utf8")
-        return self.content
-
-    def raise_for_status(self):
-        """Null implementation of raise_for_status, a method
-        implemented by real requests Response objects.
-        """
+        if request:
+            self.request = request.prepare()

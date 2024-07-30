@@ -19,6 +19,7 @@ from feedparser import FeedParserDict
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import AnyHttpUrl
+from requests import Response
 from sqlalchemy.orm.session import Session
 
 from palace.manager.api.circulation import (
@@ -75,11 +76,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.model.resource import (
-    HttpResponseTuple,
-    Hyperlink,
-    Representation,
-)
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import datetime_utc, to_utc, utc_now
@@ -382,7 +379,6 @@ class BaseOPDSImporter(
         _db: Session,
         collection: Collection,
         data_source_name: str | None,
-        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         self._db = _db
         if collection.id is None:
@@ -401,11 +397,6 @@ class BaseOPDSImporter(
                     "Cannot perform an OPDS import on a Collection that has no associated DataSource!"
                 )
         self.data_source_name = data_source_name
-
-        # In general, we are cautious when mirroring resources so that
-        # we don't, e.g. accidentally get our IP banned from
-        # gutenberg.org.
-        self.http_get = http_get or Representation.cautious_http_get
         self.settings = integration_settings_load(
             self.settings_class(), collection.integration_configuration
         )
@@ -690,7 +681,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         _db: Session,
         collection: Collection,
         data_source_name: str | None = None,
-        http_get: Callable[..., HttpResponseTuple] | None = None,
     ):
         """:param collection: LicensePools created by this OPDS import
         will be associated with the given Collection. If this is None,
@@ -703,18 +693,10 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         .data_source will take precedence over any value provided
         here. This is only for use when you are importing OPDS
         metadata without any particular Collection in mind.
-
-        :param http_get: Use this method to make an HTTP GET request. This
-        can be replaced with a stub method for testing purposes.
         """
         super().__init__(_db, collection, data_source_name)
 
         self.primary_identifier_source = self.settings.primary_identifier_source
-
-        # In general, we are cautious when mirroring resources so that
-        # we don't, e.g. accidentally get our IP banned from
-        # gutenberg.org.
-        self.http_get = http_get or Representation.cautious_http_get
 
     def extract_next_links(self, feed: str | bytes | FeedParserDict) -> list[str]:
         if isinstance(feed, (bytes, str)):
@@ -754,7 +736,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         )
         # gets: medium, measurements, links, contributors, etc.
         xml_data_meta, xml_failures = self.extract_metadata_from_elementtree(
-            feed, data_source=data_source, feed_url=feed_url, do_get=self.http_get
+            feed, data_source=data_source, feed_url=feed_url
         )
 
         # translate the id in failures to identifier.urn
@@ -979,7 +961,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         feed: bytes | str,
         data_source: DataSource,
         feed_url: str | None = None,
-        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> tuple[dict[str, Any], dict[str, CoverageFailure]]:
         """Parse the OPDS as XML and extract all author and subject
         information, as well as ratings and medium.
@@ -1027,7 +1008,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         # Then turn Atom <entry> tags into Metadata objects.
         for entry in parser._xpath(root, "/atom:feed/atom:entry"):
             identifier, detail, failure_entry = cls.detail_for_elementtree_entry(
-                parser, entry, data_source, feed_url, do_get=do_get
+                parser, entry, data_source, feed_url
             )
             if identifier:
                 if failure_entry:
@@ -1309,7 +1290,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         entry_tag: Element,
         data_source: DataSource,
         feed_url: str | None = None,
-        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> tuple[str | None, dict[str, Any] | None, CoverageFailure | None]:
         """Turn an <atom:entry> tag into a dictionary of metadata that can be
         used as keyword arguments to the Metadata contructor.
@@ -1324,9 +1304,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         identifier = identifier.text
 
         try:
-            data = cls._detail_for_elementtree_entry(
-                parser, entry_tag, feed_url, do_get=do_get
-            )
+            data = cls._detail_for_elementtree_entry(parser, entry_tag, feed_url)
             return identifier, data, None
 
         except Exception as e:
@@ -1343,7 +1321,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         parser: OPDSXMLParser,
         entry_tag: Element,
         feed_url: str | None = None,
-        do_get: Callable[..., HttpResponseTuple] | None = None,
     ) -> dict[str, Any]:
         """Helper method that extracts metadata and circulation data from an elementtree
         entry. This method can be overridden in tests to check that callers handle things
@@ -1734,7 +1711,7 @@ class OPDSImportMonitor(CollectionMonitor):
         self._feed_base_url = f"{parsed_url.scheme}://{parsed_url.hostname}{(':' + str(parsed_url.port)) if parsed_url.port else ''}/"
         super().__init__(_db, collection)
 
-    def _get(self, url: str, headers: Mapping[str, str]) -> HttpResponseTuple:
+    def _get(self, url: str, headers: Mapping[str, str]) -> Response:
         """Make the sort of HTTP request that's normal for an OPDS feed.
 
         Long timeout, raise error on anything but 2xx or 3xx.
@@ -1748,8 +1725,7 @@ class OPDSImportMonitor(CollectionMonitor):
         )
         if not url.startswith("http"):
             url = urljoin(self._feed_base_url, url)
-        response = HTTP.get_with_timeout(url, headers=headers, **kwargs)
-        return response.status_code, response.headers, response.content
+        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _get_accept_header(self) -> str:
         return ",".join(
@@ -1892,7 +1868,7 @@ class OPDSImportMonitor(CollectionMonitor):
             raise BadResponseException(url, message=message, status_code=status_code)
 
     def follow_one_link(
-        self, url: str, do_get: Callable[..., HttpResponseTuple] | None = None
+        self, url: str, do_get: Callable[..., Response] | None = None
     ) -> tuple[list[str], bytes | None]:
         """Download a representation of a URL and extract the useful
         information.
@@ -1903,7 +1879,10 @@ class OPDSImportMonitor(CollectionMonitor):
         """
         self.log.info("Following next link: %s", url)
         get = do_get or self._get
-        status_code, headers, feed = get(url, {})
+        resp = get(url, {})
+        feed = resp.content
+        status_code = resp.status_code
+        headers = resp.headers
 
         self._verify_media_type(url, status_code, headers, feed)
 

@@ -59,7 +59,7 @@ from palace.manager.util.http import BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
-from tests.mocks.mock import DummyHTTPClient
+from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 
 class DoomedOPDSImporter(OPDSImporter):
@@ -118,25 +118,6 @@ def opds_importer_fixture(
 
 
 class TestOPDSImporter:
-    def test_constructor(self, opds_importer_fixture: OPDSImporterFixture):
-        data, db, session = (
-            opds_importer_fixture,
-            opds_importer_fixture.db,
-            opds_importer_fixture.db.session,
-        )
-
-        # The default way of making HTTP requests is with
-        # Representation.cautious_http_get.
-        importer = opds_importer_fixture.importer()
-        assert Representation.cautious_http_get == importer.http_get
-
-        # But you can pass in anything you want.
-        do_get = MagicMock()
-        importer = OPDSImporter(
-            session, collection=db.default_collection(), http_get=do_get
-        )
-        assert do_get == importer.http_get
-
     def test_data_source_autocreated(self, opds_importer_fixture: OPDSImporterFixture):
         data, db, session = (
             opds_importer_fixture,
@@ -1725,7 +1706,9 @@ class TestOPDSImportMonitor:
 
         class MockOPDSImportMonitor(OPDSImportMonitor):
             def _get(self, url, headers):
-                return 200, {"content-type": AtomFeed.ATOM_TYPE}, feed
+                return MockRequestsResponse(
+                    200, {"content-type": AtomFeed.ATOM_TYPE}, feed
+                )
 
         data_source_name = "OPDS"
         collection = db.collection(
@@ -1825,7 +1808,7 @@ class TestOPDSImportMonitor:
         )
         feed = data.content_server_mini_feed
 
-        http = DummyHTTPClient()
+        http = MockHTTPClient()
 
         # If there's new data, follow_one_link extracts the next links.
         def follow():

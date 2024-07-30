@@ -15,7 +15,7 @@ from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.mocks.mock import DummyHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockRepresentationHTTPClient, MockRequestsResponse
 
 
 class NoveListFilesFixture(FilesFixture):
@@ -216,7 +216,7 @@ class TestNoveListAPI:
 
     def test_lookup(self, novelist_fixture: NoveListFixture):
         # Test the lookup() method.
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(200, "text/html", content="yay")
 
         novelist = novelist_fixture.novelist
