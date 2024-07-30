@@ -4,6 +4,7 @@ import datetime
 import logging
 from collections import defaultdict
 from decimal import Decimal
+from functools import cmp_to_key
 from typing import Any
 from urllib.parse import quote
 
@@ -243,6 +244,21 @@ class ToFeedEntry:
 
 
 class Annotator(ToFeedEntry):
+    @classmethod
+    def _sample_link_comparator(cls, link1: Link, link2: Link):
+        link_1_type = link1.type.lower()
+        link_2_type = link2.type.lower()
+        if "/epub" in link_1_type and "/epub" not in link_2_type:
+            return -1
+        elif "/epub" in link_2_type and "/epub" not in link_1_type:
+            return 1
+        elif link_1_type > link_2_type:
+            return 1
+        elif link_1_type < link_2_type:
+            return -1
+        else:
+            return 0
+
     def annotate_work_entry(
         self, entry: WorkEntry, updated: datetime.datetime | None = None
     ) -> None:
@@ -284,6 +300,8 @@ class Annotator(ToFeedEntry):
                     type=sample.resource.representation.media_type,
                 )
             )
+
+        other_links.sort(key=cmp_to_key(self._sample_link_comparator))
 
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))

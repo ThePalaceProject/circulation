@@ -1,4 +1,5 @@
 from datetime import timedelta
+from functools import cmp_to_key
 
 import feedparser
 import pytest
@@ -25,9 +26,9 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
+from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import tuple_to_numericrange
+from palace.manager.sqlalchemy.util import get_one_or_create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture, DBStatementCounter
 from tests.manager.feed.conftest import PatchedUrlFor
@@ -409,6 +410,32 @@ class TestAnnotator:
         edition: Edition = work.presentation_edition
         now = utc_now()
 
+        def create_sample_link(media_type: str, url: str):
+            representation, _ = get_one_or_create(
+                db.session, Representation, url=url, media_type=media_type
+            )
+            resource, _ = get_one_or_create(
+                db.session,
+                Resource,
+                url=url + "/preview",
+                data_source=edition.data_source,
+                representation=representation,
+            )
+            link = get_one_or_create(
+                db.session,
+                Hyperlink,
+                identifier=edition.primary_identifier,
+                data_source=edition.data_source,
+                rel=Hyperlink.SAMPLE,
+                resource=resource,
+            )
+            return link
+
+        create_sample_link(MediaTypes.PDF_MEDIA_TYPE, "http://pdf")
+        create_sample_link(MediaTypes.EPUB_MEDIA_TYPE, "http://epub")
+        create_sample_link(MediaTypes.TEXT_HTML_MEDIA_TYPE, "http://html")
+        create_sample_link(MediaTypes.APPLICATION_JSON_MEDIA_TYPE, "http://json")
+
         edition.cover_full_url = "http://coverurl.jpg"
         edition.cover_thumbnail_url = "http://thumburl.gif"
         work.summary_text = "Summary"
@@ -454,6 +481,13 @@ class TestAnnotator:
         # Missing values
         assert data.language == None
         assert data.updated == FeedEntryType(text=strftime(now))
+
+        # other links
+        other_links = data.other_links
+        assert other_links[0].type == MediaTypes.EPUB_MEDIA_TYPE
+        assert other_links[1].type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
+        assert other_links[2].type == MediaTypes.PDF_MEDIA_TYPE
+        assert other_links[3].type == MediaTypes.TEXT_HTML_MEDIA_TYPE
 
 
 class CirculationManagerAnnotatorFixture:
@@ -694,3 +728,26 @@ class TestCirculationManagerAnnotator:
         result._hit = hit
         entry = entry_for(result)
         assert "2017-01-01" in entry.get("updated")
+
+    def test_sample_link_sort(self):
+        epub_link = Link(rel=None, href=None, type="application/epub+zip")
+        html_link = Link(rel=None, href=None, type="text/html")
+        pdf_link = Link(rel=None, href=None, type="application/pdf")
+        kepub_link = Link(rel=None, href=None, type="z-application/kepub+zip")
+
+        sorted_order = [epub_link, pdf_link, html_link, kepub_link]
+
+        test_1 = sorted_order.copy()
+        test_1.sort(key=cmp_to_key(Annotator._sample_link_comparator))
+
+        assert test_1 == sorted_order
+
+        test_2 = [kepub_link, html_link, pdf_link, epub_link]
+        test_2.sort(key=cmp_to_key(Annotator._sample_link_comparator))
+
+        assert test_2 == sorted_order
+
+        test_3 = [epub_link, pdf_link, kepub_link, html_link]
+        test_3.sort(key=cmp_to_key(Annotator._sample_link_comparator))
+
+        assert test_3 == sorted_order
