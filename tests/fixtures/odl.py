@@ -27,6 +27,7 @@ from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
+from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 
 
@@ -265,10 +266,7 @@ class OPDS2WithODLImporterFixture:
         )
 
     def get_response(self, *args: Any, **kwargs: Any) -> Response:
-        resp = Response()
-        resp.status_code = 200
-        resp._content = self.responses.pop(0)
-        return resp
+        return MockRequestsResponse(200, content=self.responses.pop(0))
 
     def queue_response(self, item: LicenseInfoHelper | str | bytes) -> None:
         if isinstance(item, LicenseInfoHelper):

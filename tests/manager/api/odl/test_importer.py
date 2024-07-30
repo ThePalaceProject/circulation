@@ -42,6 +42,7 @@ from tests.fixtures.odl import (
     LicenseInfoHelper,
     OPDS2WithODLImporterFixture,
 )
+from tests.mocks.mock import MockHTTPClient
 
 
 class TestOPDS2WithODLImporter:
@@ -916,48 +917,38 @@ class TestOPDS2WithODLImporter:
     def test_fetch_license_info(self):
         """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
-        responses: list[Response] = []
-        requests: list[str] = []
-
-        def get(url: str, *args: Any, **kwargs: Any) -> Response:
-            requests.append(url)
-            return responses.pop(0)
-
-        def queue_response(status: int, body: bytes | str) -> None:
-            body_bytes = body if isinstance(body, bytes) else body.encode("utf-8")
-            resp = Response()
-            resp.status_code = status
-            resp._content = body_bytes
-            responses.append(resp)
+        http = MockHTTPClient()
 
         # Bad status code
-        queue_response(400, b"Bad Request")
+        http.queue_response(400, content=b"Bad Request")
 
         assert (
-            OPDS2WithODLImporter.fetch_license_info("http://example.org/feed", get)
+            OPDS2WithODLImporter.fetch_license_info(
+                "http://example.org/feed", http.do_get
+            )
             is None
         )
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
         # 200 status - json decodes body and returns it
-        queue_response(200, json.dumps(["a", "b"]))
+        http.queue_response(200, content=json.dumps(["a", "b"]))
         assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", get
+            "http://example.org/feed", http.do_get
         ) == [
             "a",
             "b",
         ]
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
         # 201 status - json decodes body and returns it
-        queue_response(201, json.dumps({"test": "123"}))
+        http.queue_response(201, content=json.dumps({"test": "123"}))
         assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", get
+            "http://example.org/feed", http.do_get
         ) == {"test": "123"}
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
     def test_get_license_data(self, monkeypatch: pytest.MonkeyPatch):
         expires = utc_now() + datetime.timedelta(days=1)
