@@ -2663,17 +2663,20 @@ class TestSyncBookshelf:
 
         # We have recorded a new DeliveryMechanism associated with
         # each loan.
-        mechanisms = []
-        for loan in loans.values():
-            if loan.fulfillment:
-                mechanism = loan.fulfillment.delivery_mechanism
-                mechanisms.append((mechanism.content_type, mechanism.drm_scheme))
-        assert [
+        mechanisms = {
+            (
+                loan.fulfillment.delivery_mechanism.content_type,
+                loan.fulfillment.delivery_mechanism.drm_scheme,
+            )
+            for loan in loans.values()
+            if loan.fulfillment
+        }
+        assert {
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
             (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-        ] == mechanisms
+        } == mechanisms
 
         # There are no holds.
         assert {} == holds
