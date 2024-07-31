@@ -594,7 +594,7 @@ class TestEnkiAPI:
     def test_patron_activity_failure(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         patron = db.patron()
-        enki_test_fixture.api.queue_response(404, "No such patron")
+        enki_test_fixture.api.queue_response(404, content="No such patron")
         collect = lambda: list(enki_test_fixture.api.patron_activity(patron, "pin"))
         pytest.raises(PatronAuthorizationFailedException, collect)
 

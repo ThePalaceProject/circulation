@@ -76,7 +76,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
-from tests.mocks.mock import DummyHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.overdrive import MockOverdriveAPI
 
 if TYPE_CHECKING:
@@ -1155,7 +1155,7 @@ class TestOverdriveAPI:
         # Same if the error message is missing or the response can't be
         # processed.
         pytest.raises(CannotHold, process_error_response, dict())
-        pytest.raises(CannotHold, process_error_response, None)
+        pytest.raises(CannotHold, process_error_response, json.dumps(None))
 
         # Same if the error code isn't in the 4xx or 2xx range
         # (which shouldn't happen in real life).
@@ -1320,18 +1320,17 @@ class TestOverdriveAPI:
         # The first will be to the fulfill link returned by our mock
         # get_fulfillment_link. The response to this request is a
         # redirect that includes an early return link.
-        http = DummyHTTPClient()
-        http.responses.append(
-            MockRequestsResponse(
-                302, dict(location="http://fulfill-this-book/?or=return-early")
-            )
+        http = MockHTTPClient()
+        http.queue_response(
+            302,
+            other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
         )
 
         # The second HTTP request made will be to the early return
         # link 'extracted' from that link by our mock
         # _extract_early_return_url. The response here is a copy of
         # the actual response Overdrive sends in this situation.
-        http.responses.append(MockRequestsResponse(200, content="Success"))
+        http.queue_response(200, content="Success")
 
         # Do the thing.
         success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
@@ -1365,9 +1364,10 @@ class TestOverdriveAPI:
         #
         overdrive._extract_early_return_url_call = None
         overdrive.EARLY_RETURN_URL = None  # type: ignore
-        http.responses.append(
-            MockRequestsResponse(302, dict(location="http://fulfill-this-book/"))
+        http.queue_response(
+            302, other_headers=dict(location="http://fulfill-this-book/")
         )
+
         success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
         assert False == success
 
@@ -1393,12 +1393,11 @@ class TestOverdriveAPI:
 
         # If the final attempt to hit the return URL doesn't result
         # in a 200 status code, perform_early_return has no effect.
-        http.responses.append(
-            MockRequestsResponse(
-                302, dict(location="http://fulfill-this-book/?or=return-early")
-            )
+        http.queue_response(
+            302,
+            other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
         )
-        http.responses.append(MockRequestsResponse(401, content="Unauthorized!"))
+        http.queue_response(401, content="Unauthorized!")
         success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
         assert False == success
 

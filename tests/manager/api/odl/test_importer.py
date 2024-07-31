@@ -10,6 +10,7 @@ from typing import Any
 import dateutil
 import pytest
 from freezegun import freeze_time
+from requests import Response
 from webpub_manifest_parser.odl.ast import ODLPublication
 from webpub_manifest_parser.odl.semantic import (
     ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
@@ -31,7 +32,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicenseStatus,
 )
-from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Hyperlink
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
@@ -41,6 +42,7 @@ from tests.fixtures.odl import (
     LicenseInfoHelper,
     OPDS2WithODLImporterFixture,
 )
+from tests.mocks.mock import MockHTTPClient
 
 
 class TestOPDS2WithODLImporter:
@@ -915,50 +917,50 @@ class TestOPDS2WithODLImporter:
     def test_fetch_license_info(self):
         """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""
 
-        responses: list[HttpResponseTuple] = []
-        requests: list[str] = []
-
-        def get(url: str, *args: Any, **kwargs: Any) -> HttpResponseTuple:
-            requests.append(url)
-            return responses.pop(0)
+        http = MockHTTPClient()
 
         # Bad status code
-        responses.append((400, {}, b"Bad Request"))
+        http.queue_response(400, content=b"Bad Request")
 
         assert (
-            OPDS2WithODLImporter.fetch_license_info("http://example.org/feed", get)
+            OPDS2WithODLImporter.fetch_license_info(
+                "http://example.org/feed", http.do_get
+            )
             is None
         )
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
         # 200 status - json decodes body and returns it
-        responses.append((200, {}, json.dumps(["a", "b"]).encode("utf-8")))
+        http.queue_response(200, content=json.dumps(["a", "b"]))
         assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", get
+            "http://example.org/feed", http.do_get
         ) == [
             "a",
             "b",
         ]
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
         # 201 status - json decodes body and returns it
-        responses.append((201, {}, json.dumps({"test": "123"}).encode("utf-8")))
+        http.queue_response(201, content=json.dumps({"test": "123"}))
         assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", get
+            "http://example.org/feed", http.do_get
         ) == {"test": "123"}
-        assert len(requests) == 1
-        assert requests.pop() == "http://example.org/feed"
+        assert len(http.requests) == 1
+        assert http.requests.pop() == "http://example.org/feed"
 
     def test_get_license_data(self, monkeypatch: pytest.MonkeyPatch):
         expires = utc_now() + datetime.timedelta(days=1)
 
         responses: list[tuple[int, str]] = []
 
-        def get(url: str, *args: Any, **kwargs: Any) -> HttpResponseTuple:
-            resp = responses.pop(0)
-            return resp[0], {}, resp[1].encode("utf-8")
+        def get(url: str, *args: Any, **kwargs: Any) -> Response:
+            status_code, body = responses.pop(0)
+            resp = Response()
+            resp.status_code = status_code
+            resp._content = body.encode("utf-8")
+            return resp
 
         def get_license_data() -> LicenseData | None:
             return OPDS2WithODLImporter.get_license_data(

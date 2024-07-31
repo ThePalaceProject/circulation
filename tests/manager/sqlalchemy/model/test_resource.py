@@ -13,7 +13,7 @@ from tests.fixtures.database import (
     TemporaryDirectoryConfigurationFixture,
 )
 from tests.fixtures.files import SampleCoversFixture
-from tests.mocks.mock import DummyHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockRepresentationHTTPClient, MockRequestsResponse
 
 
 class TestHyperlink:
@@ -289,7 +289,7 @@ class TestRepresentation:
         assert None == representation.unicode_content
 
     def test_presumed_media_type(self, db: DatabaseTransactionFixture):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
 
         # In the absence of a content-type header, the presumed_media_type
         # takes over.
@@ -328,7 +328,7 @@ class TestRepresentation:
         assert "text/plain" == representation.media_type
 
     def test_404_creates_cachable_representation(self, db: DatabaseTransactionFixture):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(404)
 
         url = db.fresh_url()
@@ -340,7 +340,7 @@ class TestRepresentation:
         assert representation == representation2
 
     def test_302_creates_cachable_representation(self, db: DatabaseTransactionFixture):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(302)
 
         url = db.fresh_url()
@@ -354,7 +354,7 @@ class TestRepresentation:
     def test_500_creates_uncachable_representation(
         self, db: DatabaseTransactionFixture
     ):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(500)
         url = db.fresh_url()
         representation, cached = Representation.get(db.session, url, do_get=h.do_get)
@@ -367,7 +367,7 @@ class TestRepresentation:
     def test_response_reviewer_impacts_representation(
         self, db: DatabaseTransactionFixture
     ):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(200, media_type="text/html")
 
         def reviewer(response):
@@ -496,7 +496,7 @@ class TestRepresentation:
         assert "cover.png" == filename
 
     def test_cautious_http_get(self):
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(200, content="yay")
 
         # If the domain is obviously safe, the GET request goes through,
@@ -660,7 +660,7 @@ class TestRepresentation:
 
         normalizer = Normalizer()
 
-        h = DummyHTTPClient()
+        h = MockRepresentationHTTPClient()
         h.queue_response(200, content="yay")
         original_url = "http://url/?sid=12345"
 
