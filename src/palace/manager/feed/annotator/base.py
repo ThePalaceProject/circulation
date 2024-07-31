@@ -20,6 +20,7 @@ from palace.manager.feed.types import (
     WorkEntryData,
 )
 from palace.manager.feed.util import strftime
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -244,18 +245,30 @@ class ToFeedEntry:
 
 
 class Annotator(ToFeedEntry):
-    @classmethod
-    def _sample_link_comparator(cls, link1: Link, link2: Link):
-        link_1_type = link1.type.lower()
-        link_2_type = link2.type.lower()
-        if "/epub" in link_1_type and "/epub" not in link_2_type:
+    @staticmethod
+    def _sample_link_comparator(link1: Link, link2: Link) -> int:
+        link_1_type = link1.type
+        link_2_type = link2.type
+        assert link_1_type
+        assert link_2_type
+
+        epub_type = MediaTypes.EPUB_MEDIA_TYPE
+
+        if link_1_type == epub_type and link_2_type != epub_type:
             return -1
-        elif "/epub" in link_2_type and "/epub" not in link_1_type:
+        elif link_1_type != epub_type and link_2_type == epub_type:
             return 1
         elif link_1_type > link_2_type:
             return 1
         elif link_1_type < link_2_type:
             return -1
+        elif link1.href and link2.href:
+            if link1.href > link2.href:
+                return 1
+            elif link1.href < link2.href:
+                return -1
+            else:
+                return 0
         else:
             return 0
 

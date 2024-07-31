@@ -432,9 +432,10 @@ class TestAnnotator:
             return link
 
         create_sample_link(MediaTypes.PDF_MEDIA_TYPE, "http://pdf")
-        create_sample_link(MediaTypes.EPUB_MEDIA_TYPE, "http://epub")
+        create_sample_link(MediaTypes.EPUB_MEDIA_TYPE, "http://epub-b")
         create_sample_link(MediaTypes.TEXT_HTML_MEDIA_TYPE, "http://html")
         create_sample_link(MediaTypes.APPLICATION_JSON_MEDIA_TYPE, "http://json")
+        create_sample_link(MediaTypes.EPUB_MEDIA_TYPE, "http://epub-a")
 
         edition.cover_full_url = "http://coverurl.jpg"
         edition.cover_thumbnail_url = "http://thumburl.gif"
@@ -485,9 +486,12 @@ class TestAnnotator:
         # other links
         other_links = data.other_links
         assert other_links[0].type == MediaTypes.EPUB_MEDIA_TYPE
-        assert other_links[1].type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
-        assert other_links[2].type == MediaTypes.PDF_MEDIA_TYPE
-        assert other_links[3].type == MediaTypes.TEXT_HTML_MEDIA_TYPE
+        assert other_links[0].href.startswith("http://epub-a")
+        assert other_links[1].type == MediaTypes.EPUB_MEDIA_TYPE
+        assert other_links[1].href.startswith("http://epub-b")
+        assert other_links[2].type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
+        assert other_links[3].type == MediaTypes.PDF_MEDIA_TYPE
+        assert other_links[4].type == MediaTypes.TEXT_HTML_MEDIA_TYPE
 
 
 class CirculationManagerAnnotatorFixture:
@@ -730,24 +734,31 @@ class TestCirculationManagerAnnotator:
         assert "2017-01-01" in entry.get("updated")
 
     def test_sample_link_sort(self):
-        epub_link = Link(rel=None, href=None, type="application/epub+zip")
-        html_link = Link(rel=None, href=None, type="text/html")
-        pdf_link = Link(rel=None, href=None, type="application/pdf")
-        kepub_link = Link(rel=None, href=None, type="z-application/kepub+zip")
+        epub_link_a = Link(rel=None, href="a", type=MediaTypes.EPUB_MEDIA_TYPE)
+        epub_link_b = Link(rel=None, href="b", type=MediaTypes.EPUB_MEDIA_TYPE)
+        html_link = Link(rel=None, href="a", type=MediaTypes.TEXT_HTML_MEDIA_TYPE)
+        pdf_link = Link(rel=None, href="a", type=MediaTypes.PDF_MEDIA_TYPE)
+        kepub_link = Link(rel=None, href="a", type="application/kepub+zip")
 
-        sorted_order = [epub_link, pdf_link, html_link, kepub_link]
+        expected_sorted_order = [
+            epub_link_a,
+            epub_link_b,
+            kepub_link,
+            pdf_link,
+            html_link,
+        ]
 
-        test_1 = sorted_order.copy()
+        test_1 = expected_sorted_order.copy()
         test_1.sort(key=cmp_to_key(Annotator._sample_link_comparator))
 
-        assert test_1 == sorted_order
+        assert test_1 == expected_sorted_order
 
-        test_2 = [kepub_link, html_link, pdf_link, epub_link]
+        test_2 = [kepub_link, html_link, pdf_link, epub_link_b, epub_link_a]
         test_2.sort(key=cmp_to_key(Annotator._sample_link_comparator))
 
-        assert test_2 == sorted_order
+        assert test_2 == expected_sorted_order
 
-        test_3 = [epub_link, pdf_link, kepub_link, html_link]
+        test_3 = [epub_link_b, epub_link_a, pdf_link, kepub_link, html_link]
         test_3.sort(key=cmp_to_key(Annotator._sample_link_comparator))
 
-        assert test_3 == sorted_order
+        assert test_3 == expected_sorted_order
