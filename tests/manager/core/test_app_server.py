@@ -574,6 +574,7 @@ class TestErrorHandler:
     def test_handle_error_problem_error(
         self, error_handler_fixture: ErrorHandlerFixture, caplog: LogCaptureFixture
     ):
+        caplog.set_level(LogLevel.warning)
         handler = error_handler_fixture.handler()
         with error_handler_fixture.app.test_request_context("/"):
             try:
