@@ -268,7 +268,7 @@ redis = "^5.0.5"
 redmail = "^0.6.0"
 requests = "^2.29"
 sqlalchemy = {version = "^1.4", extras = ["mypy"]}
-tenacity = "^8.5.0"
+tenacity = "^9.0.0"
 textblob = "0.18.0.post0"
 types-pyopenssl = "^24.0.0.20240130"
 types-pyyaml = "^6.0.12.9"
