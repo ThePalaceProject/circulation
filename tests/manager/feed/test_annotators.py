@@ -486,12 +486,10 @@ class TestAnnotator:
         # other links
         other_links = data.other_links
         assert other_links[0].type == MediaTypes.EPUB_MEDIA_TYPE
-        assert other_links[0].href.startswith("http://epub-a")
         assert other_links[1].type == MediaTypes.EPUB_MEDIA_TYPE
-        assert other_links[1].href.startswith("http://epub-b")
-        assert other_links[2].type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
-        assert other_links[3].type == MediaTypes.PDF_MEDIA_TYPE
-        assert other_links[4].type == MediaTypes.TEXT_HTML_MEDIA_TYPE
+        assert other_links[2].type != MediaTypes.EPUB_MEDIA_TYPE
+        assert other_links[3].type != MediaTypes.EPUB_MEDIA_TYPE
+        assert other_links[4].type != MediaTypes.EPUB_MEDIA_TYPE
 
 
 class CirculationManagerAnnotatorFixture:
@@ -748,17 +746,21 @@ class TestCirculationManagerAnnotator:
             html_link,
         ]
 
+        def test_expected_order(result, expected):
+            assert result[0].type == expected[0].type
+            assert result[1].type == expected[1].type
+            assert result[2].type != MediaTypes.EPUB_MEDIA_TYPE
+            assert result[3].type != MediaTypes.EPUB_MEDIA_TYPE
+            assert result[4].type != MediaTypes.EPUB_MEDIA_TYPE
+
         test_1 = expected_sorted_order.copy()
         test_1.sort(key=cmp_to_key(Annotator._sample_link_comparator))
-
-        assert test_1 == expected_sorted_order
+        test_expected_order(test_1, expected_sorted_order)
 
         test_2 = [kepub_link, html_link, pdf_link, epub_link_b, epub_link_a]
         test_2.sort(key=cmp_to_key(Annotator._sample_link_comparator))
-
-        assert test_2 == expected_sorted_order
+        test_expected_order(test_2, expected_sorted_order)
 
         test_3 = [epub_link_b, epub_link_a, pdf_link, kepub_link, html_link]
         test_3.sort(key=cmp_to_key(Annotator._sample_link_comparator))
-
-        assert test_3 == expected_sorted_order
+        test_expected_order(test_3, expected_sorted_order)

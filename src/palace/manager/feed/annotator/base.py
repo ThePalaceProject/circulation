@@ -258,17 +258,6 @@ class Annotator(ToFeedEntry):
             return -1
         elif link_1_type != epub_type and link_2_type == epub_type:
             return 1
-        elif link_1_type > link_2_type:
-            return 1
-        elif link_1_type < link_2_type:
-            return -1
-        elif link1.href and link2.href:
-            if link1.href > link2.href:
-                return 1
-            elif link1.href < link2.href:
-                return -1
-            else:
-                return 0
         else:
             return 0
 
