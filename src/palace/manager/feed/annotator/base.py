@@ -4,6 +4,7 @@ import datetime
 import logging
 from collections import defaultdict
 from decimal import Decimal
+from functools import cmp_to_key
 from typing import Any
 from urllib.parse import quote
 
@@ -19,6 +20,7 @@ from palace.manager.feed.types import (
     WorkEntryData,
 )
 from palace.manager.feed.util import strftime
+from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -243,6 +245,22 @@ class ToFeedEntry:
 
 
 class Annotator(ToFeedEntry):
+    @staticmethod
+    def _sample_link_comparator(link1: Link, link2: Link) -> int:
+        link_1_type = link1.type
+        link_2_type = link2.type
+        assert link_1_type
+        assert link_2_type
+
+        epub_type = MediaTypes.EPUB_MEDIA_TYPE
+
+        if link_1_type == epub_type and link_2_type != epub_type:
+            return -1
+        elif link_1_type != epub_type and link_2_type == epub_type:
+            return 1
+        else:
+            return 0
+
     def annotate_work_entry(
         self, entry: WorkEntry, updated: datetime.datetime | None = None
     ) -> None:
@@ -284,6 +302,8 @@ class Annotator(ToFeedEntry):
                     type=sample.resource.representation.media_type,
                 )
             )
+
+        other_links.sort(key=cmp_to_key(self._sample_link_comparator))
 
         if edition.medium:
             additional_type = Edition.medium_to_additional_type.get(str(edition.medium))
