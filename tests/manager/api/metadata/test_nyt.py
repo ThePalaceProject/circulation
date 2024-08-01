@@ -12,12 +12,12 @@ from palace.manager.api.metadata.nyt import (
     NYTBestSellerListTitle,
 )
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.util.http import IntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 

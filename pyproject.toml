@@ -117,6 +117,7 @@ module = [
     "palace.manager.util.authentication_for_opds",
     "palace.manager.util.base64",
     "palace.manager.util.cache",
+    "palace.manager.util.http",
     "palace.manager.util.log",
     "palace.manager.util.migration.*",
     "palace.manager.util.notifications",
