@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import requests
 from flask_babel import lazy_gettext as _
-from requests import sessions
+from requests import PreparedRequest, sessions
 from requests.adapters import HTTPAdapter, Response
+from requests.auth import AuthBase
 from typing_extensions import Self
 from urllib3 import Retry
 
@@ -75,7 +76,7 @@ class RemoteIntegrationException(IntegrationException, BaseProblemDetailExceptio
         )
 
     def document_detail(self) -> str:
-        return _(str(self.detail), service=self.service)
+        return _(str(self.detail), service=self.service)  # type: ignore[no-any-return]
 
     def document_debug_message(self) -> str:
         return str(self)
@@ -192,25 +193,29 @@ class HTTP(LoggerMixin):
         cls.DEFAULT_REQUEST_TIMEOUT = 5
 
     @classmethod
-    def get_with_timeout(cls, url: str, *args, **kwargs) -> Response:
+    def get_with_timeout(cls, url: str, *args: Any, **kwargs: Any) -> Response:
         """Make a GET request with timeout handling."""
         return cls.request_with_timeout("GET", url, *args, **kwargs)
 
     @classmethod
-    def post_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
+    def post_with_timeout(
+        cls, url: str, payload: str | Mapping[str, Any], *args: Any, **kwargs: Any
+    ) -> Response:
         """Make a POST request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("POST", url, *args, **kwargs)
 
     @classmethod
-    def put_with_timeout(cls, url: str, payload, *args, **kwargs) -> Response:
+    def put_with_timeout(
+        cls, url: str, payload: str | Mapping[str, Any], *args: Any, **kwargs: Any
+    ) -> Response:
         """Make a PUT request with timeout handling."""
         kwargs["data"] = payload
         return cls.request_with_timeout("PUT", url, *args, **kwargs)
 
     @classmethod
     def request_with_timeout(
-        cls, http_method: str, url: str, *args, **kwargs
+        cls, http_method: str, url: str, *args: Any, **kwargs: Any
     ) -> Response:
         """Call requests.request and turn a timeout into a RequestTimedOut
         exception.
@@ -224,7 +229,11 @@ class HTTP(LoggerMixin):
 
     @classmethod
     def _request_with_timeout(
-        cls, url: str, make_request_with: Callable[..., Response], *args, **kwargs
+        cls,
+        url: str,
+        make_request_with: Callable[..., Response],
+        *args: Any,
+        **kwargs: Any,
     ) -> Response:
         """Call some kind of method and turn a timeout into a RequestTimedOut
         exception.
@@ -243,7 +252,6 @@ class HTTP(LoggerMixin):
         allowed_response_codes = kwargs.pop("allowed_response_codes", [])
         disallowed_response_codes = kwargs.pop("disallowed_response_codes", [])
         verbose = kwargs.pop("verbose", False)
-        expected_encoding = kwargs.pop("expected_encoding", "utf-8")
 
         if not "timeout" in kwargs:
             kwargs["timeout"] = cls.DEFAULT_REQUEST_TIMEOUT
@@ -326,53 +334,46 @@ class HTTP(LoggerMixin):
             # a generic RequestNetworkException.
             raise RequestNetworkException(url, str(e)) from e
 
-        return process_response_with(
+        return process_response_with(  # type: ignore[no-any-return]
             url,
             response,
             allowed_response_codes,
             disallowed_response_codes,
-            expected_encoding,
         )
 
     @classmethod
     def _process_response(
         cls,
         url: str,
-        response,
-        allowed_response_codes=None,
-        disallowed_response_codes=None,
-        expected_encoding: str = "utf-8",
-    ):
+        response: Response,
+        allowed_response_codes: Sequence[int | str] | None = None,
+        disallowed_response_codes: Sequence[int | str] | None = None,
+    ) -> Response:
         """Raise a RequestNetworkException if the response code indicates a
         server-side failure, or behavior so unpredictable that we can't
         continue.
 
         :param allowed_response_codes If passed, then only the responses with
             http status codes in this list are processed.  The rest generate
-            BadResponseExceptions.
+            BadResponseExceptions. If both allowed_response_codes and
+            disallowed_response_codes are passed, then the allowed_response_codes
+            list is used.
         :param disallowed_response_codes The values passed are added to 5xx, as
             http status codes that would generate BadResponseExceptions.
-        :param expected_encoding Typically we expect HTTP responses to be UTF-8
-            encoded, but for certain requests we can change the encoding type.
         """
-        if allowed_response_codes:
-            allowed_response_codes = list(map(str, allowed_response_codes))
-            status_code_not_in_allowed = (
-                "Got status code %%s from external server, but can only continue on: %s."
-                % (", ".join(sorted(allowed_response_codes)),)
-            )
-        if disallowed_response_codes:
-            disallowed_response_codes = list(map(str, disallowed_response_codes))
-        else:
-            disallowed_response_codes = []
+        allowed_response_codes_str = (
+            list(map(str, allowed_response_codes)) if allowed_response_codes else []
+        )
+        disallowed_response_codes_str = (
+            list(map(str, disallowed_response_codes))
+            if disallowed_response_codes
+            else []
+        )
 
-        code = response.status_code
-        series = cls.series(code)
-        code = str(code)
+        series = cls.series(response.status_code)
+        code = str(response.status_code)
 
-        if allowed_response_codes and (
-            code in allowed_response_codes or series in allowed_response_codes
-        ):
+        if code in allowed_response_codes_str or series in allowed_response_codes_str:
             # The code or series has been explicitly allowed. Allow
             # the request to be processed.
             return response
@@ -380,39 +381,39 @@ class HTTP(LoggerMixin):
         error_message = None
         if (
             series == "5xx"
-            or code in disallowed_response_codes
-            or series in disallowed_response_codes
+            or code in disallowed_response_codes_str
+            or series in disallowed_response_codes_str
         ):
             # Unless explicitly allowed, the 5xx series always results in
             # an exception.
             error_message = BadResponseException.BAD_STATUS_CODE_MESSAGE
         elif allowed_response_codes and not (
-            code in allowed_response_codes or series in allowed_response_codes
+            code in allowed_response_codes_str or series in allowed_response_codes_str
         ):
-            error_message = status_code_not_in_allowed
+            error_message = (
+                "Got status code %%s from external server, but can only continue on: %s."
+                % (", ".join(sorted(allowed_response_codes_str)),)
+            )
 
         if error_message:
             raise BadResponseException(
                 url,
                 error_message % code,
-                status_code=code,
+                status_code=response.status_code,
                 debug_message="Response content: %s"
-                % cls._decode_response_content(expected_encoding, response, url),
+                % cls._decode_response_content(response, url),
             )
         return response
 
     @classmethod
-    def _decode_response_content(cls, expected_encoding, response, url) -> str:
-        response_content = response.content
-        if response_content and isinstance(response_content, bytes):
-            try:
-                response_content = response_content.decode(expected_encoding)
-            except Exception as e:
-                raise RequestNetworkException(url, str(e)) from e
-        return response_content
+    def _decode_response_content(cls, response: Response, url: str) -> str:
+        try:
+            return response.text
+        except Exception as e:
+            raise RequestNetworkException(url, str(e)) from e
 
     @classmethod
-    def series(cls, status_code):
+    def series(cls, status_code: int) -> str:
         """Return the HTTP series for the given status code."""
         return "%sxx" % (int(status_code) // 100)
 
@@ -471,15 +472,12 @@ class HTTP(LoggerMixin):
         response: Response,
         allowed_response_codes: list[str | int] | None = None,
         disallowed_response_codes: list[str | int] | None = None,
-        expected_encoding: str = "utf-8",
     ) -> Response:
         """If there was a problem with an integration request,
         raise ProblemError with an appropriate ProblemDetail. Otherwise, return the
         response to the original request.
 
         :param response: A Response object from the requests library.
-        :param expected_encoding: Typically, we expect HTTP responses to be UTF-8
-            encoded, but for certain requests we can change the encoding type.
         """
 
         allowed_response_codes = allowed_response_codes or ["2xx", "3xx"]
@@ -520,3 +518,26 @@ class HTTP(LoggerMixin):
                 f'{response.status_code} response from integration server: "{response.text}"'
             )
         )
+
+
+class BearerAuth(AuthBase):
+    """
+    Requests Auth class that supports authentication using a Bearer token.
+
+    See: https://docs.python-requests.org/en/latest/user/authentication/#new-forms-of-authentication
+    """
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+
+    def __call__(self, r: PreparedRequest) -> PreparedRequest:
+        r.headers["authorization"] = f"Bearer {self.token}"
+        return r
+
+    def __repr__(self) -> str:
+        return f"BearerAuth({self.token})"
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, BearerAuth):
+            return NotImplemented
+        return self.token == other.token

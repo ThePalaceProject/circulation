@@ -11,10 +11,10 @@ from typing import Any, ParamSpec, TypeVar
 
 from sqlalchemy.orm import Session
 
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import IntegrationException
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import AtomFeed
 

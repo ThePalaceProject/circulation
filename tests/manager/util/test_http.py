@@ -2,12 +2,13 @@ from unittest import mock
 
 import pytest
 import requests
+from requests_mock import Mocker
 
-from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.util.http import (
     HTTP,
-    INTEGRATION_ERROR,
     BadResponseException,
+    BearerAuth,
     RemoteIntegrationException,
     RequestNetworkException,
     RequestTimedOut,
@@ -462,3 +463,25 @@ class TestRequestNetworkException:
             detail.debug_message
             == "Network error contacting http://url/: Colossal failure"
         )
+
+
+class TestBearerAuth:
+    def test___call__(self, requests_mock: Mocker):
+        # An auth token is set on the request when using BearerAuth
+        auth = BearerAuth("token")
+
+        requests_mock.get("http://example.com", text="success")
+        response = requests.get("http://example.com", auth=auth)
+        assert response.status_code == 200
+        assert response.text == "success"
+        assert requests_mock.last_request is not None
+        assert requests_mock.last_request.headers["Authorization"] == "Bearer token"
+
+    def test___repr__(self):
+        auth = BearerAuth("token")
+        assert repr(auth) == "BearerAuth(token)"
+
+    def test___eq__(self):
+        assert BearerAuth("token") == BearerAuth("token")
+        assert BearerAuth("token") != BearerAuth("different token")
+        assert BearerAuth("token") != "token"

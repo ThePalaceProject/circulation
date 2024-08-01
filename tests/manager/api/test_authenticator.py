@@ -52,6 +52,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
 from palace.manager.api.sip import SIP2AuthenticationProvider
 from palace.manager.api.util.patron import PatronUtility
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
 from palace.manager.service.analytics.analytics import Analytics
@@ -67,7 +68,7 @@ from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import IntegrationException, RemoteIntegrationException
+from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.announcements import AnnouncementFixture
