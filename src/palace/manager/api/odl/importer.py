@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urljoin
 
 import dateutil
 from requests import Response
@@ -11,9 +12,10 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.auth import ODLAuthenticatedGet
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl.settings import OPDS2WithODLSettings
-from palace.manager.core.metadata_layer import FormatData, LicenseData
+from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
+from palace.manager.core.metadata_layer import FormatData, LicenseData, Metadata
 from palace.manager.core.opds2_import import (
     OPDS2Importer,
     OPDS2ImportMonitor,
@@ -27,12 +29,12 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicenseStatus,
     RightsStatus,
 )
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
 from palace.manager.util.datetime_helpers import to_utc
 from palace.manager.util.http import HTTP
 
 if TYPE_CHECKING:
-    from webpub_manifest_parser.core.ast import Metadata
     from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
 
@@ -94,6 +96,40 @@ class OPDS2WithODLImporter(OPDS2Importer):
 
         self.http_get = http_get or HTTP.get_with_timeout
 
+    def _process_unlimited_access_title(self, metadata: Metadata) -> Metadata:
+        if self.settings.auth_type != OPDS2AuthType.OAUTH:  # type: ignore[attr-defined]
+            return metadata
+
+        # Links to items with a non-open access acquisition type cannot be directly accessed
+        # if the feed is protected by OAuth. So we need to add a BEARER_TOKEN delivery mechanism
+        # to the formats, so we know we are able to fulfill these items indirectly via a bearer token.
+        circulation = metadata.circulation
+        supported_media_types = {
+            format
+            for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup
+            if drm == DeliveryMechanism.BEARER_TOKEN and format is not None
+        }
+
+        def create_format_data(format: FormatData) -> FormatData:
+            return FormatData(
+                content_type=format.content_type,
+                drm_scheme=DeliveryMechanism.BEARER_TOKEN,
+                link=format.link,
+                rights_uri=RightsStatus.IN_COPYRIGHT,
+            )
+
+        new_formats = [
+            create_format_data(format)
+            if format.content_type in supported_media_types
+            and format.drm_scheme is None
+            and format.link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+            else format
+            for format in circulation.formats
+        ]
+
+        circulation.formats = new_formats
+        return metadata
+
     def _extract_publication_metadata(
         self,
         feed: OPDS2Feed,
@@ -113,8 +149,8 @@ class OPDS2WithODLImporter(OPDS2Importer):
         )
 
         if not publication.licenses:
-            # This title is an open-access title, no need to process licenses.
-            return metadata
+            # This is an unlimited-access title with no license information. Nothing to do.
+            return self._process_unlimited_access_title(metadata)
 
         formats = []
         licenses = []
@@ -385,7 +421,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         return parsed_license
 
 
-class OPDS2WithODLImportMonitor(OPDS2ImportMonitor):
+class OPDS2WithODLImportMonitor(ODLAuthenticatedGet, OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
     PROTOCOL = OPDS2WithODLApi.label()
@@ -402,3 +438,31 @@ class OPDS2WithODLImportMonitor(OPDS2ImportMonitor):
         super().__init__(
             _db, collection, import_class, force_reimport=True, **import_class_kwargs
         )
+        self.settings = cast(OPDS2WithODLSettings, self.importer.settings)
+
+    @property
+    def _username(self) -> str:
+        return self.settings.username
+
+    @property
+    def _password(self) -> str:
+        return self.settings.password
+
+    @property
+    def _auth_type(self) -> OPDS2AuthType:
+        return self.settings.auth_type
+
+    @property
+    def _feed_url(self) -> str:
+        return self.settings.external_account_id
+
+    def _get(
+        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    ) -> Response:
+        headers = self._update_headers(headers)
+        kwargs["timeout"] = 120
+        kwargs["max_retry_count"] = self._max_retry_count
+        kwargs["allowed_response_codes"] = ["2xx", "3xx"]
+        if not url.startswith("http"):
+            url = urljoin(self._feed_base_url, url)
+        return super()._get(url, headers, **kwargs)

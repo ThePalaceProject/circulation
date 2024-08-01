@@ -6,18 +6,19 @@ import functools
 import json
 import uuid
 from typing import Any
+from unittest.mock import patch
 
 import dateutil
 import pytest
 from freezegun import freeze_time
 from requests import Response
-from webpub_manifest_parser.odl.ast import ODLPublication
-from webpub_manifest_parser.odl.semantic import (
-    ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR,
-)
-from webpub_manifest_parser.opds2.ast import OPDS2PublicationMetadata
 
-from palace.manager.api.odl.importer import OPDS2WithODLImporter
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.importer import (
+    OPDS2WithODLImporter,
+    OPDS2WithODLImportMonitor,
+)
+from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import LicenseData
 from palace.manager.sqlalchemy.constants import (
@@ -36,6 +37,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.odl import (
     LicenseHelper,
@@ -195,17 +197,7 @@ class TestOPDS2WithODLImporter:
         assert isinstance(huck_finn_failure, CoverageFailure)
         assert "9781234567897" == huck_finn_failure.obj.identifier
 
-        huck_finn_semantic_error = (
-            ODL_PUBLICATION_MUST_CONTAIN_EITHER_LICENSES_OR_OA_ACQUISITION_LINK_ERROR(
-                node=ODLPublication(
-                    metadata=OPDS2PublicationMetadata(
-                        identifier="urn:isbn:9781234567897"
-                    )
-                ),
-                node_property=None,
-            )
-        )
-        assert str(huck_finn_semantic_error) == huck_finn_failure.exception
+        assert "required property title is missing" in huck_finn_failure.exception
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_with_streaming(
@@ -313,21 +305,35 @@ class TestOPDS2WithODLImporter:
         )
         assert lcp_delivery_mechanism is not None
 
-    @freeze_time("2016-01-01T00:00:00+00:00")
+    @pytest.mark.parametrize(
+        "auth_type",
+        [
+            OPDS2AuthType.BASIC,
+            OPDS2AuthType.OAUTH,
+        ],
+    )
     def test_import_open_access(
         self,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
+        auth_type: OPDS2AuthType,
     ) -> None:
         """
         Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
         open access book.
         """
+        importer = opds2_with_odl_importer_fixture.importer
+        importer.settings = importer.settings_class()(
+            **opds2_with_odl_importer_fixture.api_fixture.default_collection_settings(),
+            auth_type=auth_type,
+        )
         (
             imported_editions,
             pools,
             works,
             failures,
-        ) = opds2_with_odl_importer_fixture.import_fixture_file("oa-title.json")
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "open-access-title.json"
+        )
 
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
@@ -347,6 +353,7 @@ class TestOPDS2WithODLImporter:
 
         [license_pool] = pools
         assert license_pool.open_access is True
+        assert license_pool.unlimited_access is True
 
         assert 1 == len(license_pool.delivery_mechanisms)
 
@@ -354,6 +361,67 @@ class TestOPDS2WithODLImporter:
             license_pool.delivery_mechanisms,
             MediaTypes.EPUB_MEDIA_TYPE,
             None,
+        )
+        assert oa_ebook_delivery_mechanism is not None
+
+    @pytest.mark.parametrize(
+        "auth_type",
+        [
+            OPDS2AuthType.BASIC,
+            OPDS2AuthType.OAUTH,
+        ],
+    )
+    def test_import_unlimited_access(
+        self,
+        opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
+        auth_type: OPDS2AuthType,
+    ) -> None:
+        """
+        Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
+        open access book.
+        """
+        importer = opds2_with_odl_importer_fixture.importer
+        importer.settings = importer.settings_class()(
+            **opds2_with_odl_importer_fixture.api_fixture.default_collection_settings(),
+            auth_type=auth_type,
+        )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "unlimited-access-title.json"
+        )
+
+        assert isinstance(imported_editions, list)
+        assert 1 == len(imported_editions)
+
+        [edition] = imported_editions
+        assert isinstance(edition, Edition)
+        assert (
+            edition.primary_identifier.identifier
+            == "urn:uuid:a0f77af3-a2a6-4a29-8e1f-18e06e4e573e"
+        )
+        assert edition.primary_identifier.type == "URI"
+        assert edition.medium == EditionConstants.AUDIO_MEDIUM
+
+        # Make sure that license pools have correct configuration
+        assert isinstance(pools, list)
+        assert 1 == len(pools)
+
+        [license_pool] = pools
+        assert license_pool.open_access is False
+        assert license_pool.unlimited_access is True
+
+        assert 1 == len(license_pool.delivery_mechanisms)
+
+        oa_ebook_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+            license_pool.delivery_mechanisms,
+            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DeliveryMechanism.BEARER_TOKEN
+            if auth_type == OPDS2AuthType.OAUTH
+            else None,
         )
         assert oa_ebook_delivery_mechanism is not None
 
@@ -1044,3 +1112,40 @@ class TestOPDS2WithODLImporter:
         assert license_data.expires == expires
         assert license_data.identifier == "identifier"
         assert license_data.terms_concurrency == 12
+
+
+class TestOPDS2WithODLImportMonitor:
+    def test_get(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        session = db.session
+        collection = db.collection(
+            external_account_id="https://opds.import.com:9999/feed",
+            username="username",
+            password="password",
+            data_source_name="OPDS",
+            protocol=OPDS2WithODLApi.label(),
+        )
+        monitor = OPDS2WithODLImportMonitor(session, collection, OPDS2WithODLImporter)
+
+        with patch.object(HTTP, "get_with_timeout") as mock_get:
+            monitor._get("/absolute/path", {})
+            assert mock_get.call_args.args == (
+                "https://opds.import.com:9999/absolute/path",
+            )
+
+        with patch.object(HTTP, "get_with_timeout") as mock_get:
+            monitor._get("relative/path", {})
+            assert mock_get.call_args.args == (
+                "https://opds.import.com:9999/relative/path",
+            )
+
+        with patch.object(HTTP, "get_with_timeout") as mock_get:
+            monitor._get("http://example.com/full/url")
+            assert mock_get.call_args.args == ("http://example.com/full/url",)
+            # assert that we set the expected extra args to the HTTP request
+            kwargs = mock_get.call_args.kwargs
+            assert kwargs.get("timeout") == 120
+            assert kwargs.get("max_retry_count") == monitor._max_retry_count
+            assert kwargs.get("allowed_response_codes") == ["2xx", "3xx"]

@@ -1,10 +1,15 @@
+from collections.abc import Mapping
+from datetime import timedelta
 from typing import Any
 
 from requests import Response
 from sqlalchemy.orm import Session
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.auth import TokenTuple
+from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
 from tests.mocks.mock import MockRequestsResponse
 
@@ -17,7 +22,22 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
     ) -> None:
         super().__init__(_db, collection)
         self.responses: list[MockRequestsResponse] = []
-        self.requests: list[tuple[str, dict[str, str] | None]] = []
+        self.requests: list[
+            tuple[str, Mapping[str, str] | None, Mapping[str, Any]]
+        ] = []
+        self.mock_auth_type = self.settings.auth_type
+        self.refresh_token_calls = 0
+        self.refresh_token_timedelta = timedelta(minutes=30)
+
+    @property
+    def _auth_type(self) -> OPDS2AuthType:
+        return self.mock_auth_type
+
+    def _refresh_token(self) -> None:
+        self.refresh_token_calls += 1
+        self._session_token = TokenTuple(
+            token="new_token", expires=utc_now() + self.refresh_token_timedelta
+        )
 
     def queue_response(
         self,
@@ -36,7 +56,9 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
             "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
         )
 
-    def _get(self, url: str, headers: dict[str, str] | None = None) -> Response:
-        self.requests.append((url, headers))
+    def _get(
+        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    ) -> Response:
+        self.requests.append((url, headers, kwargs))
         response = self.responses.pop()
         return HTTP._process_response(url, response)

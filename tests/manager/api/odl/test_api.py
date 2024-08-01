@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 import dateutil
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.api.circulation import HoldInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import (
@@ -27,15 +28,17 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
 )
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
+from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
-from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
@@ -70,6 +73,21 @@ class TestOPDS2WithODLApi:
                 pool=work2.active_license_pool(),
             )
         assert exc.value.limit == 1
+
+    def test_hold_open_access(
+        self,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ):
+        """Tests that placing a hold on an open-access work will always fail,
+        since these items are always available to borrow"""
+        # Create an open-access work
+        pool = opds2_with_odl_api_fixture.work.license_pools[0]
+        pool.open_access = True
+
+        with pytest.raises(CurrentlyAvailable):
+            opds2_with_odl_api_fixture.api.place_hold(
+                opds2_with_odl_api_fixture.patron, "pin", pool, ""
+            )
 
     def test_hold_limit(
         self,
@@ -886,13 +904,17 @@ class TestOPDS2WithODLApi:
         loan, ignore = pool.loan_to(opds2_with_odl_api_fixture.patron)
 
         # If we can't find a delivery mechanism, we can't fulfill the loan.
+        mock_lpdm = MagicMock(
+            spec=LicensePoolDeliveryMechanism,
+            delivery_mechanism=MagicMock(drm_scheme=None),
+        )
         pytest.raises(
             CannotFulfill,
             opds2_with_odl_api_fixture.api.fulfill,
             opds2_with_odl_api_fixture.patron,
             "pin",
             pool,
-            MagicMock(spec=LicensePoolDeliveryMechanism),
+            mock_lpdm,
         )
 
         lpdm = pool.delivery_mechanisms[0]
@@ -912,6 +934,78 @@ class TestOPDS2WithODLApi:
         assert fulfillment.content_expires is None
         assert fulfillment.content_link == pool.open_access_download_url
         assert fulfillment.content_type == lpdm.delivery_mechanism.content_type
+
+    @freeze_time()
+    def test_fulfill_bearer_token(
+        self,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        opds2_with_odl_api_fixture.api.mock_auth_type = OPDS2AuthType.OAUTH
+        work = db.work()
+        pool = db.licensepool(
+            work.presentation_edition,
+            work=work,
+            unlimited_access=True,
+            with_open_access_download=True,
+            collection=opds2_with_odl_api_fixture.collection,
+        )
+        url = "http://test.com/" + db.fresh_str()
+        media_type = MediaTypes.EPUB_MEDIA_TYPE
+        link, new = pool.identifier.add_link(
+            Hyperlink.GENERIC_OPDS_ACQUISITION, url, pool.data_source, media_type
+        )
+
+        # Add a DeliveryMechanism for this download
+        lpdm = pool.set_delivery_mechanism(
+            media_type,
+            DeliveryMechanism.BEARER_TOKEN,
+            RightsStatus.IN_COPYRIGHT,
+            link.resource,
+        )
+
+        pool.loan_to(opds2_with_odl_api_fixture.patron)
+        fulfillment = opds2_with_odl_api_fixture.api.fulfill(
+            opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
+        )
+
+        assert opds2_with_odl_api_fixture.collection == fulfillment.collection(
+            db.session
+        )
+        assert (
+            opds2_with_odl_api_fixture.pool.data_source.name
+            == fulfillment.data_source_name
+        )
+        assert fulfillment.identifier_type == pool.identifier.type
+        assert fulfillment.identifier == pool.identifier.identifier
+        assert opds2_with_odl_api_fixture.api._session_token is not None
+        assert (
+            fulfillment.content_expires
+            == opds2_with_odl_api_fixture.api._session_token.expires
+        )
+        assert fulfillment.content_link is None
+        assert fulfillment.content_type == DeliveryMechanism.BEARER_TOKEN
+        assert fulfillment.content is not None
+        token_doc = json.loads(fulfillment.content)
+        assert (
+            token_doc.get("access_token")
+            == opds2_with_odl_api_fixture.api._session_token.token
+        )
+        assert token_doc.get("expires_in") == int(
+            (
+                opds2_with_odl_api_fixture.api._session_token.expires - utc_now()
+            ).total_seconds()
+        )
+        assert token_doc.get("token_type") == "Bearer"
+        assert token_doc.get("location") == url
+        assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
+
+        # A second call to fulfill should not refresh the token
+        fulfillment_2 = opds2_with_odl_api_fixture.api.fulfill(
+            opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
+        )
+        assert fulfillment_2.content == fulfillment.content
+        assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
 
     def test_fulfill_cannot_fulfill(
         self,
@@ -1751,3 +1845,11 @@ class TestOPDS2WithODLApi:
         assert 1 == opds2_with_odl_api_fixture.pool.licenses_reserved
         assert 0 == hold.position
         assert 0 == db.session.query(Loan).count()
+
+    def test_settings_properties(
+        self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
+    ):
+        assert opds2_with_odl_api_fixture.api._auth_type == OPDS2AuthType.BASIC
+        assert opds2_with_odl_api_fixture.api._username == "a"
+        assert opds2_with_odl_api_fixture.api._password == "b"
+        assert opds2_with_odl_api_fixture.api._feed_url == "http://odl"

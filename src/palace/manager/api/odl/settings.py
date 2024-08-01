@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from enum import Enum
+
 from flask_babel import lazy_gettext as _
 from pydantic import AnyHttpUrl, HttpUrl, NonNegativeInt, PositiveInt
 
@@ -12,6 +14,12 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+
+
+class OPDS2AuthType(Enum):
+    BASIC = "Basic Auth"
+    OAUTH = "OAuth (via OPDS authentication document)"
+    NONE = "None"
 
 
 class OPDS2WithODLSettings(OPDS2ImporterSettings):
@@ -56,6 +64,16 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             ),
             type=ConfigurationFormItemType.NUMBER,
             required=False,
+        ),
+    )
+    auth_type: OPDS2AuthType = FormField(
+        default=OPDS2AuthType.BASIC,
+        form=ConfigurationFormItem(
+            label="Feed authentication type",
+            description="Method used to authenticate when interacting with the feed.",
+            type=ConfigurationFormItemType.SELECT,
+            required=True,
+            options={auth: auth.value for auth in OPDS2AuthType},
         ),
     )
     password: str = FormField(

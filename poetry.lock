@@ -1536,8 +1536,6 @@ files = [
     {file = "frozendict-2.4.4-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:d13b4310db337f4d2103867c5a05090b22bc4d50ca842093779ef541ea9c9eea"},
     {file = "frozendict-2.4.4-cp39-cp39-win_amd64.whl", hash = "sha256:b3b967d5065872e27b06f785a80c0ed0a45d1f7c9b85223da05358e734d858ca"},
     {file = "frozendict-2.4.4-cp39-cp39-win_arm64.whl", hash = "sha256:4ae8d05c8d0b6134bfb6bfb369d5fa0c4df21eabb5ca7f645af95fdc6689678e"},
-    {file = "frozendict-2.4.4-py311-none-any.whl", hash = "sha256:705efca8d74d3facbb6ace80ab3afdd28eb8a237bfb4063ed89996b024bc443d"},
-    {file = "frozendict-2.4.4-py312-none-any.whl", hash = "sha256:d9647563e76adb05b7cde2172403123380871360a114f546b4ae1704510801e5"},
     {file = "frozendict-2.4.4.tar.gz", hash = "sha256:3f7c031b26e4ee6a3f786ceb5e3abf1181c4ade92dce1f847da26ea2c96008c7"},
 ]
 
@@ -2938,13 +2936,13 @@ files = [
 
 [[package]]
 name = "palace-webpub-manifest-parser"
-version = "3.2.0"
+version = "4.0.0"
 description = "A parser for the Readium Web Publication Manifest, OPDS 2.0 and ODL formats."
 optional = false
 python-versions = "<4,>=3.8"
 files = [
-    {file = "palace_webpub_manifest_parser-3.2.0-py3-none-any.whl", hash = "sha256:813850224cb4970bffd399b097cee59318e2d2050e376000db49166821928872"},
-    {file = "palace_webpub_manifest_parser-3.2.0.tar.gz", hash = "sha256:46f9e9c5719ab63762636715cb8493cad780ba8341a080f27fa1eda059c4532b"},
+    {file = "palace_webpub_manifest_parser-4.0.0-py3-none-any.whl", hash = "sha256:8b7f98c259cbd63d4515da80bdb9c387a7ef109162f38de1935bd5cba5aad345"},
+    {file = "palace_webpub_manifest_parser-4.0.0.tar.gz", hash = "sha256:fb24ac59682e0ca7272fa55a04f905eb3f10a7c1948a3ad260a1e2eb9dacd0ac"},
 ]
 
 [package.dependencies]
@@ -5124,4 +5122,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "51b35c8ab12c9ad35a4f52458c4bdbcfd1ea7d38817f0c57410d523ea35e3e36"
+content-hash = "5a3199e3abacfa90a192829ede962ea039d36ac4aa99f765fd3dad9cd12b7929"
