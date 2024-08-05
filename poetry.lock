@@ -2938,13 +2938,13 @@ files = [
 
 [[package]]
 name = "palace-webpub-manifest-parser"
-version = "3.2.0"
+version = "4.0.0"
 description = "A parser for the Readium Web Publication Manifest, OPDS 2.0 and ODL formats."
 optional = false
 python-versions = "<4,>=3.8"
 files = [
-    {file = "palace_webpub_manifest_parser-3.2.0-py3-none-any.whl", hash = "sha256:813850224cb4970bffd399b097cee59318e2d2050e376000db49166821928872"},
-    {file = "palace_webpub_manifest_parser-3.2.0.tar.gz", hash = "sha256:46f9e9c5719ab63762636715cb8493cad780ba8341a080f27fa1eda059c4532b"},
+    {file = "palace_webpub_manifest_parser-4.0.0-py3-none-any.whl", hash = "sha256:8b7f98c259cbd63d4515da80bdb9c387a7ef109162f38de1935bd5cba5aad345"},
+    {file = "palace_webpub_manifest_parser-4.0.0.tar.gz", hash = "sha256:fb24ac59682e0ca7272fa55a04f905eb3f10a7c1948a3ad260a1e2eb9dacd0ac"},
 ]
 
 [package.dependencies]
@@ -5123,4 +5123,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "7aa4e53a3337e83d3562479abf1d3cf0367a8839ef40add6f5a71029aaa3c13d"
+content-hash = "f8580e22697e0958dbd7fb31a3ed31401ec9b426ffc0ee132ef688d193f1703c"
