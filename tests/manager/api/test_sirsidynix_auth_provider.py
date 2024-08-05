@@ -34,9 +34,7 @@ class MockedSirsiApi:
 
 
 class SirsiAuthFixture:
-    def __init__(
-        self, monkeypatch: pytest.MonkeyPatch, patron_status_block=True
-    ) -> None:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.app_id = "UNITTEST"
         monkeypatch.setenv(Configuration.SIRSI_DYNIX_APP_ID, self.app_id)
 
@@ -55,7 +53,6 @@ class SirsiAuthFixture:
             url=self.url,
             test_identifier=self.test_identifier,
             client_id=self.client_id,
-            patron_status_block=patron_status_block,
         )
 
         self.mock_library_id = 20
@@ -81,9 +78,12 @@ class SirsiAuthFixture:
         }
 
     def provider_mocked_api(
-        self, patron_status_info: dict | None = None
+        self,
+        provider: SirsiDynixHorizonAuthenticationProvider | None = None,
+        patron_status_info: dict | None = None,
     ) -> MockedSirsiApi:
-        provider = self.provider()
+        if provider is None:
+            provider = self.provider()
 
         api_patron_login = create_autospec(
             provider.api_patron_login,
@@ -133,12 +133,8 @@ class SirsiAuthFixture:
 
 
 @pytest.fixture
-def sirsi_auth_fixture(monkeypatch: pytest.MonkeyPatch, request) -> SirsiAuthFixture:
-    if hasattr(request, "param") and request.param is not None:
-        patron_status_block = request.param
-    else:
-        patron_status_block = True
-    return SirsiAuthFixture(monkeypatch, patron_status_block)
+def sirsi_auth_fixture(monkeypatch: pytest.MonkeyPatch) -> SirsiAuthFixture:
+    return SirsiAuthFixture(monkeypatch)
 
 
 class TestSirsiDynixAuthenticationProvider:
@@ -216,13 +212,12 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.block_reason == PatronData.NO_VALUE
         assert patrondata.library_identifier == "testtype"
 
-    @pytest.mark.parametrize(
-        "sirsi_auth_fixture", [False], indirect=["sirsi_auth_fixture"]
-    )
     def test_remote_patron_lookup_unblocked_user_with_blocks_ignored(
         self, sirsi_auth_fixture: SirsiAuthFixture
     ):
-        provider_mock = sirsi_auth_fixture.provider_mocked_api()
+        settings = sirsi_auth_fixture.settings(patron_status_block=False)
+        provider = sirsi_auth_fixture.provider(settings=settings)
+        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider)
         patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
         )
@@ -252,17 +247,16 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.personal_name == "Test User"
         assert patrondata.block_reason == PatronData.EXCESSIVE_FINES
 
-    @pytest.mark.parametrize(
-        "sirsi_auth_fixture", [False], indirect=["sirsi_auth_fixture"]
-    )
     def test_remote_patron_lookup_blocked_user_with_blocks_ignored(
         self, sirsi_auth_fixture: SirsiAuthFixture
     ):
         """ "Test that patron block status is not called when blocks are ignored."""
-        patron_info = {"fields": {"hasMaxDaysWithFines": True}}
-        provider_mock = sirsi_auth_fixture.provider_mocked_api(
-            patron_status_info=patron_info
-        )
+        settings = sirsi_auth_fixture.settings(patron_status_block=False)
+        provider = sirsi_auth_fixture.provider(settings=settings)
+        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider)
+        provider_mock.api_patron_status_info.return_value = {
+            "fields": {"hasMaxDaysWithFines": True}
+        }
 
         patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")

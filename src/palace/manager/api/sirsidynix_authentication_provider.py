@@ -167,10 +167,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         self.sirsi_library_id = library_settings.library_id
 
         # Check if patrons should be blocked based on SIP status
-        if settings.patron_status_block:
-            self.patron_status_should_block = True
-        else:
-            self.patron_status_should_block = False
+        self.patron_status_should_block = settings.patron_status_block
 
     def remote_authenticate(
         self, username: str | None, password: str | None
