@@ -179,4 +179,4 @@ class TestInterestLevelClassifier:
         assert (5, 8) == f("lg")
         assert (9, 13) == f("mg")
         assert (9, 13) == f("mg+")
-        assert (14, 17) == f("ug")
+        assert f("ug") is None
