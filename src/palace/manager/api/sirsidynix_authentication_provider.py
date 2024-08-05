@@ -66,7 +66,6 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
             type=ConfigurationFormItemType.SELECT,
             options={"true": "Yes, block.", "false": "No, do not block."},
         ),
-        alias="patron block status",
     )
 
 
