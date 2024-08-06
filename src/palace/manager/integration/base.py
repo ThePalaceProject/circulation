@@ -102,7 +102,11 @@ class HasIntegrationConfiguration(Generic[SettingsType], ABC):
         ...
 
     @classmethod
-    def settings_load(cls, integration: IntegrationConfiguration) -> SettingsType:
+    def settings_load(
+        cls,
+        integration: IntegrationConfiguration,
+        parent: IntegrationConfiguration | None = None,
+    ) -> SettingsType:
         """
         Load the settings object for this integration from the database.
 

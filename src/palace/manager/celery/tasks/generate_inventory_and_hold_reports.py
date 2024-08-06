@@ -36,7 +36,15 @@ def eligible_integrations(
     def is_eligible(integration: IntegrationConfiguration) -> bool:
         if integration.protocol is None:
             return False
-        settings = registry[integration.protocol].settings_load(integration)
+
+        if integration.collection.parent:
+            parent_integration = integration.collection.parent.integration_configuration
+        else:
+            parent_integration = None
+
+        settings = registry[integration.protocol].settings_load(
+            integration, parent_integration
+        )
         return isinstance(settings, OPDSImporterSettings)
 
     return [integration for integration in integrations if is_eligible(integration)]
