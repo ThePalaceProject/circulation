@@ -256,7 +256,7 @@ pydantic = {version = "^1.10.9", extras = ["dotenv", "email"]}
 pyinstrument = "^4.6"
 PyJWT = "^2.8"
 PyLD = "2.0.4"
-pymarc = "5.2.1"
+pymarc = "5.2.2"
 pyOpenSSL = "^24.0.0"
 pyparsing = "3.1.2"
 pyspellchecker = "0.8.1"
