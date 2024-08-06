@@ -56,6 +56,18 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
         alias="CLIENT_ID",
     )
 
+    patron_status_block: bool = FormField(
+        True,
+        form=ConfigurationFormItem(
+            label="Patron Status Block",
+            description=(
+                "Block patrons from borrowing based on the status of the ILS's patron block field?"
+            ),
+            type=ConfigurationFormItemType.SELECT,
+            options={"true": "Yes, block.", "false": "No, do not block."},
+        ),
+    )
+
 
 class SirsiDynixHorizonAuthLibrarySettings(BasicAuthProviderLibrarySettings):
     library_id: str = FormField(
@@ -153,6 +165,9 @@ class SirsiDynixHorizonAuthenticationProvider(
         self.sirsi_disallowed_suffixes = library_settings.library_disallowed_suffixes
         self.sirsi_library_id = library_settings.library_id
 
+        # Check if patrons should be blocked based on ILS status
+        self.patron_status_should_block = settings.patron_status_block
+
     def remote_authenticate(
         self, username: str | None, password: str | None
     ) -> PatronData | None:
@@ -213,38 +228,44 @@ class SirsiDynixHorizonAuthenticationProvider(
                 patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
                 return patrondata
 
-        # Get patron "fines" information
-        status = self.api_patron_status_info(
-            patron_key=patrondata.permanent_id,
-            session_token=patrondata.session_token,
-        )
+        if self.patron_status_should_block:
+            # Get patron "fines" information
+            status = self.api_patron_status_info(
+                patron_key=patrondata.permanent_id,
+                session_token=patrondata.session_token,
+            )
 
-        if not status or "fields" not in status:
-            return None
+            if not status or "fields" not in status:
+                return None
 
-        status_fields: dict = status["fields"]
-        fines = status_fields.get("estimatedFines")
-        if fines is not None:
-            # We ignore currency for now, and assume USD
-            patrondata.fines = float(fines.get("amount", 0))
+            status_fields: dict = status["fields"]
+            fines = status_fields.get("estimatedFines")
+            if fines is not None:
+                # We ignore currency for now, and assume USD
+                patrondata.fines = float(fines.get("amount", 0))
 
-        # Blockable statuses
-        if status_fields.get("hasMaxDaysWithFines") or status_fields.get("hasMaxFines"):
-            patrondata.block_reason = PatronData.EXCESSIVE_FINES
-        elif status_fields.get("hasMaxLostItem"):
-            patrondata.block_reason = PatronData.TOO_MANY_LOST
-        elif status_fields.get("hasMaxOverdueDays") or status_fields.get(
-            "hasMaxOverdueItem"
-        ):
-            patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
-        elif status_fields.get("hasMaxItemsCheckedOut"):
-            patrondata.block_reason = PatronData.TOO_MANY_LOANS
-        elif status_fields.get("expired"):
-            patrondata.block_reason = SirsiBlockReasons.EXPIRED
+            # Blockable statuses
+            if status_fields.get("hasMaxDaysWithFines") or status_fields.get(
+                "hasMaxFines"
+            ):
+                patrondata.block_reason = PatronData.EXCESSIVE_FINES
+            elif status_fields.get("hasMaxLostItem"):
+                patrondata.block_reason = PatronData.TOO_MANY_LOST
+            elif status_fields.get("hasMaxOverdueDays") or status_fields.get(
+                "hasMaxOverdueItem"
+            ):
+                patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
+            elif status_fields.get("hasMaxItemsCheckedOut"):
+                patrondata.block_reason = PatronData.TOO_MANY_LOANS
+            elif status_fields.get("expired"):
+                patrondata.block_reason = SirsiBlockReasons.EXPIRED
 
-        # If previously, the patron was blocked this should unset the value in the DB
-        if patrondata.block_reason is None:
+            # If previously, the patron was blocked this should unset the value in the DB
+            if patrondata.block_reason is None:
+                patrondata.block_reason = PatronData.NO_VALUE
+        else:
             patrondata.block_reason = PatronData.NO_VALUE
+
         return patrondata
 
     ###
