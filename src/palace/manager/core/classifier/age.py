@@ -156,8 +156,6 @@ class InterestLevelClassifier(Classifier):
             return cls.range_tuple(5, 8)
         if identifier in ("mg+", "mg"):
             return cls.range_tuple(9, 13)
-        if identifier == "ug":
-            return cls.range_tuple(14, 17)
         return None
 
 
