@@ -80,7 +80,7 @@ class SirsiAuthFixture:
     def provider_mocked_api(
         self,
         provider: SirsiDynixHorizonAuthenticationProvider | None = None,
-        patron_status_info: dict | None = None,
+        patron_status_info: dict[str, Any] | None = None,
     ) -> MockedSirsiApi:
         if provider is None:
             provider = self.provider()

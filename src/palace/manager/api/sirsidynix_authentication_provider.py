@@ -165,7 +165,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         self.sirsi_disallowed_suffixes = library_settings.library_disallowed_suffixes
         self.sirsi_library_id = library_settings.library_id
 
-        # Check if patrons should be blocked based on SIP status
+        # Check if patrons should be blocked based on ILS status
         self.patron_status_should_block = settings.patron_status_block
 
     def remote_authenticate(
