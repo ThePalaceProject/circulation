@@ -4,12 +4,12 @@ import binascii
 import datetime
 import json
 import uuid
+from functools import cached_property
 from typing import Any, Literal
 
 import dateutil
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
-from requests import Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
@@ -28,6 +28,7 @@ from palace.manager.api.circulation_exceptions import (
     CannotLoan,
     CurrentlyAvailable,
     FormatNotAvailable,
+    HoldOnUnlimitedAccess,
     HoldsNotPermitted,
     NoAvailableCopies,
     NoLicenses,
@@ -37,8 +38,10 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
+from palace.manager.api.odl.auth import ODLAuthenticatedGet
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import (
+    OPDS2AuthType,
     OPDS2WithODLLibrarySettings,
     OPDS2WithODLSettings,
 )
@@ -60,11 +63,12 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP, BadResponseException
+from palace.manager.util.http import BadResponseException
 
 
 class OPDS2WithODLApi(
-    PatronActivityCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings]
+    ODLAuthenticatedGet,
+    PatronActivityCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings],
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
     libraries to manage their own loans and holds. It offers a deeper level
@@ -139,17 +143,30 @@ class OPDS2WithODLApi(
         self.data_source_name = settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
-
-        self.username = settings.username
-        self.password = settings.password
         self.analytics = analytics
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()
         self._hasher_instance: Hasher | None = None
 
-        self.loan_limit = self.settings.loan_limit
-        self.hold_limit = self.settings.hold_limit
+        self.loan_limit = settings.loan_limit
+        self.hold_limit = settings.hold_limit
+
+    @cached_property
+    def _username(self) -> str:
+        return self.settings.username
+
+    @cached_property
+    def _password(self) -> str:
+        return self.settings.password
+
+    @cached_property
+    def _auth_type(self) -> OPDS2AuthType:
+        return self.settings.auth_type
+
+    @cached_property
+    def _feed_url(self) -> str:
+        return self.settings.external_account_id
 
     def _get_hasher(self) -> Hasher:
         """Returns a Hasher instance
@@ -163,19 +180,6 @@ class OPDS2WithODLApi(
             )
 
         return self._hasher_instance
-
-    def _get(self, url: str, headers: dict[str, str] | None = None) -> Response:
-        """Make a normal HTTP request, but include an authentication
-        header with the credentials for the collection.
-        """
-
-        username = self.username
-        password = self.password
-        headers = dict(headers or {})
-        auth_header = "Basic %s" % base64.b64encode(f"{username}:{password}")
-        headers["Authorization"] = auth_header
-
-        return HTTP.get_with_timeout(url, headers=headers)
 
     def _url_for(self, *args: Any, **kwargs: Any) -> str:
         """Wrapper around flask's url_for to be overridden for tests."""
@@ -284,8 +288,8 @@ class OPDS2WithODLApi(
             raise NotCheckedOut()
         loan_result = loan.one()
 
-        if loan_result.license_pool.open_access:
-            # If this is an open-access book, we don't need to do anything.
+        if licensepool.open_access or licensepool.unlimited_access:
+            # If this is an open-access or unlimited access book, we don't need to do anything.
             return
 
         self._checkin(loan_result)
@@ -352,7 +356,7 @@ class OPDS2WithODLApi(
         if loan.count() > 0:
             raise AlreadyCheckedOut()
 
-        if licensepool.open_access:
+        if licensepool.open_access or licensepool.unlimited_access:
             loan_start = None
             loan_end = None
             external_identifier = None
@@ -505,49 +509,15 @@ class OPDS2WithODLApi(
 
         return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
 
-    def _fulfill(
-        self,
-        loan: Loan,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+    def _unlimited_access_fulfill(
+        self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> FulfillmentInfo:
         licensepool = loan.license_pool
-
-        if licensepool.open_access:
-            expires = None
-            requested_mechanism = delivery_mechanism.delivery_mechanism
-            fulfillment = next(
-                (
-                    lpdm
-                    for lpdm in licensepool.delivery_mechanisms
-                    if lpdm.delivery_mechanism == requested_mechanism
-                ),
-                None,
-            )
-            if fulfillment is None:
-                raise FormatNotAvailable()
-            content_link = fulfillment.resource.representation.public_url
-            content_type = fulfillment.resource.representation.media_type
-        else:
-            doc = self.get_license_status_document(loan)
-            status = doc.get("status")
-
-            if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
-                # This loan isn't available for some reason. It's possible
-                # the distributor revoked it or the patron already returned it
-                # through the DRM system, and we didn't get a notification
-                # from the distributor yet.
-                self.update_loan(loan, doc)
-                raise CannotFulfill()
-
-            expires = doc.get("potential_rights", {}).get("end")
-            expires = dateutil.parser.parse(expires)
-
-            links = doc.get("links", [])
-
-            content_link, content_type = self._find_content_link_and_type(
-                links, delivery_mechanism.delivery_mechanism.drm_scheme
-            )
-
+        fulfillment = self._find_matching_delivery_mechanism(
+            delivery_mechanism.delivery_mechanism, licensepool
+        )
+        content_link = fulfillment.resource.representation.public_url
+        content_type = fulfillment.resource.representation.media_type
         return FulfillmentInfo(
             licensepool.collection,
             licensepool.data_source.name,
@@ -556,8 +526,113 @@ class OPDS2WithODLApi(
             content_link,
             content_type,
             None,
+            None,
+        )
+
+    def _find_matching_delivery_mechanism(
+        self, requested_delivery_mechanism: DeliveryMechanism, licensepool: LicensePool
+    ) -> LicensePoolDeliveryMechanism:
+        fulfillment = next(
+            (
+                lpdm
+                for lpdm in licensepool.delivery_mechanisms
+                if lpdm.delivery_mechanism == requested_delivery_mechanism
+            ),
+            None,
+        )
+        if fulfillment is None:
+            raise FormatNotAvailable()
+        return fulfillment
+
+    def _lcp_fulfill(
+        self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
+    ) -> FulfillmentInfo:
+        doc = self.get_license_status_document(loan)
+        status = doc.get("status")
+
+        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
+            # This loan isn't available for some reason. It's possible
+            # the distributor revoked it or the patron already returned it
+            # through the DRM system, and we didn't get a notification
+            # from the distributor yet.
+            self.update_loan(loan, doc)
+            raise CannotFulfill()
+
+        expires = doc.get("potential_rights", {}).get("end")
+        expires = dateutil.parser.parse(expires)
+
+        links = doc.get("links", [])
+
+        content_link, content_type = self._find_content_link_and_type(
+            links, delivery_mechanism.delivery_mechanism.drm_scheme
+        )
+
+        return FulfillmentInfo(
+            loan.license_pool.collection,
+            loan.license_pool.data_source.name,
+            loan.license_pool.identifier.type,
+            loan.license_pool.identifier.identifier,
+            content_link,
+            content_type,
+            None,
             expires,
         )
+
+    def _bearer_token_fulfill(
+        self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
+    ) -> FulfillmentInfo:
+        licensepool = loan.license_pool
+        fulfillment_mechanism = self._find_matching_delivery_mechanism(
+            delivery_mechanism.delivery_mechanism, licensepool
+        )
+
+        # Make sure we have a session token to pass to the app. If the token expires in the
+        # next 10 minutes, we'll refresh it to make sure the app has enough time to download the book.
+        if (
+            self._session_token is None
+            or self._session_token.expires - datetime.timedelta(minutes=10) < utc_now()
+        ):
+            self._refresh_token()
+
+        # At this point the token should never be None, but for mypy to be happy we'll assert it.
+        assert self._session_token is not None
+
+        # Build an application/vnd.librarysimplified.bearer-token
+        # document using information from the credential.
+        token_document = dict(
+            token_type="Bearer",
+            access_token=self._session_token.token,
+            expires_in=(int((self._session_token.expires - utc_now()).total_seconds())),
+            location=fulfillment_mechanism.resource.url,
+        )
+
+        return FulfillmentInfo(
+            licensepool.collection,
+            licensepool.data_source.name,
+            licensepool.identifier.type,
+            licensepool.identifier.identifier,
+            content_link=None,
+            content_type=DeliveryMechanism.BEARER_TOKEN,
+            content=json.dumps(token_document),
+            content_expires=self._session_token.expires,
+        )
+
+    def _fulfill(
+        self,
+        loan: Loan,
+        delivery_mechanism: LicensePoolDeliveryMechanism,
+    ) -> FulfillmentInfo:
+        if loan.license_pool.open_access or loan.license_pool.unlimited_access:
+            if (
+                delivery_mechanism.delivery_mechanism.drm_scheme
+                == DeliveryMechanism.BEARER_TOKEN
+                and self._auth_type == OPDS2AuthType.OAUTH
+            ):
+                return self._bearer_token_fulfill(loan, delivery_mechanism)
+            else:
+                return self._unlimited_access_fulfill(loan, delivery_mechanism)
+        else:
+            return self._lcp_fulfill(loan, delivery_mechanism)
 
     def _count_holds_before(self, holdinfo: HoldInfo, pool: LicensePool) -> int:
         # Count holds on the license pool that started before this hold and
@@ -725,6 +800,9 @@ class OPDS2WithODLApi(
         notification_email_address: str | None,
     ) -> HoldInfo:
         """Create a new hold."""
+        if licensepool.open_access or licensepool.unlimited_access:
+            raise HoldOnUnlimitedAccess()
+
         return self._place_hold(patron, licensepool)
 
     def _place_hold(self, patron: Patron, licensepool: LicensePool) -> HoldInfo:
@@ -782,7 +860,6 @@ class OPDS2WithODLApi(
     def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Cancel a hold."""
         _db = Session.object_session(patron)
-
         hold = get_one(
             _db,
             Hold,
@@ -904,3 +981,11 @@ class OPDS2WithODLApi(
 
     def update_availability(self, licensepool: LicensePool) -> None:
         pass
+
+    def can_fulfill_without_loan(
+        self,
+        patron: Patron | None,
+        pool: LicensePool,
+        lpdm: LicensePoolDeliveryMechanism,
+    ) -> bool:
+        return False

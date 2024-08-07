@@ -1,0 +1,94 @@
+{
+  "metadata" : {
+    "title" : "Crawlable page: 1",
+    "itemsPerPage" : 25,
+    "currentPage" : 1
+  },
+  "links" : [ {
+    "rel" : "self",
+    "href" : "https://catalog.example.org/opds/v2/crawlable/1",
+    "type" : "application/opds+json"
+  } ],
+  "publications" : [ {
+    "metadata" : {
+      "@type" : "https://schema.org/Audiobook",
+      "identifier" : "urn:uuid:a0f77af3-a2a6-4a29-8e1f-18e06e4e573e",
+      "title" : "StarTalk",
+      "publisher" : "Blackstone Publishing",
+      "description" : "&lt;p&gt;For decades, beloved astrophysicist Neil deGrasse Tyson has interpreted science with a combination of brainpower and charm that resonates with fans everywhere.&lt;/p&gt;&lt;p&gt;This pioneering, provocative audiobook brings together the best of StarTalk, his beloved podcast and television show devoted to solving the most confounding mysteries of Earth, space, and what it means to be human. Filled with brilliant sidebars and unforgettable quotes from Tyson and his brilliant cohort of science and entertainment luminaries, StarTalk will help answer all of your most pressing questions about our world—from how the brain works to the physics of comic book superheroes.&lt;/p&gt;&lt;p&gt;Fun, smart, and laugh-out-loud funny, this audiobook is the perfect guide to everything you ever wanted to know about the universe—and beyond.&lt;/p&gt;",
+      "published" : "2022-01-01T00:00:00Z",
+      "language" : "eng",
+      "modified" : "2024-07-31T22:58:04Z",
+      "contributor" : [ {
+        "name" : "Neil deGrasse Tyson",
+        "role" : "author",
+        "position" : 0
+      }, {
+        "name" : "Jeffrey Lee Simons",
+        "role" : "author",
+        "position" : 1
+      }, {
+        "name" : "Kevin R. Free",
+        "role" : "performer",
+        "position" : 2
+      }, {
+        "name" : "Charles Liu",
+        "role" : "author",
+        "position" : 3
+      }, {
+        "name" : "various narrators",
+        "role" : "performer",
+        "position" : 4
+      }, {
+        "name" : "Luzma Ortiz",
+        "role" : "performer",
+        "position" : 5
+      }, {
+        "name" : "Jesse Bickford",
+        "role" : "author",
+        "position" : 6
+      }, {
+        "name" : "Lauren Fortgang",
+        "role" : "performer",
+        "position" : 7
+      } ],
+      "subject" : [ {
+        "name" : "Science / Space Science / Astronomy",
+        "code" : "SCI004000",
+        "scheme" : "http://www.bisg.org/standards/bisac_subject/"
+      }, {
+        "name" : "Science / Space Science",
+        "code" : "SCI098000",
+        "scheme" : "http://www.bisg.org/standards/bisac_subject/"
+      }, {
+        "name" : "Science / Earth Sciences",
+        "code" : "SCI019000",
+        "scheme" : "http://www.bisg.org/standards/bisac_subject/"
+      } ]
+    },
+    "links" : [ {
+      "rel" : "self",
+      "href" : "https://catalog.example.org/opds/v2/items/a0f77af3-a2a6-4a29-8e1f-18e06e4e573e",
+      "type" : "application/opds-publication+json"
+    }, {
+      "rel" : "http://opds-spec.org/acquisition",
+      "href" : "https://library.example.org/viewer/a0f77af3-a2a6-4a29-8e1f-18e06e4e573e",
+      "type" : "text/html"
+    }, {
+      "rel" : "http://opds-spec.org/acquisition",
+      "href" : "https://catalog.example.org/opds/items/a0f77af3-a2a6-4a29-8e1f-18e06e4e573e/manifest.json",
+      "type" : "application/audiobook+json"
+    } ],
+    "images" : [ {
+      "href" : "https://library.example.org/ext/api/media/a0f77af3-a2a6-4a29-8e1f-18e06e4e573e/assets/thumbnail.jpg",
+      "type" : "image/jpeg",
+      "height" : 500,
+      "width" : 300
+    }, {
+      "href" : "https://library.example.org/ext/api/media/a0f77af3-a2a6-4a29-8e1f-18e06e4e573e/assets/thumbnail_full.jpg",
+      "type" : "image/jpeg",
+      "height" : 1440,
+      "width" : 1080
+      } ]
+} ]
+}
