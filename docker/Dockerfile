@@ -32,7 +32,7 @@ RUN . env/bin/activate && \
 
 FROM common AS exec
 
-ENV SIMPLIFIED_SCRIPT_NAME ""
+ENV SIMPLIFIED_SCRIPT_NAME=""
 
 VOLUME /var/log
 WORKDIR /home/simplified/circulation/bin
