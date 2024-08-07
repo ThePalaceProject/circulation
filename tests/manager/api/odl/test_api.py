@@ -19,6 +19,7 @@ from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
     CannotLoan,
     CurrentlyAvailable,
+    HoldOnUnlimitedAccess,
     HoldsNotPermitted,
     NoAvailableCopies,
     NoLicenses,
@@ -27,6 +28,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
+from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -74,17 +76,27 @@ class TestOPDS2WithODLApi:
             )
         assert exc.value.limit == 1
 
-    def test_hold_open_access(
+    @pytest.mark.parametrize(
+        "open_access,unlimited_access",
+        [
+            pytest.param(False, True, id="unlimited_access"),
+            pytest.param(True, True, id="open_access"),
+        ],
+    )
+    def test_hold_unlimited_access(
         self,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        open_access: bool,
+        unlimited_access: bool,
     ):
         """Tests that placing a hold on an open-access work will always fail,
         since these items are always available to borrow"""
         # Create an open-access work
         pool = opds2_with_odl_api_fixture.work.license_pools[0]
-        pool.open_access = True
+        pool.open_access = open_access
+        pool.unlimited_access = unlimited_access
 
-        with pytest.raises(CurrentlyAvailable):
+        with pytest.raises(HoldOnUnlimitedAccess):
             opds2_with_odl_api_fixture.api.place_hold(
                 opds2_with_odl_api_fixture.patron, "pin", pool, ""
             )
@@ -1849,7 +1861,17 @@ class TestOPDS2WithODLApi:
     def test_settings_properties(
         self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
     ):
-        assert opds2_with_odl_api_fixture.api._auth_type == OPDS2AuthType.BASIC
-        assert opds2_with_odl_api_fixture.api._username == "a"
-        assert opds2_with_odl_api_fixture.api._password == "b"
-        assert opds2_with_odl_api_fixture.api._feed_url == "http://odl"
+        real_api = OPDS2WithODLApi(
+            opds2_with_odl_api_fixture.db.session, opds2_with_odl_api_fixture.collection
+        )
+        assert real_api._auth_type == OPDS2AuthType.BASIC
+        assert real_api._username == "a"
+        assert real_api._password == "b"
+        assert real_api._feed_url == "http://odl"
+
+    def test_can_fulfill_without_loan(
+        self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
+    ):
+        assert not opds2_with_odl_api_fixture.api.can_fulfill_without_loan(
+            MagicMock(), MagicMock(), MagicMock()
+        )

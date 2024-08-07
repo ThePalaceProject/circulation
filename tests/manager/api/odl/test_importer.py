@@ -378,7 +378,7 @@ class TestOPDS2WithODLImporter:
     ) -> None:
         """
         Ensure that OPDSWithODLImporter correctly processes and imports a feed with an
-        open access book.
+        unlimited access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
         importer.settings = importer.settings_class()(
@@ -416,14 +416,14 @@ class TestOPDS2WithODLImporter:
 
         assert 1 == len(license_pool.delivery_mechanisms)
 
-        oa_ebook_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
+        ebook_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
             license_pool.delivery_mechanisms,
             MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
             DeliveryMechanism.BEARER_TOKEN
             if auth_type == OPDS2AuthType.OAUTH
             else None,
         )
-        assert oa_ebook_delivery_mechanism is not None
+        assert ebook_delivery_mechanism is not None
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_availability(

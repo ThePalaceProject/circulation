@@ -28,6 +28,7 @@ from palace.manager.api.circulation_exceptions import (
     CannotLoan,
     CurrentlyAvailable,
     FormatNotAvailable,
+    HoldOnUnlimitedAccess,
     HoldsNotPermitted,
     NoAvailableCopies,
     NoLicenses,
@@ -800,7 +801,7 @@ class OPDS2WithODLApi(
     ) -> HoldInfo:
         """Create a new hold."""
         if licensepool.open_access or licensepool.unlimited_access:
-            raise CurrentlyAvailable()
+            raise HoldOnUnlimitedAccess()
 
         return self._place_hold(patron, licensepool)
 

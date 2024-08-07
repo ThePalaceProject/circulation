@@ -351,6 +351,17 @@ class CurrentlyAvailable(CannotHold):
     """The patron can't put this book on hold because it's available now."""
 
 
+class HoldOnUnlimitedAccess(CannotHold):
+    """The patron can't put this book on hold because it's an unlimited
+    access title, so it is currently available."""
+
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLD_FAILED.detailed(
+            detail="Cannot place a hold on an unlimited access title."
+        )
+
+
 class NoAcceptableFormat(CannotFulfill):
     """We can't fulfill the patron's loan because the book is not available
     in an acceptable format.
