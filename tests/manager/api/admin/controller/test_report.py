@@ -226,11 +226,12 @@ class TestReportController:
         assert exc.value.problem_detail == LIBRARY_NOT_FOUND
 
     @pytest.mark.parametrize(
-        "protocol, settings, expect_collection",
+        "protocol, settings, parent_settings, expect_collection",
         (
             (
                 OPDSAPI.label(),
                 {"data_source": "test", "external_account_id": "http://url"},
+                None,
                 True,
             ),
             (
@@ -240,6 +241,7 @@ class TestReportController:
                     "data_source": "test",
                     "external_account_id": "http://test.url",
                 },
+                None,
                 False,
             ),
             (
@@ -249,10 +251,22 @@ class TestReportController:
                     "data_source": "test",
                     "external_account_id": "http://test.url",
                 },
+                None,
                 True,
             ),
             (
                 OverdriveAPI.label(),
+                {
+                    "overdrive_website_id": "test",
+                    "overdrive_client_key": "test",
+                    "overdrive_client_secret": "test",
+                },
+                None,
+                False,
+            ),
+            (
+                OverdriveAPI.label(),
+                {"external_account_id": "test"},
                 {
                     "overdrive_website_id": "test",
                     "overdrive_client_key": "test",
@@ -269,6 +283,7 @@ class TestReportController:
         flask_app_fixture: FlaskAppFixture,
         protocol: str,
         settings: dict,
+        parent_settings: dict,
         expect_collection: bool,
     ):
         controller = report_fixture.controller
@@ -277,6 +292,12 @@ class TestReportController:
         library = db.library()
         collection = db.collection(protocol=protocol, settings=settings)
         collection.libraries = [library]
+
+        if parent_settings:
+            parent = db.collection(
+                protocol=protocol, settings=parent_settings, library=library
+            )
+            collection.parent = parent
 
         expected_collections = (
             [InventoryReportCollectionInfo(id=collection.id, name=collection.name)]
