@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pytest import LogCaptureFixture
 from requests import Response
+from webpub_manifest_parser.core.ast import Contributor as WebpubContributor
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo
@@ -20,7 +21,6 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -83,35 +83,30 @@ class OPDS2Test:
         return None
 
 
-class TestOPDS2ImporterFixture:
-    transaction: DatabaseTransactionFixture
-    collection: Collection
-    data_source: DataSource
-    importer: OPDS2Importer
-    library: Library
+class OPDS2ImporterFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        self.transaction = db
+        self.collection = db.collection(
+            protocol=OPDS2API.label(),
+            data_source_name="OPDS 2.0 Data Source",
+            external_account_id="http://opds2.example.org/feed",
+        )
+        self.library = db.default_library()
+        self.collection.libraries.append(self.library)
+        self.data_source = DataSource.lookup(
+            db.session, "OPDS 2.0 Data Source", autocreate=True
+        )
+        self.collection.data_source = self.data_source
+        self.importer = OPDS2Importer(
+            db.session, self.collection, RWPMManifestParser(OPDS2FeedParserFactory())
+        )
 
 
 @pytest.fixture
 def opds2_importer_fixture(
     db: DatabaseTransactionFixture,
-) -> TestOPDS2ImporterFixture:
-    data = TestOPDS2ImporterFixture()
-    data.transaction = db
-    data.collection = db.collection(
-        protocol=OPDS2API.label(),
-        data_source_name="OPDS 2.0 Data Source",
-        external_account_id="http://opds2.example.org/feed",
-    )
-    data.library = db.default_library()
-    data.collection.libraries.append(data.library)
-    data.data_source = DataSource.lookup(
-        db.session, "OPDS 2.0 Data Source", autocreate=True
-    )
-    data.collection.data_source = data.data_source
-    data.importer = OPDS2Importer(
-        db.session, data.collection, RWPMManifestParser(OPDS2FeedParserFactory())
-    )
-    return data
+) -> OPDS2ImporterFixture:
+    return OPDS2ImporterFixture(db)
 
 
 class TestOPDS2Importer(OPDS2Test):
@@ -130,7 +125,7 @@ class TestOPDS2Importer(OPDS2Test):
     )
     def test_opds2_importer_correctly_imports_valid_opds2_feed(
         self,
-        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_importer_fixture: OPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
         name: str,
         manifest_type: str,
@@ -400,7 +395,7 @@ class TestOPDS2Importer(OPDS2Test):
     )
     def test_opds2_importer_skips_publications_with_unsupported_identifier_types(
         self,
-        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_importer_fixture: OPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
         this_identifier_type,
         ignore_identifier_type: list[IdentifierType],
@@ -447,7 +442,7 @@ class TestOPDS2Importer(OPDS2Test):
 
     def test_auth_token_feed(
         self,
-        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_importer_fixture: OPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
         data, transaction, session = (
@@ -469,7 +464,7 @@ class TestOPDS2Importer(OPDS2Test):
 
     def test_opds2_importer_imports_feeds_with_availability_info(
         self,
-        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_importer_fixture: OPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
         """Ensure that OPDS2Importer correctly imports feeds with availability information."""
@@ -638,6 +633,61 @@ class TestOPDS2Importer(OPDS2Test):
             == LicensePool.UNLIMITED_ACCESS
         )
 
+    def test__extract_contributor_roles(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+    ):
+        _extract_contributor_roles = (
+            opds2_importer_fixture.importer._extract_contributor_roles
+        )
+
+        # If there are no roles, the function returns the default
+        assert _extract_contributor_roles([], Contributor.Role.AUTHOR) == [
+            Contributor.Role.AUTHOR
+        ]
+        assert _extract_contributor_roles(None, Contributor.Role.AUTHOR) == [
+            Contributor.Role.AUTHOR
+        ]
+
+        # If the role is a string, it is converted to a list
+        assert _extract_contributor_roles(
+            Contributor.Role.ILLUSTRATOR, Contributor.Role.AUTHOR
+        ) == [Contributor.Role.ILLUSTRATOR]
+
+        # If the role is unknown, the default is used
+        assert _extract_contributor_roles("invalid", Contributor.Role.AUTHOR) == [
+            Contributor.Role.AUTHOR
+        ]
+
+        # Roles are not duplicated
+        assert _extract_contributor_roles(
+            [Contributor.Role.AUTHOR, Contributor.Role.AUTHOR], Contributor.Role.AUTHOR
+        ) == [Contributor.Role.AUTHOR]
+        assert _extract_contributor_roles(
+            ["invalid", "invalid"], Contributor.Role.AUTHOR
+        ) == [Contributor.Role.AUTHOR]
+
+        # Role lookup is not case-sensitive
+        assert _extract_contributor_roles("aUtHoR", Contributor.Role.ILLUSTRATOR) == [
+            Contributor.Role.AUTHOR
+        ]
+
+        # Roles can be looked up via marc codes
+        assert _extract_contributor_roles("AUT", Contributor.Role.ILLUSTRATOR) == [
+            Contributor.Role.AUTHOR
+        ]
+
+    def test__extract_contributors(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+    ):
+        extract_contributors = opds2_importer_fixture.importer._extract_contributors
+
+        # If the contributor name is a blank string, ignore it. This shouldn't happen generally, but
+        # we see this coming in from some feeds.
+        contributor = WebpubContributor(name="", roles=["author"])
+        assert extract_contributors([contributor], Contributor.Role.ILLUSTRATOR) == []
+
 
 class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
@@ -687,7 +737,7 @@ class TestOpds2Api:
     def test_opds2_with_authentication_tokens(
         self,
         db: DatabaseTransactionFixture,
-        opds2_importer_fixture: TestOPDS2ImporterFixture,
+        opds2_importer_fixture: OPDS2ImporterFixture,
         opds2_files_fixture: OPDS2FilesFixture,
     ):
         """Test the end to end workflow from importing the feed to a fulfill"""

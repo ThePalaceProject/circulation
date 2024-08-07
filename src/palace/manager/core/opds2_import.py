@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
+from functools import cached_property
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
@@ -348,10 +349,46 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return subject_metadata_list
 
+    @cached_property
+    def _contributor_roles(self) -> Mapping[str, str]:
+        """
+        Return a mapping of OPDS2 contributor roles to our internal contributor role representation.
+        This mapping accepts MARC role codes and our internal contributor roles.
+        """
+        # We reverse the mapping because there are some roles that have the same code, and we
+        # want to prioritize the first time the code appears in the list.
+        marc_code_mapping = {
+            code.lower(): role
+            for role, code in reversed(Contributor.MARC_ROLE_CODES.items())
+        }
+        return marc_code_mapping | {role.lower(): role for role in Contributor.Role}
+
+    def _extract_contributor_roles(
+        self, roles: Sequence[str] | str | None, default: str
+    ) -> list[str]:
+        """
+        Normalize the contributor roles from the OPDS2 feed to our internal representation.
+        """
+        if roles is None:
+            roles = []
+        elif isinstance(roles, str):
+            roles = [roles]
+
+        mapped_roles = set()
+        for role in roles:
+            if (lowercased_role := role.lower()) not in self._contributor_roles:
+                self.log.warning(f"Unknown contributor role: {role}")
+            mapped_roles.add(self._contributor_roles.get(lowercased_role, default))
+
+        if not mapped_roles:
+            return [default]
+
+        return list(mapped_roles)
+
     def _extract_contributors(
         self,
         contributors: list[core_ast.Contributor],
-        default_role: str | None = Contributor.Role.AUTHOR,
+        default_role: str,
     ) -> list[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
 
@@ -370,12 +407,18 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 )
             )
 
+            if not contributor.name:
+                self.log.warning(
+                    f"Contributor has no name. Skipping. {encode(contributor)}"
+                )
+                continue
+
             contributor_metadata = ContributorData(
                 sort_name=contributor.sort_as,
                 display_name=contributor.name,
                 family_name=None,
                 wikipedia_name=None,
-                roles=contributor.roles if contributor.roles else default_role,
+                roles=self._extract_contributor_roles(contributor.roles, default_role),
             )
 
             self.log.debug(
