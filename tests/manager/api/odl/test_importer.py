@@ -1114,20 +1114,36 @@ class TestOPDS2WithODLImporter:
         assert license_data.terms_concurrency == 12
 
 
-class TestOPDS2WithODLImportMonitor:
-    def test_get(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        session = db.session
-        collection = db.collection(
-            external_account_id="https://opds.import.com:9999/feed",
-            username="username",
-            password="password",
+class OPDS2WithODLImportMonitorFixture:
+    def __init__(self, db: DatabaseTransactionFixture):
+        self.feed_url = "https://opds.import.com:9999/feed"
+        self.username = "username"
+        self.password = "password"
+        self.collection = db.collection(
+            external_account_id=self.feed_url,
+            username=self.username,
+            password=self.password,
             data_source_name="OPDS",
             protocol=OPDS2WithODLApi.label(),
         )
-        monitor = OPDS2WithODLImportMonitor(session, collection, OPDS2WithODLImporter)
+        self.monitor = OPDS2WithODLImportMonitor(
+            db.session, self.collection, OPDS2WithODLImporter
+        )
+
+
+@pytest.fixture
+def opds2_with_odl_import_monitor_fixture(
+    db: DatabaseTransactionFixture,
+) -> OPDS2WithODLImportMonitorFixture:
+    return OPDS2WithODLImportMonitorFixture(db)
+
+
+class TestOPDS2WithODLImportMonitor:
+    def test_get(
+        self,
+        opds2_with_odl_import_monitor_fixture: OPDS2WithODLImportMonitorFixture,
+    ):
+        monitor = opds2_with_odl_import_monitor_fixture.monitor
 
         with patch.object(HTTP, "get_with_timeout") as mock_get:
             monitor._get("/absolute/path", {})
@@ -1149,3 +1165,14 @@ class TestOPDS2WithODLImportMonitor:
             assert kwargs.get("timeout") == 120
             assert kwargs.get("max_retry_count") == monitor._max_retry_count
             assert kwargs.get("allowed_response_codes") == ["2xx", "3xx"]
+
+    def test_properties(
+        self,
+        opds2_with_odl_import_monitor_fixture: OPDS2WithODLImportMonitorFixture,
+    ):
+        monitor = opds2_with_odl_import_monitor_fixture.monitor
+
+        assert monitor._username == opds2_with_odl_import_monitor_fixture.username
+        assert monitor._password == opds2_with_odl_import_monitor_fixture.password
+        assert monitor._auth_type == OPDS2AuthType.BASIC
+        assert monitor._feed_url == opds2_with_odl_import_monitor_fixture.feed_url
