@@ -11,6 +11,7 @@ from palace.manager.sqlalchemy.model.time_tracking import (
     PlaytimeEntry,
     PlaytimeSummary,
     _isbn_for_identifier,
+    _title_for_identifier,
 )
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
@@ -295,3 +296,24 @@ class TestHelpers:
         result = _isbn_for_identifier(test_identifier)
         # Assert
         assert result == expected_isbn
+
+    def test__title_for_identifier_multiple_editions(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        identifier = db.identifier()
+        test_title = "test title"
+        e1 = db.edition(title=test_title)
+        e2 = db.edition(title=test_title, data_source_name="another datasource")
+        e1.primary_identifier = identifier
+        e2.primary_identifier = identifier
+        assert e1.id != e2.id
+        result = _title_for_identifier(identifier)
+        assert result == test_title
+
+    def test__title_for_identifier_no_edition(
+        self,
+        db: DatabaseTransactionFixture,
+    ):
+        identifier = db.identifier()
+        assert not _title_for_identifier(identifier)
