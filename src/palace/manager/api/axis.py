@@ -1051,12 +1051,12 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
     role_abbreviation = re.compile(r"\(([A-Z][A-Z][A-Z])\)$")
     generic_author = object()
     role_abbreviation_to_role = dict(
-        INT=Contributor.INTRODUCTION_ROLE,
-        EDT=Contributor.EDITOR_ROLE,
-        PHT=Contributor.PHOTOGRAPHER_ROLE,
-        ILT=Contributor.ILLUSTRATOR_ROLE,
-        TRN=Contributor.TRANSLATOR_ROLE,
-        FRW=Contributor.FOREWORD_ROLE,
+        INT=Contributor.Role.INTRODUCTION,
+        EDT=Contributor.Role.EDITOR,
+        PHT=Contributor.Role.PHOTOGRAPHER,
+        ILT=Contributor.Role.ILLUSTRATOR,
+        TRN=Contributor.Role.TRANSLATOR,
+        FRW=Contributor.Role.FOREWORD,
         ADP=generic_author,  # Author of adaptation
         COR=generic_author,  # Corporate author
     )
@@ -1066,7 +1066,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         cls,
         author: str,
         primary_author_found: bool = False,
-        force_role: str | None = None,
+        force_role: Contributor.Role | None = None,
     ) -> ContributorData:
         """Parse an Axis 360 contributor string.
 
@@ -1088,20 +1088,20 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
             over the value implied by primary_author_found.
         """
         if primary_author_found:
-            default_author_role = Contributor.AUTHOR_ROLE
+            default_author_role = Contributor.Role.AUTHOR
         else:
-            default_author_role = Contributor.PRIMARY_AUTHOR_ROLE
+            default_author_role = Contributor.Role.PRIMARY_AUTHOR
         role = default_author_role
         match = cls.role_abbreviation.search(author)
         if match:
             role_type = match.groups()[0]
             mapped_role = cls.role_abbreviation_to_role.get(
-                role_type, Contributor.UNKNOWN_ROLE
+                role_type, Contributor.Role.UNKNOWN
             )
             role = (
                 default_author_role
                 if mapped_role is cls.generic_author
-                else cast(str, mapped_role)
+                else cast(Contributor.Role, mapped_role)
             )
             author = author[:-5].strip()
         if force_role:
@@ -1131,7 +1131,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         if contributor:
             for c in self.parse_list(contributor):
                 contributor_data = self.parse_contributor(c, found_primary_author)
-                if Contributor.PRIMARY_AUTHOR_ROLE in contributor_data.roles:
+                if Contributor.Role.PRIMARY_AUTHOR in contributor_data.roles:
                     found_primary_author = True
                 contributors.append(contributor_data)
 
@@ -1139,7 +1139,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         if narrator:
             for n in self.parse_list(narrator):
                 contributor_data = self.parse_contributor(
-                    n, force_role=Contributor.NARRATOR_ROLE
+                    n, force_role=Contributor.Role.NARRATOR
                 )
                 contributors.append(contributor_data)
 

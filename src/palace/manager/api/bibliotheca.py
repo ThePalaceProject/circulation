@@ -686,7 +686,7 @@ class ItemListParser(XMLProcessor[Metadata]):
 
     @classmethod
     def contributors_from_string(
-        cls, string: str | None, role: str = Contributor.AUTHOR_ROLE
+        cls, string: str | None, role: str = Contributor.Role.AUTHOR
     ) -> list[ContributorData]:
         contributors: list[ContributorData] = []
         if not string:
@@ -752,7 +752,7 @@ class ItemListParser(XMLProcessor[Metadata]):
 
         authors = list(self.contributors_from_string(value("Authors")))
         narrators = list(
-            self.contributors_from_string(value("Narrator"), Contributor.NARRATOR_ROLE)
+            self.contributors_from_string(value("Narrator"), Contributor.Role.NARRATOR)
         )
 
         published_date = None

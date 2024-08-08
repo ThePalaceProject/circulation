@@ -559,7 +559,7 @@ class NoveListAPI(
         i1 = aliased(Identifier)
         i2 = aliased(Identifier)
         roles = list(Contributor.AUTHOR_ROLES)
-        roles.append(Contributor.NARRATOR_ROLE)
+        roles.append(Contributor.Role.NARRATOR)
 
         isbnQuery = (
             select(
@@ -670,7 +670,7 @@ class NoveListAPI(
             return (None, None, None, False)
 
         roles = list(Contributor.AUTHOR_ROLES)
-        roles.append(Contributor.NARRATOR_ROLE)
+        roles.append(Contributor.Role.NARRATOR)
 
         role = object[6]
         author_or_narrator = object[7] if role in roles else ""
@@ -684,9 +684,9 @@ class NoveListAPI(
         if isbn == currentIdentifier and existingItem:
             if not existingItem.get("author") and role in Contributor.AUTHOR_ROLES:
                 existingItem["author"] = author_or_narrator
-            if not existingItem.get("narrator") and role == Contributor.NARRATOR_ROLE:
+            if not existingItem.get("narrator") and role == Contributor.Role.NARRATOR:
                 existingItem["narrator"] = author_or_narrator
-            if role == Contributor.PRIMARY_AUTHOR_ROLE:
+            if role == Contributor.Role.PRIMARY_AUTHOR:
                 existingItem["author"] = author_or_narrator
             existingItem["role"] = role
 
@@ -718,7 +718,7 @@ class NoveListAPI(
             addItem = True if existingItem else False
             if role in Contributor.AUTHOR_ROLES:
                 newItem["author"] = author_or_narrator
-            if role == Contributor.NARRATOR_ROLE:
+            if role == Contributor.Role.NARRATOR:
                 newItem["narrator"] = author_or_narrator
 
             return (isbn, existingItem, newItem, addItem)

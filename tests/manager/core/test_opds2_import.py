@@ -187,7 +187,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert isinstance(moby_dick_author_contribution, Contribution)
         assert moby_dick_author == moby_dick_author_contribution.contributor
         assert moby_dick_edition == moby_dick_author_contribution.edition
-        assert Contributor.AUTHOR_ROLE == moby_dick_author_contribution.role
+        assert Contributor.Role.AUTHOR == moby_dick_author_contribution.role
 
         assert data.data_source == moby_dick_edition.data_source
 
@@ -228,7 +228,7 @@ class TestOPDS2Importer(OPDS2Test):
             == huckleberry_finn_author_contribution.contributor
         )
         assert huckleberry_finn_edition == huckleberry_finn_author_contribution.edition
-        assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
+        assert Contributor.Role.AUTHOR == huckleberry_finn_author_contribution.role
 
         assert isinstance(huckleberry_finn_authors[1], Contributor)
         assert "Samuel Langhorne Clemens" == huckleberry_finn_authors[1].display_name
@@ -244,7 +244,7 @@ class TestOPDS2Importer(OPDS2Test):
             == huckleberry_finn_author_contribution.contributor
         )
         assert huckleberry_finn_edition == huckleberry_finn_author_contribution.edition
-        assert Contributor.AUTHOR_ROLE == huckleberry_finn_author_contribution.role
+        assert Contributor.Role.AUTHOR == huckleberry_finn_author_contribution.role
 
         assert data.data_source == huckleberry_finn_edition.data_source
 

@@ -110,9 +110,9 @@ class Axis360Fixture:
         identifiers=[IdentifierData(type=Identifier.ISBN, identifier="9780375504587")],
         contributors=[
             ContributorData(
-                sort_name="McCain, John", roles=[Contributor.PRIMARY_AUTHOR_ROLE]
+                sort_name="McCain, John", roles=[Contributor.Role.PRIMARY_AUTHOR]
             ),
-            ContributorData(sort_name="Salter, Mark", roles=[Contributor.AUTHOR_ROLE]),
+            ContributorData(sort_name="Salter, Mark", roles=[Contributor.Role.AUTHOR]),
         ],
         subjects=[
             SubjectData(
@@ -1181,18 +1181,18 @@ class TestParsers:
         # same format as author information.
         [cont1, cont2, narrator] = bib1.contributors
         assert "McCain, John" == cont1.sort_name
-        assert [Contributor.PRIMARY_AUTHOR_ROLE] == cont1.roles
+        assert [Contributor.Role.PRIMARY_AUTHOR] == cont1.roles
 
         assert "Salter, Mark" == cont2.sort_name
-        assert [Contributor.AUTHOR_ROLE] == cont2.roles
+        assert [Contributor.Role.AUTHOR] == cont2.roles
 
         assert "McCain, John S. III" == narrator.sort_name
-        assert [Contributor.NARRATOR_ROLE] == narrator.roles
+        assert [Contributor.Role.NARRATOR] == narrator.roles
 
         # Book #2 only has a primary author.
         [cont] = bib2.contributors
         assert "Pollero, Rhonda" == cont.sort_name
-        assert [Contributor.PRIMARY_AUTHOR_ROLE] == cont.roles
+        assert [Contributor.Role.PRIMARY_AUTHOR] == cont.roles
 
         axis_id, isbn = sorted(bib1.identifiers, key=lambda x: x.identifier)
         assert "0003642860" == axis_id.identifier
@@ -1322,31 +1322,31 @@ class TestParsers:
         parse = BibliographicParser.parse_contributor
         c = parse(author)
         assert "Dyssegaard, Elisabeth Kallick" == c.sort_name
-        assert [Contributor.TRANSLATOR_ROLE] == c.roles
+        assert [Contributor.Role.TRANSLATOR] == c.roles
 
         # A corporate author is given a normal author role.
         author = "Bob, Inc. (COR)"
         c = parse(author, primary_author_found=False)
         assert "Bob, Inc." == c.sort_name
-        assert [Contributor.PRIMARY_AUTHOR_ROLE] == c.roles
+        assert [Contributor.Role.PRIMARY_AUTHOR] == c.roles
 
         c = parse(author, primary_author_found=True)
         assert "Bob, Inc." == c.sort_name
-        assert [Contributor.AUTHOR_ROLE] == c.roles
+        assert [Contributor.Role.AUTHOR] == c.roles
 
         # An unknown author type is given an unknown role
         author = "Eve, Mallory (ZZZ)"
         c = parse(author, primary_author_found=False)
         assert "Eve, Mallory" == c.sort_name
-        assert [Contributor.UNKNOWN_ROLE] == c.roles
+        assert [Contributor.Role.UNKNOWN] == c.roles
 
         # force_role overwrites whatever other role might be
         # assigned.
         author = "Bob, Inc. (COR)"
         c = parse(
-            author, primary_author_found=False, force_role=Contributor.NARRATOR_ROLE
+            author, primary_author_found=False, force_role=Contributor.Role.NARRATOR
         )
-        assert [Contributor.NARRATOR_ROLE] == c.roles
+        assert [Contributor.Role.NARRATOR] == c.roles
 
     def test_availability_parser(self, axis360: Axis360Fixture):
         """Make sure the availability information gets properly

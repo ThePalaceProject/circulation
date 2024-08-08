@@ -89,12 +89,12 @@ class TestContributor:
         roberts_book, ignore = Edition.for_foreign_id(
             db.session, data_source, Identifier.GUTENBERG_ID, "1"
         )
-        roberts_book.add_contributor(robert, Contributor.AUTHOR_ROLE)
+        roberts_book.add_contributor(robert, Contributor.Role.AUTHOR)
 
         bobs_book, ignore = Edition.for_foreign_id(
             db.session, data_source, Identifier.GUTENBERG_ID, "10"
         )
-        bobs_book.add_contributor(bob, Contributor.AUTHOR_ROLE)
+        bobs_book.add_contributor(bob, Contributor.Role.AUTHOR)
 
         # In a shocking turn of events, it transpires that "Bob" and
         # "Robert" are the same person. We merge "Bob" into Robert

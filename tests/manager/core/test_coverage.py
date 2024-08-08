@@ -135,7 +135,7 @@ def bibliographic_data() -> Metadata:
         ],
         contributors=[
             ContributorData(
-                sort_name="Nancy Farmer", roles=[Contributor.PRIMARY_AUTHOR_ROLE]
+                sort_name="Nancy Farmer", roles=[Contributor.Role.PRIMARY_AUTHOR]
             )
         ],
         subjects=[

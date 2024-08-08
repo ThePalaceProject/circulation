@@ -455,7 +455,7 @@ class TestOPDSImporter:
 
         [contributor] = book["contributors"]
         assert "Thoreau, Henry David" == contributor.sort_name
-        assert [Contributor.AUTHOR_ROLE] == contributor.roles
+        assert [Contributor.Role.AUTHOR] == contributor.roles
 
         subjects = book["subjects"]
         assert ["LCSH", "LCSH", "LCSH", "LCC"] == [x.type for x in subjects]

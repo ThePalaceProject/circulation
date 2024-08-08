@@ -150,7 +150,7 @@ class TestWork:
         )
         edition1.title = "The 1st Title"
         edition1.subtitle = "The 1st Subtitle"
-        edition1.add_contributor(bob, Contributor.AUTHOR_ROLE)
+        edition1.add_contributor(bob, Contributor.Role.AUTHOR)
 
         edition2, pool2 = db.edition(
             gitenberg_source,
@@ -161,10 +161,10 @@ class TestWork:
         )
         edition2.title = "The 2nd Title"
         edition2.subtitle = "The 2nd Subtitle"
-        edition2.add_contributor(bob, Contributor.AUTHOR_ROLE)
+        edition2.add_contributor(bob, Contributor.Role.AUTHOR)
         [alice], ignore = Contributor.lookup(db.session, "Adder, Alice")
         alice.family_name, alice.display_name = alice.default_names()
-        edition2.add_contributor(alice, Contributor.AUTHOR_ROLE)
+        edition2.add_contributor(alice, Contributor.Role.AUTHOR)
 
         edition3, pool3 = db.edition(
             gutenberg_source,
@@ -175,8 +175,8 @@ class TestWork:
         )
         edition3.title = "The 2nd Title"
         edition3.subtitle = "The 2nd Subtitle"
-        edition3.add_contributor(bob, Contributor.AUTHOR_ROLE)
-        edition3.add_contributor(alice, Contributor.AUTHOR_ROLE)
+        edition3.add_contributor(bob, Contributor.Role.AUTHOR)
+        edition3.add_contributor(alice, Contributor.Role.AUTHOR)
 
         # Create three summaries.
 
@@ -1082,7 +1082,7 @@ class TestWork:
         [contributor1] = [
             c.contributor
             for c in edition.contributions
-            if c.role == Contributor.PRIMARY_AUTHOR_ROLE
+            if c.role == Contributor.Role.PRIMARY_AUTHOR
         ]
         contributor1.display_name = db.fresh_str()
         contributor1.family_name = db.fresh_str()
@@ -1091,7 +1091,7 @@ class TestWork:
         [contributor2] = [
             c.contributor
             for c in edition.contributions
-            if c.role == Contributor.AUTHOR_ROLE
+            if c.role == Contributor.Role.AUTHOR
         ]
 
         data_source = DataSource.lookup(db.session, DataSource.THREEM)
@@ -1323,8 +1323,8 @@ class TestWork:
         assert contributor1.lc == contributor1_doc["lc"]
         assert None == contributor2_doc["lc"]
 
-        assert Contributor.PRIMARY_AUTHOR_ROLE == contributor1_doc["role"]
-        assert Contributor.AUTHOR_ROLE == contributor2_doc["role"]
+        assert Contributor.Role.PRIMARY_AUTHOR == contributor1_doc["role"]
+        assert Contributor.Role.AUTHOR == contributor2_doc["role"]
 
         classifications = search_doc["classifications"]
         assert 3 == len(classifications)

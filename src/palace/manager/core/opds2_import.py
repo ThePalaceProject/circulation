@@ -351,7 +351,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
     def _extract_contributors(
         self,
         contributors: list[core_ast.Contributor],
-        default_role: str | None = Contributor.AUTHOR_ROLE,
+        default_role: str | None = Contributor.Role.AUTHOR,
     ) -> list[ContributorData]:
         """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
 
@@ -746,37 +746,37 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         subjects = self._extract_subjects(publication.metadata.subjects)
         contributors = (
             self._extract_contributors(
-                publication.metadata.authors, Contributor.AUTHOR_ROLE
+                publication.metadata.authors, Contributor.Role.AUTHOR
             )
             + self._extract_contributors(
-                publication.metadata.translators, Contributor.TRANSLATOR_ROLE
+                publication.metadata.translators, Contributor.Role.TRANSLATOR
             )
             + self._extract_contributors(
-                publication.metadata.editors, Contributor.EDITOR_ROLE
+                publication.metadata.editors, Contributor.Role.EDITOR
             )
             + self._extract_contributors(
-                publication.metadata.artists, Contributor.ARTIST_ROLE
+                publication.metadata.artists, Contributor.Role.ARTIST
             )
             + self._extract_contributors(
-                publication.metadata.illustrators, Contributor.ILLUSTRATOR_ROLE
+                publication.metadata.illustrators, Contributor.Role.ILLUSTRATOR
             )
             + self._extract_contributors(
-                publication.metadata.letterers, Contributor.LETTERER_ROLE
+                publication.metadata.letterers, Contributor.Role.LETTERER
             )
             + self._extract_contributors(
-                publication.metadata.pencilers, Contributor.PENCILER_ROLE
+                publication.metadata.pencilers, Contributor.Role.PENCILER
             )
             + self._extract_contributors(
-                publication.metadata.colorists, Contributor.COLORIST_ROLE
+                publication.metadata.colorists, Contributor.Role.COLORIST
             )
             + self._extract_contributors(
-                publication.metadata.inkers, Contributor.INKER_ROLE
+                publication.metadata.inkers, Contributor.Role.INKER
             )
             + self._extract_contributors(
-                publication.metadata.narrators, Contributor.NARRATOR_ROLE
+                publication.metadata.narrators, Contributor.Role.NARRATOR
             )
             + self._extract_contributors(
-                publication.metadata.contributors, Contributor.CONTRIBUTOR_ROLE
+                publication.metadata.contributors, Contributor.Role.CONTRIBUTOR
             )
         )
         # Audiobook duration

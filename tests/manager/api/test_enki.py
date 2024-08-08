@@ -665,7 +665,7 @@ class TestBibliographicParser:
         # One contributor
         [contributor] = m.contributors
         assert "Hoffmeister, David" == contributor.sort_name
-        assert [Contributor.AUTHOR_ROLE] == contributor.roles
+        assert [Contributor.Role.AUTHOR] == contributor.roles
 
         # Two links -- full-sized image and description.
         image, description = sorted(m.links, key=lambda x: x.rel)

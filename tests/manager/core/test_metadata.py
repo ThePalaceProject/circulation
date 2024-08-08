@@ -977,7 +977,7 @@ class TestMetadata:
             wikipedia_name="Robert_Jordan",
             viaf="79096089",
             lc="123",
-            roles=[Contributor.PRIMARY_AUTHOR_ROLE],
+            roles=[Contributor.Role.PRIMARY_AUTHOR],
         )
 
         metadata = Metadata(DataSource.OVERDRIVE, contributors=[contributor])

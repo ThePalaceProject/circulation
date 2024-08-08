@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, ForeignKey, Integer, Unicode, UniqueConstraint
@@ -16,6 +17,12 @@ from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import flush, get_one, get_one_or_create
 from palace.manager.util.personal_names import display_name_to_sort_name
+
+# TODO: Remove this when we drop support for Python 3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.edition import Edition
@@ -60,100 +67,102 @@ class Contributor(Base):
     )
 
     # Types of roles
-    AUTHOR_ROLE = "Author"
-    PRIMARY_AUTHOR_ROLE = "Primary Author"
-    EDITOR_ROLE = "Editor"
-    ARTIST_ROLE = "Artist"
-    PHOTOGRAPHER_ROLE = "Photographer"
-    TRANSLATOR_ROLE = "Translator"
-    ILLUSTRATOR_ROLE = "Illustrator"
-    LETTERER_ROLE = "Letterer"
-    PENCILER_ROLE = "Penciler"
-    COLORIST_ROLE = "Colorist"
-    INKER_ROLE = "Inker"
-    INTRODUCTION_ROLE = "Introduction Author"
-    FOREWORD_ROLE = "Foreword Author"
-    AFTERWORD_ROLE = "Afterword Author"
-    COLOPHON_ROLE = "Colophon Author"
-    UNKNOWN_ROLE = "Unknown"
-    DIRECTOR_ROLE = "Director"
-    PRODUCER_ROLE = "Producer"
-    EXECUTIVE_PRODUCER_ROLE = "Executive Producer"
-    ACTOR_ROLE = "Actor"
-    LYRICIST_ROLE = "Lyricist"
-    CONTRIBUTOR_ROLE = "Contributor"
-    COMPOSER_ROLE = "Composer"
-    NARRATOR_ROLE = "Narrator"
-    COMPILER_ROLE = "Compiler"
-    ADAPTER_ROLE = "Adapter"
-    PERFORMER_ROLE = "Performer"
-    MUSICIAN_ROLE = "Musician"
-    ASSOCIATED_ROLE = "Associated name"
-    COLLABORATOR_ROLE = "Collaborator"
-    ENGINEER_ROLE = "Engineer"
-    COPYRIGHT_HOLDER_ROLE = "Copyright holder"
-    TRANSCRIBER_ROLE = "Transcriber"
-    DESIGNER_ROLE = "Designer"
-    AUTHOR_ROLES: set[str] = {PRIMARY_AUTHOR_ROLE, AUTHOR_ROLE}
+    class Role(StrEnum):
+        AUTHOR = "Author"
+        PRIMARY_AUTHOR = "Primary Author"
+        EDITOR = "Editor"
+        ARTIST = "Artist"
+        PHOTOGRAPHER = "Photographer"
+        TRANSLATOR = "Translator"
+        ILLUSTRATOR = "Illustrator"
+        LETTERER = "Letterer"
+        PENCILER = "Penciler"
+        COLORIST = "Colorist"
+        INKER = "Inker"
+        INTRODUCTION = "Introduction Author"
+        FOREWORD = "Foreword Author"
+        AFTERWORD = "Afterword Author"
+        COLOPHON = "Colophon Author"
+        UNKNOWN = "Unknown"
+        DIRECTOR = "Director"
+        PRODUCER = "Producer"
+        EXECUTIVE_PRODUCER = "Executive Producer"
+        ACTOR = "Actor"
+        LYRICIST = "Lyricist"
+        CONTRIBUTOR = "Contributor"
+        COMPOSER = "Composer"
+        NARRATOR = "Narrator"
+        COMPILER = "Compiler"
+        ADAPTER = "Adapter"
+        PERFORMER = "Performer"
+        MUSICIAN = "Musician"
+        ASSOCIATED = "Associated name"
+        COLLABORATOR = "Collaborator"
+        ENGINEER = "Engineer"
+        COPYRIGHT_HOLDER = "Copyright holder"
+        TRANSCRIBER = "Transcriber"
+        DESIGNER = "Designer"
+
+    AUTHOR_ROLES: set[str] = {Role.PRIMARY_AUTHOR, Role.AUTHOR}
 
     # Map our recognized roles to MARC relators.
     # https://www.loc.gov/marc/relators/relaterm.html
     #
     # This is used when crediting contributors in OPDS feeds.
-    MARC_ROLE_CODES = {
-        ACTOR_ROLE: "act",
-        ADAPTER_ROLE: "adp",
-        AFTERWORD_ROLE: "aft",
-        ARTIST_ROLE: "art",
-        ASSOCIATED_ROLE: "asn",
-        AUTHOR_ROLE: "aut",  # Joint author: USE Author
-        COLLABORATOR_ROLE: "ctb",  # USE Contributor
-        COLOPHON_ROLE: "aft",  # Author of afterword, colophon, etc.
-        COMPILER_ROLE: "com",
-        COMPOSER_ROLE: "cmp",
-        CONTRIBUTOR_ROLE: "ctb",
-        COPYRIGHT_HOLDER_ROLE: "cph",
-        DESIGNER_ROLE: "dsr",
-        DIRECTOR_ROLE: "drt",
-        EDITOR_ROLE: "edt",
-        ENGINEER_ROLE: "eng",
-        EXECUTIVE_PRODUCER_ROLE: "pro",
-        FOREWORD_ROLE: "wpr",  # Writer of preface
-        ILLUSTRATOR_ROLE: "ill",
-        INTRODUCTION_ROLE: "win",
-        LYRICIST_ROLE: "lyr",
-        MUSICIAN_ROLE: "mus",
-        NARRATOR_ROLE: "nrt",
-        PERFORMER_ROLE: "prf",
-        PHOTOGRAPHER_ROLE: "pht",
-        PRIMARY_AUTHOR_ROLE: "aut",
-        PRODUCER_ROLE: "pro",
-        TRANSCRIBER_ROLE: "trc",
-        TRANSLATOR_ROLE: "trl",
-        LETTERER_ROLE: "ctb",
-        PENCILER_ROLE: "ctb",
-        COLORIST_ROLE: "clr",
-        INKER_ROLE: "ctb",
-        UNKNOWN_ROLE: "asn",
+    MARC_ROLE_CODES: dict[str, str] = {
+        Role.ACTOR: "act",
+        Role.ADAPTER: "adp",
+        Role.AFTERWORD: "aft",
+        Role.ARTIST: "art",
+        Role.ASSOCIATED: "asn",
+        Role.AUTHOR: "aut",  # Joint author: USE Author
+        Role.COLLABORATOR: "ctb",  # USE Contributor
+        Role.COLOPHON: "aft",  # Author of afterword, colophon, etc.
+        Role.COMPILER: "com",
+        Role.COMPOSER: "cmp",
+        Role.CONTRIBUTOR: "ctb",
+        Role.COPYRIGHT_HOLDER: "cph",
+        Role.DESIGNER: "dsr",
+        Role.DIRECTOR: "drt",
+        Role.EDITOR: "edt",
+        Role.ENGINEER: "eng",
+        Role.EXECUTIVE_PRODUCER: "pro",
+        Role.FOREWORD: "wpr",  # Writer of preface
+        Role.ILLUSTRATOR: "ill",
+        Role.INTRODUCTION: "win",
+        Role.LYRICIST: "lyr",
+        Role.MUSICIAN: "mus",
+        Role.NARRATOR: "nrt",
+        Role.PERFORMER: "prf",
+        Role.PHOTOGRAPHER: "pht",
+        Role.PRIMARY_AUTHOR: "aut",
+        Role.PRODUCER: "pro",
+        Role.TRANSCRIBER: "trc",
+        Role.TRANSLATOR: "trl",
+        Role.LETTERER: "ctb",
+        Role.PENCILER: "ctb",
+        Role.COLORIST: "clr",
+        Role.INKER: "ctb",
+        Role.UNKNOWN: "asn",
     }
 
     # People from these roles can be put into the 'author' slot if no
     # author proper is given.
     AUTHOR_SUBSTITUTE_ROLES = [
-        EDITOR_ROLE,
-        COMPILER_ROLE,
-        COMPOSER_ROLE,
-        DIRECTOR_ROLE,
-        CONTRIBUTOR_ROLE,
-        TRANSLATOR_ROLE,
-        ADAPTER_ROLE,
-        PHOTOGRAPHER_ROLE,
-        ARTIST_ROLE,
-        LYRICIST_ROLE,
-        COPYRIGHT_HOLDER_ROLE,
+        Role.EDITOR,
+        Role.COMPILER,
+        Role.COMPOSER,
+        Role.DIRECTOR,
+        Role.CONTRIBUTOR,
+        Role.TRANSLATOR,
+        Role.ADAPTER,
+        Role.PHOTOGRAPHER,
+        Role.ARTIST,
+        Role.LYRICIST,
+        Role.COPYRIGHT_HOLDER,
     ]
 
-    PERFORMER_ROLES = [ACTOR_ROLE, PERFORMER_ROLE, NARRATOR_ROLE, MUSICIAN_ROLE]
+    PERFORMER_ROLES = [Role.ACTOR, Role.PERFORMER, Role.NARRATOR, Role.MUSICIAN]
 
     # Extra fields
     BIRTH_DATE = "birthDate"
@@ -169,7 +178,7 @@ class Contributor(Base):
 
     @classmethod
     def author_contributor_tiers(cls):
-        yield [cls.PRIMARY_AUTHOR_ROLE]
+        yield [cls.Role.PRIMARY_AUTHOR]
         yield cls.AUTHOR_ROLES
         yield cls.AUTHOR_SUBSTITUTE_ROLES
         yield cls.PERFORMER_ROLES
