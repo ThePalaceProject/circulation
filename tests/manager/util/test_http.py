@@ -97,6 +97,26 @@ class TestHTTP:
         assert HTTP._request_with_timeout("/", request.fake_request).status_code == 201
         assert request.agent == b"Palace Manager/1.x.x"
 
+        # User agent is still set if headers are None
+        assert (
+            HTTP._request_with_timeout(
+                "/", request.fake_request, headers=None
+            ).status_code
+            == 201
+        )
+        assert request.agent == b"Palace Manager/1.x.x"
+
+        # The headers are not modified if they are passed into the function
+        original_headers = {"header": "value"}
+        assert (
+            HTTP._request_with_timeout(
+                "/", request.fake_request, headers=original_headers
+            ).status_code
+            == 201
+        )
+        assert request.agent == b"Palace Manager/1.x.x"
+        assert original_headers == {"header": "value"}
+
     def test_request_with_timeout_failure(self):
         def immediately_timeout(*args, **kwargs):
             raise requests.exceptions.Timeout("I give up")

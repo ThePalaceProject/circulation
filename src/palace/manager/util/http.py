@@ -261,29 +261,29 @@ class HTTP(LoggerMixin):
         )
         backoff_factor: float = float(kwargs.pop("backoff_factor", 1.0))
 
-        # Unicode data can't be sent over the wire. Convert it
-        # to UTF-8.
+        # Unicode data can't be sent over the wire. Convert it to UTF-8.
         if "data" in kwargs and isinstance(kwargs["data"], str):
             kwdata: str = kwargs["data"]
             kwargs["data"] = kwdata.encode("utf8")
 
-        headers = kwargs.get("headers", {})
         # Set a user-agent if not already present
-        if "User-Agent" not in headers:
-            version = (
-                manager.__version__
-                if manager.__version__
-                else cls.DEFAULT_USER_AGENT_VERSION
-            )
-            headers["User-Agent"] = f"Palace Manager/{version}"
-        new_headers = {}
-        for k, v in list(headers.items()):
-            if isinstance(k, str):
-                k = k.encode("utf8")
-            if isinstance(v, str):
-                v = v.encode("utf8")
-            new_headers[k] = v
-        kwargs["headers"] = new_headers
+        version = (
+            manager.__version__
+            if manager.__version__
+            else cls.DEFAULT_USER_AGENT_VERSION
+        )
+        ua_header = {"User-Agent": f"Palace Manager/{version}"}
+        headers = ua_header | (kwargs.get("headers") or {})
+
+        # Make sure headers are encoded as utf-8
+        kwargs["headers"] = {
+            k.encode()
+            if isinstance(k, str)
+            else k: v.encode()
+            if isinstance(v, str)
+            else v
+            for k, v in headers.items()
+        }
 
         try:
             if verbose:
