@@ -36,8 +36,9 @@ def eligible_integrations(
     def is_eligible(integration: IntegrationConfiguration) -> bool:
         if integration.protocol is None:
             return False
-        settings = registry[integration.protocol].settings_load(integration)
-        return isinstance(settings, OPDSImporterSettings)
+
+        settings_cls = registry[integration.protocol].settings_class()
+        return issubclass(settings_cls, OPDSImporterSettings)
 
     return [integration for integration in integrations if is_eligible(integration)]
 
