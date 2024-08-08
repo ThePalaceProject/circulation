@@ -217,6 +217,7 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         "barcode",
         form=ConfigurationFormItem(
             label="Library Identifier Field",
+            type=ConfigurationFormItemType.SELECT,
             description="This is the field on the patron record that the <em>Library Identifier Restriction "
             "Type</em> is applied to, different patron authentication methods provide different "
             "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
