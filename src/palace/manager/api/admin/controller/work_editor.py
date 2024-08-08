@@ -89,31 +89,31 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         CODES = Contributor.MARC_ROLE_CODES
         marc_to_role = dict()
         for role in [
-            Contributor.ACTOR_ROLE,
-            Contributor.ADAPTER_ROLE,
-            Contributor.AFTERWORD_ROLE,
-            Contributor.ARTIST_ROLE,
-            Contributor.ASSOCIATED_ROLE,
-            Contributor.AUTHOR_ROLE,
-            Contributor.COMPILER_ROLE,
-            Contributor.COMPOSER_ROLE,
-            Contributor.CONTRIBUTOR_ROLE,
-            Contributor.COPYRIGHT_HOLDER_ROLE,
-            Contributor.DESIGNER_ROLE,
-            Contributor.DIRECTOR_ROLE,
-            Contributor.EDITOR_ROLE,
-            Contributor.ENGINEER_ROLE,
-            Contributor.FOREWORD_ROLE,
-            Contributor.ILLUSTRATOR_ROLE,
-            Contributor.INTRODUCTION_ROLE,
-            Contributor.LYRICIST_ROLE,
-            Contributor.MUSICIAN_ROLE,
-            Contributor.NARRATOR_ROLE,
-            Contributor.PERFORMER_ROLE,
-            Contributor.PHOTOGRAPHER_ROLE,
-            Contributor.PRODUCER_ROLE,
-            Contributor.TRANSCRIBER_ROLE,
-            Contributor.TRANSLATOR_ROLE,
+            Contributor.Role.ACTOR,
+            Contributor.Role.ADAPTER,
+            Contributor.Role.AFTERWORD,
+            Contributor.Role.ARTIST,
+            Contributor.Role.ASSOCIATED,
+            Contributor.Role.AUTHOR,
+            Contributor.Role.COMPILER,
+            Contributor.Role.COMPOSER,
+            Contributor.Role.CONTRIBUTOR,
+            Contributor.Role.COPYRIGHT_HOLDER,
+            Contributor.Role.DESIGNER,
+            Contributor.Role.DIRECTOR,
+            Contributor.Role.EDITOR,
+            Contributor.Role.ENGINEER,
+            Contributor.Role.FOREWORD,
+            Contributor.Role.ILLUSTRATOR,
+            Contributor.Role.INTRODUCTION,
+            Contributor.Role.LYRICIST,
+            Contributor.Role.MUSICIAN,
+            Contributor.Role.NARRATOR,
+            Contributor.Role.PERFORMER,
+            Contributor.Role.PHOTOGRAPHER,
+            Contributor.Role.PRODUCER,
+            Contributor.Role.TRANSCRIBER,
+            Contributor.Role.TRANSLATOR,
         ]:
             marc_to_role[CODES[role]] = role
         return marc_to_role
@@ -185,8 +185,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # The first author in the form is considered the primary author, even
         # though there's no separate MARC code for that.
         for i, role in enumerate(new_contributor_roles):
-            if role == Contributor.AUTHOR_ROLE:
-                new_contributor_roles[i] = Contributor.PRIMARY_AUTHOR_ROLE
+            if role == Contributor.Role.AUTHOR:
+                new_contributor_roles[i] = Contributor.Role.PRIMARY_AUTHOR
                 break
         roles_and_names = list(zip(new_contributor_roles, new_contributor_names))
 

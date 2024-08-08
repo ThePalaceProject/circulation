@@ -384,9 +384,9 @@ class Query(SearchBase):
     # When someone searches for a person's name, they're most likely
     # searching for that person's contributions in one of these roles.
     SEARCH_RELEVANT_ROLES = [
-        Contributor.PRIMARY_AUTHOR_ROLE,
-        Contributor.AUTHOR_ROLE,
-        Contributor.NARRATOR_ROLE,
+        Contributor.Role.PRIMARY_AUTHOR,
+        Contributor.Role.AUTHOR,
+        Contributor.Role.NARRATOR,
     ]
 
     # If the entire search query is turned into a filter, all works
@@ -1439,10 +1439,10 @@ class Filter(SearchBase):
     # In general, someone looking for things "by this person" is
     # probably looking for one of these roles.
     AUTHOR_MATCH_ROLES = list(Contributor.AUTHOR_ROLES) + [
-        Contributor.NARRATOR_ROLE,
-        Contributor.EDITOR_ROLE,
-        Contributor.DIRECTOR_ROLE,
-        Contributor.ACTOR_ROLE,
+        Contributor.Role.NARRATOR,
+        Contributor.Role.EDITOR,
+        Contributor.Role.DIRECTOR,
+        Contributor.Role.ACTOR,
     ]
 
     @classmethod

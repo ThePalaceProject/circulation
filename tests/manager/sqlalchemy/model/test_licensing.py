@@ -894,7 +894,7 @@ class TestLicensePool:
         db.session.commit()
         [jane], ignore = Contributor.lookup(db.session, "Doe, Jane")
         jane.family_name, jane.display_name = jane.default_names()
-        admin.add_contributor(jane, Contributor.AUTHOR_ROLE)
+        admin.add_contributor(jane, Contributor.Role.AUTHOR)
         pool.set_presentation_edition()
 
         # The old contributor has been removed from the presentation

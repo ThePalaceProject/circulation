@@ -335,7 +335,7 @@ class TestAnnotator:
 
         # Edition with two authors and a translator gets three 700 fields and no 100 fields.
         edition = db.edition(authors=[author, author2])
-        edition.add_contributor(translator, Contributor.TRANSLATOR_ROLE)
+        edition.add_contributor(translator, Contributor.Role.TRANSLATOR)
 
         record = Record()
         Annotator.add_contributors(record, edition)
@@ -347,11 +347,11 @@ class TestAnnotator:
             fields, key=lambda x: x.get_subfields("a")[0]
         )
         assert author == author_field.get_subfields("a")[0]
-        assert Contributor.PRIMARY_AUTHOR_ROLE == author_field.get_subfields("e")[0]
+        assert Contributor.Role.PRIMARY_AUTHOR == author_field.get_subfields("e")[0]
         assert author2 == author2_field.get_subfields("a")[0]
-        assert Contributor.AUTHOR_ROLE == author2_field.get_subfields("e")[0]
+        assert Contributor.Role.AUTHOR == author2_field.get_subfields("e")[0]
         assert translator == translator_field.get_subfields("a")[0]
-        assert Contributor.TRANSLATOR_ROLE == translator_field.get_subfields("e")[0]
+        assert Contributor.Role.TRANSLATOR == translator_field.get_subfields("e")[0]
 
     def test_add_publisher(self, db: DatabaseTransactionFixture):
         edition = db.edition()

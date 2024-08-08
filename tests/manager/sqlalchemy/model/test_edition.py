@@ -58,12 +58,12 @@ class TestEdition:
         # We've listed the same person as primary author and author.
         [alice], ignore = Contributor.lookup(db.session, "Adder, Alice")
         edition.add_contributor(
-            alice, [Contributor.AUTHOR_ROLE, Contributor.PRIMARY_AUTHOR_ROLE]
+            alice, [Contributor.Role.AUTHOR, Contributor.Role.PRIMARY_AUTHOR]
         )
 
         # We've listed a different person as illustrator.
         [bob], ignore = Contributor.lookup(db.session, "Bitshifter, Bob")
-        edition.add_contributor(bob, [Contributor.ILLUSTRATOR_ROLE])
+        edition.add_contributor(bob, [Contributor.Role.ILLUSTRATOR])
 
         # Both contributors show up in .contributors.
         assert {alice, bob} == edition.contributors
@@ -321,7 +321,7 @@ class TestEdition:
         assert "Bitshifter, Bob" == wr.sort_author
 
         kelly, ignore = db.contributor(sort_name="Accumulator, Kelly")
-        wr.add_contributor(kelly, Contributor.AUTHOR_ROLE)
+        wr.add_contributor(kelly, Contributor.Role.AUTHOR)
         wr.calculate_presentation()
         assert "Kelly Accumulator, Bob A. Bitshifter" == wr.author
         assert "Accumulator, Kelly ; Bitshifter, Bob" == wr.sort_author

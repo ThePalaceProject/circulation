@@ -155,15 +155,15 @@ class TestWorkController:
 
     def test_roles(self, work_fixture: WorkFixture):
         roles = work_fixture.manager.admin_work_controller.roles()
-        assert Contributor.ILLUSTRATOR_ROLE in list(roles.values())
-        assert Contributor.NARRATOR_ROLE in list(roles.values())
+        assert Contributor.Role.ILLUSTRATOR in list(roles.values())
+        assert Contributor.Role.NARRATOR in list(roles.values())
         assert (
-            Contributor.ILLUSTRATOR_ROLE
-            == roles[Contributor.MARC_ROLE_CODES[Contributor.ILLUSTRATOR_ROLE]]
+            Contributor.Role.ILLUSTRATOR
+            == roles[Contributor.MARC_ROLE_CODES[Contributor.Role.ILLUSTRATOR]]
         )
         assert (
-            Contributor.NARRATOR_ROLE
-            == roles[Contributor.MARC_ROLE_CODES[Contributor.NARRATOR_ROLE]]
+            Contributor.Role.NARRATOR
+            == roles[Contributor.MARC_ROLE_CODES[Contributor.Role.NARRATOR]]
         )
 
     def test_languages(self, work_fixture: WorkFixture):

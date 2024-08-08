@@ -161,9 +161,9 @@ class TestAnnotators:
         edition = db.edition()
         [c_orig] = list(edition.contributors)
 
-        c1 = edition.add_contributor("c1", Contributor.AUTHOR_ROLE, _sort_name="c1")
+        c1 = edition.add_contributor("c1", Contributor.Role.AUTHOR, _sort_name="c1")
         # No name contributor
-        c_none = edition.add_contributor("c2", Contributor.AUTHOR_ROLE)
+        c_none = edition.add_contributor("c2", Contributor.Role.AUTHOR)
         c_none.display_name = ""
         c_none._sort_name = ""
 
@@ -196,7 +196,7 @@ class TestAnnotators:
         assert "http://id.loc.gov/authorities/names/n100" == author.lc
 
         work = db.work(authors=[], with_license_pool=True)
-        work.presentation_edition.add_contributor(c, Contributor.PRIMARY_AUTHOR_ROLE)
+        work.presentation_edition.add_contributor(c, Contributor.Role.PRIMARY_AUTHOR)
 
         [same_tag] = VerboseAnnotator.authors(work.presentation_edition)["authors"]
         assert same_tag.asdict() == author.asdict()
@@ -210,7 +210,7 @@ class TestAnnotators:
         duplicate.sort_name = work.author
 
         edition = work.presentation_edition
-        edition.add_contributor(duplicate, Contributor.AUTHOR_ROLE)
+        edition.add_contributor(duplicate, Contributor.Role.AUTHOR)
 
         assert 1 == len(Annotator.authors(edition)["authors"])
 
@@ -227,18 +227,18 @@ class TestAnnotators:
         illustrator, ignore = db.contributor()
         barrel_washer, ignore = db.contributor()
 
-        edition.add_contributor(primary_author, Contributor.PRIMARY_AUTHOR_ROLE)
-        edition.add_contributor(author, Contributor.AUTHOR_ROLE)
+        edition.add_contributor(primary_author, Contributor.Role.PRIMARY_AUTHOR)
+        edition.add_contributor(author, Contributor.Role.AUTHOR)
 
         # This contributor is relevant because we have a MARC Role Code
         # for the role.
-        edition.add_contributor(illustrator, Contributor.ILLUSTRATOR_ROLE)
+        edition.add_contributor(illustrator, Contributor.Role.ILLUSTRATOR)
 
         # This contributor is not relevant because we have no MARC
         # Role Code for the role.
         edition.add_contributor(barrel_washer, "Barrel Washer")
 
-        illustrator_code = Contributor.MARC_ROLE_CODES[Contributor.ILLUSTRATOR_ROLE]
+        illustrator_code = Contributor.MARC_ROLE_CODES[Contributor.Role.ILLUSTRATOR]
 
         tags = Annotator.authors(edition)
         # We made two <author> tags and one <contributor>

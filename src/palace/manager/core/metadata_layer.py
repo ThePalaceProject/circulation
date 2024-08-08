@@ -180,7 +180,7 @@ class ContributorData:
         self.family_name = family_name
         self.wikipedia_name = wikipedia_name
         if roles is None:
-            roles = Contributor.AUTHOR_ROLE
+            roles = Contributor.Role.AUTHOR
         if not isinstance(roles, list):
             roles = [roles]
         self.roles = roles
@@ -1212,7 +1212,7 @@ class Metadata:
                     ContributorData(
                         sort_name=edition.sort_author,
                         display_name=edition.author,
-                        roles=[Contributor.PRIMARY_AUTHOR_ROLE],
+                        roles=[Contributor.Role.PRIMARY_AUTHOR],
                     )
                 )
 
@@ -1367,7 +1367,7 @@ class Metadata:
         for contributor in self.contributors:
             if not any(
                 x in contributor.roles
-                for x in (Contributor.AUTHOR_ROLE, Contributor.PRIMARY_AUTHOR_ROLE)
+                for x in (Contributor.Role.AUTHOR, Contributor.Role.PRIMARY_AUTHOR)
             ):
                 continue
             contributor.find_sort_name(_db)
@@ -2018,7 +2018,7 @@ class CSVMetadataImporter:
                 ContributorData(
                     sort_name=sort_author,
                     display_name=display_author,
-                    roles=[Contributor.AUTHOR_ROLE],
+                    roles=[Contributor.Role.AUTHOR],
                 )
             )
 

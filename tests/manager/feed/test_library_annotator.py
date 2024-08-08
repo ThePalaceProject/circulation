@@ -815,7 +815,7 @@ class TestLibraryAnnotator:
         )
 
         # When there are two authors, they each get a contributor link.
-        work.presentation_edition.add_contributor("Oprah", Contributor.AUTHOR_ROLE)
+        work.presentation_edition.add_contributor("Oprah", Contributor.Role.AUTHOR)
         work.calculate_presentation(
             PresentationCalculationPolicy(),
         )

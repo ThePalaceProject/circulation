@@ -118,7 +118,7 @@ class TestOPDS2WithODLImporter:
         assert isinstance(moby_dick_author_author_contribution, Contribution)
         assert moby_dick_author == moby_dick_author_author_contribution.contributor
         assert moby_dick_edition == moby_dick_author_author_contribution.edition
-        assert Contributor.AUTHOR_ROLE == moby_dick_author_author_contribution.role
+        assert Contributor.Role.AUTHOR == moby_dick_author_author_contribution.role
 
         assert "Feedbooks" == moby_dick_edition.data_source.name
 

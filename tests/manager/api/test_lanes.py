@@ -544,7 +544,7 @@ class TestRelatedBooksLane:
 
         # A book with a contributor initializes a RelatedBooksLane.
         luthor, i = db.contributor("Luthor, Lex")
-        related_books_fixture.edition.add_contributor(luthor, [Contributor.EDITOR_ROLE])
+        related_books_fixture.edition.add_contributor(luthor, [Contributor.Role.EDITOR])
 
         result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert related_books_fixture.work == result.work
@@ -600,7 +600,7 @@ class TestRelatedBooksLane:
 
         original = related_books_fixture.edition.contributions[0].contributor
         luthor, i = db.contributor("Luthor, Lex")
-        related_books_fixture.edition.add_contributor(luthor, Contributor.EDITOR_ROLE)
+        related_books_fixture.edition.add_contributor(luthor, Contributor.Role.EDITOR)
 
         # Lex Luthor doesn't show up because he's only an editor,
         # and an author is listed.
@@ -613,7 +613,7 @@ class TestRelatedBooksLane:
         # ContributorLane sublanes.
         lane, i = db.contributor("Lane, Lois")
         related_books_fixture.edition.add_contributor(
-            lane, Contributor.PRIMARY_AUTHOR_ROLE
+            lane, Contributor.Role.PRIMARY_AUTHOR
         )
         result = RelatedBooksLane(db.default_library(), related_books_fixture.work, "")
         assert 2 == len(result.children)

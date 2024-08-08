@@ -1780,8 +1780,8 @@ class TestItemListParser:
             "Sayers, Dorothy L.",
         ]
         assert [x.roles for x in authors] == [
-            [Contributor.AUTHOR_ROLE],
-            [Contributor.AUTHOR_ROLE],
+            [Contributor.Role.AUTHOR],
+            [Contributor.Role.AUTHOR],
         ]
 
         # Parentheticals are stripped.
@@ -1806,11 +1806,11 @@ class TestItemListParser:
         # It's possible to specify some role other than AUTHOR_ROLE.
         narrators = list(
             ItemListParser.contributors_from_string(
-                "Callow, Simon; Mann, Bruce; Hagon, Garrick", Contributor.NARRATOR_ROLE
+                "Callow, Simon; Mann, Bruce; Hagon, Garrick", Contributor.Role.NARRATOR
             )
         )
         for narrator in narrators:
-            assert [Contributor.NARRATOR_ROLE] == narrator.roles
+            assert [Contributor.Role.NARRATOR] == narrator.roles
         assert ["Callow, Simon", "Mann, Bruce", "Hagon, Garrick"] == [
             narrator.sort_name for narrator in narrators
         ]
@@ -1860,7 +1860,7 @@ class TestItemListParser:
 
         [author] = cooked.contributors
         assert "Rowland, Laura Joh" == author.sort_name
-        assert [Contributor.AUTHOR_ROLE] == author.roles
+        assert [Contributor.Role.AUTHOR] == author.roles
 
         subjects = [x.name for x in cooked.subjects]
         assert ["Children's Health", "Mystery & Detective"] == sorted(subjects)

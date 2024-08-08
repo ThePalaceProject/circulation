@@ -25,7 +25,7 @@ class TestCheckContributorNamesInDB:
         alice._sort_name = "Alice Alrighty"
         alice.display_name = "Alice Alrighty"
 
-        edition_alice.add_contributor(alice, [Contributor.PRIMARY_AUTHOR_ROLE])
+        edition_alice.add_contributor(alice, [Contributor.Role.PRIMARY_AUTHOR])
         edition_alice.sort_author = "Alice Rocks"
 
         # everything is set up as we expect
@@ -44,7 +44,7 @@ class TestCheckContributorNamesInDB:
         bob, new = db.contributor(sort_name="Bob")
         bob.display_name = "Bob Bitshifter"
 
-        edition_bob.add_contributor(bob, [Contributor.PRIMARY_AUTHOR_ROLE])
+        edition_bob.add_contributor(bob, [Contributor.Role.PRIMARY_AUTHOR])
         edition_bob.sort_author = "Bob Rocks"
 
         assert "Bob" == bob.sort_name

@@ -178,7 +178,7 @@ class CheckContributorNamesInDB(IdentifierInputScript):
         # If this author appears as Primary Author anywhere on the edition, then change edition.sort_author.
         edition_contributions = contribution.edition.contributions
         for edition_contribution in edition_contributions:
-            if (edition_contribution.role == Contributor.PRIMARY_AUTHOR_ROLE) and (
+            if (edition_contribution.role == Contributor.Role.PRIMARY_AUTHOR) and (
                 edition_contribution.contributor.display_name
                 == contribution.contributor.display_name
             ):
