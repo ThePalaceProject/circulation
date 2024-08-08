@@ -21,7 +21,7 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     RecursiveEquivalencyCache,
 )
-from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import minute_timestamp
 
 if TYPE_CHECKING:
@@ -228,7 +228,11 @@ def _title_for_identifier(identifier: Identifier | None) -> str | None:
     if identifier is None:
         return None
     db = Session.object_session(identifier)
-    if edition := get_one(db, Edition, primary_identifier_id=identifier.id):
+    if (
+        edition := db.query(Edition)
+        .filter(Edition.primary_identifier == identifier)
+        .first()
+    ):
         return edition.title
     return None
 
