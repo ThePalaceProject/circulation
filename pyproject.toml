@@ -246,7 +246,7 @@ lxml = {extras = ["html-clean"], version = "^5.2.1"}
 money = "1.3.0"
 multipledispatch = "^1.0"
 nameparser = "^1.1"  # nameparser is for author name manipulations
-nltk = "3.8.1"  # nltk is a textblob dependency.
+nltk = "3.8.2"  # nltk is a textblob dependency.
 opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "^4.0.0"
