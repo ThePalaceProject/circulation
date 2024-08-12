@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import json
 import os
 from collections.abc import Callable, Generator
@@ -7,6 +8,7 @@ from gettext import gettext as _
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urljoin
 
+import dateutil
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
 
@@ -228,43 +230,52 @@ class SirsiDynixHorizonAuthenticationProvider(
                 patrondata.block_reason = SirsiBlockReasons.PATRON_BLOCKED
                 return patrondata
 
-        if self.patron_status_should_block:
-            # Get patron "fines" information
-            status = self.api_patron_status_info(
-                patron_key=patrondata.permanent_id,
-                session_token=patrondata.session_token,
-            )
+        # Get patron "fines" information
+        status = self.api_patron_status_info(
+            patron_key=patrondata.permanent_id,
+            session_token=patrondata.session_token,
+        )
 
-            if not status or "fields" not in status:
-                return None
+        if not status or "fields" not in status:
+            return None
 
-            status_fields: dict = status["fields"]
-            fines = status_fields.get("estimatedFines")
-            if fines is not None:
-                # We ignore currency for now, and assume USD
-                patrondata.fines = float(fines.get("amount", 0))
+        status_fields: dict = status["fields"]
+        fines = status_fields.get("estimatedFines")
+        if fines is not None:
+            # We ignore currency for now, and assume USD
+            patrondata.fines = float(fines.get("amount", 0))
 
-            # Blockable statuses
-            if status_fields.get("hasMaxDaysWithFines") or status_fields.get(
-                "hasMaxFines"
-            ):
-                patrondata.block_reason = PatronData.EXCESSIVE_FINES
-            elif status_fields.get("hasMaxLostItem"):
-                patrondata.block_reason = PatronData.TOO_MANY_LOST
-            elif status_fields.get("hasMaxOverdueDays") or status_fields.get(
-                "hasMaxOverdueItem"
-            ):
-                patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
-            elif status_fields.get("hasMaxItemsCheckedOut"):
-                patrondata.block_reason = PatronData.TOO_MANY_LOANS
-            elif status_fields.get("expired"):
-                patrondata.block_reason = SirsiBlockReasons.EXPIRED
+        expires_date: str = status_fields.get("privilegeExpiresDate")
+        expires_date_obj = None
 
-            # If previously, the patron was blocked this should unset the value in the DB
-            if patrondata.block_reason is None:
-                patrondata.block_reason = PatronData.NO_VALUE
-        else:
+        if expires_date:
+            expires_date_obj = dateutil.parser.parse(expires_date)
+        elif status_fields.get("expired"):
+            patrondata.block_reason = SirsiBlockReasons.EXPIRED
+        # Blockable statuses
+        if expires_date_obj and datetime.datetime.utcnow() >= expires_date_obj:
+            patrondata.block_reason = SirsiBlockReasons.EXPIRED
+        elif status_fields.get("hasMaxDaysWithFines") or status_fields.get(
+            "hasMaxFines"
+        ):
+            patrondata.block_reason = PatronData.EXCESSIVE_FINES
+        elif status_fields.get("hasMaxLostItem"):
+            patrondata.block_reason = PatronData.TOO_MANY_LOST
+        elif status_fields.get("hasMaxOverdueDays") or status_fields.get(
+            "hasMaxOverdueItem"
+        ):
+            patrondata.block_reason = PatronData.TOO_MANY_OVERDUE
+        elif status_fields.get("hasMaxItemsCheckedOut"):
+            patrondata.block_reason = PatronData.TOO_MANY_LOANS
+
+        # If previously, the patron was blocked this should unset the value in the DB
+        if patrondata.block_reason is None:
             patrondata.block_reason = PatronData.NO_VALUE
+
+        if not self.patron_status_should_block:
+            # if blocks are ignored and patron is not expired, treat patron as unblocked.
+            if patrondata.block_reason != SirsiBlockReasons.EXPIRED:
+                patrondata.block_reason = PatronData.NO_VALUE
 
         return patrondata
 
