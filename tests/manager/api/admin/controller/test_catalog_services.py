@@ -75,16 +75,15 @@ class TestCatalogServicesController:
             include_summary=True, include_genres=True, organization_code="US-MaBoDPL"
         )
 
-        protocol = controller.registry.get_protocol(MARCExporter)
-        assert protocol is not None
         integration = db.integration_configuration(
-            protocol,
+            MARCExporter,
             Goals.CATALOG_GOAL,
             name="name",
+            libraries=[db.default_library()],
         )
 
-        integration.libraries += [db.default_library()]
         library_settings_integration = integration.for_library(db.default_library())
+        assert library_settings_integration is not None
         MARCExporter.library_settings_update(
             library_settings_integration, library_settings
         )
@@ -182,8 +181,8 @@ class TestCatalogServicesController:
             "fake protocol",
             Goals.CATALOG_GOAL,
             name="existing integration",
+            libraries=[db.default_library()],
         )
-        service.libraries += [db.default_library()]
 
         if post_data.get("id") == "<existing>":
             post_data["id"] = str(service.id)
@@ -252,21 +251,19 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = controller.registry.get_protocol(MARCExporter)
-        assert protocol is not None
-
         service = db.integration_configuration(
-            protocol,
+            MARCExporter,
             Goals.CATALOG_GOAL,
             name="name",
         )
+        protocol = service.protocol
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("name", "exporter name"),
                     ("id", str(service.id)),
-                    ("protocol", protocol),
+                    ("protocol", str(protocol)),
                     (
                         "libraries",
                         json.dumps(
@@ -300,13 +297,9 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = controller.registry.get_protocol(MARCExporter)
-        assert protocol is not None
-
         service = db.integration_configuration(
-            protocol,
+            MARCExporter,
             Goals.CATALOG_GOAL,
-            name="name",
         )
 
         with flask_app_fixture.test_request_context("/", method="DELETE"):
@@ -317,6 +310,7 @@ class TestCatalogServicesController:
             )
 
         with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+            assert service.id is not None
             response = controller.process_delete(service.id)
             assert isinstance(response, Response)
             assert response.status_code == 200

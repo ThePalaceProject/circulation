@@ -77,7 +77,7 @@ from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.axis import MockAxis360API
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+    from tests.fixtures.authenticator import AuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -155,7 +155,7 @@ class TestAxis360API:
     def test__run_self_tests(
         self,
         axis360: Axis360Fixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         # Verify that Axis360API._run_self_tests() calls the right
         # methods.
@@ -186,7 +186,7 @@ class TestAxis360API:
         axis360.collection.libraries.append(no_default_patron)
 
         with_default_patron = axis360.db.default_library()
-        create_simple_auth_integration(with_default_patron)
+        auth_integration_fixture.simple_auth(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(axis360.db.session, axis360.collection)

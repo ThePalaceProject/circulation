@@ -50,12 +50,7 @@ from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import (
-        MilleniumAuthIntegrationFixture,
-        SamlAuthIntegrationFixture,
-        SimpleAuthIntegrationFixture,
-        Sip2AuthIntegrationFixture,
-    )
+    from tests.fixtures.authenticator import AuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -123,10 +118,10 @@ class TestPatronAuth:
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration(
+        auth_service, _ = auth_integration_fixture.simple_auth(
             test_identifier="user", test_password="pass"
         )
 
@@ -164,10 +159,10 @@ class TestPatronAuth:
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_millenium_auth_integration(
+        auth_service, _ = auth_integration_fixture.millenium_patron(
             db.default_library(),
             test_identifier="user",
             test_password="pass",
@@ -198,10 +193,10 @@ class TestPatronAuth:
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        create_sip2_auth_integration: Sip2AuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_sip2_auth_integration(
+        auth_service, _ = auth_integration_fixture.sip2(
             db.default_library(),
             url="url",
             port="1234",
@@ -223,7 +218,7 @@ class TestPatronAuth:
             service.get("protocol")
         )
         assert "url" == service.get("settings").get("url")
-        assert "1234" == service.get("settings").get("port")
+        assert 1234 == service.get("settings").get("port")
         assert "user" == service.get("settings").get("username")
         assert "pass" == service.get("settings").get("password")
         assert "5" == service.get("settings").get("location_code")
@@ -236,10 +231,10 @@ class TestPatronAuth:
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        create_saml_auth_integration: SamlAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_saml_auth_integration(
+        auth_service, _ = auth_integration_fixture.saml(
             db.default_library(),
         )
 
@@ -306,10 +301,10 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration()
+        auth_service, _ = auth_integration_fixture.simple_auth()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -327,10 +322,10 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration()
+        auth_service, _ = auth_integration_fixture.simple_auth()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -348,11 +343,11 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_millenium_auth_integration()
+        auth_service, _ = auth_integration_fixture.millenium_patron()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -373,11 +368,11 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         common_args: list[tuple[str, str]],
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration()
+        auth_service, _ = auth_integration_fixture.simple_auth()
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -464,12 +459,12 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         default_library: Library,
         common_args: list[tuple[str, str]],
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration(default_library)
+        auth_service, _ = auth_integration_fixture.simple_auth(default_library)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
@@ -649,7 +644,7 @@ class TestPatronAuth:
         common_args: list[tuple[str, str]],
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         db: DatabaseTransactionFixture,
         monkeypatch: MonkeyPatch,
     ):
@@ -663,7 +658,7 @@ class TestPatronAuth:
             mock_site_configuration_has_changed,
         )
 
-        auth_service, _ = create_simple_auth_integration(
+        auth_service, _ = auth_integration_fixture.simple_auth(
             l1,
             "old_user",
             "old_password",
@@ -723,12 +718,12 @@ class TestPatronAuth:
         common_args: list[tuple[str, str]],
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         db: DatabaseTransactionFixture,
     ):
         controller = controller_fixture.controller
         l1 = db.library("Library 1", "L1")
-        auth_service, _ = create_simple_auth_integration(
+        auth_service, _ = auth_integration_fixture.simple_auth(
             l1,
             "old_user",
             "old_password",
@@ -779,10 +774,10 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration()
+        auth_service, _ = auth_integration_fixture.simple_auth()
         with flask_app_fixture.test_request_context("/"):
             response_obj = controller.process_patron_auth_service_self_tests(
                 auth_service.id
@@ -801,11 +796,11 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         default_library: Library,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration(library=default_library)
+        auth_service, _ = auth_integration_fixture.simple_auth(library=default_library)
 
         # Make sure that we return the correct response when there are no results
         with flask_app_fixture.test_request_context("/"):
@@ -828,7 +823,7 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         default_library: Library,
     ):
         controller = controller_fixture.controller
@@ -838,7 +833,7 @@ class TestPatronAuth:
             end="2018-08-08T16:05:05Z",
             results=[],
         )
-        auth_service, _ = create_simple_auth_integration(library=default_library)
+        auth_service, _ = auth_integration_fixture.simple_auth(library=default_library)
         auth_service.self_test_results = expected_results
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
@@ -863,10 +858,10 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         controller = controller_fixture.controller
-        auth_service, _ = create_simple_auth_integration()
+        auth_service, _ = auth_integration_fixture.simple_auth()
         with flask_app_fixture.test_request_context("/", method="POST"):
             response = controller.process_patron_auth_service_self_tests(
                 auth_service.id,
@@ -881,7 +876,7 @@ class TestPatronAuth:
         self,
         controller_fixture: ControllerFixture,
         flask_app_fixture: FlaskAppFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
         monkeypatch: MonkeyPatch,
         db: DatabaseTransactionFixture,
     ):
@@ -890,7 +885,7 @@ class TestPatronAuth:
         mock = MagicMock(return_value=expected_results)
         monkeypatch.setattr(HasSelfTests, "run_self_tests", mock)
         library = db.default_library()
-        auth_service, _ = create_simple_auth_integration(library=library)
+        auth_service, _ = auth_integration_fixture.simple_auth(library=library)
 
         with flask_app_fixture.test_request_context("/", method="POST"):
             response = controller.process_patron_auth_service_self_tests(

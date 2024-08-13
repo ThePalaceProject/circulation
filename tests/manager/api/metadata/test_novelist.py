@@ -37,11 +37,11 @@ class NoveListFixture:
         self.files = files
         self.settings = NoveListApiSettings(username="library", password="yep")
         self.integration = db.integration_configuration(
-            "NoveList Select",
+            NoveListAPI,
             Goals.METADATA_GOAL,
             libraries=[db.default_library()],
+            settings=self.settings,
         )
-        NoveListAPI.settings_update(self.integration, self.settings)
         self.novelist = NoveListAPI.from_config(db.default_library())
 
     def sample_data(self, filename):

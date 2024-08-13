@@ -18,7 +18,7 @@ from palace.manager.util.problem_detail import ProblemDetail
 
 # TODO: we can drop this when we drop support for Python 3.6 and 3.7
 from tests.fixtures.api_controller import CirculationControllerFixture
-from tests.fixtures.database import IntegrationConfigurationFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -56,7 +56,7 @@ class TestCirculationManager:
     def test_load_settings(
         self,
         circulation_fixture: CirculationControllerFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
+        db: DatabaseTransactionFixture,
         services_fixture: ServicesFixture,
     ):
         # Here's a CirculationManager which we've been using for a while.
@@ -90,7 +90,7 @@ class TestCirculationManager:
         )
 
         # And a discovery service registration, that sets a web client url.
-        registry = create_integration_configuration.discovery_service()
+        registry = db.discovery_service_integration()
         create(
             circulation_fixture.db.session,
             DiscoveryServiceRegistration,

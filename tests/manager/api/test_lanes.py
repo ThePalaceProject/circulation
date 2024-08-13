@@ -27,14 +27,13 @@ from palace.manager.api.lanes import (
     create_world_languages_lane,
 )
 from palace.manager.api.metadata.novelist import NoveListAPI
-from palace.manager.api.metadata.nyt import NYTBestSellerAPI
+from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.core.metadata_layer import ContributorData, Metadata
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import Filter
-from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -130,12 +129,10 @@ class TestLaneCreation:
             db.session.delete(lane)
 
         # If there's an NYT Best Sellers integration and we create the lanes again...
-        nyt_protocol = MetadataRegistry().get_protocol(NYTBestSellerAPI)
-        assert nyt_protocol is not None
         db.integration_configuration(
-            nyt_protocol,
+            NYTBestSellerAPI,
             goal=Goals.METADATA_GOAL,
-            password="foo",
+            settings=NytBestSellerApiSettings(password="foo"),
         )
 
         create_lanes_for_large_collection(db.session, db.default_library(), languages)

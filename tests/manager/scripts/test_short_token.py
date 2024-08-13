@@ -8,7 +8,7 @@ from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.scripts.short_token import GenerateShortTokenScript
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.util.datetime_helpers import datetime_utc
-from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
+from tests.fixtures.authenticator import AuthIntegrationFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -49,11 +49,11 @@ class TestGenerateShortTokenScript:
     def authentication_provider(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
+        auth_integration_fixture: AuthIntegrationFixture,
     ):
         barcode = "12345"
         pin = "abcd"
-        create_simple_auth_integration(db.default_library(), barcode, pin)
+        auth_integration_fixture.simple_auth(db.default_library(), barcode, pin)
         return barcode, pin
 
     def test_run_days(

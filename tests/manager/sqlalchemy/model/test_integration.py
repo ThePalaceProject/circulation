@@ -47,8 +47,13 @@ class TestIntegrationConfiguration:
             "  l2 - library 2",
         ]
 
-        integration.for_library(l1).settings_dict = {"b": "one value", "a": "two value"}
-        integration.for_library(l2).settings_dict = {"password": "super secret"}
+        library_integration_l1 = integration.for_library(l1)
+        assert library_integration_l1 is not None
+        library_integration_l1.settings_dict = {"b": "one value", "a": "two value"}
+
+        library_integration_l2 = integration.for_library(l2)
+        assert library_integration_l2 is not None
+        library_integration_l2.settings_dict = {"password": "super secret"}
         assert integration.explain()[-8:] == [
             "Configured libraries:",
             "  l1 - library 1",

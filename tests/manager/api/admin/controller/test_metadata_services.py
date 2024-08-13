@@ -56,13 +56,14 @@ class MetadataServicesFixture:
         self,
         username: str = "user",
         password: str = "pass",
+        name: str | None = None,
     ) -> IntegrationConfiguration:
         integration = self.db.integration_configuration(
-            protocol=self.novelist_protocol,
+            name=name,
+            protocol=NoveListAPI,
             goal=Goals.METADATA_GOAL,
+            settings=NoveListApiSettings(username=username, password=password),
         )
-        settings = NoveListApiSettings(username=username, password=password)
-        NoveListAPI.settings_update(integration, settings)
         return integration
 
     def create_nyt_integration(
@@ -70,11 +71,10 @@ class MetadataServicesFixture:
         api_key: str = "xyz",
     ) -> IntegrationConfiguration:
         integration = self.db.integration_configuration(
-            protocol=self.nyt_protocol,
+            protocol=NYTBestSellerAPI,
             goal=Goals.METADATA_GOAL,
+            settings=NytBestSellerApiSettings(password=api_key),
         )
-        settings = NytBestSellerApiSettings(password=api_key)
-        NYTBestSellerAPI.settings_update(integration, settings)
         return integration
 
 
@@ -380,14 +380,10 @@ class TestMetadataServices:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
-        existing_service = db.integration_configuration(
-            protocol=metadata_services_fixture.novelist_protocol,
-            goal=Goals.METADATA_GOAL,
+        existing_service = metadata_services_fixture.create_novelist_integration(
             name="existing service",
         )
-        new_service = db.integration_configuration(
-            protocol=metadata_services_fixture.novelist_protocol,
-            goal=Goals.METADATA_GOAL,
+        new_service = metadata_services_fixture.create_novelist_integration(
             name="new service",
         )
 

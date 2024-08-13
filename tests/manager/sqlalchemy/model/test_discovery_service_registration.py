@@ -10,10 +10,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    IntegrationConfigurationFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 
 
@@ -24,7 +21,7 @@ class RegistrationFixture:
         integration: IntegrationConfiguration | None = None,
     ) -> DiscoveryServiceRegistration:
         library = library or self.library_fixture.library()
-        integration = integration or self.integration_fixture(
+        integration = integration or self.db.integration_configuration(
             "test", Goals.DISCOVERY_GOAL
         )
         registration, _ = create(
@@ -39,20 +36,17 @@ class RegistrationFixture:
         self,
         db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
-        integration_fixture: IntegrationConfigurationFixture,
     ) -> None:
         self.db = db
         self.library_fixture = library_fixture
-        self.integration_fixture = integration_fixture
 
 
 @pytest.fixture
 def registration_fixture(
     db: DatabaseTransactionFixture,
     library_fixture: LibraryFixture,
-    create_integration_configuration: IntegrationConfigurationFixture,
 ) -> RegistrationFixture:
-    return RegistrationFixture(db, library_fixture, create_integration_configuration)
+    return RegistrationFixture(db, library_fixture)
 
 
 class TestDiscoveryServiceRegistration:
