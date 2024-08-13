@@ -58,15 +58,19 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
         alias="CLIENT_ID",
     )
 
-    patron_status_block: bool = FormField(
+    patron_blocks_enforced: bool = FormField(
         True,
         form=ConfigurationFormItem(
-            label="Patron Status Block",
+            label="Enforce Patron ILS Blocks",
             description=(
-                "Block patrons from borrowing based on the status of the ILS's patron block field?"
+                "Block patrons from borrowing based on the status of the ILS's patron block field? "
+                "(Note: expired accounts are always blocked.)"
             ),
             type=ConfigurationFormItemType.SELECT,
-            options={"true": "Yes, block.", "false": "No, do not block."},
+            options={
+                "true": "Patron blocks enforced",
+                "false": "Patron blocks NOT enforced.",
+            },
         ),
     )
 
@@ -168,7 +172,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         self.sirsi_library_id = library_settings.library_id
 
         # Check if patrons should be blocked based on ILS status
-        self.patron_status_should_block = settings.patron_status_block
+        self.patron_blocks_enforced = settings.patron_blocks_enforced
 
     def remote_authenticate(
         self, username: str | None, password: str | None
@@ -245,7 +249,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             # We ignore currency for now, and assume USD
             patrondata.fines = float(fines.get("amount", 0))
 
-        expires_date: str = status_fields.get("privilegeExpiresDate")
+        expires_date: str | None = status_fields.get("privilegeExpiresDate")
         expires_date_obj = None
 
         if expires_date:
@@ -272,7 +276,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         if patrondata.block_reason is None:
             patrondata.block_reason = PatronData.NO_VALUE
 
-        if not self.patron_status_should_block:
+        if not self.patron_blocks_enforced:
             # if blocks are ignored and patron is not expired, treat patron as unblocked.
             if patrondata.block_reason != SirsiBlockReasons.EXPIRED:
                 patrondata.block_reason = PatronData.NO_VALUE
