@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 import flask
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -16,7 +19,16 @@ from palace.manager.core.query.playtime_entries import PlaytimeEntries
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
+
+
+def resolve_loan_identifier(patron: Patron, loan: Loan | None) -> str:
+    def sha1(msg):
+        return hashlib.sha1(msg.encode()).hexdigest()
+
+    return sha1(f"loan: {loan.id}") if loan else sha1(f"patron:{patron.id}")
 
 
 class PlaytimeEntriesController(CirculationManagerController):
@@ -49,8 +61,28 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
+        loan = self._db.execute(
+            select(Loan)
+            .select_from(Loan)
+            .join(LicensePool)
+            .where(
+                LicensePool.identifier == identifier,
+                Loan.patron == flask.request.patron,
+            )
+            .order_by(Loan.start.desc())
+        ).first()
+
+        loan_identifier = self.resolve_loan_identifier(
+            loan=loan, patron=flask.request.patron
+        )
+
         responses, summary = PlaytimeEntries.insert_playtime_entries(
-            self._db, identifier, collection, library, data
+            self._db,
+            identifier,
+            collection,
+            library,
+            data,
+            loan_identifier,
         )
 
         response_data = PlaytimeEntriesPostResponse(

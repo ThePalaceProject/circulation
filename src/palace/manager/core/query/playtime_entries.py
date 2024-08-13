@@ -28,6 +28,7 @@ class PlaytimeEntries:
         collection: Collection,
         library: Library,
         data: PlaytimeEntriesPost,
+        loan_identifier: str,
     ) -> tuple[list, PlaytimeEntriesPostSummary]:
         """Insert into the database playtime entries from a request"""
         responses = []
@@ -59,6 +60,7 @@ class PlaytimeEntries:
                         library_name=library.name,
                         timestamp=entry.during_minute,
                         total_seconds_played=entry.seconds_played,
+                        loan_identfier=loan_identifier,
                     )
             except IntegrityError as ex:
                 logging.getLogger("Time Tracking").error(

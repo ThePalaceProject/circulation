@@ -36,6 +36,7 @@ class TestPlaytimeEntries:
             timestamp=now,
             total_seconds_played=30,
             tracking_id="tracking-id",
+            loan_identifier="loan-id",
         )
 
         assert entry.identifier == identifier
@@ -47,12 +48,14 @@ class TestPlaytimeEntries:
         assert entry.total_seconds_played == 30
         assert entry.timestamp == now
         assert entry.tracking_id == "tracking-id"
+        assert entry.loan_identifier == "loan-id"
 
     def test_constraints(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
         now = utc_now()
+        loan_id = "loan-id"
 
         # > 60 second playtime (per minute)
         with pytest.raises(IntegrityError) as raised:
@@ -68,6 +71,7 @@ class TestPlaytimeEntries:
                 timestamp=now,
                 total_seconds_played=61,
                 tracking_id="tracking-id",
+                loan_identifier=loan_id,
             )
         assert "max_total_seconds_played_constraint" in raised.exconly()
         db.session.rollback()
@@ -90,6 +94,7 @@ class TestPlaytimeEntries:
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-0",
+            loan_identifier=loan_id,
         )
         # Different identifier same tracking id is ok
         create(
@@ -104,6 +109,7 @@ class TestPlaytimeEntries:
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-0",
+            loan_identifier="loan-id-2",
         )
         # Same identifier different tracking id is ok
         create(
@@ -118,6 +124,7 @@ class TestPlaytimeEntries:
             timestamp=now,
             total_seconds_played=60,
             tracking_id="tracking-id-1",
+            loan_identifier=loan_id,
         )
         with pytest.raises(IntegrityError) as raised:
             # Same identifier same tracking id is not ok
@@ -133,9 +140,10 @@ class TestPlaytimeEntries:
                 timestamp=now,
                 total_seconds_played=60,
                 tracking_id="tracking-id-0",
+                loan_identifier=loan_id,
             )
         assert (
-            f"Key (tracking_id, identifier_str, collection_name, library_name)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}) already exists"
+            f"Key (tracking_id, identifier_str, collection_name, library_name, loan_identifier)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}, {loan_id}) already exists"
             in raised.exconly()
         )
 
@@ -145,6 +153,7 @@ class TestPlaytimeSummaries:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
+        loan_id = "loan-id"
 
         create(
             db.session,
@@ -157,6 +166,7 @@ class TestPlaytimeSummaries:
             library_name=library.name,
             timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
             total_seconds_played=600,
+            loan_identifier=loan_id,
         )
 
         # Same identifier string with same timestamp
@@ -172,6 +182,7 @@ class TestPlaytimeSummaries:
                 library_name=library.name,
                 timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
                 total_seconds_played=600,
+                loan_identifier=loan_id,
             )
         assert (
             f'Key ("timestamp", identifier_str, collection_name, library_name)=(2000-01-01 12:00:00+00, {identifier.urn}, {collection.name}, {library.name}) already exists'
@@ -193,6 +204,7 @@ class TestPlaytimeSummaries:
                 library_name=library.name,
                 timestamp=datetime.datetime(2000, 1, 1, 12, 00, 1),
                 total_seconds_played=600,
+                loan_identifier=loan_id,
             )
         assert "timestamp_minute_boundary_constraint" in raised.exconly()
 
@@ -200,7 +212,7 @@ class TestPlaytimeSummaries:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-
+        loan_id = "loan-id"
         urn = identifier.urn
         entry, _ = create(
             db.session,
@@ -213,6 +225,7 @@ class TestPlaytimeSummaries:
             library_name=library.name,
             timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
             total_seconds_played=600,
+            loan_identifier=loan_id,
         )
 
         assert entry.identifier == identifier

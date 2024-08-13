@@ -3,6 +3,7 @@ from unittest.mock import patch
 import flask
 from sqlalchemy.exc import IntegrityError
 
+from palace.manager.api.controller.playtime_entries import resolve_loan_identifier
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
@@ -91,6 +92,7 @@ class TestPlaytimeEntriesController:
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 17
             assert entry.timestamp.isoformat() == date_string(hour=12, minute=1)
+            assert entry.loan_identifier
 
             # The very old entry does not get recorded
             assert None == get_one(
@@ -114,6 +116,8 @@ class TestPlaytimeEntriesController:
         )
         patron = db.patron()
 
+        loan_identifier = resolve_loan_identifier(loan=None, patron=patron)
+
         db.session.add(
             PlaytimeEntry(
                 tracking_id="tracking-id-0",
@@ -125,6 +129,7 @@ class TestPlaytimeEntriesController:
                 identifier_str=identifier.urn,
                 collection_name=collection.name,
                 library_name=library.name,
+                loan_identifier=loan_identifier,
             )
         )
 

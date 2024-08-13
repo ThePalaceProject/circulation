@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
 import pytz
-from sqlalchemy.sql.expression import false, true
-from sqlalchemy.sql.functions import sum
+from sqlalchemy.sql.expression import and_, distinct, false, select, true
+from sqlalchemy.sql.functions import coalesce, count, sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
@@ -71,6 +71,7 @@ class PlaytimeEntriesSummationScript(Script):
                 e.identifier_str,
                 e.collection_name,
                 e.library_name,
+                e.loan_identifier,
             )
 
         by_group = defaultdict(int)
@@ -88,6 +89,7 @@ class PlaytimeEntriesSummationScript(Script):
                 identifier_str,
                 collection_name,
                 library_name,
+                loan_identifier,
             ) = group
 
             # Update the playtime summary.
@@ -101,9 +103,11 @@ class PlaytimeEntriesSummationScript(Script):
                 identifier_str=identifier_str,
                 collection_name=collection_name,
                 library_name=library_name,
+                loan_identifier=loan_identifier,
             )
             self.log.info(
-                f"Added {seconds} to {identifier_str} ({collection_name} in {library_name}) for {timestamp}: new total {playtime.total_seconds_played}."
+                f"Added {seconds} to {identifier_str} ({collection_name} in {library_name} with loan id of "
+                f"{loan_identifier}) for {timestamp}: new total {playtime.total_seconds_played}."
             )
 
         self._db.commit()
@@ -214,34 +218,75 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 self.log.warning(temp.read())
 
     def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
-        return (
-            self._db.query(PlaytimeSummary)
-            .with_entities(
-                PlaytimeSummary.identifier_str,
-                PlaytimeSummary.collection_name,
-                PlaytimeSummary.library_name,
-                PlaytimeSummary.isbn,
-                PlaytimeSummary.title,
-                sum(PlaytimeSummary.total_seconds_played),
+        loan_count_query = (
+            select(
+                PlaytimeSummary.identifier_str.label("identifier_str2"),
+                PlaytimeSummary.collection_name.label("collection_name2"),
+                PlaytimeSummary.library_name.label("library_name2"),
+                coalesce(PlaytimeSummary.isbn, "").label("isbn2"),
+                coalesce(PlaytimeSummary.title, "").label("title2"),
+                count(distinct(PlaytimeSummary.loan_identifier)).label("loan_count"),
             )
-            .filter(
-                PlaytimeSummary.timestamp >= start,
-                PlaytimeSummary.timestamp < until,
-            )
+            .where(PlaytimeSummary.timestamp.between(start, until))
             .group_by(
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_id,
                 PlaytimeSummary.isbn,
                 PlaytimeSummary.title,
+                PlaytimeSummary.identifier_id,
             )
-            .order_by(
+            .subquery()
+        )
+
+        seconds_query = (
+            select(
+                PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_str,
+                coalesce(PlaytimeSummary.isbn, "").label("isbn"),
+                coalesce(PlaytimeSummary.title, "").label("title"),
+                sum(PlaytimeSummary.total_seconds_played).label("total_seconds_played"),
             )
+            .where(PlaytimeSummary.timestamp.between(start, until))
+            .group_by(
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.isbn,
+                PlaytimeSummary.title,
+                PlaytimeSummary.identifier_id,
+            )
+            .subquery()
         )
+
+        combined = self._db.query(seconds_query, loan_count_query).join(
+            loan_count_query,
+            and_(
+                loan_count_query.c.identifier_str2 == seconds_query.c.identifier_str,
+                loan_count_query.c.collection_name2 == seconds_query.c.collection_name,
+                loan_count_query.c.library_name2 == seconds_query.c.library_name,
+                loan_count_query.c.isbn2 == seconds_query.c.isbn,
+                loan_count_query.c.title2 == seconds_query.c.title,
+            ),
+        )
+        combined_sq = combined.subquery()
+
+        query4 = self._db.query(
+            combined_sq.c.identifier_str,
+            combined_sq.c.collection_name,
+            combined_sq.c.library_name,
+            combined_sq.c.isbn,
+            combined_sq.c.title,
+            combined_sq.c.total_seconds_played,
+            combined_sq.c.loan_count,
+        ).order_by(
+            combined_sq.c.collection_name,
+            combined_sq.c.library_name,
+            combined_sq.c.identifier_str,
+        )
+        results = query4.all()
+        return results
 
 
 def _produce_report(writer: Writer, date_label, records=None) -> None:
@@ -256,6 +301,7 @@ def _produce_report(writer: Writer, date_label, records=None) -> None:
             "library",
             "title",
             "total seconds",
+            "loan count",
         )
     )
     for (
@@ -265,15 +311,17 @@ def _produce_report(writer: Writer, date_label, records=None) -> None:
         isbn,
         title,
         total,
+        loan_count,
     ) in records:
         row = (
             date_label,
             identifier_str,
-            isbn,
+            None if isbn == "" else isbn,
             collection_name,
             library_name,
-            title,
+            None if title == "" else title,
             total,
+            loan_count,
         )
         # Write the row to the CSV
         writer.writerow(row)
