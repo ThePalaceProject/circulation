@@ -1,4 +1,3 @@
-import datetime
 import json
 from copy import deepcopy
 from dataclasses import dataclass
@@ -214,7 +213,7 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.library_identifier == "testtype"
 
     @pytest.mark.parametrize(
-        "patron_data, patron_status_block, block_reason",
+        "patron_data, patron_blocks_enforced, block_reason",
         [
             (
                 None,
@@ -233,43 +232,6 @@ class TestSirsiDynixAuthenticationProvider:
             ),
             (
                 {"fields": {"hasMaxDaysWithFines": True}},
-                False,
-                PatronData.NO_VALUE,
-            ),
-            (
-                {"fields": {"privilegeExpiresDate": "1900-01-01"}},
-                True,
-                SirsiBlockReasons.EXPIRED,
-            ),
-            (
-                {"fields": {"privilegeExpiresDate": "1900-01-01"}},
-                False,
-                SirsiBlockReasons.EXPIRED,
-            ),
-            (
-                {"fields": {"privilegeExpiresDate": "19000101"}},
-                False,
-                SirsiBlockReasons.EXPIRED,
-            ),
-            (
-                {
-                    "fields": {
-                        "privilegeExpiresDate": (
-                            datetime.datetime.now() - datetime.timedelta(days=1)
-                        ).isoformat()
-                    }
-                },
-                False,
-                SirsiBlockReasons.EXPIRED,
-            ),
-            (
-                {
-                    "fields": {
-                        "privilegeExpiresDate": (
-                            datetime.datetime.now() + datetime.timedelta(days=1)
-                        ).isoformat()
-                    }
-                },
                 False,
                 PatronData.NO_VALUE,
             ),
@@ -304,10 +266,12 @@ class TestSirsiDynixAuthenticationProvider:
         self,
         sirsi_auth_fixture: SirsiAuthFixture,
         patron_data: dict[Any, Any],
-        patron_status_block: bool,
+        patron_blocks_enforced: bool,
         block_reason: str,
     ):
-        settings = sirsi_auth_fixture.settings(patron_status_block=patron_status_block)
+        settings = sirsi_auth_fixture.settings(
+            patron_blocks_enforced=patron_blocks_enforced
+        )
         provider = sirsi_auth_fixture.provider(settings=settings)
         provider_mock = sirsi_auth_fixture.provider_mocked_api(provider)
         if patron_data:

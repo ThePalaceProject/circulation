@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import json
 import os
 from collections.abc import Callable, Generator
@@ -8,7 +7,6 @@ from gettext import gettext as _
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urljoin
 
-import dateutil
 from pydantic import HttpUrl
 from sqlalchemy.orm import Session
 
@@ -63,8 +61,9 @@ class SirsiDynixHorizonAuthSettings(BasicAuthProviderSettings):
         form=ConfigurationFormItem(
             label="Enforce Patron ILS Blocks",
             description=(
-                "Block patrons from borrowing based on the status of the ILS's patron block field? "
-                "(Note: expired accounts are always blocked.)"
+                "Block patrons from borrowing based on the approved, hasMaxDaysWithFines, hasMaxFines, hasMaxLostItem, "
+                "hasMaxOverdueDays, hasMaxItemsCheckedOut fields from the ILS.(Note: expired accounts are always "
+                "blocked)."
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
@@ -249,15 +248,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             # We ignore currency for now, and assume USD
             patrondata.fines = float(fines.get("amount", 0))
 
-        expires_date: str | None = status_fields.get("privilegeExpiresDate")
-        expires_date_obj = None
-
-        if expires_date:
-            expires_date_obj = dateutil.parser.parse(expires_date)
-        elif status_fields.get("expired"):
-            patrondata.block_reason = SirsiBlockReasons.EXPIRED
-        # Blockable statuses
-        if expires_date_obj and datetime.datetime.utcnow() >= expires_date_obj:
+        if status_fields.get("expired"):
             patrondata.block_reason = SirsiBlockReasons.EXPIRED
         elif status_fields.get("hasMaxDaysWithFines") or status_fields.get(
             "hasMaxFines"
