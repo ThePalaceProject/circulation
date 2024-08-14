@@ -212,30 +212,70 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.block_reason == PatronData.NO_VALUE
         assert patrondata.library_identifier == "testtype"
 
-    def test_remote_patron_lookup_unblocked_user_with_blocks_ignored(
-        self, sirsi_auth_fixture: SirsiAuthFixture
+    @pytest.mark.parametrize(
+        "patron_data, patron_blocks_enforced, block_reason",
+        [
+            (
+                None,
+                False,
+                PatronData.NO_VALUE,
+            ),
+            (
+                None,
+                True,
+                PatronData.NO_VALUE,
+            ),
+            (
+                {"fields": {"hasMaxDaysWithFines": True}},
+                True,
+                PatronData.EXCESSIVE_FINES,
+            ),
+            (
+                {"fields": {"hasMaxDaysWithFines": True}},
+                False,
+                PatronData.NO_VALUE,
+            ),
+            (
+                {"fields": {"privilegeExpiresDate": "9999-01-01"}},
+                True,
+                PatronData.NO_VALUE,
+            ),
+            (
+                {"fields": {"expired": True}},
+                True,
+                SirsiBlockReasons.EXPIRED,
+            ),
+            (
+                {"fields": {"expired": True}},
+                False,
+                SirsiBlockReasons.EXPIRED,
+            ),
+            (
+                {"fields": {"expired": False}},
+                True,
+                PatronData.NO_VALUE,
+            ),
+            (
+                {"fields": {"expired": False}},
+                False,
+                PatronData.NO_VALUE,
+            ),
+        ],
+    )
+    def test_remote_patron_lookup_blocks(
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        patron_data: dict[Any, Any],
+        patron_blocks_enforced: bool,
+        block_reason: str,
     ):
-        settings = sirsi_auth_fixture.settings(patron_status_block=False)
+        settings = sirsi_auth_fixture.settings(
+            patron_blocks_enforced=patron_blocks_enforced
+        )
         provider = sirsi_auth_fixture.provider(settings=settings)
         provider_mock = sirsi_auth_fixture.provider_mocked_api(provider)
-        patrondata = provider_mock.provider.remote_patron_lookup(
-            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
-        )
-
-        assert provider_mock.api_read_patron_data.call_count == 1
-        assert provider_mock.api_patron_status_info.call_count == 0
-        assert isinstance(patrondata, PatronData)
-        assert patrondata.personal_name == "Test User"
-        assert patrondata.block_reason == PatronData.NO_VALUE
-
-    def test_remote_patron_lookup_blocked_user_with_blocks_enabled(
-        self, sirsi_auth_fixture: SirsiAuthFixture
-    ):
-        """Tests that remote patron block status is called when blocks are enabled."""
-        patron_info = {"fields": {"hasMaxDaysWithFines": True}}
-        provider_mock = sirsi_auth_fixture.provider_mocked_api(
-            patron_status_info=patron_info
-        )
+        if patron_data:
+            provider_mock.api_patron_status_info.return_value = patron_data
 
         patrondata = provider_mock.provider.remote_patron_lookup(
             SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
@@ -245,28 +285,7 @@ class TestSirsiDynixAuthenticationProvider:
         assert provider_mock.api_patron_status_info.call_count == 1
         assert isinstance(patrondata, PatronData)
         assert patrondata.personal_name == "Test User"
-        assert patrondata.block_reason == PatronData.EXCESSIVE_FINES
-
-    def test_remote_patron_lookup_blocked_user_with_blocks_ignored(
-        self, sirsi_auth_fixture: SirsiAuthFixture
-    ):
-        """ "Test that patron block status is not called when blocks are ignored."""
-        settings = sirsi_auth_fixture.settings(patron_status_block=False)
-        provider = sirsi_auth_fixture.provider(settings=settings)
-        provider_mock = sirsi_auth_fixture.provider_mocked_api(provider)
-        provider_mock.api_patron_status_info.return_value = {
-            "fields": {"hasMaxDaysWithFines": True}
-        }
-
-        patrondata = provider_mock.provider.remote_patron_lookup(
-            SirsiDynixPatronData(permanent_id="xxxx", session_token="xxx")
-        )
-
-        assert provider_mock.api_read_patron_data.call_count == 1
-        assert provider_mock.api_patron_status_info.call_count == 0
-        assert isinstance(patrondata, PatronData)
-        assert patrondata.personal_name == "Test User"
-        assert patrondata.block_reason == PatronData.NO_VALUE
+        assert patrondata.block_reason == block_reason
 
     def test_remote_patron_lookup_bad_patrondata(
         self, sirsi_auth_fixture: SirsiAuthFixture
