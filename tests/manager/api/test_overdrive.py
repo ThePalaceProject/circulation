@@ -80,7 +80,6 @@ from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.overdrive import MockOverdriveAPI
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import AuthIntegrationFixture
     from tests.fixtures.time import Time
 
 
@@ -618,7 +617,6 @@ class TestOverdriveAPI:
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
-        auth_integration_fixture: AuthIntegrationFixture,
     ):
         # Verify that OverdriveAPI._run_self_tests() calls the right
         # methods.
@@ -662,7 +660,7 @@ class TestOverdriveAPI:
         overdrive_api_fixture.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        auth_integration_fixture.simple_auth(with_default_patron)
+        db.simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(db.session, overdrive_api_fixture.collection)

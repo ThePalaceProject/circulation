@@ -10,7 +10,7 @@ from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 from unittest.mock import patch
 
 import pytest
@@ -22,9 +22,17 @@ from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from typing_extensions import Self
 
+from palace.manager.api.authentication.base import (
+    AuthenticationProvider,
+    AuthProviderSettings,
+)
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
+)
+from palace.manager.api.simple_authentication import (
+    SimpleAuthenticationProvider,
+    SimpleAuthSettings,
 )
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
@@ -375,6 +383,9 @@ def function_database(
     with DatabaseFixture.fixture(function_database_creation) as db:
         with db.patch_engine_error():
             yield db
+
+
+TSettings = TypeVar("TSettings", bound=AuthProviderSettings)
 
 
 class DatabaseTransactionFixture:
@@ -951,7 +962,9 @@ class DatabaseTransactionFixture:
         if not isinstance(libraries, list):
             libraries = [libraries]
 
-        integration.libraries.extend(libraries)
+        for library in libraries:
+            if library not in integration.libraries:
+                integration.libraries.append(library)
 
         if settings is not None:
             if isinstance(protocol, str):
@@ -969,6 +982,35 @@ class DatabaseTransactionFixture:
             protocol=OpdsRegistrationService,
             goal=Goals.DISCOVERY_GOAL,
             settings=OpdsRegistrationServiceSettings(url=url or self.fresh_url()),
+        )
+
+    def auth_integration(
+        self,
+        protocol: type[AuthenticationProvider[TSettings, Any]],
+        library: Library | None = None,
+        settings: TSettings | None = None,
+    ) -> IntegrationConfiguration:
+        integration = self.integration_configuration(
+            protocol,
+            Goals.PATRON_AUTH_GOAL,
+            libraries=library,
+            settings=settings,
+        )
+        return integration
+
+    def simple_auth_integration(
+        self,
+        library: Library | None = None,
+        test_identifier: str = "username1",
+        test_password: str = "password1",
+    ) -> IntegrationConfiguration:
+        return self.auth_integration(
+            SimpleAuthenticationProvider,
+            library=library,
+            settings=SimpleAuthSettings(
+                test_identifier=test_identifier,
+                test_password=test_password,
+            ),
         )
 
     @classmethod

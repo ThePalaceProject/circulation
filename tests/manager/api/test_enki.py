@@ -31,7 +31,6 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
-from tests.fixtures.authenticator import AuthIntegrationFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.mocks.enki import MockEnkiAPI
@@ -112,7 +111,6 @@ class TestEnkiAPI:
     def test__run_self_tests(
         self,
         enki_test_fixture: EnkiTestFixure,
-        auth_integration_fixture: AuthIntegrationFixture,
     ):
         db = enki_test_fixture.db
 
@@ -145,7 +143,7 @@ class TestEnkiAPI:
         api.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        auth_integration_fixture.simple_auth(with_default_patron)
+        db.simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         (

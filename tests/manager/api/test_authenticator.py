@@ -42,7 +42,10 @@ from palace.manager.api.authenticator import (
     LibraryAuthenticator,
 )
 from palace.manager.api.config import CannotLoadConfiguration, Configuration
-from palace.manager.api.millenium_patron import MilleniumPatronAPI
+from palace.manager.api.millenium_patron import (
+    MilleniumPatronAPI,
+    MilleniumPatronSettings,
+)
 from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
@@ -50,7 +53,7 @@ from palace.manager.api.problem_details import (
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
-from palace.manager.api.sip import SIP2AuthenticationProvider
+from palace.manager.api.sip import SIP2AuthenticationProvider, SIP2Settings
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.user_profile import ProfileController
@@ -76,7 +79,6 @@ from tests.mocks.analytics_provider import MockAnalyticsProvider
 
 if TYPE_CHECKING:
     from tests.fixtures.api_controller import ControllerFixture
-    from tests.fixtures.authenticator import AuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.vendor_id import VendorIDFixture
 
@@ -493,7 +495,6 @@ class TestAuthenticator:
     def test_init(
         self,
         controller_fixture: ControllerFixture,
-        auth_integration_fixture: AuthIntegrationFixture,
     ):
         db = controller_fixture.db
 
@@ -504,7 +505,11 @@ class TestAuthenticator:
 
         # This library uses Millenium Patron.
         l2 = db.library(short_name="l2")
-        auth_integration_fixture.millenium_patron(l2)
+        db.auth_integration(
+            MilleniumPatronAPI,
+            l2,
+            settings=MilleniumPatronSettings(url="http://url.com/"),
+        )
 
         db.session.flush()
 
@@ -623,14 +628,13 @@ class TestLibraryAuthenticator:
     def test_from_config_basic_auth_only(
         self,
         db: DatabaseTransactionFixture,
-        auth_integration_fixture: AuthIntegrationFixture,
     ):
         # Only a basic auth provider.
-        auth_integration_fixture.millenium_patron(db.default_library())
+        db.simple_auth_integration(db.default_library())
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
 
         assert auth.basic_auth_provider is not None
-        assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
+        assert isinstance(auth.basic_auth_provider, SimpleAuthenticationProvider)
 
     def test_config_succeeds_when_no_providers_configured(
         self,
@@ -739,13 +743,15 @@ class TestLibraryAuthenticator:
     def test_register_provider_basic_auth(
         self,
         db: DatabaseTransactionFixture,
-        auth_integration_fixture: AuthIntegrationFixture,
     ):
         library = db.default_library()
-        _, integration = auth_integration_fixture.sip2(library)
-        assert isinstance(integration, IntegrationLibraryConfiguration)
+        integration = db.auth_integration(
+            SIP2AuthenticationProvider, library, settings=SIP2Settings(url="url")
+        )
+        library_integration = integration.for_library(library)
+        assert isinstance(library_integration, IntegrationLibraryConfiguration)
         auth = LibraryAuthenticator(_db=db.session, library=library)
-        auth.register_provider(integration)
+        auth.register_provider(library_integration)
         assert auth.basic_auth_provider is not None
         assert isinstance(auth.basic_auth_provider, SIP2AuthenticationProvider)
 
