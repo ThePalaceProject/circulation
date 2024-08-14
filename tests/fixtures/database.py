@@ -10,7 +10,7 @@ from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -22,10 +22,8 @@ from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from typing_extensions import Self
 
-from palace.manager.api.authentication.base import (
-    AuthenticationProvider,
-    AuthProviderSettings,
-)
+from palace.manager.api.authentication.base import AuthenticationProvider
+from palace.manager.api.authentication.base import SettingsType as TAuthProviderSettings
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
@@ -39,9 +37,9 @@ from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.base import HasIntegrationConfiguration
+from palace.manager.integration.base import SettingsType as TIntegrationSettings
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -383,9 +381,6 @@ def function_database(
     with DatabaseFixture.fixture(function_database_creation) as db:
         with db.patch_engine_error():
             yield db
-
-
-TSettings = TypeVar("TSettings", bound=AuthProviderSettings)
 
 
 class DatabaseTransactionFixture:
@@ -928,12 +923,12 @@ class DatabaseTransactionFixture:
 
     def integration_configuration(
         self,
-        protocol: type[HasIntegrationConfiguration] | str,
+        protocol: type[HasIntegrationConfiguration[TIntegrationSettings]] | str,
         goal: Goals,
         *,
         libraries: list[Library] | Library | None = None,
         name: str | None = None,
-        settings: BaseSettings | None = None,
+        settings: TIntegrationSettings | None = None,
     ) -> IntegrationConfiguration:
         registry_mapping = {
             Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
@@ -986,9 +981,9 @@ class DatabaseTransactionFixture:
 
     def auth_integration(
         self,
-        protocol: type[AuthenticationProvider[TSettings, Any]],
+        protocol: type[AuthenticationProvider[TAuthProviderSettings, Any]],
         library: Library | None = None,
-        settings: TSettings | None = None,
+        settings: TAuthProviderSettings | None = None,
     ) -> IntegrationConfiguration:
         integration = self.integration_configuration(
             protocol,
