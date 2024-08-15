@@ -34,7 +34,7 @@ from palace.manager.api.simple_authentication import (
 )
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.integration.base import HasIntegrationConfiguration
 from palace.manager.integration.base import SettingsType as TIntegrationSettings
@@ -962,9 +962,11 @@ class DatabaseTransactionFixture:
                 integration.libraries.append(library)
 
         if settings is not None:
-            if isinstance(protocol, str):
-                raise ValueError(
-                    "protocol must be an instance of HasIntegrationConfiguration to set settings"
+            if isinstance(protocol, str) or not issubclass(
+                protocol, HasIntegrationConfiguration
+            ):
+                raise PalaceValueError(
+                    "protocol must be a subclass of HasIntegrationConfiguration to set settings"
                 )
             protocol.settings_update(integration, settings)
 
