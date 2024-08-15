@@ -71,7 +71,6 @@ from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
-    from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.files import BibliothecaFilesFixture
     from tests.fixtures.time import Time
@@ -99,7 +98,6 @@ class TestBibliothecaAPI:
     def test__run_self_tests(
         self,
         bibliotheca_fixture: BibliothecaAPITestFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         db = bibliotheca_fixture.db
         # Verify that BibliothecaAPI._run_self_tests() calls the right
@@ -127,7 +125,7 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.collection.libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
-        create_simple_auth_integration(with_default_patron)
+        db.simple_auth_integration(with_default_patron)
 
         # Now that everything is set up, run the self-test.
         api = Mock(db.session, bibliotheca_fixture.collection)

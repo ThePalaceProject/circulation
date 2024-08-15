@@ -22,14 +22,24 @@ from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
 from typing_extensions import Self
 
-from palace.manager.api.discovery.opds_registration import OpdsRegistrationService
+from palace.manager.api.authentication.base import AuthenticationProvider
+from palace.manager.api.authentication.base import SettingsType as TAuthProviderSettings
+from palace.manager.api.discovery.opds_registration import (
+    OpdsRegistrationService,
+    OpdsRegistrationServiceSettings,
+)
+from palace.manager.api.simple_authentication import (
+    SimpleAuthenticationProvider,
+    SimpleAuthSettings,
+)
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.integration.base import HasIntegrationConfiguration
+from palace.manager.integration.base import SettingsType as TIntegrationSettings
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
-from palace.manager.service.integration_registry.discovery import DiscoveryRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -912,12 +922,31 @@ class DatabaseTransactionFixture:
         return self._isbns.pop()
 
     def integration_configuration(
-        self, protocol: str, goal=None, libraries=None, name=None, **kwargs
-    ):
+        self,
+        protocol: type[HasIntegrationConfiguration[TIntegrationSettings]] | str,
+        goal: Goals,
+        *,
+        libraries: list[Library] | Library | None = None,
+        name: str | None = None,
+        settings: TIntegrationSettings | None = None,
+    ) -> IntegrationConfiguration:
+        registry_mapping = {
+            Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
+            Goals.DISCOVERY_GOAL: self._services.services.integration_registry.discovery(),
+            Goals.LICENSE_GOAL: self._services.services.integration_registry.license_providers(),
+            Goals.METADATA_GOAL: self._services.services.integration_registry.metadata(),
+            Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
+        }
+        protocol_str = (
+            protocol
+            if isinstance(protocol, str)
+            else registry_mapping[goal].get_protocol(protocol)
+        )
+        assert protocol_str is not None
         integration, ignore = get_one_or_create(
             self.session,
             IntegrationConfiguration,
-            protocol=protocol,
+            protocol=protocol_str,
             goal=goal,
             name=(name or self.fresh_str()),
         )
@@ -928,10 +957,58 @@ class DatabaseTransactionFixture:
         if not isinstance(libraries, list):
             libraries = [libraries]
 
-        integration.libraries.extend(libraries)
+        for library in libraries:
+            if library not in integration.libraries:
+                integration.libraries.append(library)
 
-        integration.settings_dict = kwargs
+        if settings is not None:
+            if isinstance(protocol, str) or not issubclass(
+                protocol, HasIntegrationConfiguration
+            ):
+                raise PalaceValueError(
+                    "protocol must be a subclass of HasIntegrationConfiguration to set settings"
+                )
+            protocol.settings_update(integration, settings)
+
         return integration
+
+    def discovery_service_integration(
+        self, url: str | None = None
+    ) -> IntegrationConfiguration:
+        return self.integration_configuration(
+            protocol=OpdsRegistrationService,
+            goal=Goals.DISCOVERY_GOAL,
+            settings=OpdsRegistrationServiceSettings(url=url or self.fresh_url()),
+        )
+
+    def auth_integration(
+        self,
+        protocol: type[AuthenticationProvider[TAuthProviderSettings, Any]],
+        library: Library | None = None,
+        settings: TAuthProviderSettings | None = None,
+    ) -> IntegrationConfiguration:
+        integration = self.integration_configuration(
+            protocol,
+            Goals.PATRON_AUTH_GOAL,
+            libraries=library,
+            settings=settings,
+        )
+        return integration
+
+    def simple_auth_integration(
+        self,
+        library: Library | None = None,
+        test_identifier: str = "username1",
+        test_password: str = "password1",
+    ) -> IntegrationConfiguration:
+        return self.auth_integration(
+            SimpleAuthenticationProvider,
+            library=library,
+            settings=SimpleAuthSettings(
+                test_identifier=test_identifier,
+                test_password=test_password,
+            ),
+        )
 
     @classmethod
     def set_settings(
@@ -1156,83 +1233,6 @@ def temporary_directory_configuration() -> (
     fix = TemporaryDirectoryConfigurationFixture.create()
     yield fix
     fix.close()
-
-
-class IntegrationConfigurationFixture:
-    def __init__(
-        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-    ):
-        self.db = db
-        self.discovery_registry: DiscoveryRegistry = (
-            services_fixture.services.integration_registry.discovery()
-        )
-
-    def __call__(
-        self, protocol: str | None, goal: Goals, settings_dict: dict | None = None
-    ) -> IntegrationConfiguration:
-        integration, _ = create(
-            self.db.session,
-            IntegrationConfiguration,
-            name=self.db.fresh_str(),
-            protocol=protocol,
-            goal=goal,
-            settings_dict=settings_dict or {},
-        )
-        return integration
-
-    def discovery_service(
-        self, protocol: str | None = None, url: str | None = None
-    ) -> IntegrationConfiguration:
-        if protocol is None:
-            protocol = self.discovery_registry.get_protocol(OpdsRegistrationService)
-            assert protocol is not None
-
-        if url is not None:
-            settings_obj = self.discovery_registry[protocol].settings_class().construct(url=url)  # type: ignore[arg-type]
-            settings_dict = settings_obj.dict()
-        else:
-            settings_dict = {}
-
-        return self(
-            protocol=protocol, goal=Goals.DISCOVERY_GOAL, settings_dict=settings_dict
-        )
-
-
-@pytest.fixture
-def create_integration_configuration(
-    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-) -> IntegrationConfigurationFixture:
-    fixture = IntegrationConfigurationFixture(db, services_fixture)
-    return fixture
-
-
-class IntegrationLibraryConfigurationFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
-        self.db = db
-
-    def __call__(
-        self,
-        library: Library,
-        parent: IntegrationConfiguration,
-        settings_dict: dict | None = None,
-    ) -> IntegrationLibraryConfiguration:
-        settings_dict = settings_dict or {}
-        integration, _ = create(
-            self.db.session,
-            IntegrationLibraryConfiguration,
-            parent=parent,
-            library=library,
-            settings_dict=settings_dict,
-        )
-        return integration
-
-
-@pytest.fixture
-def create_integration_library_configuration(
-    db: DatabaseTransactionFixture,
-) -> IntegrationLibraryConfigurationFixture:
-    fixture = IntegrationLibraryConfigurationFixture(db)
-    return fixture
 
 
 class MockSessionMaker:

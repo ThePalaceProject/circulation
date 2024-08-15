@@ -33,10 +33,7 @@ from palace.manager.util.problem_detail import (
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
 )
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    IntegrationConfigurationFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockCirculationManager
@@ -47,15 +44,12 @@ class RemoteRegistryFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        integration_configuration: IntegrationConfigurationFixture,
     ):
         self.db = db
         # Create an integration that can be used as the basis for
         # a OpdsRegistrationService.
         self.registry_url = "http://registry.com/"
-        self.integration = integration_configuration.discovery_service(
-            url=self.registry_url
-        )
+        self.integration = db.discovery_service_integration(url=self.registry_url)
         assert self.integration.protocol is not None
         self.protocol = self.integration.protocol
         assert self.integration.goal is not None
@@ -80,9 +74,8 @@ class RemoteRegistryFixture:
 @pytest.fixture(scope="function")
 def remote_registry_fixture(
     db: DatabaseTransactionFixture,
-    create_integration_configuration: IntegrationConfigurationFixture,
 ) -> RemoteRegistryFixture:
-    return RemoteRegistryFixture(db, create_integration_configuration)
+    return RemoteRegistryFixture(db)
 
 
 class TestOpdsRegistrationService:

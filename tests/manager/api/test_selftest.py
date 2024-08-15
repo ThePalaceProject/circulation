@@ -16,7 +16,6 @@ from palace.manager.api.selftest import (
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail
-from tests.fixtures.authenticator import SimpleAuthIntegrationFixture
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -26,7 +25,6 @@ class TestHasPatronSelfTests:
     def test__determine_self_test_patron(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Test per-library default patron lookup for self-tests.
 
@@ -49,7 +47,7 @@ class TestHasPatronSelfTests:
         )
 
         # Add a patron authentication integration
-        create_simple_auth_integration(db.default_library())
+        db.simple_auth_integration(db.default_library())
 
         # This library's patron authentication integration has a default
         # patron (for this library).
@@ -95,7 +93,6 @@ class TestHasPatronSelfTests:
     def test_default_patrons(
         self,
         db: DatabaseTransactionFixture,
-        create_simple_auth_integration: SimpleAuthIntegrationFixture,
     ):
         """Some self-tests must run with a patron's credentials.  The
         default_patrons() method finds the default Patron for every
@@ -127,7 +124,7 @@ class TestHasPatronSelfTests:
         collection.libraries.append(no_default_patron)
 
         # This library has a default patron set up.
-        create_simple_auth_integration(db.default_library())
+        db.simple_auth_integration(db.default_library())
 
         # Calling default_patrons on the Collection returns one result for
         # each Library associated with that Collection.

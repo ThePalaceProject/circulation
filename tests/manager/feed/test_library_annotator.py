@@ -37,7 +37,6 @@ from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.integration.goals import Goals
 from palace.manager.service.container import container_instance
-from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -876,15 +875,11 @@ class TestLibraryAnnotator:
         ]
 
         # There's a recommendation link when configuration is found, though!
-        protocol = MetadataRegistry().get_protocol(NoveListAPI)
-        assert protocol is not None
-        integration = annotator_fixture.db.integration_configuration(
-            protocol=protocol,
+        annotator_fixture.db.integration_configuration(
+            protocol=NoveListAPI,
             goal=Goals.METADATA_GOAL,
             libraries=[annotator_fixture.db.default_library()],
-        )
-        NoveListAPI.settings_update(
-            integration, NoveListApiSettings(username="library", password="sure")
+            settings=NoveListApiSettings(username="library", password="sure"),
         )
 
         feed = self.get_parsed_feed(annotator_fixture, [work])

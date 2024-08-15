@@ -24,10 +24,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    IntegrationConfigurationFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -50,7 +47,7 @@ class CacheMARCFilesFixture:
             library = self.library
 
         return self.db.integration_configuration(
-            protocol=MARCExporter.__name__,
+            protocol=MARCExporter,
             goal=Goals.CATALOG_GOAL,
             libraries=[library],
         )
@@ -177,7 +174,6 @@ class TestCacheMARCFiles:
         self,
         db: DatabaseTransactionFixture,
         cache_marc_files: CacheMARCFilesFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
     ):
         # No web client URLs are returned if there are no discovery service registrations.
         script = cache_marc_files.script()
@@ -189,7 +185,7 @@ class TestCacheMARCFiles:
         ) == ["http://web-client"]
 
         # Add a URL from a library registry.
-        registry = create_integration_configuration.discovery_service()
+        registry = db.discovery_service_integration()
         create(
             db.session,
             DiscoveryServiceRegistration,

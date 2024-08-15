@@ -35,7 +35,7 @@ class MARCRecordControllerFixture:
     def integration(self, library: Library | None = None):
         library = library or self.library
         return self.db.integration_configuration(
-            MARCExporter.__name__,
+            MARCExporter,
             Goals.CATALOG_GOAL,
             libraries=[library],
         )

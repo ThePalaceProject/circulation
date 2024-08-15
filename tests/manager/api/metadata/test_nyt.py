@@ -14,7 +14,6 @@ from palace.manager.api.metadata.nyt import (
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.goals import Goals
-from palace.manager.service.integration_registry.metadata import MetadataRegistry
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -64,12 +63,6 @@ class NYTBestSellerAPIFixture:
         """
         return datetime.datetime(*args, tzinfo=NYTAPI.TIME_ZONE)
 
-    def protocol(self) -> str:
-        registry = MetadataRegistry()
-        protocol = registry.get_protocol(NYTBestSellerAPI)
-        assert protocol is not None
-        return protocol
-
     def __init__(self, db: DatabaseTransactionFixture, files: NYTFilesFixture):
         self.db = db
         self.api = DummyNYTBestSellerAPI(db.session, files)
@@ -93,10 +86,10 @@ class TestNYTBestSellerAPI:
         assert "No Integration found for the NYT." in str(excinfo.value)
 
         integration = nyt_fixture.db.integration_configuration(
-            protocol=nyt_fixture.protocol(), goal=Goals.METADATA_GOAL
+            protocol=NYTBestSellerAPI,
+            goal=Goals.METADATA_GOAL,
+            settings=NytBestSellerApiSettings(password="api key"),
         )
-        settings = NytBestSellerApiSettings(password="api key")
-        NYTBestSellerAPI.settings_update(integration, settings)
 
         api = NYTBestSellerAPI.from_config(nyt_fixture.db.session)
         assert "api key" == api.api_key

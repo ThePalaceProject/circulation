@@ -9,10 +9,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    IntegrationConfigurationFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class VendorIDFixture:
@@ -32,7 +29,7 @@ class VendorIDFixture:
         self,
         vendor_id_library: Library,
     ):
-        self.registry = self.integration_configuration.discovery_service()
+        self.registry = self.db.discovery_service_integration()
         self.registration, _ = create(
             self.db.session,
             DiscoveryServiceRegistration,
@@ -54,16 +51,13 @@ class VendorIDFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        integration_configuration: IntegrationConfigurationFixture,
     ) -> None:
         assert isinstance(db, DatabaseTransactionFixture)
         self.db = db
-        self.integration_configuration = integration_configuration
 
 
 @pytest.fixture(scope="function")
 def vendor_id_fixture(
     db: DatabaseTransactionFixture,
-    create_integration_configuration: IntegrationConfigurationFixture,
 ) -> VendorIDFixture:
-    return VendorIDFixture(db, create_integration_configuration)
+    return VendorIDFixture(db)

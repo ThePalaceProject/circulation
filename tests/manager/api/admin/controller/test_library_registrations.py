@@ -21,10 +21,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 )
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-from tests.fixtures.database import (
-    DatabaseTransactionFixture,
-    IntegrationConfigurationFixture,
-)
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.services import ServicesFixture
@@ -47,12 +44,11 @@ class TestLibraryRegistration:
         controller: DiscoveryServiceLibraryRegistrationsController,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
         library_fixture: LibraryFixture,
         requests_mock: Mocker,
     ) -> None:
         # Here's a discovery service.
-        discovery_service = create_integration_configuration.discovery_service(
+        discovery_service = db.discovery_service_integration(
             url="http://service-url.com/"
         )
 
@@ -214,7 +210,7 @@ class TestLibraryRegistration:
         self,
         controller: DiscoveryServiceLibraryRegistrationsController,
         flask_app_fixture: FlaskAppFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
+        db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
     ) -> None:
         """Test what might happen when you POST to
@@ -248,7 +244,7 @@ class TestLibraryRegistration:
             assert MISSING_SERVICE == response
 
         # Create an IntegrationConfiguration to avoid that problem in future tests.
-        discovery_service = create_integration_configuration.discovery_service(
+        discovery_service = db.discovery_service_integration(
             url="http://register-here.com/"
         )
 

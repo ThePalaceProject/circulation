@@ -28,10 +28,7 @@ from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 
 if TYPE_CHECKING:
-    from tests.fixtures.database import (
-        DatabaseTransactionFixture,
-        IntegrationConfigurationFixture,
-    )
+    from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class DiscoveryServicesControllerFixture:
@@ -94,11 +91,8 @@ class TestDiscoveryServices:
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
     ):
-        discovery_service = create_integration_configuration.discovery_service(
-            url=db.fresh_str()
-        )
+        discovery_service = db.discovery_service_integration()
 
         with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller_fixture.process_discovery_services()
@@ -116,7 +110,6 @@ class TestDiscoveryServices:
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
     ):
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -149,9 +142,7 @@ class TestDiscoveryServices:
             assert response == MISSING_SERVICE
 
         integration_url = db.fresh_url()
-        existing_integration = create_integration_configuration.discovery_service(
-            url=integration_url
-        )
+        existing_integration = db.discovery_service_integration(url=integration_url)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             assert isinstance(existing_integration.name, str)
             flask.request.form = ImmutableMultiDict(
@@ -232,11 +223,9 @@ class TestDiscoveryServices:
         self,
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
+        db: DatabaseTransactionFixture,
     ):
-        discovery_service = create_integration_configuration.discovery_service(
-            url="registry url"
-        )
+        discovery_service = db.discovery_service_integration()
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
@@ -262,10 +251,10 @@ class TestDiscoveryServices:
         self,
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
+        db: DatabaseTransactionFixture,
     ):
-        existing_service = create_integration_configuration.discovery_service()
-        new_service = create_integration_configuration.discovery_service()
+        existing_service = db.discovery_service_integration()
+        new_service = db.discovery_service_integration()
 
         # Try to change new service so that it has the same name as existing service
         # -- this is not allowed.
@@ -314,11 +303,8 @@ class TestDiscoveryServices:
         flask_app_fixture: FlaskAppFixture,
         controller_fixture: DiscoveryServicesControllerFixture,
         db: DatabaseTransactionFixture,
-        create_integration_configuration: IntegrationConfigurationFixture,
     ):
-        discovery_service = create_integration_configuration.discovery_service(
-            url="registry url"
-        )
+        discovery_service = db.discovery_service_integration()
 
         with flask_app_fixture.test_request_context("/", method="DELETE"):
             pytest.raises(
@@ -328,8 +314,9 @@ class TestDiscoveryServices:
             )
 
         with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):
+            assert discovery_service.id is not None
             response = controller_fixture.controller.process_delete(
-                discovery_service.id  # type: ignore[arg-type]
+                discovery_service.id
             )
             assert response.status_code == 200
 

@@ -42,7 +42,10 @@ from palace.manager.api.authenticator import (
     LibraryAuthenticator,
 )
 from palace.manager.api.config import CannotLoadConfiguration, Configuration
-from palace.manager.api.millenium_patron import MilleniumPatronAPI
+from palace.manager.api.millenium_patron import (
+    MilleniumPatronAPI,
+    MilleniumPatronSettings,
+)
 from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     PATRON_AUTH_ACCESS_TOKEN_EXPIRED,
@@ -50,14 +53,13 @@ from palace.manager.api.problem_details import (
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
 from palace.manager.api.simple_authentication import SimpleAuthenticationProvider
-from palace.manager.api.sip import SIP2AuthenticationProvider
+from palace.manager.api.sip import SIP2AuthenticationProvider, SIP2Settings
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.integration_registry.base import IntegrationRegistry
-from palace.manager.service.integration_registry.patron_auth import PatronAuthRegistry
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.integration import (
@@ -77,10 +79,6 @@ from tests.mocks.analytics_provider import MockAnalyticsProvider
 
 if TYPE_CHECKING:
     from tests.fixtures.api_controller import ControllerFixture
-    from tests.fixtures.authenticator import (
-        CreateAuthIntegrationFixture,
-        MilleniumAuthIntegrationFixture,
-    )
     from tests.fixtures.database import DatabaseTransactionFixture
     from tests.fixtures.vendor_id import VendorIDFixture
 
@@ -497,7 +495,6 @@ class TestAuthenticator:
     def test_init(
         self,
         controller_fixture: ControllerFixture,
-        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
     ):
         db = controller_fixture.db
 
@@ -508,7 +505,11 @@ class TestAuthenticator:
 
         # This library uses Millenium Patron.
         l2 = db.library(short_name="l2")
-        create_millenium_auth_integration(l2)
+        db.auth_integration(
+            MilleniumPatronAPI,
+            l2,
+            settings=MilleniumPatronSettings(url="http://url.com/"),
+        )
 
         db.session.flush()
 
@@ -627,14 +628,13 @@ class TestLibraryAuthenticator:
     def test_from_config_basic_auth_only(
         self,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
     ):
         # Only a basic auth provider.
-        create_millenium_auth_integration(db.default_library())
+        db.simple_auth_integration(db.default_library())
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
 
         assert auth.basic_auth_provider is not None
-        assert isinstance(auth.basic_auth_provider, MilleniumPatronAPI)
+        assert isinstance(auth.basic_auth_provider, SimpleAuthenticationProvider)
 
     def test_config_succeeds_when_no_providers_configured(
         self,
@@ -655,8 +655,6 @@ class TestLibraryAuthenticator:
     def test_configuration_exception_during_from_config_stored(
         self,
         db: DatabaseTransactionFixture,
-        create_millenium_auth_integration: MilleniumAuthIntegrationFixture,
-        create_auth_integration_configuration: CreateAuthIntegrationFixture,
     ):
         # If the initialization of an AuthenticationProvider from config
         # raises CannotLoadConfiguration or ImportError, the exception
@@ -664,7 +662,9 @@ class TestLibraryAuthenticator:
         # propagated.
         # Create an integration destined to raise CannotLoadConfiguration..
         library = db.default_library()
-        unknown, _ = create_auth_integration_configuration("unknown protocol", library)
+        unknown = db.integration_configuration(
+            "unknown protocol", goal=Goals.PATRON_AUTH_GOAL, libraries=[library]
+        )
 
         auth = LibraryAuthenticator.from_config(db.session, db.default_library())
 
@@ -743,22 +743,15 @@ class TestLibraryAuthenticator:
     def test_register_provider_basic_auth(
         self,
         db: DatabaseTransactionFixture,
-        create_auth_integration_configuration: CreateAuthIntegrationFixture,
-        patron_auth_registry: PatronAuthRegistry,
     ):
         library = db.default_library()
-        protocol = patron_auth_registry.get_protocol(SIP2AuthenticationProvider, "")
-        _, integration = create_auth_integration_configuration(
-            protocol,
-            library,
-            settings_dict={
-                "url": "http://url/",
-                "password": "secret",
-            },
+        integration = db.auth_integration(
+            SIP2AuthenticationProvider, library, settings=SIP2Settings(url="url")
         )
-        assert isinstance(integration, IntegrationLibraryConfiguration)
+        library_integration = integration.for_library(library)
+        assert isinstance(library_integration, IntegrationLibraryConfiguration)
         auth = LibraryAuthenticator(_db=db.session, library=library)
-        auth.register_provider(integration)
+        auth.register_provider(library_integration)
         assert auth.basic_auth_provider is not None
         assert isinstance(auth.basic_auth_provider, SIP2AuthenticationProvider)
 
