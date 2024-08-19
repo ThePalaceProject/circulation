@@ -221,7 +221,7 @@ class TaskLock(RedisLock):
         redis_client: Redis,
         task: Task,
         lock_name: str | None = None,
-        timeout: timedelta | None = timedelta(minutes=5),
+        lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
     ):
         random_value = task.request.root_id or task.request.id
@@ -233,4 +233,4 @@ class TaskLock(RedisLock):
             name = ["Task", task.name]
         else:
             name = [lock_name]
-        super().__init__(redis_client, name, random_value, timeout, retry_delay)
+        super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)
