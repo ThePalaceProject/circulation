@@ -33,14 +33,14 @@ class TestRedisLock:
         # We can acquire the lock. And acquiring the lock sets a timeout on the key, so the lock
         # will expire eventually if something goes wrong.
         assert redis_lock_fixture.lock.acquire()
-        assert redis_fixture.client.ttl(redis_lock_fixture.lock.lock_key) > 0
+        assert redis_fixture.client.ttl(redis_lock_fixture.lock.key) > 0
 
         # Acquiring the lock again with the same random value should return True
         # and extend the timeout for the lock
-        redis_fixture.client.expire(redis_lock_fixture.lock.lock_key, 5)
-        timeout = redis_fixture.client.ttl(redis_lock_fixture.lock.lock_key)
+        redis_fixture.client.expire(redis_lock_fixture.lock.key, 5)
+        timeout = redis_fixture.client.ttl(redis_lock_fixture.lock.key)
         assert redis_lock_fixture.lock.acquire()
-        assert redis_fixture.client.ttl(redis_lock_fixture.lock.lock_key) > timeout
+        assert redis_fixture.client.ttl(redis_lock_fixture.lock.key) > timeout
 
         # Acquiring the lock again with a different random value should return False
         assert not redis_lock_fixture.other_lock.acquire()
@@ -66,13 +66,13 @@ class TestRedisLock:
         assert redis_lock_fixture.other_lock.release() is False
 
         # Make sure the key is set in redis
-        assert redis_fixture.client.get(redis_lock_fixture.lock.lock_key) is not None
+        assert redis_fixture.client.get(redis_lock_fixture.lock.key) is not None
 
         # But the client that acquired the lock can release it
         assert redis_lock_fixture.lock.release() is True
 
         # And the key should be removed from redis
-        assert redis_fixture.client.get(redis_lock_fixture.lock.lock_key) is None
+        assert redis_fixture.client.get(redis_lock_fixture.lock.key) is None
 
     def test_extend_timeout(
         self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
@@ -84,12 +84,12 @@ class TestRedisLock:
 
         # If the lock has a timeout, the acquiring client can extend it, but another client cannot
         assert redis_lock_fixture.lock.acquire()
-        redis_fixture.client.expire(redis_lock_fixture.lock.lock_key, 5)
+        redis_fixture.client.expire(redis_lock_fixture.lock.key, 5)
         assert redis_lock_fixture.other_lock.extend_timeout() is False
         assert redis_lock_fixture.lock.extend_timeout() is True
 
         # The key should have a new timeout
-        assert redis_fixture.client.ttl(redis_lock_fixture.other_lock.lock_key) > 5
+        assert redis_fixture.client.ttl(redis_lock_fixture.other_lock.key) > 5
 
     def test_locked(self, redis_lock_fixture: RedisLockFixture):
         # If the lock is not acquired, it should not be locked
@@ -177,8 +177,8 @@ class TestTaskLock:
         # If we don't provide a lock_name, we should use the task name
         mock_task.name = "test_task"
         task_lock = TaskLock(redis_fixture.client, mock_task)
-        assert task_lock.lock_key.endswith("::TaskLock::Task::test_task")
+        assert task_lock.key.endswith("::TaskLock::Task::test_task")
 
         # If we provide a lock_name, we should use that instead
         task_lock = TaskLock(redis_fixture.client, mock_task, lock_name="test_lock")
-        assert task_lock.lock_key.endswith("::TaskLock::test_lock")
+        assert task_lock.key.endswith("::TaskLock::test_lock")

@@ -62,7 +62,7 @@ class BaseRedisLock(ABC):
 
     @property
     @abstractmethod
-    def lock_key(self) -> str:
+    def key(self) -> str:
         """
         Return the key used to store the lock in Redis.
 
@@ -141,7 +141,7 @@ class RedisLock(BaseRedisLock):
         self.extend_script = self._redis_client.register_script(self._EXTEND_SCRIPT)
 
     @cached_property
-    def lock_key(self) -> str:
+    def key(self) -> str:
         return self._redis_client.get_key(self._lock_type, *self._lock_name)
 
     @property
@@ -152,7 +152,7 @@ class RedisLock(BaseRedisLock):
         previous_value = cast(
             str | None,
             self._redis_client.set(
-                self.lock_key,
+                self.key,
                 self._random_value,
                 nx=True,
                 px=self._lock_timeout,
@@ -192,9 +192,7 @@ class RedisLock(BaseRedisLock):
         return False
 
     def release(self) -> bool:
-        ret_val: int = self.unlock_script(
-            keys=(self.lock_key,), args=(self._random_value,)
-        )
+        ret_val: int = self.unlock_script(keys=(self.key,), args=(self._random_value,))
         return ret_val == 1
 
     def extend_timeout(self) -> bool:
@@ -204,12 +202,12 @@ class RedisLock(BaseRedisLock):
 
         timout_ms = int(self._lock_timeout.total_seconds() * 1000)
         ret_val: int = self.extend_script(
-            keys=(self.lock_key,), args=(self._random_value, timout_ms)
+            keys=(self.key,), args=(self._random_value, timout_ms)
         )
         return ret_val == 1
 
     def locked(self, by_us: bool = False) -> bool:
-        key_value = self._redis_client.get(self.lock_key)
+        key_value = self._redis_client.get(self.key)
         if by_us:
             return key_value == self._random_value
         return key_value is not None
