@@ -4,12 +4,7 @@ from unittest.mock import create_autospec
 import pytest
 
 from palace.manager.celery.task import Task
-from palace.manager.service.redis.models.lock import (
-    LockError,
-    LockReturn,
-    RedisLock,
-    TaskLock,
-)
+from palace.manager.service.redis.models.lock import LockError, RedisLock, TaskLock
 from tests.fixtures.redis import RedisFixture
 
 
@@ -19,10 +14,10 @@ class RedisLockFixture:
 
         self.lock = RedisLock(self.redis_fixture.client, "test_lock")
         self.other_lock = RedisLock(
-            self.redis_fixture.client, "test_lock", timeout=timedelta(seconds=1)
+            self.redis_fixture.client, "test_lock", lock_timeout=timedelta(seconds=1)
         )
         self.no_timeout_lock = RedisLock(
-            self.redis_fixture.client, "test_lock", timeout=None
+            self.redis_fixture.client, "test_lock", lock_timeout=None
         )
 
 
@@ -32,7 +27,7 @@ def redis_lock_fixture(redis_fixture: RedisFixture):
 
 
 class TestRedisLock:
-    def test_acquire_non_blocking(
+    def test_acquire(
         self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
     ):
         # We can acquire the lock. And acquiring the lock sets a timeout on the key, so the lock
@@ -51,17 +46,17 @@ class TestRedisLock:
         assert not redis_lock_fixture.other_lock.acquire()
 
     def test_acquire_blocking(self, redis_lock_fixture: RedisLockFixture):
-        # If you specify a timeout without blocking, you should get an error
+        # If you specify a negative timeout, you should get an error
         with pytest.raises(LockError):
-            redis_lock_fixture.lock.acquire(blocking=False, timeout=5)
+            redis_lock_fixture.lock.acquire_blocking(timeout=-5)
 
-        # If you acquire the lock with blocking, it will block until the lock is available or times out
+        # If you acquire the lock with blocking, it will block until the lock is available or times out.
+        # Because the lock timeout on other_lock is 1 second, the first call should fail because its
+        # blocking timeout is 0.1 seconds, but the second call should succeed, since its blocking timeout
+        # is 2 seconds. It will block and wait, then acquire the lock.
         assert redis_lock_fixture.other_lock.acquire()
-        assert (
-            redis_lock_fixture.lock.acquire(blocking=True, timeout=0.1)
-            is LockReturn.timeout
-        )
-        assert redis_lock_fixture.lock.acquire(blocking=True, timeout=2)
+        assert not redis_lock_fixture.lock.acquire_blocking(timeout=0.1)
+        assert redis_lock_fixture.lock.acquire_blocking(timeout=2)
 
     def test_release(
         self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
@@ -124,10 +119,10 @@ class TestRedisLock:
             with redis_lock_fixture.lock.lock() as acquired:
                 assert not acquired
 
-        # If the lock is extended, the context manager returns LockReturn.extended
+        # If the lock is extended, the context manager returns True
         redis_lock_fixture.lock.acquire()
         with redis_lock_fixture.lock.lock() as acquired:
-            assert acquired is LockReturn.extended
+            assert acquired
             assert redis_lock_fixture.lock.locked() is True
         # Exiting the inner context manager should release the lock
         assert redis_lock_fixture.lock.locked() is False
@@ -168,15 +163,6 @@ class TestRedisLock:
             assert acquired
             assert redis_lock_fixture.lock.locked() is True
         assert redis_lock_fixture.lock.locked() is not release_on_exit
-
-
-class TestLockReturn:
-    def test_boolean(self):
-        # Acquired and extended should be truthy, failed and timeout should be falsy
-        assert bool(LockReturn.acquired) is True
-        assert bool(LockReturn.extended) is True
-        assert bool(LockReturn.failed) is False
-        assert bool(LockReturn.timeout) is False
 
 
 class TestTaskLock:
