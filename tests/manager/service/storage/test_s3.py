@@ -186,10 +186,14 @@ class TestS3Service:
     def test_multipart_upload(self, s3_service_fixture: S3ServiceFixture):
         service = s3_service_fixture.service()
 
-        # Successful upload
-        with service.multipart(key="key") as upload:
-            assert upload.client == s3_service_fixture.mock_s3_client
-            assert upload.bucket == s3_service_fixture.bucket
+        with (ctx := service.multipart(key="key")) as upload:
+            # You are not allowed to nest the multipart upload context manager.
+            with pytest.raises(RuntimeError):
+                with ctx:
+                    pass
+
+            # Successful upload
+            assert upload._service == service
             assert upload.key == "key"
             assert upload.parts == []
 
