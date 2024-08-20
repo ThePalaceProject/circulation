@@ -209,8 +209,8 @@ class TestS3Service:
 
             assert len(upload.parts) == 2
             [part1, part2] = upload.parts
-            assert part1.PartNumber == 1
-            assert part2.PartNumber == 2
+            assert part1.part_number == 1
+            assert part2.part_number == 2
 
             s3_service_fixture.mock_s3_client.complete_multipart_upload.assert_not_called()
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import sys
 from functools import cached_property
 from io import BytesIO
@@ -10,6 +9,7 @@ from typing import TYPE_CHECKING, BinaryIO
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
+from pydantic import BaseModel, Field
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.util.log import LoggerMixin
@@ -23,10 +23,13 @@ if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
 
 
-@dataclasses.dataclass
-class MultipartS3UploadPart:
-    ETag: str
-    PartNumber: int
+class MultipartS3UploadPart(BaseModel):
+    etag: str = Field(..., alias="ETag")
+    part_number: int = Field(..., alias="PartNumber")
+
+    class Config:
+        allow_population_by_field_name = True
+        frozen = True
 
 
 class MultipartS3ContextManager(LoggerMixin):
@@ -220,7 +223,7 @@ class S3Service(LoggerMixin):
             PartNumber=part_number,
             UploadId=upload_id,
         )
-        return MultipartS3UploadPart(result["ETag"], part_number)
+        return MultipartS3UploadPart(etag=result["ETag"], part_number=part_number)
 
     def multipart_complete(
         self, key: str, upload_id: str, parts: list[MultipartS3UploadPart]
@@ -232,7 +235,7 @@ class S3Service(LoggerMixin):
             Bucket=self.bucket,
             Key=key,
             UploadId=upload_id,
-            MultipartUpload=dict(Parts=[dataclasses.asdict(part) for part in parts]),  # type: ignore[misc]
+            MultipartUpload=dict(Parts=[part.dict(by_alias=True) for part in parts]),  # type: ignore[misc]
         )
 
     def multipart_abort(self, key: str, upload_id: str) -> None:
