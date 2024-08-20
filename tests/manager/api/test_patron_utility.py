@@ -122,6 +122,25 @@ class TestPatronUtility:
         patron.block_reason = None
         assert True == PatronUtility.has_borrowing_privileges(patron)
 
+        patron.block_reason = PatronData.NO_VALUE
+        assert True == PatronUtility.has_borrowing_privileges(patron)
+
+    def test_has_borrowing_privileges_when_block_reason_is_set_to_NO_VALUE(
+        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
+    ):
+        # Test the has_excess_fines method.
+        library = library_fixture.library()
+        patron = db.patron(library=library)
+        settings = library_fixture.settings(library)
+        patron.fines = 10.0
+        settings.max_outstanding_fines = 9.0
+        patron.block_reason = PatronData.NO_VALUE
+        assert PatronUtility.has_borrowing_privileges(patron) is True
+
+        # if block reason is unset, then deny borrowing privileges when excess fines present.
+        patron.block_reason = None
+        assert PatronUtility.has_borrowing_privileges(patron) is False
+
     def test_has_excess_fines(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):

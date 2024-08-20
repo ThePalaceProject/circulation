@@ -3,6 +3,7 @@ import datetime
 import dateutil
 from money import Money
 
+from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.circulation_exceptions import (
     AuthorizationBlocked,
     AuthorizationExpired,
@@ -69,26 +70,20 @@ class PatronUtility:
         :raises OutstandingFines: If the patron has too many outstanding fines.
 
         """
+        if patron.block_reason == PatronData.NO_VALUE:
+            return
+
         if not cls.authorization_is_active(patron):
             # The patron's card has expired.
             raise AuthorizationExpired()
 
-        if cls.has_excess_fines(patron):
+        if patron.block_reason is PatronData.EXCESSIVE_FINES or cls.has_excess_fines(
+            patron
+        ):
             raise OutstandingFines(fines=patron.fines)
-
-        from palace.manager.api.authentication.base import PatronData
 
         if patron.block_reason is None:
             return
-
-        if patron.block_reason == PatronData.NO_VALUE:
-            return
-
-        if patron.block_reason is PatronData.EXCESSIVE_FINES:
-            # The authentication mechanism itself may know that
-            # the patron has outstanding fines, even if the circulation
-            # manager is not configured to make that deduction.
-            raise OutstandingFines(fines=patron.fines)
 
         raise AuthorizationBlocked()
 
@@ -99,6 +94,7 @@ class PatronUtility:
         :param a Patron:
         :return: A boolean
         """
+
         if not patron.fines:
             return False
 
