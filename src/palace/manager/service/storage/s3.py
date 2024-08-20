@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import dataclasses
 import sys
+from functools import cached_property
 from io import BytesIO
 from string import Formatter
 from types import TracebackType
@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, BinaryIO
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
+from pydantic import BaseModel, Field
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.util.log import LoggerMixin
@@ -20,45 +21,36 @@ else:
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
-    from mypy_boto3_s3.type_defs import CreateMultipartUploadOutputTypeDef
 
 
-@dataclasses.dataclass
-class MultipartS3UploadPart:
-    ETag: str
-    PartNumber: int
+class MultipartS3UploadPart(BaseModel):
+    etag: str = Field(..., alias="ETag")
+    part_number: int = Field(..., alias="PartNumber")
+
+    class Config:
+        allow_population_by_field_name = True
+        frozen = True
 
 
 class MultipartS3ContextManager(LoggerMixin):
     def __init__(
         self,
-        client: S3Client,
-        bucket: str,
+        service: S3Service,
         key: str,
-        url: str,
         media_type: str | None = None,
     ) -> None:
-        self.client = client
+        self._service = service
         self.key = key
-        self.bucket = bucket
-        self.part_number = 1
         self.parts: list[MultipartS3UploadPart] = []
         self.media_type = media_type
-        self.upload: CreateMultipartUploadOutputTypeDef | None = None
         self.upload_id: str | None = None
         self._complete = False
-        self._url = url
         self._exception: BaseException | None = None
 
     def __enter__(self) -> Self:
-        params = {
-            "Bucket": self.bucket,
-            "Key": self.key,
-        }
-        if self.media_type is not None:
-            params["ContentType"] = self.media_type
-        self.upload = self.client.create_multipart_upload(**params)  # type: ignore[arg-type]
-        self.upload_id = self.upload["UploadId"]
+        if self.upload_id is not None:
+            raise RuntimeError("Upload already in progress.")
+        self.upload_id = self._service.multipart_create(self.key, self.media_type)
         return self
 
     def __exit__(
@@ -82,18 +74,10 @@ class MultipartS3ContextManager(LoggerMixin):
         if self.complete or self.exception or self.upload_id is None:
             raise RuntimeError("Upload already complete or aborted.")
 
-        self.log.info(
-            f"Uploading part {self.part_number} of {self.key} to {self.bucket}"
+        result = self._service.multipart_upload(
+            self.key, self.upload_id, len(self.parts) + 1, content
         )
-        result = self.client.upload_part(
-            Body=content,
-            Bucket=self.bucket,
-            Key=self.key,
-            PartNumber=self.part_number,
-            UploadId=self.upload_id,
-        )
-        self.parts.append(MultipartS3UploadPart(result["ETag"], self.part_number))
-        self.part_number += 1
+        self.parts.append(result)
 
     def _upload_complete(self) -> None:
         if not self.parts:
@@ -102,28 +86,19 @@ class MultipartS3ContextManager(LoggerMixin):
         elif self.upload_id is None:
             raise RuntimeError("Upload ID not set.")
         else:
-            self.client.complete_multipart_upload(
-                Bucket=self.bucket,
-                Key=self.key,
-                UploadId=self.upload_id,
-                MultipartUpload=dict(Parts=[dataclasses.asdict(part) for part in self.parts]),  # type: ignore[misc]
-            )
+            self._service.multipart_complete(self.key, self.upload_id, self.parts)
             self._complete = True
 
     def _upload_abort(self) -> None:
-        self.log.info(f"Aborting upload of {self.key}.")
-        if self.upload_id is not None:
-            self.client.abort_multipart_upload(
-                Bucket=self.bucket,
-                Key=self.key,
-                UploadId=self.upload_id,
-            )
-        else:
+        if self.upload_id is None:
             self.log.error("Upload ID not set, unable to abort.")
+            return
 
-    @property
+        self._service.multipart_abort(self.key, self.upload_id)
+
+    @cached_property
     def url(self) -> str:
-        return self._url
+        return self._service.generate_url(self.key)
 
     @property
     def complete(self) -> bool:
@@ -225,7 +200,48 @@ class S3Service(LoggerMixin):
     def multipart(
         self, key: str, content_type: str | None = None
     ) -> MultipartS3ContextManager:
-        url = self.generate_url(key)
-        return MultipartS3ContextManager(
-            self.client, self.bucket, key, url, content_type
+        return MultipartS3ContextManager(self, key, content_type)
+
+    def multipart_create(self, key: str, content_type: str | None = None) -> str:
+        params = {
+            "Bucket": self.bucket,
+            "Key": key,
+        }
+        if content_type is not None:
+            params["ContentType"] = content_type
+        upload = self.client.create_multipart_upload(**params)  # type: ignore[arg-type]
+        return upload["UploadId"]
+
+    def multipart_upload(
+        self, key: str, upload_id: str, part_number: int, content: bytes
+    ) -> MultipartS3UploadPart:
+        self.log.info(f"Uploading part {part_number} of {key} to {self.bucket}")
+        result = self.client.upload_part(
+            Body=content,
+            Bucket=self.bucket,
+            Key=key,
+            PartNumber=part_number,
+            UploadId=upload_id,
+        )
+        return MultipartS3UploadPart(etag=result["ETag"], part_number=part_number)
+
+    def multipart_complete(
+        self, key: str, upload_id: str, parts: list[MultipartS3UploadPart]
+    ) -> None:
+        self.log.info(
+            f"Completing multipart upload of {key} to {self.bucket} ({len(parts)} parts)."
+        )
+        self.client.complete_multipart_upload(
+            Bucket=self.bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload=dict(Parts=[part.dict(by_alias=True) for part in parts]),  # type: ignore[misc]
+        )
+
+    def multipart_abort(self, key: str, upload_id: str) -> None:
+        self.log.info(f"Aborting multipart upload of {key} to {self.bucket}.")
+        self.client.abort_multipart_upload(
+            Bucket=self.bucket,
+            Key=key,
+            UploadId=upload_id,
         )

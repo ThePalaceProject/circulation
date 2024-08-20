@@ -106,6 +106,7 @@ class S3ServiceProtocol(Protocol):
 class S3ServiceFixture:
     def __init__(self):
         self.mock_s3_client = MagicMock()
+        self.mock_s3_client.upload_part = MagicMock(return_value={"ETag": "xyz"})
         self.region = "region"
         self.url_template = "https://{region}.test.com/{bucket}/{key}"
         self.bucket = "bucket"
