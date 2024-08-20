@@ -9,6 +9,7 @@ import pytest
 from flask import Flask, Response, make_response
 from flask_babel import Babel
 from flask_babel import lazy_gettext as _
+from freezegun import freeze_time
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture
 
@@ -618,6 +619,7 @@ class TestErrorHandler:
 class TestCompressibleAnnotator:
     """Test the @compressible annotator."""
 
+    @freeze_time()
     def test_compressible(self):
         # Test the @compressible annotator.
         app = Flask(__name__)
