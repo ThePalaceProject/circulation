@@ -4920,13 +4920,13 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 
 [[package]]
 name = "watchtower"
-version = "3.2.0"
+version = "3.3.1"
 description = "Python CloudWatch Logging"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "watchtower-3.2.0-py3-none-any.whl", hash = "sha256:3c41396e022dd48af2261737d3e78edaaa2d1c60ad59704fc7e2524ddfe50bfb"},
-    {file = "watchtower-3.2.0.tar.gz", hash = "sha256:7d515b2d0ae0d36168d3b32937e7f79c19b3efd25bbd16bcda233a092666b98c"},
+    {file = "watchtower-3.3.1-py3-none-any.whl", hash = "sha256:72d4f3f2ec906302e0478c042a2076611eb22f5a491ceda6411fec531aa2ee85"},
+    {file = "watchtower-3.3.1.tar.gz", hash = "sha256:5e654f52b54b39e279592d6c18a033b22cfbffda676f5b3cf6dfef712ed5738c"},
 ]
 
 [package.dependencies]
@@ -5125,4 +5125,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "5a3199e3abacfa90a192829ede962ea039d36ac4aa99f765fd3dad9cd12b7929"
+content-hash = "0733153c25bf8a37ba1661c2b13301ea3a4fbf79b851ab22fa4d703ee99ea33b"
