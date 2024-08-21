@@ -272,7 +272,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
         )
         combined_sq = combined.subquery()
 
-        query4 = self._db.query(
+        return self._db.query(
             combined_sq.c.identifier_str,
             combined_sq.c.collection_name,
             combined_sq.c.library_name,
@@ -285,8 +285,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
             combined_sq.c.library_name,
             combined_sq.c.identifier_str,
         )
-        results = query4.all()
-        return results
 
 
 def _produce_report(writer: Writer, date_label, records=None) -> None:
