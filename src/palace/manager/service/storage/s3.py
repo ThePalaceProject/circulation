@@ -110,6 +110,8 @@ class MultipartS3ContextManager(LoggerMixin):
 
 
 class S3Service(LoggerMixin):
+    MINIMUM_MULTIPART_UPLOAD_SIZE = 5 * 1024 * 1024  # 5MB
+
     def __init__(
         self,
         client: S3Client,

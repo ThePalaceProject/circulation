@@ -110,7 +110,7 @@ services:
       retries: 5
 
   redis:
-    image: "redis:7"
+    image: "redis/redis-stack-server:7.4.0-v0"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s

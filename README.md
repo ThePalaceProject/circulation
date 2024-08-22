@@ -149,7 +149,7 @@ grant all privileges on database circ to palace;
 Redis is used as the broker for Celery and the caching layer. You can run Redis with docker using the following command:
 
 ```sh
-docker run -d --name redis -p 6379:6379 redis
+docker run -d --name redis -p 6379:6379 redis/redis-stack-server
 ```
 
 ### Environment variables

@@ -79,19 +79,29 @@ class RedisPrefixCheckMixin(ABC):
             RedisCommandArgs("KEYS"),
             RedisCommandArgs("GET"),
             RedisCommandArgs("EXPIRE"),
+            RedisCommandArgs("PEXPIRE"),
             RedisCommandArgs("GETRANGE"),
             RedisCommandArgs("SET"),
             RedisCommandArgs("TTL"),
             RedisCommandArgs("PTTL"),
+            RedisCommandArgs("PTTL"),
             RedisCommandArgs("SADD"),
             RedisCommandArgs("SPOP"),
             RedisCommandArgs("SCARD"),
+            RedisCommandArgs("WATCH"),
             RedisCommandArgs("SRANDMEMBER"),
             RedisCommandArgs("SREM"),
             RedisCommandArgs("DEL", args_end=None),
             RedisCommandArgs("MGET", args_end=None),
             RedisCommandArgs("EXISTS", args_end=None),
             RedisCommandArgs("EXPIRETIME"),
+            RedisCommandArgs("JSON.SET"),
+            RedisCommandArgs("JSON.STRLEN"),
+            RedisCommandArgs("JSON.STRAPPEND"),
+            RedisCommandArgs("JSON.NUMINCRBY"),
+            RedisCommandArgs("JSON.GET"),
+            RedisCommandArgs("JSON.OBJKEYS"),
+            RedisCommandArgs("JSON.ARRAPPEND"),
             RedisVariableCommandArgs("EVALSHA", key_index=1),
         ]
     }
@@ -161,3 +171,6 @@ class Pipeline(RedisPipeline, RedisPrefixCheckMixin):
     def execute_command(self, *args: Any, **options: Any) -> Any:
         self._check_prefix(*args)
         return super().execute_command(*args, **options)
+
+    def __enter__(self) -> Pipeline:
+        return self

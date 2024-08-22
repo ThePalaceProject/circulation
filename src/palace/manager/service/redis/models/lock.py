@@ -1,11 +1,12 @@
+import json
 import random
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import cached_property
-from typing import cast
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 from palace.manager.celery.task import Task
@@ -69,6 +70,18 @@ class BaseRedisLock(ABC):
         :return: The key used to store the lock in Redis.
         """
 
+    def _exception_exit(self) -> None:
+        """
+        Clean up before exiting the context manager, if an exception occurs.
+        """
+        self.release()
+
+    def _normal_exit(self) -> None:
+        """
+        Clean up before exiting the context manager, if no exception occurs.
+        """
+        self.release()
+
     @contextmanager
     def lock(
         self,
@@ -94,10 +107,10 @@ class BaseRedisLock(ABC):
                 exception_occurred = True
             raise
         finally:
-            if (release_on_error and exception_occurred) or (
-                release_on_exit and not exception_occurred
-            ):
-                self.release()
+            if release_on_error and exception_occurred:
+                self._exception_exit()
+            elif release_on_exit and not exception_occurred:
+                self._normal_exit()
 
 
 class RedisLock(BaseRedisLock):
@@ -232,3 +245,182 @@ class TaskLock(RedisLock):
         else:
             name = [lock_name]
         super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)
+
+
+class RedisJsonLock(BaseRedisLock, ABC):
+    _ACQUIRE_SCRIPT = """
+        -- If the locks json object doesn't exist, create it with the initial value
+        redis.call("json.set", KEYS[1], "$", ARGV[4], "nx")
+
+        -- Get the current lock value
+        local lock_value = cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1]
+        if not lock_value then
+            -- The lock isn't currently locked, so we lock it and set the timeout
+            redis.call("json.set", KEYS[1], ARGV[1], cjson.encode(ARGV[2]))
+            redis.call("pexpire", KEYS[1], ARGV[3])
+            return 1
+        elseif lock_value == ARGV[2] then
+            -- The lock is already held by us, so we extend the timeout
+            redis.call("pexpire", KEYS[1], ARGV[3])
+            return 2
+        else
+            -- The lock is held by someone else, we do nothing
+            return nil
+        end
+    """
+
+    _RELEASE_SCRIPT = """
+        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+            redis.call("json.del", KEYS[1], ARGV[1])
+            return 1
+        else
+            return nil
+        end
+    """
+
+    _EXTEND_SCRIPT = """
+        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+            redis.call("pexpire", KEYS[1], ARGV[3])
+            return 1
+        else
+            return nil
+        end
+    """
+
+    _DELETE_SCRIPT = """
+        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+            redis.call("del", KEYS[1])
+            return 1
+        else
+            return nil
+        end
+    """
+
+    def __init__(
+        self,
+        redis_client: Redis,
+        random_value: str | None = None,
+    ):
+        super().__init__(redis_client, random_value)
+
+        # Register our scripts
+        self._acquire_script = self._redis_client.register_script(self._ACQUIRE_SCRIPT)
+        self._release_script = self._redis_client.register_script(self._RELEASE_SCRIPT)
+        self._extend_script = self._redis_client.register_script(self._EXTEND_SCRIPT)
+        self._delete_script = self._redis_client.register_script(self._DELETE_SCRIPT)
+
+    @property
+    @abstractmethod
+    def _lock_timeout_ms(self) -> int:
+        """
+        The lock timeout in milliseconds.
+        """
+        ...
+
+    @property
+    def _lock_json_key(self) -> str:
+        """
+        The key to use for the lock value in the JSON object.
+
+        This can be overridden if you need to store the lock value in a different key. It should
+        be a Redis JSONPath.
+        See: https://redis.io/docs/latest/develop/data-types/json/path/
+        """
+        return "$.lock"
+
+    @property
+    def _initial_value(self) -> str:
+        """
+        The initial value to use for the locks JSON object.
+        """
+        return json.dumps({})
+
+    T = TypeVar("T")
+
+    @classmethod
+    def _parse_multi(
+        cls, value: Mapping[str, Sequence[T]] | None
+    ) -> dict[str, T | None]:
+        if value is None:
+            return {}
+        return {k: cls._parse_value(v) for k, v in value.items()}
+
+    @staticmethod
+    def _parse_value(value: Sequence[T] | None) -> T | None:
+        if value is None:
+            return None
+        try:
+            return value[0]
+        except IndexError:
+            return None
+
+    @classmethod
+    def _parse_value_or_raise(cls, value: Sequence[T] | None) -> T:
+        parsed_value = cls._parse_value(value)
+        if parsed_value is None:
+            raise LockError(f"Could not parse value ({json.dumps(value)})")
+        return parsed_value
+
+    def _get_value(self, json_key: str) -> Any | None:
+        value = self._redis_client.json().get(self.key, json_key)
+        if value is None or len(value) != 1:
+            return None
+        return value[0]
+
+    def acquire(self) -> bool:
+        return (
+            self._acquire_script(
+                keys=(self.key,),
+                args=(
+                    self._lock_json_key,
+                    self._random_value,
+                    self._lock_timeout_ms,
+                    self._initial_value,
+                ),
+            )
+            is not None
+        )
+
+    def release(self) -> bool:
+        """
+        Release the lock.
+
+        You must have the lock to release it. This will unset the lock value in the JSON object, but importantly
+        it will not delete the JSON object itself. If you want to delete the JSON object, use the delete method.
+        """
+        return (
+            self._release_script(
+                keys=(self.key,),
+                args=(self._lock_json_key, self._random_value),
+            )
+            is not None
+        )
+
+    def locked(self, by_us: bool = False) -> bool:
+        lock_value: str | None = self._parse_value(
+            self._redis_client.json().get(self.key, self._lock_json_key)
+        )
+        if by_us:
+            return lock_value == self._random_value
+        return lock_value is not None
+
+    def extend_timeout(self) -> bool:
+        return (
+            self._extend_script(
+                keys=(self.key,),
+                args=(self._lock_json_key, self._random_value, self._lock_timeout_ms),
+            )
+            is not None
+        )
+
+    def delete(self) -> bool:
+        """
+        Delete the whole json object, including the lock. Must have the lock to delete the object.
+        """
+        return (
+            self._delete_script(
+                keys=(self.key,),
+                args=(self._lock_json_key, self._random_value),
+            )
+            is not None
+        )
