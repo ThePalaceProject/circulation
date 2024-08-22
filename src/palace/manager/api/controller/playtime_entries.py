@@ -72,7 +72,7 @@ class PlaytimeEntriesController(CirculationManagerController):
             .order_by(Loan.start.desc())
         ).first()
 
-        loan_identifier = self.resolve_loan_identifier(
+        loan_identifier = resolve_loan_identifier(
             loan=loan, patron=flask.request.patron
         )
 
