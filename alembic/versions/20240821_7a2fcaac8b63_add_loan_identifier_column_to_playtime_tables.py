@@ -28,10 +28,11 @@ def upgrade() -> None:
     op.drop_constraint(
         "unique_playtime_entry",
         "playtime_entries",
+        type_="unique",
     )
 
     op.create_unique_constraint(
-        "unique_playtime_entry",
+        "unique_playtime_entry_with_loan_identifier",
         "playtime_entries",
         [
             "tracking_id",
@@ -50,10 +51,11 @@ def upgrade() -> None:
     op.drop_constraint(
         "unique_playtime_summary",
         "playtime_summaries",
+        type_="unique",
     )
 
     op.create_unique_constraint(
-        "unique_playtime_summary",
+        "unique_playtime_summary_with_loan_identifier",
         "playtime_summaries",
         [
             "timestamp",
@@ -70,8 +72,9 @@ def downgrade() -> None:
     conn = session.connection()
 
     op.drop_constraint(
-        "unique_playtime_entry",
+        "unique_playtime_entry_with_loan_identifier",
         "playtime_entries",
+        type_="unique",
     )
 
     op.drop_column("playtime_entries", "loan_identifier")
@@ -89,8 +92,9 @@ def downgrade() -> None:
     )
 
     op.drop_constraint(
-        "unique_playtime_summary",
+        "unique_playtime_summary_with_loan_identifier",
         "playtime_summaries",
+        type_="unique",
     )
 
     op.drop_column("playtime_summaries", "loan_identifier")
