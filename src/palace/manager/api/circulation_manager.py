@@ -343,7 +343,10 @@ class CirculationManager(LoggerMixin):
         """
         self.index_controller = IndexController(self)
         self.opds_feeds = OPDSFeedController(self)
-        self.marc_records = MARCRecordController(self.services.storage.public())
+        self.marc_records = MARCRecordController(
+            self.services.storage.public(),
+            self.services.integration_registry.catalog_services(),
+        )
         self.loans = LoanController(self)
         self.annotations = AnnotationController(self)
         self.urn_lookup = URNLookupController(self)

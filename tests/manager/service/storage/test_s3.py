@@ -1,28 +1,15 @@
 from __future__ import annotations
 
 import functools
-import uuid
-from collections.abc import Generator
 from io import BytesIO
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from pydantic import AnyHttpUrl
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.configuration.service_configuration import (
-    ServiceConfiguration,
-)
-from palace.manager.service.storage.container import Storage
 from palace.manager.service.storage.s3 import S3Service
-from tests.fixtures.config import FixtureTestUrlConfiguration
-
-if TYPE_CHECKING:
-    from mypy_boto3_s3 import S3Client
-
-    from tests.fixtures.s3 import S3ServiceFixture
+from tests.fixtures.s3 import S3ServiceFixture, S3ServiceIntegrationFixture
 
 
 class TestS3Service:
@@ -237,88 +224,6 @@ class TestS3Service:
 
         with pytest.raises(RuntimeError):
             upload.upload_part(b"foo")
-
-
-class S3UploaderIntegrationConfiguration(FixtureTestUrlConfiguration):
-    url: AnyHttpUrl
-    user: str
-    password: str
-
-    class Config(ServiceConfiguration.Config):
-        env_prefix = "PALACE_TEST_MINIO_"
-
-
-class S3ServiceIntegrationFixture:
-    def __init__(self):
-        self.container = Storage()
-        self.configuration = S3UploaderIntegrationConfiguration.from_env()
-        self.analytics_bucket = self.random_name("analytics")
-        self.public_access_bucket = self.random_name("public")
-        self.container.config.from_dict(
-            {
-                "access_key": self.configuration.user,
-                "secret_key": self.configuration.password,
-                "endpoint_url": self.configuration.url,
-                "region": "us-east-1",
-                "analytics_bucket": self.analytics_bucket,
-                "public_access_bucket": self.public_access_bucket,
-                "url_template": self.configuration.url + "/{bucket}/{key}",
-            }
-        )
-        self.buckets = []
-        self.create_buckets()
-
-    @classmethod
-    def random_name(cls, prefix: str = "test"):
-        return f"{prefix}-{uuid.uuid4()}"
-
-    @property
-    def s3_client(self) -> S3Client:
-        return self.container.s3_client()
-
-    @property
-    def public(self) -> S3Service:
-        return self.container.public()
-
-    @property
-    def analytics(self) -> S3Service:
-        return self.container.analytics()
-
-    def create_bucket(self, bucket_name: str) -> None:
-        client = self.s3_client
-        client.create_bucket(Bucket=bucket_name)
-        self.buckets.append(bucket_name)
-
-    def get_bucket(self, bucket_name: str) -> str:
-        if bucket_name == "public":
-            return self.public_access_bucket
-        elif bucket_name == "analytics":
-            return self.analytics_bucket
-        else:
-            raise ValueError(f"Unknown bucket name: {bucket_name}")
-
-    def create_buckets(self) -> None:
-        for bucket in [self.analytics_bucket, self.public_access_bucket]:
-            self.create_bucket(bucket)
-
-    def close(self):
-        for bucket in self.buckets:
-            response = self.s3_client.list_objects(Bucket=bucket)
-
-            for object in response.get("Contents", []):
-                object_key = object["Key"]
-                self.s3_client.delete_object(Bucket=bucket, Key=object_key)
-
-            self.s3_client.delete_bucket(Bucket=bucket)
-
-
-@pytest.fixture
-def s3_service_integration_fixture() -> (
-    Generator[S3ServiceIntegrationFixture, None, None]
-):
-    fixture = S3ServiceIntegrationFixture()
-    yield fixture
-    fixture.close()
 
 
 @pytest.mark.minio

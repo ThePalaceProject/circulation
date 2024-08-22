@@ -253,6 +253,9 @@ class TestJsonLock:
         json_lock_fixture.assert_locked(json_lock_fixture.lock)
 
     def test_release(self, json_lock_fixture: JsonLockFixture):
+        # If the lock doesn't exist, we can't release it
+        assert json_lock_fixture.lock.release() is False
+
         # If you acquire a lock another client cannot release it
         assert json_lock_fixture.lock.acquire()
         assert json_lock_fixture.other_lock.release() is False
@@ -267,6 +270,8 @@ class TestJsonLock:
         assert json_lock_fixture.get_key(json_lock_fixture.lock.key, "$") == {}
 
     def test_delete(self, json_lock_fixture: JsonLockFixture):
+        assert json_lock_fixture.lock.delete() is False
+
         # If you acquire a lock another client cannot delete it
         assert json_lock_fixture.lock.acquire()
         assert json_lock_fixture.other_lock.delete() is False
@@ -282,6 +287,8 @@ class TestJsonLock:
         assert json_lock_fixture.get_key(json_lock_fixture.lock.key, "$") is None
 
     def test_extend_timeout(self, json_lock_fixture: JsonLockFixture):
+        assert json_lock_fixture.lock.extend_timeout() is False
+
         # If the lock has a timeout, the acquiring client can extend it, but another client cannot
         assert json_lock_fixture.lock.acquire()
         json_lock_fixture.client.pexpire(json_lock_fixture.lock.key, 500)
@@ -307,3 +314,22 @@ class TestJsonLock:
         assert json_lock_fixture.lock.release() is True
         assert json_lock_fixture.lock.locked() is False
         assert json_lock_fixture.other_lock.locked() is False
+
+    def test__parse_value(self):
+        assert RedisJsonLock._parse_value(None) is None
+        assert RedisJsonLock._parse_value([]) is None
+        assert RedisJsonLock._parse_value(["value"]) == "value"
+
+    def test__parse_multi(self):
+        assert RedisJsonLock._parse_multi(None) == {}
+        assert RedisJsonLock._parse_multi({}) == {}
+        assert RedisJsonLock._parse_multi(
+            {"key": ["value"], "key2": ["value2"], "key3": []}
+        ) == {"key": "value", "key2": "value2", "key3": None}
+
+    def test__parse_value_or_raise(self):
+        with pytest.raises(LockError):
+            RedisJsonLock._parse_value_or_raise(None)
+        with pytest.raises(LockError):
+            RedisJsonLock._parse_value_or_raise([])
+        assert RedisJsonLock._parse_value_or_raise(["value"]) == "value"

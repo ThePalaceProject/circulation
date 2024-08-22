@@ -1,0 +1,142 @@
+from collections import defaultdict
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager
+
+from celery.exceptions import Ignore, Retry
+from typing_extensions import Self
+
+from palace.manager.service.redis.models.marc import MarcFileUploads
+from palace.manager.service.storage.s3 import S3Service
+from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.util.log import LoggerMixin
+
+
+class MarcUploader(LoggerMixin):
+    """
+    This class is used to manage the upload of MARC files to S3. The upload is done in multiple
+    parts, so that the Celery task can be broken up into multiple steps, saving the progress
+    between steps to redis, and flushing them to S3 when the buffer is large enough.
+
+    This class orchestrates the upload process, delegating the redis operation to the
+    `MarcFileUploads` class, and the S3 upload to the `S3Service` class.
+    """
+
+    def __init__(self, storage_service: S3Service, marc_uploads: MarcFileUploads):
+        self.storage_service = storage_service
+        self.marc_uploads = marc_uploads
+        self._buffers: defaultdict[str, str] = defaultdict(str)
+        self._locked = False
+
+    @property
+    def locked(self) -> bool:
+        return self._locked
+
+    @property
+    def update_number(self) -> int:
+        return self.marc_uploads.update_number
+
+    def add_record(self, key: str, record: bytes) -> None:
+        self._buffers[key] += record.decode()
+
+    def _s3_sync(self, needs_upload: Sequence[str]) -> None:
+        upload_ids = self.marc_uploads.get_upload_ids(needs_upload)
+        for key in needs_upload:
+            if upload_ids.get(key) is None:
+                upload_id = self.storage_service.multipart_create(
+                    key, content_type=Representation.MARC_MEDIA_TYPE
+                )
+                self.marc_uploads.set_upload_id(key, upload_id)
+                upload_ids[key] = upload_id
+
+            part_number, data = self.marc_uploads.get_part_num_and_buffer(key)
+            upload_part = self.storage_service.multipart_upload(
+                key, upload_ids[key], part_number, data.encode()
+            )
+            self.marc_uploads.add_part_and_clear_buffer(key, upload_part)
+
+    def sync(self) -> None:
+        # First sync our buffers to redis
+        buffer_lengths = self.marc_uploads.append_buffers(self._buffers)
+        self._buffers.clear()
+
+        # Then, if any of our redis buffers are large enough, upload them to S3
+        needs_upload = [
+            key
+            for key, length in buffer_lengths.items()
+            if length > self.storage_service.MINIMUM_MULTIPART_UPLOAD_SIZE
+        ]
+
+        if not needs_upload:
+            return
+
+        self._s3_sync(needs_upload)
+
+    def _abort(self) -> None:
+        in_progress = self.marc_uploads.get()
+        for key, upload in in_progress.items():
+            if upload.upload_id is None:
+                # This upload has not started, so there is nothing to abort.
+                continue
+            try:
+                self.storage_service.multipart_abort(key, upload.upload_id)
+            except Exception as e:
+                # We log and keep going, since we want to abort as many uploads as possible
+                # even if some fail, this is likely already being called in an exception handler.
+                # So we want to do as much cleanup as possible.
+                self.log.exception(
+                    f"Failed to abort upload {key} (UploadID: {upload.upload_id}) due to exception ({e})."
+                )
+
+        # Delete our in-progress uploads from redis as well
+        self.delete()
+
+    def complete(self) -> set[str]:
+        # Make sure any local data we have is synced
+        self.sync()
+
+        in_progress = self.marc_uploads.get()
+        for key, upload in in_progress.items():
+            if upload.upload_id is None:
+                # We haven't started the upload. At this point there is no reason to start a
+                # multipart upload, just upload the file directly and continue.
+                self.storage_service.store(
+                    key, upload.buffer, Representation.MARC_MEDIA_TYPE
+                )
+            else:
+                if upload.buffer != "":
+                    # Upload the last chunk if the buffer is not empty, the final part has no
+                    # minimum size requirement.
+                    upload_part = self.storage_service.multipart_upload(
+                        key, upload.upload_id, len(upload.parts), upload.buffer.encode()
+                    )
+                    upload.parts.append(upload_part)
+
+                # Complete the multipart upload
+                self.storage_service.multipart_complete(
+                    key, upload.upload_id, upload.parts
+                )
+
+        # Delete our in-progress uploads data from redis
+        if in_progress:
+            self.marc_uploads.clear_uploads()
+
+        # Return the keys that were uploaded
+        return set(in_progress.keys())
+
+    def delete(self) -> None:
+        self.marc_uploads.delete()
+
+    @contextmanager
+    def begin(self) -> Generator[Self, None, None]:
+        self._locked = self.marc_uploads.acquire()
+        try:
+            yield self
+        except Exception as e:
+            # We want to ignore any celery exceptions that are expected, but
+            # handle cleanup for any other cases.
+            if not isinstance(e, (Retry, Ignore)):
+                self._abort()
+            raise
+        finally:
+            self.marc_uploads.release()
+            self._locked = False

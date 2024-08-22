@@ -6,7 +6,7 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import cached_property
-from typing import Any, TypeVar, cast
+from typing import TypeVar, cast
 from uuid import uuid4
 
 from palace.manager.celery.task import Task
@@ -70,18 +70,6 @@ class BaseRedisLock(ABC):
         :return: The key used to store the lock in Redis.
         """
 
-    def _exception_exit(self) -> None:
-        """
-        Clean up before exiting the context manager, if an exception occurs.
-        """
-        self.release()
-
-    def _normal_exit(self) -> None:
-        """
-        Clean up before exiting the context manager, if no exception occurs.
-        """
-        self.release()
-
     @contextmanager
     def lock(
         self,
@@ -107,10 +95,10 @@ class BaseRedisLock(ABC):
                 exception_occurred = True
             raise
         finally:
-            if release_on_error and exception_occurred:
-                self._exception_exit()
-            elif release_on_exit and not exception_occurred:
-                self._normal_exit()
+            if (release_on_error and exception_occurred) or (
+                release_on_exit and not exception_occurred
+            ):
+                self.release()
 
 
 class RedisLock(BaseRedisLock):
@@ -248,12 +236,23 @@ class TaskLock(RedisLock):
 
 
 class RedisJsonLock(BaseRedisLock, ABC):
-    _ACQUIRE_SCRIPT = """
+    _GET_LOCK_FUNCTION = """
+    local function get_lock_value(key, json_key)
+        local value = redis.call("json.get", key, json_key)
+        if not value then
+            return nil
+        end
+        return cjson.decode(value)[1]
+    end
+    """
+
+    _ACQUIRE_SCRIPT = f"""
+        {_GET_LOCK_FUNCTION}
         -- If the locks json object doesn't exist, create it with the initial value
         redis.call("json.set", KEYS[1], "$", ARGV[4], "nx")
 
         -- Get the current lock value
-        local lock_value = cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1]
+        local lock_value = get_lock_value(KEYS[1], ARGV[1])
         if not lock_value then
             -- The lock isn't currently locked, so we lock it and set the timeout
             redis.call("json.set", KEYS[1], ARGV[1], cjson.encode(ARGV[2]))
@@ -269,8 +268,9 @@ class RedisJsonLock(BaseRedisLock, ABC):
         end
     """
 
-    _RELEASE_SCRIPT = """
-        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+    _RELEASE_SCRIPT = f"""
+        {_GET_LOCK_FUNCTION}
+        if get_lock_value(KEYS[1], ARGV[1]) == ARGV[2] then
             redis.call("json.del", KEYS[1], ARGV[1])
             return 1
         else
@@ -278,8 +278,9 @@ class RedisJsonLock(BaseRedisLock, ABC):
         end
     """
 
-    _EXTEND_SCRIPT = """
-        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+    _EXTEND_SCRIPT = f"""
+        {_GET_LOCK_FUNCTION}
+        if get_lock_value(KEYS[1], ARGV[1]) == ARGV[2] then
             redis.call("pexpire", KEYS[1], ARGV[3])
             return 1
         else
@@ -287,8 +288,9 @@ class RedisJsonLock(BaseRedisLock, ABC):
         end
     """
 
-    _DELETE_SCRIPT = """
-        if cjson.decode(redis.call("json.get", KEYS[1], ARGV[1]))[1] == ARGV[2] then
+    _DELETE_SCRIPT = f"""
+        {_GET_LOCK_FUNCTION}
+        if get_lock_value(KEYS[1], ARGV[1]) == ARGV[2] then
             redis.call("del", KEYS[1])
             return 1
         else
@@ -341,12 +343,20 @@ class RedisJsonLock(BaseRedisLock, ABC):
     def _parse_multi(
         cls, value: Mapping[str, Sequence[T]] | None
     ) -> dict[str, T | None]:
+        """
+        Helper function that makes it easier to work with the results of a JSON GET command,
+        where you request multiple keys.
+        """
         if value is None:
             return {}
         return {k: cls._parse_value(v) for k, v in value.items()}
 
     @staticmethod
     def _parse_value(value: Sequence[T] | None) -> T | None:
+        """
+        Helper function to parse the value from the results of a JSON GET command, where you
+        expect the JSONPath to return a single value.
+        """
         if value is None:
             return None
         try:
@@ -356,16 +366,13 @@ class RedisJsonLock(BaseRedisLock, ABC):
 
     @classmethod
     def _parse_value_or_raise(cls, value: Sequence[T] | None) -> T:
+        """
+        Wrapper around _parse_value that raises an exception if the value is None.
+        """
         parsed_value = cls._parse_value(value)
         if parsed_value is None:
             raise LockError(f"Could not parse value ({json.dumps(value)})")
         return parsed_value
-
-    def _get_value(self, json_key: str) -> Any | None:
-        value = self._redis_client.json().get(self.key, json_key)
-        if value is None or len(value) != 1:
-            return None
-        return value[0]
 
     def acquire(self) -> bool:
         return (
