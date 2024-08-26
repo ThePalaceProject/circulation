@@ -11,7 +11,7 @@
 #
 # Main repo for this image is here:
 # https://github.com/phusion/baseimage-docker
-FROM phusion/baseimage:jammy-1.0.1 As baseimage
+FROM phusion/baseimage:jammy-1.0.1 AS baseimage
 
 # Make sure base system is up to date
 RUN apt-get update && \
@@ -63,7 +63,10 @@ RUN python3 -m venv env && \
     . env/bin/activate && \
     pip install --upgrade pip && \
     poetry install --only main,pg --sync --no-root && \
+    # TODO: This can be removed once NLTK merges https://github.com/sloria/TextBlob/pull/469
+    python3 -m nltk.downloader punkt_tab && \
     python3 -m textblob.download_corpora lite && \
+    rm -rf /root/nltk_data/tokenizers/punkt && \
     mv /root/nltk_data /usr/lib/ && \
     find /usr/lib/nltk_data -name *.zip -delete && \
     rm -Rf /root/.cache && \
