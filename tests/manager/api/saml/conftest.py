@@ -9,6 +9,7 @@ import pytest
 
 from palace.manager.api.saml.configuration.model import (
     SAMLOneLoginConfiguration,
+    SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.api.saml.metadata.model import (
@@ -16,7 +17,6 @@ from palace.manager.api.saml.metadata.model import (
     SAMLServiceProviderMetadata,
 )
 from palace.manager.api.saml.provider import SAMLWebSSOAuthenticationProvider
-from palace.manager.integration.settings import BaseSettings
 from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
 
 if TYPE_CHECKING:
@@ -43,12 +43,13 @@ def create_saml_provider(
     create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
 ) -> Callable[..., SAMLWebSSOAuthenticationProvider]:
     library = controller_fixture.db.default_library()
+    assert library.id is not None
     return partial(
         SAMLWebSSOAuthenticationProvider,
         library_id=library.id,
         integration_id=mock_integration_id,
         settings=create_saml_configuration(),
-        library_settings=BaseSettings(),
+        library_settings=SAMLWebSSOAuthLibrarySettings(),
     )
 
 

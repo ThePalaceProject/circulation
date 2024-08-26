@@ -208,7 +208,7 @@ def create_config_setting() -> CreateConfigSetting:
         library_id: int | None = None,
         associate_library: bool = False,
     ) -> int:
-        if type(value) in (tuple, list, dict):
+        if type(value) in (tuple, list, dict):  # type: ignore[comparison-overlap]
             value = json.dumps(value)
         setting = connection.execute(
             "INSERT INTO configurationsettings (key, value, external_integration_id, library_id) VALUES (%s, %s, %s, %s) returning id",

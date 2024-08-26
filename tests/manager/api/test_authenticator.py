@@ -151,9 +151,11 @@ def mock_integration_id() -> int:
 def mock_basic(
     db: DatabaseTransactionFixture, mock_integration_id: int
 ) -> MockBasicFixture:
+    library_id = db.default_library().id
+    assert library_id is not None
     return partial(
         MockBasic,
-        library_id=db.default_library().id,
+        library_id=library_id,
         integration_id=mock_integration_id,
     )
 

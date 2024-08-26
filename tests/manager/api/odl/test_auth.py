@@ -220,7 +220,7 @@ class TestODLAuthenticatedGet:
         self, authenticated_get_fixture: AuthenticatedGetFixture
     ) -> None:
         authenticated_get = authenticated_get_fixture.authenticated_get(
-            auth_type="invalid"
+            auth_type="invalid"  # type: ignore[arg-type]
         )
         with pytest.raises(PalaceValueError) as exc_info:
             authenticated_get._get(

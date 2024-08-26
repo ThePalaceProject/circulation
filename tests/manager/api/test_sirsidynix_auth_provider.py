@@ -388,6 +388,7 @@ class TestSirsiDynixAuthenticationProvider:
             library_identifier_restriction_type=restriction_type,
             library_identifier_restriction_criteria=restriction,
         )
+        assert library.id is not None
         provider = sirsi_auth_fixture.provider(
             library_id=library.id,
             library_settings=library_settings,
