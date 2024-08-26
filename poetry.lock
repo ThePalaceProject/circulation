@@ -5124,4 +5124,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "bafffa7ce757828b5d693d914e7b2886d38d62deefd207a26653e7ac00c8eb3b"
+content-hash = "c601e5060bbc791f42c5e4ab9e91ab106f9f5c3ed6053f11d47c005e7f7c92d2"
