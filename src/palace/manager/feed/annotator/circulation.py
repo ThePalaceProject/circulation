@@ -223,7 +223,7 @@ class CirculationManagerAnnotator(Annotator):
         :rtype: bool
         """
         return any(
-            work in x  # type: ignore[operator] # Mypy gets confused with complex "in" statements
+            work in x
             for x in (
                 self.active_loans_by_work,
                 self.active_holds_by_work,
