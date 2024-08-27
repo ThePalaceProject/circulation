@@ -10,7 +10,6 @@ import pytz
 from freezegun import freeze_time
 from sqlalchemy.sql.expression import and_, null
 
-from palace.manager.api.controller.playtime_entries import resolve_loan_identifier
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
 from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
@@ -87,8 +86,7 @@ class TestPlaytimeEntriesSummationScript:
         collection2 = db.collection(name=c2_old_name)
         library2 = db.library(name=l2_old_name)
         loan_identifier, loan_identifier2, loan_identifier3, loan_identifier4 = (
-            resolve_loan_identifier(db.patron(external_identifier=str(x)), None)
-            for x in range(0, 4)
+            f"loan-id:{x}" for x in range(0, 4)
         )
         entries = create_playtime_entries(
             db,
@@ -286,7 +284,7 @@ class TestPlaytimeEntriesSummationScript:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-        loan_identifier = resolve_loan_identifier(db.patron(), None)
+        loan_identifier = "loan-id"
         entries = create_playtime_entries(
             db,
             identifier,
@@ -544,17 +542,16 @@ class TestPlaytimeEntriesEmailReportsScript:
         collection2 = db.collection()
         library2 = db.library()
 
-        def create_loan_identifier(patron_id: str) -> str:
-            patron = db.patron(external_identifier=patron_id)
-            return resolve_loan_identifier(patron=patron, loan=None)
+        identifier3 = db.identifier()
 
-        loan_identifiers = [create_loan_identifier(str(x)) for x in range(1, 6)]
+        loan_identifiers = [f"loan_id:{x}" for x in range(1, 7)]
         (
             loan_identifier,
             loan_identifier2,
             loan_identifier3,
             loan_identifier4,
             loan_identifier5,
+            loan_identifier6,
         ) = loan_identifiers
 
         isbn_ids: dict[str, Identifier] = {
@@ -623,6 +620,42 @@ class TestPlaytimeEntriesEmailReportsScript:
             loan_identifier5,
         )
 
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(10),
+            800,
+            loan_identifier6,
+        )
+
+        # log a summary where a title that was previously unavailable is now available for the same loan
+        edition2 = db.edition(title="A test")
+        edition2.primary_identifier = identifier3
+
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(15),
+            13,
+            loan_identifier6,
+        )
+
+        edition2.title = "Z test"
+
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(20),
+            4,
+            loan_identifier6,
+        )
+
         reporting_name = "test cm"
         with (
             patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,
@@ -639,7 +672,7 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         # Assert
         assert (
-            writer().writerow.call_count == 6
+            writer().writerow.call_count == 9
         )  # 1 header, 5 identifier,collection,library entries
 
         cutoff = date1m(0).replace(day=1)
@@ -668,6 +701,42 @@ class TestPlaytimeEntriesEmailReportsScript:
                     library2.name,
                     None,
                     300,
+                    1,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    None,
+                    800,
+                    0,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    "A test",
+                    13,
+                    0,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    "Z test",
+                    4,
                     1,
                 )
             ),

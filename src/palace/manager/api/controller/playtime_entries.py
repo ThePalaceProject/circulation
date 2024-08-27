@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+from datetime import timedelta
 
 import flask
 from pydantic import ValidationError
@@ -16,19 +16,20 @@ from palace.manager.api.model.time_tracking import (
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.query.playtime_entries import PlaytimeEntries
+from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Loan, Patron
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
 
 
-def resolve_loan_identifier(patron: Patron, loan: Loan | None) -> str:
+def resolve_loan_identifier(loan: Loan | None) -> str:
     def sha1(msg):
-        return hashlib.sha1(msg.encode()).hexdigest()
+        return
 
-    return sha1(f"loan: {loan.id}") if loan else sha1(f"patron:{patron.id}")
+    return sha1(f"loan: {loan.id}") if loan else "no-loan-found"
 
 
 class PlaytimeEntriesController(CirculationManagerController):
@@ -61,6 +62,15 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
+        min_time_entry = min([x.during_minute for x in data.time_entries])
+        max_time_entry = max([x.during_minute for x in data.time_entries])
+
+        default_loan_period = timedelta(
+            collection.default_loan_period(
+                library=library, medium=EditionConstants.AUDIO_MEDIUM
+            )
+        )
+
         loan = self._db.execute(
             select(Loan)
             .select_from(Loan)
@@ -68,13 +78,13 @@ class PlaytimeEntriesController(CirculationManagerController):
             .where(
                 LicensePool.identifier == identifier,
                 Loan.patron == flask.request.patron,
+                Loan.start >= min_time_entry,
+                Loan.start + default_loan_period < max_time_entry,
             )
             .order_by(Loan.start.desc())
         ).first()
 
-        loan_identifier = resolve_loan_identifier(
-            loan=loan, patron=flask.request.patron
-        )
+        loan_identifier = resolve_loan_identifier(loan=loan)
 
         responses, summary = PlaytimeEntries.insert_playtime_entries(
             self._db,

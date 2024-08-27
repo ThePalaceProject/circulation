@@ -106,7 +106,7 @@ class TestPlaytimeEntriesController:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-
+        patron = db.patron()
         # Attach the identifier to the collection
         pool = db.licensepool(
             db.edition(
@@ -114,9 +114,8 @@ class TestPlaytimeEntriesController:
             ),
             collection=collection,
         )
-        patron = db.patron()
 
-        loan_identifier = resolve_loan_identifier(loan=None, patron=patron)
+        loan_identifier = resolve_loan_identifier(loan=None)
 
         db.session.add(
             PlaytimeEntry(

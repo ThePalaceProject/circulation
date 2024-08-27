@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 import dateutil.parser
 import pytz
 from sqlalchemy.sql.expression import and_, distinct, false, select, true
-from sqlalchemy.sql.functions import coalesce, count, sum
+from sqlalchemy.sql.functions import coalesce, count
+from sqlalchemy.sql.functions import max as sql_max
+from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
@@ -57,7 +59,7 @@ class PlaytimeEntriesSummationScript(Script):
             PlaytimeEntry.timestamp <= cut_off,
         )
 
-        # Aggregate entries per identifier-timestamp-collection-library grouping.
+        # Aggregate entries per identifier-timestamp-collection-library-loan_identifier grouping.
         # The label forms of the identifier, collection, and library are also
         # factored in, in case any of the foreign keys are missing.
         # Since timestamps should be on minute-boundaries the aggregation
@@ -218,13 +220,23 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 self.log.warning(temp.read())
 
     def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
+        # The loan count query returns only non-empty string isbns and titles if there is more
+        # than one row returned with the grouping.  This way we ensure that we do not
+        # count the same loan twice in the case we have when a
+        # 1. a single loan with identifier A
+        # 2. and one or more playtime summaries with title A or no title or isbn A or no isbn
+        # 3. and one more playtime summaries with title B, isbn B
+        # This situation can occur when the title and isbn  metadata associated with an ID changes due to a feed
+        # update that occurs between playlist entry posts.
+        # in this case we just associate the loan identifier with one unique combination of the list of titles and isbn
+        # values.
         loan_count_query = (
             select(
                 PlaytimeSummary.identifier_str.label("identifier_str2"),
                 PlaytimeSummary.collection_name.label("collection_name2"),
                 PlaytimeSummary.library_name.label("library_name2"),
-                coalesce(PlaytimeSummary.isbn, "").label("isbn2"),
-                coalesce(PlaytimeSummary.title, "").label("title2"),
+                sql_max(coalesce(PlaytimeSummary.isbn, "")).label("isbn2"),
+                sql_max(coalesce(PlaytimeSummary.title, "")).label("title2"),
                 count(distinct(PlaytimeSummary.loan_identifier)).label("loan_count"),
             )
             .where(PlaytimeSummary.timestamp.between(start, until))
@@ -232,8 +244,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
-                PlaytimeSummary.isbn,
-                PlaytimeSummary.title,
                 PlaytimeSummary.identifier_id,
             )
             .subquery()
@@ -260,14 +270,14 @@ class PlaytimeEntriesEmailReportsScript(Script):
             .subquery()
         )
 
-        combined = self._db.query(seconds_query, loan_count_query).join(
+        combined = self._db.query(seconds_query, loan_count_query).outerjoin(
             loan_count_query,
             and_(
-                loan_count_query.c.identifier_str2 == seconds_query.c.identifier_str,
-                loan_count_query.c.collection_name2 == seconds_query.c.collection_name,
-                loan_count_query.c.library_name2 == seconds_query.c.library_name,
-                loan_count_query.c.isbn2 == seconds_query.c.isbn,
-                loan_count_query.c.title2 == seconds_query.c.title,
+                seconds_query.c.identifier_str == loan_count_query.c.identifier_str2,
+                seconds_query.c.collection_name == loan_count_query.c.collection_name2,
+                seconds_query.c.library_name == loan_count_query.c.library_name2,
+                seconds_query.c.isbn == loan_count_query.c.isbn2,
+                seconds_query.c.title == loan_count_query.c.title2,
             ),
         )
         combined_sq = combined.subquery()
@@ -279,7 +289,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
             combined_sq.c.isbn,
             combined_sq.c.title,
             combined_sq.c.total_seconds_played,
-            combined_sq.c.loan_count,
+            coalesce(combined_sq.c.loan_count, 0),
         ).order_by(
             combined_sq.c.collection_name,
             combined_sq.c.library_name,

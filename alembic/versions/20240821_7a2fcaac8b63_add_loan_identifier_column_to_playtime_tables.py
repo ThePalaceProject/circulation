@@ -22,82 +22,15 @@ def upgrade() -> None:
 
     op.add_column(
         "playtime_entries",
-        sa.Column("loan_identifier", sa.String(length=50), nullable=False, default=""),
-    )
-
-    op.drop_constraint(
-        "unique_playtime_entry",
-        "playtime_entries",
-        type_="unique",
-    )
-
-    op.create_unique_constraint(
-        "unique_playtime_entry",
-        "playtime_entries",
-        [
-            "tracking_id",
-            "identifier_str",
-            "collection_name",
-            "library_name",
-            "loan_identifier",
-        ],
+        sa.Column("loan_identifier", sa.String(length=40), nullable=False, default=""),
     )
 
     op.add_column(
         "playtime_summaries",
-        sa.Column("loan_identifier", sa.String(length=50), nullable=False, default=""),
-    )
-
-    op.drop_constraint(
-        "unique_playtime_summary",
-        "playtime_summaries",
-        type_="unique",
-    )
-
-    op.create_unique_constraint(
-        "unique_playtime_summary",
-        "playtime_summaries",
-        [
-            "timestamp",
-            "identifier_str",
-            "collection_name",
-            "library_name",
-            "loan_identifier",
-        ],
+        sa.Column("loan_identifier", sa.String(length=40), nullable=False, default=""),
     )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "unique_playtime_entry",
-        "playtime_entries",
-        type_="unique",
-    )
-
     op.drop_column("playtime_entries", "loan_identifier")
-
-    op.create_unique_constraint(
-        "unique_playtime_entry",
-        "playtime_entries",
-        [
-            "tracking_id",
-            "timestamp",
-            "identifier_str",
-            "collection_name",
-            "library_name",
-        ],
-    )
-
-    op.drop_constraint(
-        "unique_playtime_summary",
-        "playtime_summaries",
-        type_="unique",
-    )
-
     op.drop_column("playtime_summaries", "loan_identifier")
-
-    op.create_unique_constraint(
-        "unique_playtime_summary",
-        "playtime_summaries",
-        ["timestamp", "identifier_str", "collection_name", "library_name"],
-    )

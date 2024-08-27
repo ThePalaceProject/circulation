@@ -143,7 +143,7 @@ class TestPlaytimeEntries:
                 loan_identifier=loan_id,
             )
         assert (
-            f"Key (tracking_id, identifier_str, collection_name, library_name, loan_identifier)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}, {loan_id}) already exists"
+            f"Key (tracking_id, identifier_str, collection_name, library_name)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}) already exists"
             in raised.exconly()
         )
 
@@ -185,7 +185,7 @@ class TestPlaytimeSummaries:
                 loan_identifier=loan_id,
             )
         assert (
-            f'Key ("timestamp", identifier_str, collection_name, library_name, loan_identifier)=(2000-01-01 12:00:00+00, {identifier.urn}, {collection.name}, {library.name}, {loan_id}) already exists'
+            f'Key ("timestamp", identifier_str, collection_name, library_name)=(2000-01-01 12:00:00+00, {identifier.urn}, {collection.name}, {library.name}) already exists'
             in raised.exconly()
         )
 

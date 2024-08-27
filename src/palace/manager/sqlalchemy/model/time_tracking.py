@@ -74,7 +74,7 @@ class PlaytimeEntry(Base):
     collection: Mapped[Collection] = relationship("Collection", uselist=False)
     library: Mapped[Library] = relationship("Library", uselist=False)
 
-    loan_identifier = Column(String(50), nullable=False)
+    loan_identifier = Column(String(40), nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -82,7 +82,6 @@ class PlaytimeEntry(Base):
             "identifier_str",
             "collection_name",
             "library_name",
-            "loan_identifier",
             name="unique_playtime_entry",
         ),
     )
@@ -131,7 +130,7 @@ class PlaytimeSummary(Base):
 
     title = Column(String)
     isbn = Column(String)
-    loan_identifier = Column(String(50), nullable=False)
+    loan_identifier = Column(String(40), nullable=False)
 
     identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
     collection: Mapped[Collection] = relationship("Collection", uselist=False)
@@ -143,7 +142,6 @@ class PlaytimeSummary(Base):
             "identifier_str",
             "collection_name",
             "library_name",
-            "loan_identifier",
             name="unique_playtime_summary",
         ),
     )
