@@ -1,12 +1,15 @@
 """Utilities for Flask applications."""
 import datetime
+import json
 import time
+from json import JSONDecodeError
 from typing import Any
 from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
 from lxml import etree
 from pydantic import BaseModel, Extra
+from werkzeug.datastructures import MultiDict
 
 from palace.manager.util import problem_detail
 from palace.manager.util.datetime_helpers import utc_now
@@ -216,3 +219,19 @@ def str_comma_list_validator(value):
         raise TypeError("string required")
 
     return value.split(",")
+
+
+# This code is borrowed from `flask-pydantic-spec
+# - https://github.com/turner-townsend/flask-pydantic-spec/blob/2d29e45f428b7e7bee60c1bc3657e95ee1f3a866/flask_pydantic_spec/utils.py#L200-L211
+def parse_multi_dict(input: MultiDict) -> dict[str, Any]:
+    result = {}
+    for key, value in input.to_dict(flat=False).items():
+        if len(value) == 1:
+            try:
+                value_to_use = json.loads(value[0])
+            except (TypeError, JSONDecodeError):
+                value_to_use = value[0]
+        else:
+            value_to_use = value
+        result[key] = value_to_use
+    return result

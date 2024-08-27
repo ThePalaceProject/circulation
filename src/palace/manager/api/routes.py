@@ -3,14 +3,8 @@ from functools import update_wrapper, wraps
 import flask
 from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
-from flask_pydantic_spec import Response as SpecResponse
 
-from palace.manager.api.app import api_spec, app
-from palace.manager.api.model.patron_auth import PatronAuthAccessToken
-from palace.manager.api.model.time_tracking import (
-    PlaytimeEntriesPost,
-    PlaytimeEntriesPostResponse,
-)
+from palace.manager.api.app import app
 from palace.manager.core.app_server import compressible, returns_problem_detail
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
@@ -362,7 +356,6 @@ def delete_patron_devices():
 
 
 @library_dir_route("/patrons/me/token", methods=["POST"])
-@api_spec.validate(resp=SpecResponse(HTTP_200=PatronAuthAccessToken), tags=["patron"])
 @has_library
 @requires_auth
 @returns_problem_detail
@@ -540,11 +533,6 @@ def track_analytics_event(identifier_type, identifier, event_type):
 )
 @has_library
 @requires_auth
-@api_spec.validate(
-    resp=SpecResponse(HTTP_200=PlaytimeEntriesPostResponse),
-    body=PlaytimeEntriesPost,
-    tags=["analytics"],
-)
 @returns_problem_detail
 def track_playtime_events(collection_id, identifier_type, identifier):
     """The actual response type is 207, but due to a bug in flask-pydantic-spec we must document it as a 200"""

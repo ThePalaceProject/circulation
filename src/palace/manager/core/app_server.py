@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 import flask
 from flask import Response, make_response, url_for
-from flask_pydantic_spec import FlaskPydanticSpec
 from psycopg2 import OperationalError
 from werkzeug.exceptions import HTTPException
 
@@ -80,24 +79,7 @@ def load_pagination_from_request(
     return base_class.from_request(get_arg, default_size, **kwargs)
 
 
-def ensure_pydantic_after_problem_detail(func):
-    """We must ensure the problem_detail decorators are always placed below the
-    `spec.validate` decorator because the `spec.validate` decorator will always expect a
-    tuple or dict-like response, not a ProblemDetail like response.
-    The problem_detail decorators will convert the ProblemDetail before the response gets validated.
-    """
-    spec = getattr(func, "_decorator", None)
-    if spec and isinstance(spec, FlaskPydanticSpec):
-        raise RuntimeError(
-            "FlaskPydanticSpec MUST be decorated above the problem_detail decorator"
-            + ", else problem details will throw errors during response validation"
-            + f": {func}"
-        )
-
-
 def returns_problem_detail(f):
-    ensure_pydantic_after_problem_detail(f)
-
     @wraps(f)
     def decorated(*args, **kwargs):
         v = f(*args, **kwargs)
