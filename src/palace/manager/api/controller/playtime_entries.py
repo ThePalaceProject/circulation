@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import timedelta
 
 import flask
 from pydantic import ValidationError
@@ -17,7 +16,6 @@ from palace.manager.api.model.time_tracking import (
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.query.playtime_entries import PlaytimeEntries
-from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
@@ -72,12 +70,6 @@ class PlaytimeEntriesController(CirculationManagerController):
         min_time_entry = min([x.during_minute for x in data.time_entries])
         max_time_entry = max([x.during_minute for x in data.time_entries])
 
-        default_loan_period = timedelta(
-            collection.default_loan_period(
-                library=library, medium=EditionConstants.AUDIO_MEDIUM
-            )
-        )
-
         loan = self._db.execute(
             select(Loan)
             .select_from(Loan)
@@ -86,7 +78,7 @@ class PlaytimeEntriesController(CirculationManagerController):
                 LicensePool.identifier == identifier,
                 Loan.patron == flask.request.patron,
                 Loan.start >= min_time_entry,
-                Loan.start + default_loan_period < max_time_entry,
+                Loan.end < max_time_entry,
             )
             .order_by(Loan.start.desc())
         ).first()
