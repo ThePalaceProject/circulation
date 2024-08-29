@@ -22,7 +22,6 @@ class MarcFile(Base):
 
     # The library should never be null in normal operation, but if a library is deleted, we don't want to lose the
     # record of the MARC file, so we set the library to null.
-    # TODO: We need a job to clean up these records.
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", ondelete="SET NULL"),
@@ -35,7 +34,6 @@ class MarcFile(Base):
 
     # The collection should never be null in normal operation, but similar to the library, if a collection is deleted,
     # we don't want to lose the record of the MARC file, so we set the collection to null.
-    # TODO: We need a job to clean up these records.
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", ondelete="SET NULL"),

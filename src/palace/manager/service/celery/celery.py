@@ -43,6 +43,13 @@ def beat_schedule() -> dict[str, Any]:
                 hour="3,11", minute="0"
             ),  # Run twice a day at 3:00 AM and 11:00 AM
         },
+        "marc_export_cleanup": {
+            "task": "marc.marc_export_cleanup",
+            "schedule": crontab(
+                hour="1",
+                minute="0",
+            ),  # Run every day at 1:00 AM
+        },
     }
 
 

@@ -159,3 +159,27 @@ def marc_export_collection(
         task.log.info(
             f"Finished generating MARC records for collection '{collection_name}' ({collection_id})."
         )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def marc_export_cleanup(
+    task: Task,
+    batch_size: int = 20,
+) -> None:
+    """
+    Cleanup old MARC exports that are outdated or no longer needed.
+    """
+    storage_service = task.services.storage.public()
+    registry = task.services.integration_registry.catalog_services()
+    with task.session() as session:
+        for count, file_record in enumerate(
+            MarcExporter.files_for_cleanup(session, registry)
+        ):
+            if count >= batch_size:
+                # Requeue ourselves after deleting `batch_size` files to avoid blocking the worker for too long.
+                raise task.replace(marc_export_cleanup.s())
+
+            task.log.info(f"Deleting MARC export {file_record.key} ({file_record.id}).")
+            storage_service.delete(file_record.key)
+            session.delete(file_record)
+            session.commit()

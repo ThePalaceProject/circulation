@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Iterable, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from uuid import UUID, uuid4
 
 import pytz
@@ -371,3 +371,55 @@ class MarcExporter(
                     since=library_info.last_updated,
                     key=library_info.s3_key_delta,
                 )
+
+    @staticmethod
+    def files_for_cleanup(
+        session: Session, registry: CatalogServicesRegistry
+    ) -> Generator[MarcFile, None, None]:
+        # Files for collections or libraries that have had exports disabled.
+        existing = {
+            (row.collection_id, row.library_id)
+            for row in session.execute(
+                select(MarcFile.collection_id, MarcFile.library_id).distinct()
+            ).all()
+        }
+        enabled = {
+            (collection.id, integration.library_id)
+            for collection, integration in MarcExporter._enabled_collections_and_libraries(
+                session, registry
+            )
+        }
+
+        for collection_id, library_id in existing - enabled:
+            yield from session.execute(
+                select(MarcFile).where(
+                    MarcFile.library_id == library_id,
+                    MarcFile.collection_id == collection_id,
+                )
+            ).scalars()
+
+        # Outdated exports
+        for collection_id, library_id in existing:
+            # Only keep the most recent full export for each library/collection pair.
+            yield from session.execute(
+                select(MarcFile)
+                .where(
+                    MarcFile.library_id == library_id,
+                    MarcFile.collection_id == collection_id,
+                    MarcFile.since == None,
+                )
+                .order_by(MarcFile.created.desc())
+                .offset(1)
+            ).scalars()
+
+            # Keep the most recent 12 delta exports for each library/collection pair.
+            yield from session.execute(
+                select(MarcFile)
+                .where(
+                    MarcFile.library_id == library_id,
+                    MarcFile.collection_id == collection_id,
+                    MarcFile.since != None,
+                )
+                .order_by(MarcFile.created.desc())
+                .offset(12)
+            ).scalars()

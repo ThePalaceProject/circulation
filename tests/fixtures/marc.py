@@ -1,5 +1,6 @@
 import datetime
 from collections.abc import Sequence
+from typing import Literal
 
 import pytest
 
@@ -8,6 +9,7 @@ from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
@@ -43,7 +45,9 @@ class MarcExporterFixture:
         self.test_marc_file_key = "test-file-1.mrc"
 
     def integration(self) -> IntegrationConfiguration:
-        return self._db.integration_configuration(MarcExporter, Goals.CATALOG_GOAL)
+        return self._db.integration_configuration(
+            MarcExporter, Goals.CATALOG_GOAL, name="MARC Exporter"
+        )
 
     def work(self, collection: Collection | None = None) -> Work:
         collection = collection or self.collection1
@@ -56,7 +60,7 @@ class MarcExporterFixture:
     def works(self, collection: Collection | None = None) -> list[Work]:
         return [self.work(collection) for _ in range(5)]
 
-    def configure_export(self) -> None:
+    def configure_export(self, *, marc_file: bool = True) -> None:
         marc_integration = self.integration()
         self._db.integration_library_configuration(
             marc_integration,
@@ -73,14 +77,11 @@ class MarcExporterFixture:
         self.collection2.export_marc_records = True
         self.collection3.export_marc_records = True
 
-        create(
-            self.session,
-            MarcFile,
-            library=self.library1,
-            collection=self.collection1,
-            key=self.test_marc_file_key,
-            created=utc_now() - datetime.timedelta(days=7),
-        )
+        if marc_file:
+            self.marc_file(
+                key=self.test_marc_file_key,
+                created=utc_now() - datetime.timedelta(days=7),
+            )
 
     def enabled_libraries(
         self, collection: Collection | None = None
@@ -90,6 +91,30 @@ class MarcExporterFixture:
         return MarcExporter.enabled_libraries(
             self.session, self.registry, collection_id=collection.id
         )
+
+    def marc_file(
+        self,
+        *,
+        key: str | None = None,
+        collection: Collection | None | Literal[False] = False,
+        library: Library | None | Literal[False] = False,
+        created: datetime.datetime | None = None,
+        since: datetime.datetime | None = None
+    ) -> MarcFile:
+        collection = collection if collection is not False else self.collection1
+        library = library if library is not False else self.library1
+        key = key or self._db.fresh_str()
+        created = created or utc_now()
+        marc_file, _ = create(
+            self.session,
+            MarcFile,
+            library=library,
+            collection=collection,
+            key=key,
+            created=created,
+            since=since,
+        )
+        return marc_file
 
 
 @pytest.fixture
