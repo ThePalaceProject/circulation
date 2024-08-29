@@ -4673,13 +4673,13 @@ types-setuptools = "*"
 
 [[package]]
 name = "types-flask-cors"
-version = "4.0.0.20240825"
+version = "4.0.0.20240828"
 description = "Typing stubs for Flask-Cors"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "types-Flask-Cors-4.0.0.20240825.tar.gz", hash = "sha256:db273733259bad810aec5bea79541431b3bae316b4766a12ca002f2b5e36cde9"},
-    {file = "types_Flask_Cors-4.0.0.20240825-py3-none-any.whl", hash = "sha256:32c9959af4bd7fb38034b3839fa497f84c3dbdc7a92979036566f30c1fe1b093"},
+    {file = "types-Flask-Cors-4.0.0.20240828.tar.gz", hash = "sha256:f48ecf6366da923331311907cde3500e1435e07df01397ce0ef2306e263a5e85"},
+    {file = "types_Flask_Cors-4.0.0.20240828-py3-none-any.whl", hash = "sha256:36b752e88d6517fb82973b4240fe9bde44d29485bbd92dfff762a7101bdac3a0"},
 ]
 
 [package.dependencies]
