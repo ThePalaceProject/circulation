@@ -1,7 +1,9 @@
+import datetime
 import hashlib
 from unittest.mock import patch
 
 import flask
+from isodate import parse_datetime
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.controller.playtime_entries import (
@@ -39,11 +41,23 @@ class TestPlaytimeEntriesController:
         )
         patron = db.patron()
 
+        loan_exists_date_str = date_string(hour=12, minute=0)
+        inscope_loan_start = parse_datetime(loan_exists_date_str)
+        inscope_loan_end = inscope_loan_start + datetime.timedelta(days=14)
+
+        loan, _ = pool.loan_to(
+            patron,
+            inscope_loan_start,
+            inscope_loan_end,
+        )
+
+        expected_loan_identifier = resolve_loan_identifier(loan=loan)
+
         data = dict(
             timeEntries=[
                 {
                     "id": "tracking-id-0",
-                    "during_minute": date_string(hour=12, minute=0),
+                    "during_minute": loan_exists_date_str,
                     "seconds_played": 12,
                 },
                 {
@@ -89,6 +103,7 @@ class TestPlaytimeEntriesController:
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 12
             assert entry.timestamp.isoformat() == date_string(hour=12, minute=0)
+            assert entry.loan_identifier == expected_loan_identifier
 
             entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-1")
             assert entry is not None
@@ -97,7 +112,7 @@ class TestPlaytimeEntriesController:
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 17
             assert entry.timestamp.isoformat() == date_string(hour=12, minute=1)
-            assert entry.loan_identifier
+            assert entry.loan_identifier == expected_loan_identifier
 
             # The very old entry does not get recorded
             assert None == get_one(

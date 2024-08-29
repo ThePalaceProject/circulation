@@ -67,18 +67,19 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
-        min_time_entry = min([x.during_minute for x in data.time_entries])
-        max_time_entry = max([x.during_minute for x in data.time_entries])
+        # attempt to resolve a loan associated with the patron, identifier, in the time period
+        entry_max_start_time = max([x.during_minute for x in data.time_entries])
+        entry_min_end_time = min([x.during_minute for x in data.time_entries])
 
-        loan = self._db.execute(
+        loan = self._db.scalars(
             select(Loan)
             .select_from(Loan)
             .join(LicensePool)
             .where(
                 LicensePool.identifier == identifier,
                 Loan.patron == flask.request.patron,
-                Loan.start >= min_time_entry,
-                Loan.end < max_time_entry,
+                Loan.start <= entry_max_start_time,
+                Loan.end > entry_min_end_time,
             )
             .order_by(Loan.start.desc())
         ).first()
