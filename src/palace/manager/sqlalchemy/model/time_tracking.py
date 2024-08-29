@@ -142,6 +142,7 @@ class PlaytimeSummary(Base):
             "identifier_str",
             "collection_name",
             "library_name",
+            "loan_identifier",
             name="unique_playtime_summary",
         ),
     )
