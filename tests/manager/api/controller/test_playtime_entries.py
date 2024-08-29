@@ -1,9 +1,14 @@
+import hashlib
 from unittest.mock import patch
 
 import flask
 from sqlalchemy.exc import IntegrityError
 
-from palace.manager.api.controller.playtime_entries import resolve_loan_identifier
+from palace.manager.api.controller.playtime_entries import (
+    MISSING_LOAN_IDENTIFIER,
+    resolve_loan_identifier,
+)
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
@@ -98,6 +103,16 @@ class TestPlaytimeEntriesController:
             assert None == get_one(
                 db.session, PlaytimeEntry, tracking_id="tracking-id-2"
             )
+
+    def test_resolve_loan_identifier(self):
+        no_loan = resolve_loan_identifier(loan=None)
+        test_id = 1
+        test_loan_identifier = resolve_loan_identifier(Loan(id=test_id))
+        assert no_loan == MISSING_LOAN_IDENTIFIER
+        assert (
+            test_loan_identifier
+            == hashlib.sha1(f"loan: {test_id}".encode()).hexdigest()
+        )
 
     def test_track_playtime_duplicate_id_ok(
         self, circulation_fixture: CirculationControllerFixture

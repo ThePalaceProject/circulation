@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import timedelta
 
 import flask
@@ -24,12 +25,18 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
 
+MISSING_LOAN_IDENTIFIER = "LOAN_NOT_FOUND"
+
 
 def resolve_loan_identifier(loan: Loan | None) -> str:
     def sha1(msg):
         return
 
-    return sha1(f"loan: {loan.id}") if loan else "no-loan-found"
+    return (
+        hashlib.sha1(f"loan: {loan.id}".encode()).hexdigest()
+        if loan
+        else MISSING_LOAN_IDENTIFIER
+    )
 
 
 class PlaytimeEntriesController(CirculationManagerController):
