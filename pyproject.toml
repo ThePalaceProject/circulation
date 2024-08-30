@@ -177,7 +177,6 @@ module = [
     "feedparser",
     "firebase_admin.*",
     "flask_babel",
-    "flask_pydantic_spec.*",
     "fuzzywuzzy",
     "google.auth",
     "greenlet",
@@ -234,7 +233,6 @@ firebase-admin = "^6.0.1"
 Flask = "^3.0"
 Flask-Babel = "^4.0"
 Flask-Cors = "4.0.1"
-flask-pydantic-spec = "^0.6.0"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 html-sanitizer = "^2.1.0"
 isbnlib = "^3.10.14"

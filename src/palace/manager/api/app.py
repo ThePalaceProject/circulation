@@ -3,7 +3,6 @@ import logging
 import flask_babel
 from flask import request
 from flask_babel import Babel
-from flask_pydantic_spec import FlaskPydanticSpec
 from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.controller import setup_admin_controllers
@@ -38,12 +37,6 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
 babel = Babel(app, locale_selector=get_locale)
-
-# The autodoc spec, can be accessed at "/apidoc/swagger"
-api_spec = FlaskPydanticSpec(
-    "Palace Manager", mode="strict", title="Palace Manager API"
-)
-api_spec.register(app)
 
 # We use URIs as identifiers throughout the application, meaning that
 # we never want werkzeug's merge_slashes feature.
