@@ -1003,28 +1003,28 @@ class ErrorParser(BibliothecaParser[BaseProblemDetailException]):
         expected = expected.split(",")
 
         if actual == "CAN_WISH":
-            return NoLicenses(message)
+            return NoLicenses(debug_info=message)
 
         if "CAN_LOAN" in expected and actual == "CAN_HOLD":
-            return NoAvailableCopies(message)
+            return NoAvailableCopies(debug_info=message)
 
         if "CAN_LOAN" in expected and actual == "HOLD":
-            return AlreadyOnHold(message)
+            return AlreadyOnHold(debug_info=message)
 
         if "CAN_LOAN" in expected and actual == "LOAN":
-            return AlreadyCheckedOut(message)
+            return AlreadyCheckedOut(debug_info=message)
 
         if "CAN_HOLD" in expected and actual == "CAN_LOAN":
-            return CurrentlyAvailable(message)
+            return CurrentlyAvailable(debug_info=message)
 
         if "CAN_HOLD" in expected and actual == "HOLD":
-            return AlreadyOnHold(message)
+            return AlreadyOnHold(debug_info=message)
 
         if "CAN_HOLD" in expected:
-            return CannotHold(message)
+            return CannotHold(debug_info=message)
 
         if "CAN_LOAN" in expected:
-            return CannotLoan(message)
+            return CannotLoan(debug_info=message)
 
         return RemoteInitiatedServerError(message, BibliothecaAPI.SERVICE_NAME)
 
