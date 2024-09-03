@@ -199,11 +199,20 @@ class SirsiDynixHorizonAuthenticationProvider(
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
         """
+        # if the patron data object is not authenticated just pass it back after ensuring the
+        # complete flag is set to False
+        if (
+            not hasattr(patron_or_patrondata, "session_token")
+            or patron_or_patrondata.session_token is None
+        ):
+            patron_or_patrondata.complete = False
+            return patron_or_patrondata
+
         # We cannot do a remote lookup without a session token
-        if not isinstance(patron_or_patrondata, SirsiDynixPatronData):
-            return None
-        elif not patron_or_patrondata.session_token:
-            return None
+        # if :
+        #     return None
+        # elif not patron_or_patrondata.session_token:
+        #     return None
 
         patrondata = patron_or_patrondata
         # Pull and parse the basic patron information
