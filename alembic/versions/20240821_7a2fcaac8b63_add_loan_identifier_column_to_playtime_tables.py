@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("loan_identifier", sa.String(length=40), nullable=False, default=""),
     )
 
-    op.drop_index("unique_playtime_summary", "playtime_summaries")
+    op.drop_constraint("unique_playtime_summary", "playtime_summaries", type_="unique")
 
     op.create_unique_constraint(
         "unique_playtime_summary",
@@ -48,7 +48,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("playtime_entries", "loan_identifier")
 
-    op.drop_index("unique_playtime_summary", "playtime_summaries")
+    op.drop_constraint("unique_playtime_summary", "playtime_summaries", type_="unique")
 
     op.drop_column("playtime_summaries", "loan_identifier")
 
