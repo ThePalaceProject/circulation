@@ -324,7 +324,7 @@ class NoAvailableCopies(CannotLoan):
 
     @property
     def base(self) -> ProblemDetail:
-        return CHECKOUT_FAILED.detailed(detail="No available copies to check out.")
+        return CHECKOUT_FAILED.detailed(detail="No copies available to check out.")
 
 
 class AlreadyCheckedOut(CannotLoan):

@@ -881,7 +881,7 @@ class TestErrorParser:
             (
                 "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
                 NoAvailableCopies,
-                "No available copies to check out.",
+                "No copies available to check out.",
                 "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
             ),
             (
