@@ -3,7 +3,6 @@ import hashlib
 from unittest.mock import patch
 
 import flask
-from isodate import parse_datetime
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.controller.playtime_entries import (
@@ -42,7 +41,7 @@ class TestPlaytimeEntriesController:
         patron = db.patron()
 
         loan_exists_date_str = date_string(hour=12, minute=0)
-        inscope_loan_start = parse_datetime(loan_exists_date_str)
+        inscope_loan_start = datetime.datetime.fromisoformat(loan_exists_date_str)
         inscope_loan_end = inscope_loan_start + datetime.timedelta(days=14)
 
         loan, _ = pool.loan_to(
