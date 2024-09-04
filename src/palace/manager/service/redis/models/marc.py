@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from enum import auto
 from functools import cached_property
 from typing import Any
 
-from backports.strenum import StrEnum
 from pydantic import BaseModel
 from redis import ResponseError, WatchError
 
@@ -16,6 +16,12 @@ from palace.manager.service.redis.redis import Pipeline, Redis
 from palace.manager.service.storage.s3 import MultipartS3UploadPart
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.log import LoggerMixin
+
+# TODO: Remove this when we drop support for Python 3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum
 
 
 class MarcFileUploadSessionError(LockError):
