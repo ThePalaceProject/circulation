@@ -74,6 +74,8 @@ class PlaytimeEntry(Base):
     collection: Mapped[Collection] = relationship("Collection", uselist=False)
     library: Mapped[Library] = relationship("Library", uselist=False)
 
+    loan_identifier = Column(String(40), nullable=False)
+
     __table_args__ = (
         UniqueConstraint(
             "tracking_id",
@@ -128,6 +130,7 @@ class PlaytimeSummary(Base):
 
     title = Column(String)
     isbn = Column(String)
+    loan_identifier = Column(String(40), nullable=False)
 
     identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
     collection: Mapped[Collection] = relationship("Collection", uselist=False)
@@ -139,6 +142,7 @@ class PlaytimeSummary(Base):
             "identifier_str",
             "collection_name",
             "library_name",
+            "loan_identifier",
             name="unique_playtime_summary",
         ),
     )
@@ -155,6 +159,7 @@ class PlaytimeSummary(Base):
         identifier_str: str,
         collection_name: str,
         library_name: str | None,
+        loan_identifier: str,
     ) -> PlaytimeSummary:
         """Add playtime (in seconds) to it's associated minute-level summary record."""
         # Update each label with its current value, if its foreign key is present.
@@ -178,6 +183,7 @@ class PlaytimeSummary(Base):
             "collection_name": None if collection else collection_name,
             "library_id": library.id if library else None,
             "library_name": None if library else library_name,
+            "loan_identifier": loan_identifier,
         }
         lookup_keys = {k: v for k, v in _potential_lookup_keys.items() if v is not None}
         additional_columns = {

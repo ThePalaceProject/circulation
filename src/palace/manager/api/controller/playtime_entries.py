@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 import flask
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -16,7 +19,22 @@ from palace.manager.core.query.playtime_entries import PlaytimeEntries
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
+
+MISSING_LOAN_IDENTIFIER = "LOAN_NOT_FOUND"
+
+
+def resolve_loan_identifier(loan: Loan | None) -> str:
+    def sha1(msg):
+        return
+
+    return (
+        hashlib.sha1(f"loan: {loan.id}".encode()).hexdigest()
+        if loan
+        else MISSING_LOAN_IDENTIFIER
+    )
 
 
 class PlaytimeEntriesController(CirculationManagerController):
@@ -49,8 +67,32 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
+        # attempt to resolve a loan associated with the patron, identifier, in the time period
+        entry_max_start_time = max([x.during_minute for x in data.time_entries])
+        entry_min_end_time = min([x.during_minute for x in data.time_entries])
+
+        loan = self._db.scalars(
+            select(Loan)
+            .select_from(Loan)
+            .join(LicensePool)
+            .where(
+                LicensePool.identifier == identifier,
+                Loan.patron == flask.request.patron,
+                Loan.start <= entry_max_start_time,
+                Loan.end > entry_min_end_time,
+            )
+            .order_by(Loan.start.desc())
+        ).first()
+
+        loan_identifier = resolve_loan_identifier(loan=loan)
+
         responses, summary = PlaytimeEntries.insert_playtime_entries(
-            self._db, identifier, collection, library, data
+            self._db,
+            identifier,
+            collection,
+            library,
+            data,
+            loan_identifier,
         )
 
         response_data = PlaytimeEntriesPostResponse(

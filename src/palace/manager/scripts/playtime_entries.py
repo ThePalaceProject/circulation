@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
 import pytz
-from sqlalchemy.sql.expression import false, true
+from sqlalchemy.sql.expression import and_, distinct, false, select, true
+from sqlalchemy.sql.functions import coalesce, count
+from sqlalchemy.sql.functions import max as sql_max
 from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
@@ -57,7 +59,7 @@ class PlaytimeEntriesSummationScript(Script):
             PlaytimeEntry.timestamp <= cut_off,
         )
 
-        # Aggregate entries per identifier-timestamp-collection-library grouping.
+        # Aggregate entries per identifier-timestamp-collection-library-loan_identifier grouping.
         # The label forms of the identifier, collection, and library are also
         # factored in, in case any of the foreign keys are missing.
         # Since timestamps should be on minute-boundaries the aggregation
@@ -71,6 +73,7 @@ class PlaytimeEntriesSummationScript(Script):
                 e.identifier_str,
                 e.collection_name,
                 e.library_name,
+                e.loan_identifier,
             )
 
         by_group = defaultdict(int)
@@ -88,6 +91,7 @@ class PlaytimeEntriesSummationScript(Script):
                 identifier_str,
                 collection_name,
                 library_name,
+                loan_identifier,
             ) = group
 
             # Update the playtime summary.
@@ -101,9 +105,11 @@ class PlaytimeEntriesSummationScript(Script):
                 identifier_str=identifier_str,
                 collection_name=collection_name,
                 library_name=library_name,
+                loan_identifier=loan_identifier,
             )
             self.log.info(
-                f"Added {seconds} to {identifier_str} ({collection_name} in {library_name}) for {timestamp}: new total {playtime.total_seconds_played}."
+                f"Added {seconds} to {identifier_str} ({collection_name} in {library_name} with loan id of "
+                f"{loan_identifier}) for {timestamp}: new total {playtime.total_seconds_played}."
             )
 
         self._db.commit()
@@ -214,33 +220,80 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 self.log.warning(temp.read())
 
     def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
-        return (
-            self._db.query(PlaytimeSummary)
-            .with_entities(
-                PlaytimeSummary.identifier_str,
-                PlaytimeSummary.collection_name,
-                PlaytimeSummary.library_name,
-                PlaytimeSummary.isbn,
-                PlaytimeSummary.title,
-                sum(PlaytimeSummary.total_seconds_played),
+        # The loan count query returns only non-empty string isbns and titles if there is more
+        # than one row returned with the grouping.  This way we ensure that we do not
+        # count the same loan twice in the case we have when a
+        # 1. a single loan with identifier A
+        # 2. and one or more playtime summaries with title A or no title or isbn A or no isbn
+        # 3. and one more playtime summaries with title B, isbn B
+        # This situation can occur when the title and isbn  metadata associated with an ID changes due to a feed
+        # update that occurs between playlist entry posts.
+        # in this case we just associate the loan identifier with one unique combination of the list of titles and isbn
+        # values.
+        loan_count_query = (
+            select(
+                PlaytimeSummary.identifier_str.label("identifier_str2"),
+                PlaytimeSummary.collection_name.label("collection_name2"),
+                PlaytimeSummary.library_name.label("library_name2"),
+                sql_max(coalesce(PlaytimeSummary.isbn, "")).label("isbn2"),
+                sql_max(coalesce(PlaytimeSummary.title, "")).label("title2"),
+                count(distinct(PlaytimeSummary.loan_identifier)).label("loan_count"),
             )
-            .filter(
-                PlaytimeSummary.timestamp >= start,
-                PlaytimeSummary.timestamp < until,
-            )
+            .where(PlaytimeSummary.timestamp.between(start, until))
             .group_by(
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
                 PlaytimeSummary.identifier_id,
-                PlaytimeSummary.isbn,
-                PlaytimeSummary.title,
             )
-            .order_by(
+            .subquery()
+        )
+
+        seconds_query = (
+            select(
+                PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
                 PlaytimeSummary.library_name,
-                PlaytimeSummary.identifier_str,
+                coalesce(PlaytimeSummary.isbn, "").label("isbn"),
+                coalesce(PlaytimeSummary.title, "").label("title"),
+                sum(PlaytimeSummary.total_seconds_played).label("total_seconds_played"),
             )
+            .where(PlaytimeSummary.timestamp.between(start, until))
+            .group_by(
+                PlaytimeSummary.identifier_str,
+                PlaytimeSummary.collection_name,
+                PlaytimeSummary.library_name,
+                PlaytimeSummary.isbn,
+                PlaytimeSummary.title,
+                PlaytimeSummary.identifier_id,
+            )
+            .subquery()
+        )
+
+        combined = self._db.query(seconds_query, loan_count_query).outerjoin(
+            loan_count_query,
+            and_(
+                seconds_query.c.identifier_str == loan_count_query.c.identifier_str2,
+                seconds_query.c.collection_name == loan_count_query.c.collection_name2,
+                seconds_query.c.library_name == loan_count_query.c.library_name2,
+                seconds_query.c.isbn == loan_count_query.c.isbn2,
+                seconds_query.c.title == loan_count_query.c.title2,
+            ),
+        )
+        combined_sq = combined.subquery()
+
+        return self._db.query(
+            combined_sq.c.identifier_str,
+            combined_sq.c.collection_name,
+            combined_sq.c.library_name,
+            combined_sq.c.isbn,
+            combined_sq.c.title,
+            combined_sq.c.total_seconds_played,
+            coalesce(combined_sq.c.loan_count, 0),
+        ).order_by(
+            combined_sq.c.collection_name,
+            combined_sq.c.library_name,
+            combined_sq.c.identifier_str,
         )
 
 
@@ -256,6 +309,7 @@ def _produce_report(writer: Writer, date_label, records=None) -> None:
             "library",
             "title",
             "total seconds",
+            "loan count",
         )
     )
     for (
@@ -265,15 +319,17 @@ def _produce_report(writer: Writer, date_label, records=None) -> None:
         isbn,
         title,
         total,
+        loan_count,
     ) in records:
         row = (
             date_label,
             identifier_str,
-            isbn,
+            None if isbn == "" else isbn,
             collection_name,
             library_name,
-            title,
+            None if title == "" else title,
             total,
+            loan_count,
         )
         # Write the row to the CSV
         writer.writerow(row)

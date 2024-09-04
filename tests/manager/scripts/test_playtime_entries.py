@@ -33,6 +33,7 @@ def create_playtime_entries(
     identifier: Identifier,
     collection: Collection,
     library: Library,
+    loan_identifier: str,
     *entries: PlaytimeTimeEntry,
 ) -> list[PlaytimeEntry]:
     all_inserted = []
@@ -47,6 +48,7 @@ def create_playtime_entries(
             identifier_str=identifier.urn,
             collection_name=collection.name,
             library_name=library.name,
+            loan_identifier=loan_identifier,
         )
         db.session.add(inserted)
         all_inserted.append(inserted)
@@ -83,12 +85,15 @@ class TestPlaytimeEntriesSummationScript:
         )
         collection2 = db.collection(name=c2_old_name)
         library2 = db.library(name=l2_old_name)
-
+        loan_identifier, loan_identifier2, loan_identifier3, loan_identifier4 = (
+            f"loan-id:{x}" for x in range(0, 4)
+        )
         entries = create_playtime_entries(
             db,
             identifier,
             collection,
             library,
+            loan_identifier,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -99,6 +104,7 @@ class TestPlaytimeEntriesSummationScript:
             identifier2,
             collection,
             library,
+            loan_identifier2,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -113,6 +119,7 @@ class TestPlaytimeEntriesSummationScript:
             identifier2,
             collection2,
             library,
+            loan_identifier3,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=1), seconds_played=40),
         )
@@ -123,6 +130,7 @@ class TestPlaytimeEntriesSummationScript:
             identifier2,
             collection2,
             library2,
+            loan_identifier4,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=40),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -134,6 +142,7 @@ class TestPlaytimeEntriesSummationScript:
             identifier2,
             collection,
             library,
+            loan_identifier2,
             P(id="5", during_minute=utc_now(), seconds_played=30),
         )
 
@@ -143,6 +152,7 @@ class TestPlaytimeEntriesSummationScript:
             identifier2,
             collection,
             library,
+            loan_identifier2,
             P(id="6", during_minute=dk(m=10), seconds_played=30),
         )
         processed_entry.processed = True
@@ -214,6 +224,7 @@ class TestPlaytimeEntriesSummationScript:
         assert id1time.identifier_str == identifier.urn
         assert id1time.collection_name == collection.name
         assert id1time.library_name == library.name
+        assert id1time.loan_identifier == loan_identifier
         assert id1time.timestamp == dk()
 
         assert id2time1.identifier == identifier2
@@ -223,6 +234,8 @@ class TestPlaytimeEntriesSummationScript:
         assert id2time1.identifier_str == id2_new_urn
         assert id2time1.collection_name == collection.name
         assert id2time1.library_name == library.name
+        assert id2time1.loan_identifier == loan_identifier2
+
         assert id2time1.timestamp == dk()
 
         assert id2time2.identifier == identifier2
@@ -231,6 +244,7 @@ class TestPlaytimeEntriesSummationScript:
         assert id2time2.identifier_str == id2_new_urn
         assert id2time2.collection_name == collection.name
         assert id2time2.library_name == library.name
+        assert id2time2.loan_identifier == loan_identifier2
         assert id2time2.total_seconds_played == 30
         assert id2time2.timestamp == dk(m=1)
 
@@ -240,6 +254,7 @@ class TestPlaytimeEntriesSummationScript:
         assert id2col2time.identifier_str == id2_new_urn
         assert id2col2time.collection_name == c2_new_name
         assert id2col2time.library_name == library.name
+        assert id2col2time.loan_identifier == loan_identifier3
         assert id2col2time.total_seconds_played == 30
         assert id2col2time.timestamp == dk()
 
@@ -249,6 +264,7 @@ class TestPlaytimeEntriesSummationScript:
         assert id2col2time1.identifier_str == id2_new_urn
         assert id2col2time1.collection_name == c2_new_name
         assert id2col2time1.library_name == library.name
+        assert id2col2time1.loan_identifier == loan_identifier3
         assert id2col2time1.total_seconds_played == 40
         assert id2col2time1.timestamp == dk(m=1)
 
@@ -258,6 +274,7 @@ class TestPlaytimeEntriesSummationScript:
         assert id2c2l2time.identifier_str == id2_new_urn
         assert id2c2l2time.collection_name == c2_new_name
         assert id2c2l2time.library_name == l2_new_name
+        assert id2c2l2time.loan_identifier == loan_identifier4
         assert id2c2l2time.total_seconds_played == 100
         assert id2c2l2time.timestamp == dk()
 
@@ -267,11 +284,13 @@ class TestPlaytimeEntriesSummationScript:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
+        loan_identifier = "loan-id"
         entries = create_playtime_entries(
             db,
             identifier,
             collection,
             library,
+            loan_identifier,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
             P(id="2", during_minute=dk(m=0), seconds_played=30),
@@ -341,6 +360,8 @@ class TestPlaytimeEntriesSummationScript:
         c2 = db.collection(name=c2_name)
         l1 = db.library(name=l1_name)
         l2 = db.library(name=l2_name)
+        loan1_id = "loan1"
+        loan2_id = "loan2"
 
         P = PlaytimeTimeEntry
         dk = date2k
@@ -351,6 +372,7 @@ class TestPlaytimeEntriesSummationScript:
             id1,
             c1,
             l1,
+            loan1_id,
             P(id="0", during_minute=dk(m=0), seconds_played=30),
             P(id="1", during_minute=dk(m=0), seconds_played=30),
         )
@@ -359,6 +381,7 @@ class TestPlaytimeEntriesSummationScript:
             id2,
             c2,
             l2,
+            loan2_id,
             P(id="2", during_minute=dk(m=0), seconds_played=12),
             P(id="3", during_minute=dk(m=0), seconds_played=17),
         )
@@ -389,6 +412,7 @@ class TestPlaytimeEntriesSummationScript:
         assert b1sum1.identifier_id == id1.id
         assert b1sum1.collection_id == c1.id
         assert b1sum1.library_id == l1.id
+        assert b1sum1.loan_identifier == loan1_id
 
         assert b2sum1.total_seconds_played == 29
         assert b2sum1.identifier_str == id2_urn
@@ -397,6 +421,7 @@ class TestPlaytimeEntriesSummationScript:
         assert b2sum1.identifier_id == id2.id
         assert b2sum1.collection_id == c2.id
         assert b2sum1.library_id == l2.id
+        assert b2sum1.loan_identifier == loan2_id
 
         # Add some new client playtime entries.
         book1_round2 = create_playtime_entries(
@@ -404,6 +429,7 @@ class TestPlaytimeEntriesSummationScript:
             id1,
             c1,
             l1,
+            loan1_id,
             P(id="4", during_minute=dk(m=0), seconds_played=30),
             P(id="5", during_minute=dk(m=0), seconds_played=30),
         )
@@ -412,6 +438,7 @@ class TestPlaytimeEntriesSummationScript:
             id2,
             c2,
             l2,
+            loan2_id,
             P(id="6", during_minute=dk(m=0), seconds_played=22),
             P(id="7", during_minute=dk(m=0), seconds_played=46),
         )
@@ -456,6 +483,7 @@ class TestPlaytimeEntriesSummationScript:
         assert b1sum1.identifier_id is None
         assert b1sum1.collection_id is None
         assert b1sum1.library_id is None
+        assert b1sum1.loan_identifier == loan1_id
 
         assert b2sum1.total_seconds_played == 97
         assert b2sum1.identifier_str == id2_urn
@@ -464,6 +492,7 @@ class TestPlaytimeEntriesSummationScript:
         assert b2sum1.identifier_id is None
         assert b2sum1.collection_id is None
         assert b2sum1.library_id is None
+        assert b2sum1.loan_identifier == loan2_id
 
 
 def date1m(days) -> date:
@@ -483,6 +512,7 @@ def playtime(
     library: Library,
     timestamp: datetime,
     total_seconds: int,
+    loan_identifier: str,
 ):
     return PlaytimeSummary.add(
         session,
@@ -494,6 +524,7 @@ def playtime(
         identifier_str=identifier.urn,
         collection_name=collection.name,
         library_name=library.name,
+        loan_identifier=loan_identifier,
     )
 
 
@@ -510,6 +541,18 @@ class TestPlaytimeEntriesEmailReportsScript:
         identifier2 = edition.primary_identifier
         collection2 = db.collection()
         library2 = db.library()
+
+        identifier3 = db.identifier()
+
+        loan_identifiers = [f"loan_id:{x}" for x in range(1, 7)]
+        (
+            loan_identifier,
+            loan_identifier2,
+            loan_identifier3,
+            loan_identifier4,
+            loan_identifier5,
+            loan_identifier6,
+        ) = loan_identifiers
 
         isbn_ids: dict[str, Identifier] = {
             "i1": db.identifier(
@@ -533,23 +576,85 @@ class TestPlaytimeEntriesEmailReportsScript:
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
 
-        playtime(db.session, identifier, collection, library, dt1m(3), 1)
-        playtime(db.session, identifier, collection, library, dt1m(31), 2)
         playtime(
-            db.session, identifier, collection, library, dt1m(-31), 60
+            db.session, identifier, collection, library, dt1m(3), 1, loan_identifier
+        )
+        playtime(
+            db.session, identifier, collection, library, dt1m(31), 2, loan_identifier
+        )
+        playtime(
+            db.session, identifier, collection, library, dt1m(-31), 60, loan_identifier
         )  # out of range: prior to the beginning of the default reporting period
         playtime(
-            db.session, identifier, collection, library, dt1m(95), 60
+            db.session,
+            identifier,
+            collection,
+            library,
+            dt1m(95),
+            60,
+            loan_identifier,
         )  # out of range: future
-        playtime(db.session, identifier2, collection, library, dt1m(3), 5)
-        playtime(db.session, identifier2, collection, library, dt1m(4), 6)
+        playtime(
+            db.session, identifier2, collection, library, dt1m(3), 5, loan_identifier2
+        )
+        playtime(
+            db.session, identifier2, collection, library, dt1m(4), 6, loan_identifier2
+        )
 
         # Collection2
-        playtime(db.session, identifier, collection2, library, dt1m(3), 100)
+        playtime(
+            db.session, identifier, collection2, library, dt1m(3), 100, loan_identifier3
+        )
         # library2
-        playtime(db.session, identifier, collection, library2, dt1m(3), 200)
+        playtime(
+            db.session, identifier, collection, library2, dt1m(3), 200, loan_identifier4
+        )
         # collection2 library2
-        playtime(db.session, identifier, collection2, library2, dt1m(3), 300)
+        playtime(
+            db.session,
+            identifier,
+            collection2,
+            library2,
+            dt1m(3),
+            300,
+            loan_identifier5,
+        )
+
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(10),
+            800,
+            loan_identifier6,
+        )
+
+        # log a summary where a title that was previously unavailable is now available for the same loan
+        edition2 = db.edition(title="A test")
+        edition2.primary_identifier = identifier3
+
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(15),
+            13,
+            loan_identifier6,
+        )
+
+        edition2.title = "Z test"
+
+        playtime(
+            db.session,
+            identifier3,
+            collection2,
+            library2,
+            dt1m(20),
+            4,
+            loan_identifier6,
+        )
 
         reporting_name = "test cm"
         with (
@@ -567,7 +672,7 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         # Assert
         assert (
-            writer().writerow.call_count == 6
+            writer().writerow.call_count == 9
         )  # 1 header, 5 identifier,collection,library entries
 
         cutoff = date1m(0).replace(day=1)
@@ -584,6 +689,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     "library",
                     "title",
                     "total seconds",
+                    "loan count",
                 )
             ),
             call(
@@ -595,6 +701,43 @@ class TestPlaytimeEntriesEmailReportsScript:
                     library2.name,
                     None,
                     300,
+                    1,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    None,
+                    800,
+                    0,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    "A test",
+                    13,
+                    0,
+                )
+            ),
+            call(
+                (
+                    column1,
+                    identifier3.urn,
+                    None,
+                    collection2.name,
+                    library2.name,
+                    "Z test",
+                    4,
+                    1,
                 )
             ),
             call(
@@ -606,6 +749,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     library.name,
                     None,
                     100,
+                    1,
                 )
             ),
             call(
@@ -617,6 +761,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     library2.name,
                     None,
                     200,
+                    1,
                 )
             ),
             call(
@@ -627,6 +772,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     collection.name,
                     library.name,
                     None,
+                    3,
                     1,
                 )
             ),  # Identifier without edition
@@ -639,10 +785,13 @@ class TestPlaytimeEntriesEmailReportsScript:
                     library.name,
                     edition.title,
                     11,
+                    1,
                 )
             ),  # Identifier with edition
         ]
 
+        # verify the number of unique loans
+        assert len(loan_identifiers) == sum([x.args[0][7] for x in call_args[1:]])
         assert services_email_fixture.mock_emailer.send.call_count == 1
         assert services_email_fixture.mock_emailer.send.call_args == call(
             subject=f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
@@ -659,7 +808,16 @@ class TestPlaytimeEntriesEmailReportsScript:
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
-        _ = playtime(db.session, identifier, collection, library, dt1m(20), 1)
+        loan_id = "loan-id"
+        _ = playtime(
+            db.session,
+            identifier,
+            collection,
+            library,
+            dt1m(20),
+            1,
+            loan_id,
+        )
 
         with patch("palace.manager.scripts.playtime_entries.os.environ", new={}):
             script = PlaytimeEntriesEmailReportsScript(db.session)
