@@ -36,7 +36,7 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
             )
 
         patron_data = PatronData(authorization_identifier=identifier)
-        complete_patron_data = None
+        remote_patron_data = None
         patron_lookup_providers = list(authenticator.unique_patron_lookup_providers)
 
         if not patron_lookup_providers:
@@ -45,12 +45,12 @@ class PatronController(CirculationManagerController, AdminPermissionsControllerM
             )
 
         for provider in patron_lookup_providers:
-            complete_patron_data = provider.remote_patron_lookup(patron_data)
-            if complete_patron_data:
-                return complete_patron_data
+            remote_patron_data = provider.remote_patron_lookup(patron_data)
+            if remote_patron_data:
+                return remote_patron_data
 
         # If we get here, none of the providers succeeded.
-        if not complete_patron_data:
+        if not remote_patron_data:
             return NO_SUCH_PATRON.detailed(
                 _(
                     "No patron with identifier %(patron_identifier)s was found at your library",

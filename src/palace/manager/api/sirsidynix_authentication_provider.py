@@ -25,12 +25,11 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http import HTTP
 
 if TYPE_CHECKING:
     from requests import Response
-
-    from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class SirsiBlockReasons:
@@ -194,11 +193,16 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def remote_patron_lookup(
         self, patron_or_patrondata: Patron | PatronData
-    ) -> None | SirsiDynixPatronData:
+    ) -> None | SirsiDynixPatronData | PatronData:
         """Do a remote patron lookup, this method can only look up a patron with a patrondata object
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
         """
+
+        # Return None if a patron object is passed in.
+        if isinstance(patron_or_patrondata, Patron):
+            return None
+
         # if the patron data object is not authenticated just pass it back after ensuring the
         # complete flag is set to False
         if (
@@ -208,17 +212,11 @@ class SirsiDynixHorizonAuthenticationProvider(
             patron_or_patrondata.complete = False
             return patron_or_patrondata
 
-        # We cannot do a remote lookup without a session token
-        # if :
-        #     return None
-        # elif not patron_or_patrondata.session_token:
-        #     return None
-
         patrondata = patron_or_patrondata
         # Pull and parse the basic patron information
         data = self.api_read_patron_data(
             patron_key=patrondata.permanent_id,
-            session_token=patrondata.session_token,
+            session_token=patrondata.session_token,  # type: ignore[attr-defined]
         )
         if not data or "fields" not in data:
             return None
@@ -245,7 +243,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         # Get patron "fines" information
         status = self.api_patron_status_info(
             patron_key=patrondata.permanent_id,
-            session_token=patrondata.session_token,
+            session_token=patrondata.session_token,  # type: ignore[attr-defined]
         )
 
         if not status or "fields" not in status:
