@@ -78,3 +78,6 @@ docs/source/*
 .DS_Store
 
 src/palace/manager/core/_version.py
+
+# Celery beat schedule file
+celerybeat-schedule.db

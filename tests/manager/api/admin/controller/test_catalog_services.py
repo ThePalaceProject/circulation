@@ -19,8 +19,9 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.core.marc import MARCExporter, MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.marc.exporter import MarcExporter
+from palace.manager.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
@@ -60,7 +61,7 @@ class TestCatalogServicesController:
             assert 1 == len(protocols)
 
             assert protocols[0].get("name") == controller.registry.get_protocol(
-                MARCExporter
+                MarcExporter
             )
             assert "settings" in protocols[0]
             assert "library_settings" in protocols[0]
@@ -76,7 +77,7 @@ class TestCatalogServicesController:
         )
 
         integration = db.integration_configuration(
-            MARCExporter,
+            MarcExporter,
             Goals.CATALOG_GOAL,
             name="name",
             libraries=[db.default_library()],
@@ -84,7 +85,7 @@ class TestCatalogServicesController:
 
         library_settings_integration = integration.for_library(db.default_library())
         assert library_settings_integration is not None
-        MARCExporter.library_settings_update(
+        MarcExporter.library_settings_update(
             library_settings_integration, library_settings
         )
 
@@ -120,28 +121,28 @@ class TestCatalogServicesController:
                 id="unknown protocol",
             ),
             pytest.param(
-                {"protocol": "MARCExporter", "id": "123"},
+                {"protocol": "MarcExporter", "id": "123"},
                 MISSING_SERVICE,
                 True,
                 None,
                 id="unknown id",
             ),
             pytest.param(
-                {"protocol": "MARCExporter", "id": "<existing>"},
+                {"protocol": "MarcExporter", "id": "<existing>"},
                 CANNOT_CHANGE_PROTOCOL,
                 True,
                 None,
                 id="cannot change protocol",
             ),
             pytest.param(
-                {"protocol": "MARCExporter"},
+                {"protocol": "MarcExporter"},
                 MISSING_SERVICE_NAME,
                 True,
                 None,
                 id="no name",
             ),
             pytest.param(
-                {"protocol": "MARCExporter", "name": "existing integration"},
+                {"protocol": "MarcExporter", "name": "existing integration"},
                 INTEGRATION_NAME_ALREADY_IN_USE,
                 True,
                 None,
@@ -149,7 +150,7 @@ class TestCatalogServicesController:
             ),
             pytest.param(
                 {
-                    "protocol": "MARCExporter",
+                    "protocol": "MarcExporter",
                     "name": "new name",
                     "libraries": json.dumps([{"short_name": "default"}]),
                 },
@@ -203,7 +204,7 @@ class TestCatalogServicesController:
         controller: CatalogServicesController,
         db: DatabaseTransactionFixture,
     ):
-        protocol = controller.registry.get_protocol(MARCExporter)
+        protocol = controller.registry.get_protocol(MarcExporter)
         assert protocol is not None
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
@@ -241,7 +242,7 @@ class TestCatalogServicesController:
         assert service.name == "exporter name"
         assert service.libraries == [db.default_library()]
 
-        settings = MARCExporter.library_settings_load(service.library_configurations[0])
+        settings = MarcExporter.library_settings_load(service.library_configurations[0])
         assert settings.include_summary is False
         assert settings.include_genres is True
 
@@ -252,7 +253,7 @@ class TestCatalogServicesController:
         db: DatabaseTransactionFixture,
     ):
         service = db.integration_configuration(
-            MARCExporter,
+            MarcExporter,
             Goals.CATALOG_GOAL,
             name="name",
         )
@@ -287,7 +288,7 @@ class TestCatalogServicesController:
         assert service.name == "exporter name"
         assert service.libraries == [db.default_library()]
 
-        settings = MARCExporter.library_settings_load(service.library_configurations[0])
+        settings = MarcExporter.library_settings_load(service.library_configurations[0])
         assert settings.include_summary is True
         assert settings.include_genres is False
 
@@ -298,7 +299,7 @@ class TestCatalogServicesController:
         db: DatabaseTransactionFixture,
     ):
         service = db.integration_configuration(
-            MARCExporter,
+            MarcExporter,
             Goals.CATALOG_GOAL,
         )
 

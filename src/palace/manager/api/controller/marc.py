@@ -9,8 +9,11 @@ from flask import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from palace.manager.core.marc import MARCExporter
 from palace.manager.integration.goals import Goals
+from palace.manager.marc.exporter import MarcExporter
+from palace.manager.service.integration_registry.catalog_services import (
+    CatalogServicesRegistry,
+)
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import (
@@ -49,21 +52,24 @@ class MARCRecordController:
 </body>
 </html>"""
 
-    def __init__(self, storage_service: S3Service | None) -> None:
+    def __init__(
+        self, storage_service: S3Service | None, registry: CatalogServicesRegistry
+    ) -> None:
         self.storage_service = storage_service
+        self.registry = registry
 
     @staticmethod
     def library() -> Library:
         return flask.request.library  # type: ignore[no-any-return,attr-defined]
 
-    @staticmethod
-    def has_integration(session: Session, library: Library) -> bool:
+    def has_integration(self, session: Session, library: Library) -> bool:
+        protocols = self.registry.get_protocols(MarcExporter)
         integration_query = (
             select(IntegrationLibraryConfiguration)
             .join(IntegrationConfiguration)
             .where(
                 IntegrationConfiguration.goal == Goals.CATALOG_GOAL,
-                IntegrationConfiguration.protocol == MARCExporter.__name__,
+                IntegrationConfiguration.protocol.in_(protocols),
                 IntegrationLibraryConfiguration.library == library,
             )
         )

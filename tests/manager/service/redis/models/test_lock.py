@@ -1,10 +1,17 @@
 from datetime import timedelta
+from typing import Any
 from unittest.mock import create_autospec
 
 import pytest
 
 from palace.manager.celery.task import Task
-from palace.manager.service.redis.models.lock import LockError, RedisLock, TaskLock
+from palace.manager.service.redis.models.lock import (
+    LockError,
+    RedisJsonLock,
+    RedisLock,
+    TaskLock,
+)
+from palace.manager.service.redis.redis import Redis
 from tests.fixtures.redis import RedisFixture
 
 
@@ -182,3 +189,147 @@ class TestTaskLock:
         # If we provide a lock_name, we should use that instead
         task_lock = TaskLock(redis_fixture.client, mock_task, lock_name="test_lock")
         assert task_lock.key.endswith("::TaskLock::test_lock")
+
+
+class MockJsonLock(RedisJsonLock):
+    def __init__(
+        self,
+        redis_client: Redis,
+        key: str = "test",
+        timeout: int = 1000,
+        random_value: str | None = None,
+    ):
+        self._key = redis_client.get_key(key)
+        self._timeout = timeout
+        super().__init__(redis_client, random_value)
+
+    @property
+    def key(self) -> str:
+        return self._key
+
+    @property
+    def _lock_timeout_ms(self) -> int:
+        return self._timeout
+
+
+class JsonLockFixture:
+    def __init__(self, redis_fixture: RedisFixture) -> None:
+        self.client = redis_fixture.client
+        self.lock = MockJsonLock(redis_fixture.client)
+        self.other_lock = MockJsonLock(redis_fixture.client)
+
+    def get_key(self, key: str, json_key: str) -> Any:
+        ret_val = self.client.json().get(key, json_key)
+        if ret_val is None or len(ret_val) != 1:
+            return None
+        return ret_val[0]
+
+    def assert_locked(self, lock: RedisJsonLock) -> None:
+        assert self.get_key(lock.key, lock._lock_json_key) == lock._random_value
+
+
+@pytest.fixture
+def json_lock_fixture(redis_fixture: RedisFixture) -> JsonLockFixture:
+    return JsonLockFixture(redis_fixture)
+
+
+class TestJsonLock:
+    def test_acquire(self, json_lock_fixture: JsonLockFixture):
+        # We can acquire the lock. And acquiring the lock sets a timeout on the key, so the lock
+        # will expire eventually if something goes wrong.
+        assert json_lock_fixture.lock.acquire()
+        assert json_lock_fixture.client.ttl(json_lock_fixture.lock.key) > 0
+        json_lock_fixture.assert_locked(json_lock_fixture.lock)
+
+        # Acquiring the lock again with the same random value should return True
+        # and extend the timeout for the lock
+        json_lock_fixture.client.pexpire(json_lock_fixture.lock.key, 500)
+        timeout = json_lock_fixture.client.pttl(json_lock_fixture.lock.key)
+        assert json_lock_fixture.lock.acquire()
+        assert json_lock_fixture.client.pttl(json_lock_fixture.lock.key) > timeout
+
+        # Acquiring the lock again with a different random value should return False
+        assert not json_lock_fixture.other_lock.acquire()
+        json_lock_fixture.assert_locked(json_lock_fixture.lock)
+
+    def test_release(self, json_lock_fixture: JsonLockFixture):
+        # If the lock doesn't exist, we can't release it
+        assert json_lock_fixture.lock.release() is False
+
+        # If you acquire a lock another client cannot release it
+        assert json_lock_fixture.lock.acquire()
+        assert json_lock_fixture.other_lock.release() is False
+
+        # Make sure the key is set in redis
+        json_lock_fixture.assert_locked(json_lock_fixture.lock)
+
+        # But the client that acquired the lock can release it
+        assert json_lock_fixture.lock.release() is True
+
+        # And the key should still exist, but the lock key in the json is removed from redis
+        assert json_lock_fixture.get_key(json_lock_fixture.lock.key, "$") == {}
+
+    def test_delete(self, json_lock_fixture: JsonLockFixture):
+        assert json_lock_fixture.lock.delete() is False
+
+        # If you acquire a lock another client cannot delete it
+        assert json_lock_fixture.lock.acquire()
+        assert json_lock_fixture.other_lock.delete() is False
+
+        # Make sure the key is set in redis
+        assert json_lock_fixture.get_key(json_lock_fixture.lock.key, "$") is not None
+        json_lock_fixture.assert_locked(json_lock_fixture.lock)
+
+        # But the client that acquired the lock can delete it
+        assert json_lock_fixture.lock.delete() is True
+
+        # And the key should still exist, but the lock key in the json is removed from redis
+        assert json_lock_fixture.get_key(json_lock_fixture.lock.key, "$") is None
+
+    def test_extend_timeout(self, json_lock_fixture: JsonLockFixture):
+        assert json_lock_fixture.lock.extend_timeout() is False
+
+        # If the lock has a timeout, the acquiring client can extend it, but another client cannot
+        assert json_lock_fixture.lock.acquire()
+        json_lock_fixture.client.pexpire(json_lock_fixture.lock.key, 500)
+        assert json_lock_fixture.other_lock.extend_timeout() is False
+        assert json_lock_fixture.client.pttl(json_lock_fixture.lock.key) <= 500
+
+        # The key should have a new timeout
+        assert json_lock_fixture.lock.extend_timeout() is True
+        assert json_lock_fixture.client.pttl(json_lock_fixture.lock.key) > 500
+
+    def test_locked(self, json_lock_fixture: JsonLockFixture):
+        # If the lock is not acquired, it should not be locked
+        assert json_lock_fixture.lock.locked() is False
+
+        # If the lock is acquired, it should be locked
+        assert json_lock_fixture.lock.acquire()
+        assert json_lock_fixture.lock.locked() is True
+        assert json_lock_fixture.other_lock.locked() is True
+        assert json_lock_fixture.lock.locked(by_us=True) is True
+        assert json_lock_fixture.other_lock.locked(by_us=True) is False
+
+        # If the lock is released, it should not be locked
+        assert json_lock_fixture.lock.release() is True
+        assert json_lock_fixture.lock.locked() is False
+        assert json_lock_fixture.other_lock.locked() is False
+
+    def test__parse_value(self):
+        assert RedisJsonLock._parse_value(None) is None
+        assert RedisJsonLock._parse_value([]) is None
+        assert RedisJsonLock._parse_value(["value"]) == "value"
+
+    def test__parse_multi(self):
+        assert RedisJsonLock._parse_multi(None) == {}
+        assert RedisJsonLock._parse_multi({}) == {}
+        assert RedisJsonLock._parse_multi(
+            {"key": ["value"], "key2": ["value2"], "key3": []}
+        ) == {"key": "value", "key2": "value2", "key3": None}
+
+    def test__parse_value_or_raise(self):
+        with pytest.raises(LockError):
+            RedisJsonLock._parse_value_or_raise(None)
+        with pytest.raises(LockError):
+            RedisJsonLock._parse_value_or_raise([])
+        assert RedisJsonLock._parse_value_or_raise(["value"]) == "value"

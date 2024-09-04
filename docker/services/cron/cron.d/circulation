@@ -36,9 +36,6 @@ HOME=/var/www/circulation
 # Sync a library's collection with NoveList
 0 0 * * 0 root bin/run -d 60 novelist_update >> /var/log/cron.log 2>&1
 
-# Generate MARC files for libraries that have a MARC exporter configured.
-0 3,11 * * * root bin/run cache_marc_files >> /var/log/cron.log 2>&1
-
 # The remaining scripts keep the circulation manager in sync with
 # specific types of collections.
 

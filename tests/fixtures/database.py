@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import time
 import uuid
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
@@ -36,10 +36,15 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.opds_import import OPDSAPI
-from palace.manager.integration.base import HasIntegrationConfiguration
+from palace.manager.integration.base import (
+    HasIntegrationConfiguration,
+    HasLibraryIntegrationConfiguration,
+)
 from palace.manager.integration.base import SettingsType as TIntegrationSettings
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.integration.settings import BaseSettings
+from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -921,6 +926,16 @@ class DatabaseTransactionFixture:
     def isbn_take(self) -> str:
         return self._isbns.pop()
 
+    @cached_property
+    def _goal_registry_mapping(self) -> Mapping[Goals, IntegrationRegistry[Any]]:
+        return {
+            Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
+            Goals.DISCOVERY_GOAL: self._services.services.integration_registry.discovery(),
+            Goals.LICENSE_GOAL: self._services.services.integration_registry.license_providers(),
+            Goals.METADATA_GOAL: self._services.services.integration_registry.metadata(),
+            Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
+        }
+
     def integration_configuration(
         self,
         protocol: type[HasIntegrationConfiguration[TIntegrationSettings]] | str,
@@ -930,17 +945,10 @@ class DatabaseTransactionFixture:
         name: str | None = None,
         settings: TIntegrationSettings | None = None,
     ) -> IntegrationConfiguration:
-        registry_mapping = {
-            Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
-            Goals.DISCOVERY_GOAL: self._services.services.integration_registry.discovery(),
-            Goals.LICENSE_GOAL: self._services.services.integration_registry.license_providers(),
-            Goals.METADATA_GOAL: self._services.services.integration_registry.metadata(),
-            Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
-        }
         protocol_str = (
             protocol
             if isinstance(protocol, str)
-            else registry_mapping[goal].get_protocol(protocol)
+            else self._goal_registry_mapping[goal].get_protocol(protocol)
         )
         assert protocol_str is not None
         integration, ignore = get_one_or_create(
@@ -969,6 +977,37 @@ class DatabaseTransactionFixture:
                     "protocol must be a subclass of HasIntegrationConfiguration to set settings"
                 )
             protocol.settings_update(integration, settings)
+
+        return integration
+
+    def integration_library_configuration(
+        self,
+        parent: IntegrationConfiguration,
+        library: Library,
+        settings: BaseSettings | None = None,
+    ) -> IntegrationLibraryConfiguration:
+        assert parent.goal is not None
+        assert parent.protocol is not None
+        parent_cls = self._goal_registry_mapping[parent.goal][parent.protocol]
+        if not issubclass(parent_cls, HasLibraryIntegrationConfiguration):
+            raise TypeError(
+                f"{parent_cls.__name__} does not support library configuration"
+            )
+
+        integration, ignore = get_one_or_create(
+            self.session,
+            IntegrationLibraryConfiguration,
+            parent=parent,
+            library=library,
+        )
+
+        if settings is not None:
+            if not isinstance(settings, parent_cls.library_settings_class()):
+                raise TypeError(
+                    f"settings must be an instance of {parent_cls.library_settings_class().__name__} "
+                    f"not {settings.__class__.__name__}"
+                )
+            parent_cls.library_settings_update(integration, settings)
 
         return integration
 

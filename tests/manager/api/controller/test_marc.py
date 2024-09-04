@@ -7,8 +7,11 @@ import pytest
 from flask import Response
 
 from palace.manager.api.controller.marc import MARCRecordController
-from palace.manager.core.marc import MARCExporter
 from palace.manager.integration.goals import Goals
+from palace.manager.marc.exporter import MarcExporter
+from palace.manager.service.integration_registry.catalog_services import (
+    CatalogServicesRegistry,
+)
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
@@ -16,14 +19,18 @@ from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class MARCRecordControllerFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(
+        self, db: DatabaseTransactionFixture, registry: CatalogServicesRegistry
+    ):
         self.db = db
+        self.registry = registry
         self.mock_s3_service = MagicMock(spec=S3Service)
         self.mock_s3_service.generate_url = lambda x: "http://s3.url/" + x
-        self.controller = MARCRecordController(self.mock_s3_service)
+        self.controller = MARCRecordController(self.mock_s3_service, self.registry)
         self.library = db.default_library()
         self.collection = db.default_collection()
         self.collection.export_marc_records = True
@@ -35,7 +42,7 @@ class MARCRecordControllerFixture:
     def integration(self, library: Library | None = None):
         library = library or self.library
         return self.db.integration_configuration(
-            MARCExporter,
+            MarcExporter,
             Goals.CATALOG_GOAL,
             libraries=[library],
         )
@@ -73,9 +80,11 @@ class MARCRecordControllerFixture:
 
 @pytest.fixture
 def marc_record_controller_fixture(
-    db: DatabaseTransactionFixture,
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ) -> MARCRecordControllerFixture:
-    return MARCRecordControllerFixture(db)
+    return MARCRecordControllerFixture(
+        db, services_fixture.services.integration_registry.catalog_services()
+    )
 
 
 class TestMARCRecordController:

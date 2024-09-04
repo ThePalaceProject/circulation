@@ -37,6 +37,12 @@ def beat_schedule() -> dict[str, Any]:
             "task": "search.search_indexing",
             "schedule": crontab(minute="*"),  # Run every minute
         },
+        "marc_export": {
+            "task": "marc.marc_export",
+            "schedule": crontab(
+                hour="3,11", minute="0"
+            ),  # Run twice a day at 3:00 AM and 11:00 AM
+        },
     }
 
 
