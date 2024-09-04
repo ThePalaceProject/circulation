@@ -322,11 +322,21 @@ class NoAvailableCopies(CannotLoan):
     copies are already checked out.
     """
 
+    @property
+    def base(self) -> ProblemDetail:
+        return CHECKOUT_FAILED.detailed(detail="No copies available to check out.")
+
 
 class AlreadyCheckedOut(CannotLoan):
     """The patron can't put check this book out because they already have
     it checked out.
     """
+
+    @property
+    def base(self) -> ProblemDetail:
+        return CHECKOUT_FAILED.detailed(
+            detail="You already have this book checked out."
+        )
 
 
 class AlreadyOnHold(CannotHold):
@@ -334,11 +344,21 @@ class AlreadyOnHold(CannotHold):
     it on hold.
     """
 
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLD_FAILED.detailed(detail="You already have this book on hold.")
+
 
 class NotCheckedOut(CannotReturn):
     """The patron can't return this book because they don't
     have it checked out in the first place.
     """
+
+    @property
+    def base(self) -> ProblemDetail:
+        return COULD_NOT_MIRROR_TO_REMOTE.detailed(
+            title="Unable to return", detail="You don't have this book checked out."
+        )
 
 
 class NotOnHold(CannotReleaseHold):
@@ -349,6 +369,10 @@ class NotOnHold(CannotReleaseHold):
 
 class CurrentlyAvailable(CannotHold):
     """The patron can't put this book on hold because it's available now."""
+
+    @property
+    def base(self) -> ProblemDetail:
+        return HOLD_FAILED.detailed(detail="Cannot place a hold on an available title.")
 
 
 class HoldOnUnlimitedAccess(CannotHold):

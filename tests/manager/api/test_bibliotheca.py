@@ -858,48 +858,68 @@ class TestErrorParser:
     )
 
     @pytest.mark.parametrize(
-        "incoming_message, error_class",
+        "incoming_message, error_class, message, debug_message",
         [
             (
                 "Patron cannot loan more than 12 documents",
                 PatronLoanLimitReached,
+                "Patron cannot loan more than 12 documents",
+                None,
             ),
             (
                 "Patron cannot have more than 15 holds",
                 PatronHoldLimitReached,
+                "Patron cannot have more than 15 holds",
+                None,
             ),
             (
                 "the patron document status was CAN_WISH and not one of CAN_LOAN,RESERVATION",
                 NoLicenses,
+                "The library currently has no licenses for this book.",
+                "the patron document status was CAN_WISH and not one of CAN_LOAN,RESERVATION",
             ),
             (
                 "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
                 NoAvailableCopies,
+                "No copies available to check out.",
+                "the patron document status was CAN_HOLD and not one of CAN_LOAN,RESERVATION",
             ),
             (
                 "the patron document status was LOAN and not one of CAN_LOAN,RESERVATION",
                 AlreadyCheckedOut,
+                "You already have this book checked out.",
+                "the patron document status was LOAN and not one of CAN_LOAN,RESERVATION",
             ),
             (
                 "The patron has no eBooks checked out",
                 NotCheckedOut,
+                "The patron has no eBooks checked out",
+                None,
             ),
             (
                 "the patron document status was CAN_LOAN and not one of CAN_HOLD",
                 CurrentlyAvailable,
+                "Cannot place a hold on an available title.",
+                "the patron document status was CAN_LOAN and not one of CAN_HOLD",
             ),
             (
                 "the patron document status was HOLD and not one of CAN_HOLD",
                 AlreadyOnHold,
+                "You already have this book on hold.",
+                "the patron document status was HOLD and not one of CAN_HOLD",
             ),
             (
                 "The patron does not have the book on hold",
                 NotOnHold,
+                "The patron does not have the book on hold",
+                None,
             ),
             # This is such a weird case we don't have a special exception for it.
             (
                 "the patron document status was LOAN and not one of CAN_HOLD",
                 CannotHold,
+                "Could not place hold (reason unknown).",
+                "the patron document status was LOAN and not one of CAN_HOLD",
             ),
         ],
     )
@@ -907,13 +927,16 @@ class TestErrorParser:
         self,
         incoming_message: str,
         error_class: type[CirculationException],
+        message: str,
+        debug_message: str | None,
     ):
         document = self.BIBLIOTHECA_ERROR_RESPONSE_BODY_TEMPLATE.format(
             message=incoming_message
         )
         error = ErrorParser().process_first(document)
         assert error.__class__ is error_class
-        assert incoming_message == str(error)
+        assert error.problem_detail.detail == message
+        assert error.problem_detail.debug_message == debug_message
 
     @pytest.mark.parametrize(
         "incoming_message, incoming_message_from_file, error_string",
