@@ -4,7 +4,10 @@ import pytest
 from celery.exceptions import Ignore, Retry
 
 from palace.manager.marc.uploader import MarcUploader
-from palace.manager.service.redis.models.marc import MarcFileUpload, MarcFileUploads
+from palace.manager.service.redis.models.marc import (
+    MarcFileUpload,
+    MarcFileUploadSession,
+)
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.s3 import S3ServiceFixture
@@ -31,7 +34,7 @@ class MarcUploaderFixture:
 
         self.mock_collection_id = 52
 
-        self.uploads = MarcFileUploads(self.redis_client, self.mock_collection_id)
+        self.uploads = MarcFileUploadSession(self.redis_client, self.mock_collection_id)
         self.uploader = MarcUploader(self.mock_s3_service, self.uploads)
 
 

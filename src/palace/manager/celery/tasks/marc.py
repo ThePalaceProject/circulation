@@ -7,7 +7,7 @@ from palace.manager.celery.task import Task
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.uploader import MarcUploader
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.marc import MarcFileUploads
+from palace.manager.service.redis.models.marc import MarcFileUploadSession
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -26,7 +26,7 @@ def marc_export(task: Task, force: bool = False) -> None:
             # Collection.id should never be able to be None here, but mypy doesn't know that.
             # So we assert it for mypy's benefit.
             assert collection.id is not None
-            lock = MarcFileUploads(task.services.redis.client(), collection.id)
+            lock = MarcFileUploadSession(task.services.redis.client(), collection.id)
             with lock.lock() as acquired:
                 if not acquired:
                     task.log.info(
@@ -92,7 +92,9 @@ def marc_export_collection(
     libraries_info = [LibraryInfo.parse_obj(l) for l in libraries]
     uploader = MarcUploader(
         storage_service,
-        MarcFileUploads(task.services.redis.client(), collection_id, update_number),
+        MarcFileUploadSession(
+            task.services.redis.client(), collection_id, update_number
+        ),
     )
     with uploader.begin():
         if not uploader.locked:

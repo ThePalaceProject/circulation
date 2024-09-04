@@ -9,7 +9,10 @@ from palace.manager.celery.tasks import marc
 from palace.manager.marc.exporter import MarcExporter
 from palace.manager.marc.uploader import MarcUploader
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.service.redis.models.marc import MarcFileUploads, RedisMarcError
+from palace.manager.service.redis.models.marc import (
+    MarcFileUploadSession,
+    MarcFileUploadSessionError,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
@@ -56,7 +59,7 @@ def test_marc_export(
 
         # Collection 1 should be skipped because it is locked
         assert marc_exporter_fixture.collection1.id is not None
-        MarcFileUploads(
+        MarcFileUploadSession(
             redis_fixture.client, marc_exporter_fixture.collection1.id
         ).acquire()
 
@@ -113,7 +116,7 @@ class MarcExportCollectionFixture:
 
     def redis_data(self, collection: Collection) -> dict[str, Any] | None:
         assert collection.id is not None
-        uploads = MarcFileUploads(self.redis_fixture.client, collection.id)
+        uploads = MarcFileUploadSession(self.redis_fixture.client, collection.id)
         return self.redis_fixture.client.json().get(uploads.key)
 
     def setup_minio_storage(self) -> None:
@@ -252,7 +255,7 @@ class TestMarcExportCollection:
         caplog.set_level(LogLevel.info)
         collection = marc_exporter_fixture.collection1
         assert collection.id is not None
-        MarcFileUploads(redis_fixture.client, collection.id).acquire()
+        MarcFileUploadSession(redis_fixture.client, collection.id).acquire()
         marc_export_collection_fixture.setup_mock_storage()
         with patch.object(MarcExporter, "query_works") as query:
             marc_export_collection_fixture.export_collection(collection)
@@ -275,12 +278,12 @@ class TestMarcExportCollection:
 
         # Acquire the lock and start an upload, this simulates another task having done work
         # that the current task doesn't know about.
-        uploads = MarcFileUploads(redis_fixture.client, collection.id)
+        uploads = MarcFileUploadSession(redis_fixture.client, collection.id)
         with uploads.lock() as locked:
             assert locked
             uploads.append_buffers({"test": "data"})
 
-        with pytest.raises(RedisMarcError, match="Update number mismatch"):
+        with pytest.raises(MarcFileUploadSessionError, match="Update number mismatch"):
             marc_export_collection_fixture.export_collection(collection)
 
         assert marc_export_collection_fixture.marc_files() == []

@@ -16,7 +16,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.util.log import LoggerMixin
 
 
-class RedisMarcError(LockError):
+class MarcFileUploadSessionError(LockError):
     pass
 
 
@@ -26,7 +26,7 @@ class MarcFileUpload(BaseModel):
     parts: list[MultipartS3UploadPart] = []
 
 
-class MarcFileUploads(RedisJsonLock, LoggerMixin):
+class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
     """
     This class is used as a lock for the Celery MARC export task, to ensure that only one
     task can upload MARC files for a given collection at a time. It increments an update
@@ -115,7 +115,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             if (
                 remote_random := fetched_data.get(self._lock_json_key)
             ) != self._random_value:
-                raise RedisMarcError(
+                raise MarcFileUploadSessionError(
                     f"Must hold lock to append to buffer. "
                     f"Expected: {self._random_value}, got: {remote_random}"
                 )
@@ -123,7 +123,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             if (
                 remote_update_number := fetched_data.get(self._update_number_json_key)
             ) != self._update_number:
-                raise RedisMarcError(
+                raise MarcFileUploadSessionError(
                     f"Update number mismatch. "
                     f"Expected: {self._update_number}, got: {remote_update_number}"
                 )
@@ -133,7 +133,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
 
     def _execute_pipeline(self, pipe: Pipeline, updates: int) -> list[Any]:
         if not pipe.explicit_transaction:
-            raise RedisMarcError(
+            raise MarcFileUploadSessionError(
                 "Pipeline should be in explicit transaction mode before executing."
             )
         pipe.json().numincrby(self.key, self._update_number_json_key, updates)
@@ -141,7 +141,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
         try:
             pipe_results = pipe.execute()
         except WatchError as e:
-            raise RedisMarcError(
+            raise MarcFileUploadSessionError(
                 "Failed to update buffers. Another process is modifying the buffers."
             ) from e
         self._update_number = self._parse_value_or_raise(pipe_results[-2])
@@ -175,7 +175,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             pipe_results = self._execute_pipeline(pipe, len(data))
 
         if not all(pipe_results):
-            raise RedisMarcError("Failed to append buffers.")
+            raise MarcFileUploadSessionError("Failed to append buffers.")
 
         return {
             k: set_results[k] if v is True else self._parse_value_or_raise(v)
@@ -197,7 +197,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             pipe_results = self._execute_pipeline(pipe, 1)
 
         if not all(pipe_results):
-            raise RedisMarcError("Failed to add part and clear buffer.")
+            raise MarcFileUploadSessionError("Failed to add part and clear buffer.")
 
     def set_upload_id(self, key: str, upload_id: str) -> None:
         with self._pipeline() as pipe:
@@ -210,7 +210,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             pipe_results = self._execute_pipeline(pipe, 1)
 
         if not all(pipe_results):
-            raise RedisMarcError("Failed to set upload ID.")
+            raise MarcFileUploadSessionError("Failed to set upload ID.")
 
     def clear_uploads(self) -> None:
         with self._pipeline() as pipe:
@@ -218,7 +218,7 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
             pipe_results = self._execute_pipeline(pipe, 1)
 
         if not all(pipe_results):
-            raise RedisMarcError("Failed to clear uploads.")
+            raise MarcFileUploadSessionError("Failed to clear uploads.")
 
     def _get_specific(
         self,
@@ -263,7 +263,9 @@ class MarcFileUploads(RedisJsonLock, LoggerMixin):
                 pipe.json().arrlen(self.key, self._parts_path(key))
                 results = pipe.execute()
         except ResponseError as e:
-            raise RedisMarcError("Failed to get part number and buffer data.") from e
+            raise MarcFileUploadSessionError(
+                "Failed to get part number and buffer data."
+            ) from e
 
         buffer_data: str = self._parse_value_or_raise(results[0])
         part_number: int = self._parse_value_or_raise(results[1])

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from celery.exceptions import Ignore, Retry
 from typing_extensions import Self
 
-from palace.manager.service.redis.models.marc import MarcFileUploads
+from palace.manager.service.redis.models.marc import MarcFileUploadSession
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.log import LoggerMixin
@@ -18,12 +18,14 @@ class MarcUploader(LoggerMixin):
     between steps to redis, and flushing them to S3 when the buffer is large enough.
 
     This class orchestrates the upload process, delegating the redis operation to the
-    `MarcFileUploads` class, and the S3 upload to the `S3Service` class.
+    `MarcFileUploadSession` class, and the S3 upload to the `S3Service` class.
     """
 
-    def __init__(self, storage_service: S3Service, marc_uploads: MarcFileUploads):
+    def __init__(
+        self, storage_service: S3Service, upload_session: MarcFileUploadSession
+    ):
         self.storage_service = storage_service
-        self.marc_uploads = marc_uploads
+        self.upload_session = upload_session
         self._buffers: defaultdict[str, str] = defaultdict(str)
         self._locked = False
 
@@ -33,30 +35,30 @@ class MarcUploader(LoggerMixin):
 
     @property
     def update_number(self) -> int:
-        return self.marc_uploads.update_number
+        return self.upload_session.update_number
 
     def add_record(self, key: str, record: bytes) -> None:
         self._buffers[key] += record.decode()
 
     def _s3_sync(self, needs_upload: Sequence[str]) -> None:
-        upload_ids = self.marc_uploads.get_upload_ids(needs_upload)
+        upload_ids = self.upload_session.get_upload_ids(needs_upload)
         for key in needs_upload:
             if upload_ids.get(key) is None:
                 upload_id = self.storage_service.multipart_create(
                     key, content_type=Representation.MARC_MEDIA_TYPE
                 )
-                self.marc_uploads.set_upload_id(key, upload_id)
+                self.upload_session.set_upload_id(key, upload_id)
                 upload_ids[key] = upload_id
 
-            part_number, data = self.marc_uploads.get_part_num_and_buffer(key)
+            part_number, data = self.upload_session.get_part_num_and_buffer(key)
             upload_part = self.storage_service.multipart_upload(
                 key, upload_ids[key], part_number, data.encode()
             )
-            self.marc_uploads.add_part_and_clear_buffer(key, upload_part)
+            self.upload_session.add_part_and_clear_buffer(key, upload_part)
 
     def sync(self) -> None:
         # First sync our buffers to redis
-        buffer_lengths = self.marc_uploads.append_buffers(self._buffers)
+        buffer_lengths = self.upload_session.append_buffers(self._buffers)
         self._buffers.clear()
 
         # Then, if any of our redis buffers are large enough, upload them to S3
@@ -72,7 +74,7 @@ class MarcUploader(LoggerMixin):
         self._s3_sync(needs_upload)
 
     def _abort(self) -> None:
-        in_progress = self.marc_uploads.get()
+        in_progress = self.upload_session.get()
         for key, upload in in_progress.items():
             if upload.upload_id is None:
                 # This upload has not started, so there is nothing to abort.
@@ -94,7 +96,7 @@ class MarcUploader(LoggerMixin):
         # Make sure any local data we have is synced
         self.sync()
 
-        in_progress = self.marc_uploads.get()
+        in_progress = self.upload_session.get()
         for key, upload in in_progress.items():
             if upload.upload_id is None:
                 # We haven't started the upload. At this point there is no reason to start a
@@ -118,17 +120,17 @@ class MarcUploader(LoggerMixin):
 
         # Delete our in-progress uploads data from redis
         if in_progress:
-            self.marc_uploads.clear_uploads()
+            self.upload_session.clear_uploads()
 
         # Return the keys that were uploaded
         return set(in_progress.keys())
 
     def delete(self) -> None:
-        self.marc_uploads.delete()
+        self.upload_session.delete()
 
     @contextmanager
     def begin(self) -> Generator[Self, None, None]:
-        self._locked = self.marc_uploads.acquire()
+        self._locked = self.upload_session.acquire()
         try:
             yield self
         except Exception as e:
@@ -138,5 +140,5 @@ class MarcUploader(LoggerMixin):
                 self._abort()
             raise
         finally:
-            self.marc_uploads.release()
+            self.upload_session.release()
             self._locked = False
