@@ -7,7 +7,10 @@ from palace.manager.celery.task import Task
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.redis.models.marc import MarcFileUploadSession
+from palace.manager.service.redis.models.marc import (
+    MarcFileUploadSession,
+    MarcFileUploadState,
+)
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -26,11 +29,22 @@ def marc_export(task: Task, force: bool = False) -> None:
             # Collection.id should never be able to be None here, but mypy doesn't know that.
             # So we assert it for mypy's benefit.
             assert collection.id is not None
-            lock = MarcFileUploadSession(task.services.redis.client(), collection.id)
-            with lock.lock() as acquired:
+            upload_session = MarcFileUploadSession(
+                task.services.redis.client(), collection.id
+            )
+            with upload_session.lock() as acquired:
                 if not acquired:
                     task.log.info(
                         f"Skipping collection {collection.name} ({collection.id}) because another task holds its lock."
+                    )
+                    continue
+
+                if (
+                    upload_state := upload_session.state()
+                ) != MarcFileUploadState.INITIAL:
+                    task.log.info(
+                        f"Skipping collection {collection.name} ({collection.id}) because it is already being "
+                        f"processed (state: {upload_state})."
                     )
                     continue
 
@@ -62,6 +76,7 @@ def marc_export(task: Task, force: bool = False) -> None:
                 task.log.info(
                     f"Generating MARC records for collection {collection.name} ({collection.id})."
                 )
+                upload_session.set_state(MarcFileUploadState.QUEUED)
                 marc_export_collection.delay(
                     collection_id=collection.id,
                     start_time=start_time,

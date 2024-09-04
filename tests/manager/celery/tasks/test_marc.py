@@ -12,6 +12,7 @@ from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.marc import (
     MarcFileUploadSession,
     MarcFileUploadSessionError,
+    MarcFileUploadState,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
@@ -26,19 +27,54 @@ from tests.fixtures.s3 import S3ServiceFixture, S3ServiceIntegrationFixture
 from tests.fixtures.services import ServicesFixture
 
 
-def test_marc_export(
-    db: DatabaseTransactionFixture,
-    redis_fixture: RedisFixture,
-    marc_exporter_fixture: MarcExporterFixture,
-    celery_fixture: CeleryFixture,
-):
-    marc_exporter_fixture.configure_export()
-    with (patch.object(marc, "marc_export_collection") as marc_export_collection,):
-        # Because none of the collections have works, we should skip all of them.
-        marc.marc_export.delay().wait()
-        marc_export_collection.delay.assert_not_called()
+class TestMarcExport:
+    def test_no_works(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        marc_exporter_fixture.configure_export()
+        with patch.object(marc, "marc_export_collection") as marc_export_collection:
+            # Because none of the collections have works, we should skip all of them.
+            marc.marc_export.delay().wait()
+            marc_export_collection.delay.assert_not_called()
 
-        # Runs against all the expected collections
+    def test_normal_run(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        marc_exporter_fixture.configure_export()
+        with patch.object(marc, "marc_export_collection") as marc_export_collection:
+            # Runs against all the expected collections
+            collections = [
+                marc_exporter_fixture.collection1,
+                marc_exporter_fixture.collection2,
+                marc_exporter_fixture.collection3,
+            ]
+            for collection in collections:
+                marc_exporter_fixture.work(collection)
+            marc.marc_export.delay().wait()
+            marc_export_collection.delay.assert_has_calls(
+                [
+                    call(collection_id=collection.id, start_time=ANY, libraries=ANY)
+                    for collection in collections
+                ],
+                any_order=True,
+            )
+
+    def test_skip_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        marc_exporter_fixture.configure_export()
         collections = [
             marc_exporter_fixture.collection1,
             marc_exporter_fixture.collection2,
@@ -46,39 +82,34 @@ def test_marc_export(
         ]
         for collection in collections:
             marc_exporter_fixture.work(collection)
-        marc.marc_export.delay().wait()
-        marc_export_collection.delay.assert_has_calls(
-            [
-                call(collection_id=collection.id, start_time=ANY, libraries=ANY)
-                for collection in collections
-            ],
-            any_order=True,
-        )
+        with patch.object(marc, "marc_export_collection") as marc_export_collection:
+            # Collection 1 should be skipped because it is locked
+            assert marc_exporter_fixture.collection1.id is not None
+            MarcFileUploadSession(
+                redis_fixture.client, marc_exporter_fixture.collection1.id
+            ).acquire()
 
-        marc_export_collection.reset_mock()
+            # Collection 2 should be skipped because it was updated recently
+            create(
+                db.session,
+                MarcFile,
+                library=marc_exporter_fixture.library1,
+                collection=marc_exporter_fixture.collection2,
+                created=utc_now(),
+                key="test-file-2.mrc",
+            )
 
-        # Collection 1 should be skipped because it is locked
-        assert marc_exporter_fixture.collection1.id is not None
-        MarcFileUploadSession(
-            redis_fixture.client, marc_exporter_fixture.collection1.id
-        ).acquire()
+            # Collection 3 should be skipped because its state is not INITIAL
+            assert marc_exporter_fixture.collection3.id is not None
+            upload_session = MarcFileUploadSession(
+                redis_fixture.client, marc_exporter_fixture.collection3.id
+            )
+            with upload_session.lock() as acquired:
+                assert acquired
+                upload_session.set_state(MarcFileUploadState.QUEUED)
 
-        # Collection 2 should be skipped because it was updated recently
-        create(
-            db.session,
-            MarcFile,
-            library=marc_exporter_fixture.library1,
-            collection=marc_exporter_fixture.collection2,
-            created=utc_now(),
-            key="test-file-2.mrc",
-        )
-
-        marc.marc_export.delay().wait()
-        marc_export_collection.delay.assert_called_once_with(
-            collection_id=marc_exporter_fixture.collection3.id,
-            start_time=ANY,
-            libraries=ANY,
-        )
+            marc.marc_export.delay().wait()
+            marc_export_collection.delay.assert_not_called()
 
 
 class MarcExportCollectionFixture:

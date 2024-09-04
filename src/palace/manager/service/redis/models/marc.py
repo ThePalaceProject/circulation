@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
+from enum import auto
 from functools import cached_property
 from typing import Any
 
+from backports.strenum import StrEnum
 from pydantic import BaseModel
 from redis import ResponseError, WatchError
 
@@ -24,6 +26,12 @@ class MarcFileUpload(BaseModel):
     buffer: str = ""
     upload_id: str | None = None
     parts: list[MultipartS3UploadPart] = []
+
+
+class MarcFileUploadState(StrEnum):
+    INITIAL = auto()
+    QUEUED = auto()
+    UPLOADING = auto()
 
 
 class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
@@ -71,7 +79,9 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         """
         The initial value to use for the locks JSON object.
         """
-        return json.dumps({"uploads": {}, "update_number": 0})
+        return json.dumps(
+            {"uploads": {}, "update_number": 0, "state": MarcFileUploadState.INITIAL}
+        )
 
     @property
     def _update_number_json_key(self) -> str:
@@ -80,6 +90,10 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
     @property
     def _uploads_json_key(self) -> str:
         return "$.uploads"
+
+    @property
+    def _state_json_key(self) -> str:
+        return "$.state"
 
     @staticmethod
     def _upload_initial_value(buffer_data: str) -> dict[str, Any]:
@@ -116,7 +130,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
                 remote_random := fetched_data.get(self._lock_json_key)
             ) != self._random_value:
                 raise MarcFileUploadSessionError(
-                    f"Must hold lock to append to buffer. "
+                    f"Must hold lock to update upload session. "
                     f"Expected: {self._random_value}, got: {remote_random}"
                 )
             # Check that the update number is correct
@@ -131,11 +145,18 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
                 pipe.multi()
             yield pipe
 
-    def _execute_pipeline(self, pipe: Pipeline, updates: int) -> list[Any]:
+    def _execute_pipeline(
+        self,
+        pipe: Pipeline,
+        updates: int,
+        *,
+        state: MarcFileUploadState = MarcFileUploadState.UPLOADING,
+    ) -> list[Any]:
         if not pipe.explicit_transaction:
             raise MarcFileUploadSessionError(
                 "Pipeline should be in explicit transaction mode before executing."
             )
+        pipe.json().set(self.key, path=self._state_json_key, obj=state)
         pipe.json().numincrby(self.key, self._update_number_json_key, updates)
         pipe.pexpire(self.key, self._lock_timeout_ms)
         try:
@@ -145,7 +166,8 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
                 "Failed to update buffers. Another process is modifying the buffers."
             ) from e
         self._update_number = self._parse_value_or_raise(pipe_results[-2])
-        return pipe_results[:-2]
+
+        return pipe_results[:-3]
 
     def append_buffers(self, data: Mapping[str, str]) -> dict[str, int]:
         if not data:
@@ -271,3 +293,14 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         part_number: int = self._parse_value_or_raise(results[1])
 
         return part_number, buffer_data
+
+    def state(self) -> MarcFileUploadState | None:
+        get_results = self._redis_client.json().get(self.key, self._state_json_key)
+        state: str | None = self._parse_value(get_results)
+        if state is None:
+            return None
+        return MarcFileUploadState(state)
+
+    def set_state(self, state: MarcFileUploadState) -> None:
+        with self._pipeline() as pipe:
+            self._execute_pipeline(pipe, 0, state=state)

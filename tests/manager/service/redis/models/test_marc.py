@@ -4,6 +4,7 @@ from palace.manager.service.redis.models.marc import (
     MarcFileUpload,
     MarcFileUploadSession,
     MarcFileUploadSessionError,
+    MarcFileUploadState,
 )
 from palace.manager.service.redis.redis import Pipeline
 from palace.manager.service.storage.s3 import MultipartS3UploadPart
@@ -111,11 +112,12 @@ class TestMarcFileUploadSession:
         assert "Pipeline should be in explicit transaction mode" in str(exc_info.value)
 
         # The _execute_pipeline function takes care of extending the timeout and incrementing
-        # the update number.
+        # the update number and setting the state of the session
         [update_number] = client.json().get(
             uploads.key, uploads._update_number_json_key
         )
         client.pexpire(uploads.key, 500)
+        old_state = uploads.state()
         with uploads._pipeline() as pipe:
             # If we execute the pipeline, we should get a list of results, excluding the
             # operations that _execute_pipeline does.
@@ -125,6 +127,8 @@ class TestMarcFileUploadSession:
         )
         assert new_update_number == update_number + 2
         assert client.pttl(uploads.key) > 500
+        assert uploads.state() != old_state
+        assert uploads.state() == MarcFileUploadState.UPLOADING
 
         # If we try to execute a pipeline that has been modified by another process, we should get an error
         with uploads._pipeline() as pipe:
@@ -436,3 +440,30 @@ class TestMarcFileUploadSession:
         assert uploads.get_part_num_and_buffer(
             marc_file_upload_session_fixture.mock_upload_key_1
         ) == (2, "1234567")
+
+    def test_state(
+        self, marc_file_upload_session_fixture: MarcFileUploadSessionFixture
+    ):
+        uploads = marc_file_upload_session_fixture.uploads
+
+        # If the session doesn't exist, the state should be None
+        assert uploads.state() is None
+
+        # Once the state is created, by locking for example, the state should be SessionState.INITIAL
+        with uploads.lock():
+            assert uploads.state() == MarcFileUploadState.INITIAL
+
+    def test_set_state(
+        self, marc_file_upload_session_fixture: MarcFileUploadSessionFixture
+    ):
+        uploads = marc_file_upload_session_fixture.uploads
+
+        # If we don't hold the lock, we can't set the state
+        with pytest.raises(MarcFileUploadSessionError) as exc_info:
+            uploads.set_state(MarcFileUploadState.UPLOADING)
+        assert "Must hold lock" in str(exc_info.value)
+
+        # Once the state is created, by locking for example, we can set the state
+        with uploads.lock():
+            uploads.set_state(MarcFileUploadState.UPLOADING)
+            assert uploads.state() == MarcFileUploadState.UPLOADING
