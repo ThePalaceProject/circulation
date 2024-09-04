@@ -31,15 +31,15 @@ from tenacity import (
 
 from palace.manager.api.admin.validator import Validator
 from palace.manager.api.circulation import (
-    APIAwareFulfillmentInfo,
     BaseCirculationAPI,
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
     CirculationInternalFormatsMixin,
-    FulfillmentInfo,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
+    UrlFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -81,7 +81,6 @@ from palace.manager.core.monitor import (
     IdentifierSweepMonitor,
     TimelineMonitor,
 )
-from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -105,9 +104,8 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
 from palace.manager.util.flask_util import Response
-from palace.manager.util.http import HTTP, RequestNetworkException
+from palace.manager.util.http import HTTP, RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.problem_detail import ProblemDetail
 from palace.manager.util.xmlparser import XMLProcessor
 
 
@@ -478,7 +476,7 @@ class Axis360API(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         """Fulfill a patron's request for a specific book."""
         identifier = licensepool.identifier
         # This should include only one 'activity'.
@@ -498,8 +496,8 @@ class Axis360API(
                 continue
             # We've found the remote loan corresponding to this
             # license pool.
-            fulfillment = loan.fulfillment_info
-            if not fulfillment or not isinstance(fulfillment, FulfillmentInfo):
+            fulfillment = loan.fulfillment
+            if not fulfillment or not isinstance(fulfillment, Fulfillment):
                 raise CannotFulfill()
             return fulfillment
         # If we made it to this point, the patron does not have this
@@ -1616,24 +1614,15 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
 
             # Arguments common to FulfillmentInfo and
             # Axis360FulfillmentInfo.
-            kwargs = dict(
-                data_source_name=DataSource.AXIS_360,
-                identifier_type=self.id_type,
-                identifier=axis_identifier,
-            )
 
-            fulfillment: FulfillmentInfo | None
+            fulfillment: Fulfillment | None
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
                 # immediately, without making any more API requests.
-                fulfillment = Axis360AcsFulfillmentInfo(
-                    collection=self.collection,
+                fulfillment = Axis360AcsFulfillment(
                     content_link=html.unescape(download_url),
                     content_type=DeliveryMechanism.ADOBE_DRM,
-                    content=None,
-                    content_expires=None,
                     verify=self.api.verify_certificate,
-                    **kwargs,
                 )
             elif transaction_id:
                 # We will eventually need to make a request to the
@@ -1649,8 +1638,12 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 # metadata.
                 #
                 # Axis360FulfillmentInfo can handle both cases.
-                fulfillment = Axis360FulfillmentInfo(
-                    api=self.api, key=transaction_id, **kwargs
+                fulfillment = Axis360Fulfillment(
+                    data_source_name=DataSource.AXIS_360,
+                    identifier_type=self.id_type,
+                    identifier=axis_identifier,
+                    api=self.api,
+                    key=transaction_id,
                 )
             else:
                 # We're out of luck -- we can't fulfill this loan.
@@ -1662,7 +1655,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 identifier=axis_identifier,
                 start_date=start_date,
                 end_date=end_date,
-                fulfillment_info=fulfillment,
+                fulfillment=fulfillment,
             )
 
         elif reserved:
@@ -1914,35 +1907,70 @@ class AxisNowManifest:
         return json.dumps(data, sort_keys=True)
 
 
-class Axis360FulfillmentInfo(APIAwareFulfillmentInfo, LoggerMixin):
-    """An Axis 360-specific FulfillmentInfo implementation for audiobooks
+class Axis360Fulfillment(Fulfillment, LoggerMixin):
+    """An Axis 360-specific Fulfillment implementation for audiobooks
     and books served through AxisNow.
 
-    We use these instead of normal FulfillmentInfo objects because
-    putting all this information into FulfillmentInfo would require
+    We use these instead of normal Fulfillment objects because
+    putting all this information into Fulfillment would require
     one or two extra HTTP requests, and there's often no need to make
     those requests.
     """
 
-    def do_fetch(self) -> None:
+    def __init__(
+        self,
+        api: Axis360API,
+        data_source_name: str,
+        identifier_type: str,
+        identifier: str,
+        key: str,
+    ):
+        """Constructor.
+
+        :param api: An Axis360API instance, in case the parsing of
+        a fulfillment document triggers additional API requests.
+
+        :param key: The transaction ID that will be used to fulfill
+        the request.
+        """
+        self.data_source_name = data_source_name
+        self.identifier_type = identifier_type
+        self.identifier = identifier
+        self.api = api
+        self.key = key
+
+        self.content_type: str | None = None
+        self.content: str | None = None
+
+    def license_pool(self, _db: Session) -> LicensePool:
+        """Find the LicensePool model object corresponding to this object."""
+        collection = self.api.collection
+        pool, is_new = LicensePool.for_foreign_id(
+            _db,
+            self.data_source_name,
+            self.identifier_type,
+            self.identifier,
+            collection=collection,
+        )
+        return pool
+
+    def do_fetch(self) -> tuple[str, str]:
         _db = self.api._db
         license_pool = self.license_pool(_db)
         transaction_id = self.key
-        if not isinstance(self.api, Axis360API):
-            self.log.error(
-                f"Called with wrong API type {self.api.__class__.__name__} should be {Axis360API.__name__}"
-            )
-            raise ValueError("Axis360FulfillmentInfo can only be used with Axis360API")
         response = self.api.get_fulfillment_info(transaction_id)
         parser = Axis360FulfillmentInfoResponseParser(self.api)
         manifest, expires = parser.parse(response.content, license_pool=license_pool)
-        self._content = str(manifest)
-        self._content_type = manifest.MEDIA_TYPE
-        self._content_expires = expires
+        return str(manifest), manifest.MEDIA_TYPE
+
+    def response(self) -> Response:
+        if self.content is None:
+            self.content, self.content_type = self.do_fetch()
+        return Response(response=self.content, content_type=self.content_type)
 
 
-class Axis360AcsFulfillmentInfo(FulfillmentInfo, LoggerMixin):
-    """This implements a Axis 360 specific FulfillmentInfo for ACS content
+class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
+    """This implements a Axis 360 specific Fulfillment for ACS content
     served through AxisNow. The AxisNow API gives us a link that we can use
     to get the ACSM file that we serve to the mobile apps.
 
@@ -1967,27 +1995,19 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo, LoggerMixin):
     and closed the ticket.
     https://github.com/urllib3/urllib3/issues/1677
 
-    This FulfillmentInfo implementation uses the built in Python urllib
+    This Fulfillment implementation uses the built in Python urllib
     implementation instead of requests (and urllib3) to make this request
     to the Axis 360 API, sidestepping the problem, but taking a different
     code path than most of our external HTTP requests.
     """
 
-    def __init__(self, verify: bool, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.verify: bool = verify
+    def __init__(
+        self, content_link: str, content_type: str | None, verify: bool
+    ) -> None:
+        super().__init__(content_link, content_type)
+        self.verify = verify
 
-    def problem_detail_document(self, error_details: str) -> ProblemDetail:
-        service_name = urlparse(self.content_link).netloc
-        self.log.warning(error_details)
-        return INTEGRATION_ERROR.detailed(
-            _(RequestNetworkException.detail, service=service_name),
-            title=RequestNetworkException.title,
-            debug_message=error_details,
-        )
-
-    @property
-    def as_response(self) -> Response | ProblemDetail:
+    def response(self) -> Response:
         service_name = urlparse(str(self.content_link)).netloc
         try:
             if self.verify:
@@ -1999,10 +2019,6 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo, LoggerMixin):
             else:
                 # Default context does no ssl verification
                 ssl_context = ssl.SSLContext()
-            if self.content_link is None:
-                return self.problem_detail_document(
-                    f"No content link provided for {service_name}"
-                )
             req = urllib.request.Request(self.content_link)
             with urllib.request.urlopen(
                 req, timeout=20, context=ssl_context
@@ -2012,21 +2028,19 @@ class Axis360AcsFulfillmentInfo(FulfillmentInfo, LoggerMixin):
                 headers = response.headers
 
         # Mimic the behavior of the HTTP.request_with_timeout class and
-        # wrap the exceptions thrown by urllib and ssl returning a ProblemDetail document.
+        # wrap the exceptions thrown by urllib and ssl by raising a RemoteIntegrationException
         except urllib.error.HTTPError as e:
-            return self.problem_detail_document(
-                "The server received a bad status code ({}) while contacting {}".format(
-                    e.code, service_name
-                )
-            )
-        except TimeoutError:
-            return self.problem_detail_document(
-                f"Error connecting to {service_name}. Timeout occurred."
-            )
+            message = f"The server received a bad status code ({e.code}) while contacting {service_name}"
+            self.log.warning(message)
+            raise RemoteIntegrationException(service_name, message) from e
+        except TimeoutError as e:
+            message = f"Error connecting to {service_name}. Timeout occurred."
+            self.log.warning(message)
+            raise RemoteIntegrationException(service_name, message) from e
         except (urllib.error.URLError, ssl.SSLError) as e:
             reason = getattr(e, "reason", e.__class__.__name__)
-            return self.problem_detail_document(
-                f"Error connecting to {service_name}. {reason}."
-            )
+            message = f"Error connecting to {service_name}. {reason}."
+            self.log.warning(message)
+            raise RemoteIntegrationException(service_name, message) from e
 
         return Response(response=content, status=status, headers=headers)

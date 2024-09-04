@@ -27,7 +27,7 @@ from palace.manager.api.bibliotheca import (
 )
 from palace.manager.api.circulation import (
     CirculationAPI,
-    FulfillmentInfo,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
 )
@@ -561,11 +561,8 @@ class TestBibliothecaAPI:
         fulfillment = bibliotheca_fixture.api.fulfill(
             patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
-        assert isinstance(fulfillment, FulfillmentInfo)
+        assert isinstance(fulfillment, Fulfillment)
         assert b"this is an ACSM" == fulfillment.content
-        assert pool.identifier.identifier == fulfillment.identifier
-        assert pool.identifier.type == fulfillment.identifier_type
-        assert pool.data_source.name == fulfillment.data_source_name
 
         # The media type reported by the server is passed through.
         assert "presumably/an-acsm" == fulfillment.content_type
@@ -583,7 +580,7 @@ class TestBibliothecaAPI:
         fulfillment = bibliotheca_fixture.api.fulfill(
             patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
-        assert isinstance(fulfillment, FulfillmentInfo)
+        assert isinstance(fulfillment, Fulfillment)
 
         # Here, the media type reported by the server is not passed
         # through; it's replaced by a more specific media type
@@ -614,10 +611,10 @@ class TestBibliothecaAPI:
         fulfillment = bibliotheca_fixture.api.fulfill(
             patron, "password", pool, delivery_mechanism=delivery_mechanism
         )
-        assert isinstance(fulfillment, FulfillmentInfo)
+        assert isinstance(fulfillment, Fulfillment)
 
         # The (apparently) bad document is just passed on to the
-        # client as part of the FulfillmentInfo, in the hopes that the
+        # client as part of the Fulfillment, in the hopes that the
         # client will know what to do with it.
         assert bad_media_type == fulfillment.content_type
         assert bad_content == fulfillment.content

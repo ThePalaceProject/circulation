@@ -10,7 +10,7 @@ from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
     CirculationApiType,
-    FulfillmentInfo,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
@@ -92,8 +92,8 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
-        # Should be a FulfillmentInfo.
+    ) -> Fulfillment:
+        # Should be a Fulfillment.
         return self._return_or_raise("fulfill")
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
@@ -110,7 +110,7 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
     def queue_hold(self, response: HoldInfo | Exception) -> None:
         self._queue("hold", response)
 
-    def queue_fulfill(self, response: FulfillmentInfo | Exception) -> None:
+    def queue_fulfill(self, response: Fulfillment | Exception) -> None:
         self._queue("fulfill", response)
 
     def queue_checkin(self, response: None | Exception = None) -> None:
@@ -154,7 +154,7 @@ class MockCirculationAPI(CirculationAPI):
         api.queue_hold(response)
 
     def queue_fulfill(
-        self, licensepool: LicensePool, response: FulfillmentInfo | Exception
+        self, licensepool: LicensePool, response: Fulfillment | Exception
     ) -> None:
         api = self.api_for_license_pool(licensepool)
         api.queue_fulfill(response)

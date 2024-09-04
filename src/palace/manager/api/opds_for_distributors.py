@@ -9,7 +9,11 @@ import feedparser
 from flask_babel import lazy_gettext as _
 from sqlalchemy.orm import Session
 
-from palace.manager.api.circulation import BaseCirculationAPI, FulfillmentInfo, LoanInfo
+from palace.manager.api.circulation import (
+    BaseCirculationAPI,
+    DirectFulfillment,
+    LoanInfo,
+)
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
     DeliveryMechanismError,
@@ -286,10 +290,10 @@ class OPDSForDistributorsAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> DirectFulfillment:
         """Retrieve a bearer token that can be used to download the book.
 
-        :return: a FulfillmentInfo object.
+        :return: a DirectFulfillment object.
         """
         if (
             delivery_mechanism.delivery_mechanism.drm_scheme
@@ -339,15 +343,9 @@ class OPDSForDistributorsAPI(
             location=url,
         )
 
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            content_link=None,
-            content_type=DeliveryMechanism.BEARER_TOKEN,
+        return DirectFulfillment(
             content=json.dumps(token_document),
-            content_expires=credential.expires,
+            content_type=DeliveryMechanism.BEARER_TOKEN,
         )
 
     def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:

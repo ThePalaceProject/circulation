@@ -26,7 +26,7 @@ from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
     BaseCirculationLoanSettings,
-    FulfillmentInfo,
+    DirectFulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
@@ -488,7 +488,7 @@ class BibliothecaAPI(
         password: str,
         pool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> DirectFulfillment:
         """Get the actual resource file to the patron."""
         if (
             delivery_mechanism.delivery_mechanism.drm_scheme
@@ -513,15 +513,9 @@ class BibliothecaAPI(
                     response.content,
                     exc_info=e,
                 )
-        return FulfillmentInfo(
-            pool.collection,
-            DataSource.BIBLIOTHECA,
-            pool.identifier.type,
-            pool.identifier.identifier,
-            content_link=None,
-            content_type=content_type or response.headers.get("Content-Type"),
+        return DirectFulfillment(
             content=content,
-            content_expires=None,
+            content_type=content_type or response.headers.get("Content-Type"),
         )
 
     def get_fulfillment_file(self, patron_id, bibliotheca_id):
