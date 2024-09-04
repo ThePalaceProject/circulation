@@ -246,6 +246,8 @@ class TestS3ServiceIntegration:
         bucket_contents = raw_client.list_objects(Bucket=bucket).get("Contents", [])
         assert len(bucket_contents) == 0
 
+        service.delete("key")  # Deleting a non-existent key should not raise an error.
+
     @pytest.mark.parametrize(
         "key, service_name, content, content_type",
         [

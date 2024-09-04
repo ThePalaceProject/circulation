@@ -1,3 +1,4 @@
+import datetime
 from typing import Any
 from unittest.mock import ANY, call, patch
 
@@ -17,7 +18,6 @@ from palace.manager.service.redis.models.marc import (
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -90,13 +90,8 @@ class TestMarcExport:
             ).acquire()
 
             # Collection 2 should be skipped because it was updated recently
-            create(
-                db.session,
-                MarcFile,
-                library=marc_exporter_fixture.library1,
-                collection=marc_exporter_fixture.collection2,
-                created=utc_now(),
-                key="test-file-2.mrc",
+            marc_exporter_fixture.marc_file(
+                collection=marc_exporter_fixture.collection2
             )
 
             # Collection 3 should be skipped because its state is not INITIAL
@@ -319,3 +314,29 @@ class TestMarcExportCollection:
 
         assert marc_export_collection_fixture.marc_files() == []
         assert marc_export_collection_fixture.redis_data(collection) is None
+
+
+def test_marc_export_cleanup(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    marc_exporter_fixture.configure_export(marc_file=False)
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    not_deleted_id = marc_exporter_fixture.marc_file(created=utc_now()).id
+    deleted_keys = [
+        marc_exporter_fixture.marc_file(
+            created=utc_now() - datetime.timedelta(days=d + 1)
+        ).key
+        for d in range(20)
+    ]
+
+    marc.marc_export_cleanup.delay(batch_size=5).wait()
+
+    [not_deleted] = db.session.execute(select(MarcFile)).scalars().all()
+    assert not_deleted.id == not_deleted_id
+    assert mock_s3.deleted == deleted_keys

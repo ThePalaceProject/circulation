@@ -105,6 +105,10 @@ class MockS3Service(S3Service):
 
         self.upload_in_progress: dict[str, MockMultipartUpload] = {}
         self.aborted: list[str] = []
+        self.deleted: list[str] = []
+
+    def delete(self, key: str) -> None:
+        self.deleted.append(key)
 
     def store_stream(
         self,

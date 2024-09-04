@@ -423,3 +423,115 @@ class TestMarcExporter:
             key=enabled_libraries[0].s3_key_delta,
             since=enabled_libraries[0].last_updated,
         )
+
+    def test_files_for_cleanup_deleted_disabled(
+        self, marc_exporter_fixture: MarcExporterFixture
+    ) -> None:
+        marc_exporter_fixture.configure_export(marc_file=False)
+        files_for_cleanup = partial(
+            MarcExporter.files_for_cleanup,
+            marc_exporter_fixture.session,
+            marc_exporter_fixture.registry,
+        )
+
+        # If there are no files, then no files are returned.
+        assert set(files_for_cleanup()) == set()
+
+        # Files created for libraries or collections that have been deleted are returned.
+        collection1_library1 = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection1,
+            library=marc_exporter_fixture.library1,
+        )
+        collection1_library2 = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection1,
+            library=marc_exporter_fixture.library2,
+        )
+        collection2_library1 = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection2,
+            library=marc_exporter_fixture.library1,
+        )
+        collection3_library2 = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection3,
+            library=marc_exporter_fixture.library2,
+        )
+        deleted_collection = marc_exporter_fixture.marc_file(collection=None)
+        deleted_library = marc_exporter_fixture.marc_file(library=None)
+
+        assert set(files_for_cleanup()) == {deleted_collection, deleted_library}
+
+        # If a collection has export_marc_records set to False, then the files for that collection are returned.
+        marc_exporter_fixture.collection1.export_marc_records = False
+        assert set(files_for_cleanup()) == {
+            deleted_collection,
+            deleted_library,
+            collection1_library1,
+            collection1_library2,
+        }
+
+        # If a library has its marc exporter integration disabled, then the files for that library are returned.
+        library2_marc_integration = marc_exporter_fixture.integration().for_library(
+            marc_exporter_fixture.library2
+        )
+        assert library2_marc_integration is not None
+        marc_exporter_fixture.session.delete(library2_marc_integration)
+        assert set(files_for_cleanup()) == {
+            deleted_collection,
+            deleted_library,
+            collection1_library1,
+            collection1_library2,
+            collection3_library2,
+        }
+
+    def test_files_for_cleanup_outdated_full(
+        self, marc_exporter_fixture: MarcExporterFixture
+    ) -> None:
+        marc_exporter_fixture.configure_export(marc_file=False)
+        files_for_cleanup = partial(
+            MarcExporter.files_for_cleanup,
+            marc_exporter_fixture.session,
+            marc_exporter_fixture.registry,
+        )
+
+        # Only a single full file is needed, the most recent, all other files are returned.
+        decoy = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection2,
+            created=utc_now() - datetime.timedelta(days=15),
+        )
+        newest = marc_exporter_fixture.marc_file(created=utc_now())
+        outdated = {
+            marc_exporter_fixture.marc_file(
+                created=utc_now() - datetime.timedelta(days=d + 1)
+            )
+            for d in range(5)
+        }
+        assert set(files_for_cleanup()) == outdated
+
+    def test_files_for_cleanup_outdated_delta(
+        self, marc_exporter_fixture: MarcExporterFixture
+    ) -> None:
+        marc_exporter_fixture.configure_export(marc_file=False)
+        files_for_cleanup = partial(
+            MarcExporter.files_for_cleanup,
+            marc_exporter_fixture.session,
+            marc_exporter_fixture.registry,
+        )
+
+        # The most recent 12 delta files are kept, all others are returned
+        last_week = utc_now() - datetime.timedelta(days=7)
+        decoy = marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection2,
+            created=utc_now() - datetime.timedelta(days=15),
+            since=last_week - datetime.timedelta(days=15),
+        )
+        kept = {
+            marc_exporter_fixture.marc_file(created=utc_now(), since=last_week)
+            for _ in range(12)
+        }
+        outdated = {
+            marc_exporter_fixture.marc_file(
+                created=last_week - datetime.timedelta(days=d),
+                since=last_week - datetime.timedelta(days=d + 1),
+            )
+            for d in range(20)
+        }
+        assert set(files_for_cleanup()) == outdated
