@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from palace.manager.celery.tasks import marc
 from palace.manager.marc.exporter import MarcExporter
-from palace.manager.marc.uploader import MarcUploader
+from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.marc import (
     MarcFileUploadSession,
@@ -235,7 +235,7 @@ class TestMarcExportCollection:
         collection = marc_exporter_fixture.collection1
         marc_export_collection_fixture.works(collection)
 
-        with patch.object(MarcUploader, "complete") as complete:
+        with patch.object(MarcUploadManager, "complete") as complete:
             complete.side_effect = Exception("Test Exception")
             with pytest.raises(Exception, match="Test Exception"):
                 marc_export_collection_fixture.export_collection(collection)

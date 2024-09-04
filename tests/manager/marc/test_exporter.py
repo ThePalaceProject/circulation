@@ -8,7 +8,7 @@ from freezegun import freeze_time
 
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.settings import MarcExporterLibrarySettings
-from palace.manager.marc.uploader import MarcUploader
+from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
@@ -334,18 +334,18 @@ class TestMarcExporter:
         work = marc_exporter_fixture.work(collection)
         enabled_libraries = marc_exporter_fixture.enabled_libraries(collection)
 
-        mock_uploader = create_autospec(MarcUploader)
+        mock_upload_manager = create_autospec(MarcUploadManager)
 
         process_work = partial(
             MarcExporter.process_work,
             work,
             enabled_libraries,
             "http://base.url",
-            uploader=mock_uploader,
+            upload_manager=mock_upload_manager,
         )
 
         process_work()
-        mock_uploader.add_record.assert_has_calls(
+        mock_upload_manager.add_record.assert_has_calls(
             [
                 call(enabled_libraries[0].s3_key_full, ANY),
                 call(enabled_libraries[0].s3_key_delta, ANY),
@@ -354,10 +354,10 @@ class TestMarcExporter:
         )
 
         # If the work has no license pools, it is skipped.
-        mock_uploader.reset_mock()
+        mock_upload_manager.reset_mock()
         work.license_pools = []
         process_work()
-        mock_uploader.add_record.assert_not_called()
+        mock_upload_manager.add_record.assert_not_called()
 
     def test_create_marc_upload_records(
         self, marc_exporter_fixture: MarcExporterFixture

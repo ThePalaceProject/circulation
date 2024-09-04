@@ -38,7 +38,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
     them to S3 when the buffer is full.
 
     This object is focused on the redis part of this operation, the actual s3 upload orchestration
-    is handled by the `MarcUploader` class.
+    is handled by the `MarcUploadManager` class.
     """
 
     def __init__(

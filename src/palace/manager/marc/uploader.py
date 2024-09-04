@@ -11,7 +11,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.log import LoggerMixin
 
 
-class MarcUploader(LoggerMixin):
+class MarcUploadManager(LoggerMixin):
     """
     This class is used to manage the upload of MARC files to S3. The upload is done in multiple
     parts, so that the Celery task can be broken up into multiple steps, saving the progress
@@ -90,7 +90,7 @@ class MarcUploader(LoggerMixin):
                 )
 
         # Delete our in-progress uploads from redis as well
-        self.delete()
+        self.remove_session()
 
     def complete(self) -> set[str]:
         # Make sure any local data we have is synced
@@ -125,7 +125,7 @@ class MarcUploader(LoggerMixin):
         # Return the keys that were uploaded
         return set(in_progress.keys())
 
-    def delete(self) -> None:
+    def remove_session(self) -> None:
         self.upload_session.delete()
 
     @contextmanager

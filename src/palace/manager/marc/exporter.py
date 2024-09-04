@@ -16,7 +16,7 @@ from palace.manager.marc.settings import (
     MarcExporterLibrarySettings,
     MarcExporterSettings,
 )
-from palace.manager.marc.uploader import MarcUploader
+from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
 )
@@ -305,7 +305,7 @@ class MarcExporter(
         libraries_info: Iterable[LibraryInfo],
         base_url: str,
         *,
-        uploader: MarcUploader,
+        upload_manager: MarcUploadManager,
         annotator: type[Annotator] = Annotator,
     ) -> None:
         pool = work.active_license_pool()
@@ -325,7 +325,7 @@ class MarcExporter(
                 library_info.include_genres,
             )
 
-            uploader.add_record(
+            upload_manager.add_record(
                 library_info.s3_key_full,
                 library_record.as_marc(),
             )
@@ -336,7 +336,7 @@ class MarcExporter(
                 and work.last_update_time
                 and work.last_update_time > library_info.last_updated
             ):
-                uploader.add_record(
+                upload_manager.add_record(
                     library_info.s3_key_delta,
                     annotator.set_revised(library_record).as_marc(),
                 )

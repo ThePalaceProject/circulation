@@ -5,7 +5,7 @@ from celery import shared_task
 
 from palace.manager.celery.task import Task
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
-from palace.manager.marc.uploader import MarcUploader
+from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.marc import MarcFileUploadSession
 from palace.manager.util.datetime_helpers import utc_now
@@ -90,14 +90,14 @@ def marc_export_collection(
     base_url = task.services.config.sitewide.base_url()
     storage_service = task.services.storage.public()
     libraries_info = [LibraryInfo.parse_obj(l) for l in libraries]
-    uploader = MarcUploader(
+    upload_manager = MarcUploadManager(
         storage_service,
         MarcFileUploadSession(
             task.services.redis.client(), collection_id, update_number
         ),
     )
-    with uploader.begin():
-        if not uploader.locked:
+    with upload_manager.begin():
+        if not upload_manager.locked:
             task.log.info(
                 f"Skipping collection {collection_id} because another task is already processing it."
             )
@@ -112,11 +112,11 @@ def marc_export_collection(
             )
             for work in works:
                 MarcExporter.process_work(
-                    work, libraries_info, base_url, uploader=uploader
+                    work, libraries_info, base_url, upload_manager=upload_manager
                 )
 
-        # Sync the uploader to ensure that all the data is written to storage.
-        uploader.sync()
+        # Sync the upload_manager to ensure that all the data is written to storage.
+        upload_manager.sync()
 
         if len(works) == batch_size:
             # This task is complete, but there are more works waiting to be exported. So we requeue ourselves
@@ -128,7 +128,7 @@ def marc_export_collection(
                     libraries=[l.dict() for l in libraries_info],
                     batch_size=batch_size,
                     last_work_id=works[-1].id,
-                    update_number=uploader.update_number,
+                    update_number=upload_manager.update_number,
                 )
             )
 
@@ -136,11 +136,11 @@ def marc_export_collection(
         with task.transaction() as session:
             collection = MarcExporter.collection(session, collection_id)
             collection_name = collection.name if collection else "unknown"
-            completed_uploads = uploader.complete()
+            completed_uploads = upload_manager.complete()
             MarcExporter.create_marc_upload_records(
                 session, start_time, collection_id, libraries_info, completed_uploads
             )
-            uploader.delete()
+            upload_manager.remove_session()
         task.log.info(
             f"Finished generating MARC records for collection '{collection_name}' ({collection_id})."
         )
