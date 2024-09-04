@@ -12,9 +12,9 @@ from palace.manager.integration.settings import (
 
 class MarcExporterSettings(BaseSettings):
     # This setting (in days) controls how often MARC files should be
-    # automatically updated. Since the crontab in docker isn't easily
-    # configurable, we can run a script daily but check this to decide
-    # whether to do anything.
+    # automatically updated. We run the celery task to update the MARC
+    # files on a schedule, but this setting easily allows admins to
+    # generate files more or less often.
     update_frequency: NonNegativeInt = FormField(
         30,
         form=ConfigurationFormItem(
