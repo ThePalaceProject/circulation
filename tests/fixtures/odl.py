@@ -27,7 +27,7 @@ from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
-from tests.mocks.mock import MockRequestsResponse
+from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 
 
@@ -44,7 +44,8 @@ class OPDS2WithODLApiFixture:
         self.collection = self.create_collection(self.library)
         self.work = self.create_work(self.collection)
         self.license = self.setup_license()
-        self.api = MockOPDS2WithODLApi(self.db.session, self.collection)
+        self.mock_http = MockHTTPClient()
+        self.api = MockOPDS2WithODLApi(self.db.session, self.collection, self.mock_http)
         self.patron = db.patron()
         self.pool = self.license.license_pool
 
@@ -100,12 +101,6 @@ class OPDS2WithODLApiFixture:
     ) -> None:
         patron = patron or self.patron
         pool = pool or self.pool
-        self._checkin(self.api, patron=patron, pool=pool)
-
-    @staticmethod
-    def _checkin(api: MockOPDS2WithODLApi, patron: Patron, pool: LicensePool) -> None:
-        """Create a function that, when evaluated, performs a checkin."""
-
         lsd = json.dumps(
             {
                 "status": "ready",
@@ -123,33 +118,20 @@ class OPDS2WithODLApiFixture:
             }
         )
 
-        api.queue_response(200, content=lsd)
-        api.queue_response(200)
-        api.queue_response(200, content=returned_lsd)
-        api.checkin(patron, "pin", pool)
+        self.mock_http.queue_response(200, content=lsd)
+        self.mock_http.queue_response(200, content="")
+        self.mock_http.queue_response(200, content=returned_lsd)
+        self.api.checkin(patron, "pin", pool)
 
     def checkout(
         self,
         loan_url: str | None = None,
         patron: Patron | None = None,
         pool: LicensePool | None = None,
-    ) -> tuple[LoanInfo, Any]:
+    ) -> tuple[LoanInfo, Loan]:
         patron = patron or self.patron
         pool = pool or self.pool
         loan_url = loan_url or self.db.fresh_url()
-        return self._checkout(
-            self.api, patron=patron, pool=pool, db=self.db, loan_url=loan_url
-        )
-
-    @staticmethod
-    def _checkout(
-        api: MockOPDS2WithODLApi,
-        patron: Patron,
-        pool: LicensePool,
-        db: DatabaseTransactionFixture,
-        loan_url: str,
-    ) -> tuple[LoanInfo, Any]:
-        """Create a function that, when evaluated, performs a checkout."""
 
         lsd = json.dumps(
             {
@@ -163,10 +145,10 @@ class OPDS2WithODLApiFixture:
                 ],
             }
         )
-        api.queue_response(200, content=lsd)
-        loan = api.checkout(patron, "pin", pool, MagicMock())
+        self.mock_http.queue_response(200, content=lsd)
+        loan = self.api.checkout(patron, "pin", pool, MagicMock())
         loan_db = (
-            db.session.query(Loan)
+            self.db.session.query(Loan)
             .filter(Loan.license_pool == pool, Loan.patron == patron)
             .one()
         )

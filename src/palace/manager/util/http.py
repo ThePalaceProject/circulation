@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -27,9 +27,6 @@ from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetailException,
 )
-
-if TYPE_CHECKING:
-    from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
 
 
 class RemoteIntegrationException(IntegrationException, BaseProblemDetailException):
@@ -99,55 +96,28 @@ class BadResponseException(RemoteIntegrationException):
         self,
         url_or_service: str,
         message: str,
+        response: Response,
         debug_message: str | None = None,
-        status_code: int | None = None,
     ):
         """Indicate that a remote integration has failed.
 
         `param url_or_service` The name of the service that failed
            (e.g. "Overdrive"), or the specific URL that had the problem.
         """
+        if debug_message is None:
+            debug_message = (
+                f"Status code: {response.status_code}\nContent: {response.text}"
+            )
+
         super().__init__(url_or_service, message, debug_message)
         # to be set to 500, etc.
-        self.status_code = status_code
-
-    @classmethod
-    def from_response(
-        cls, url: str, message: str, response: HttpResponseTuple | Response
-    ) -> Self:
-        """Helper method to turn a `requests` Response object into
-        a BadResponseException.
-        """
-        if isinstance(response, tuple):
-            # The response has been unrolled into a (status_code,
-            # headers, body) 3-tuple.
-            status_code, _, content_bytes = response
-            # The HTTP content response is a bytestring that we want to
-            # convert to unicode for the debug message.
-            if content_bytes:
-                content = content_bytes.decode("utf-8")
-            else:
-                content = ""
-        else:
-            status_code = response.status_code
-            content = response.text
-
-        return cls(
-            url,
-            message,
-            status_code=status_code,
-            debug_message="Status code: %s\nContent: %s"
-            % (
-                status_code,
-                content,
-            ),
-        )
+        self.response = response
 
     @classmethod
     def bad_status_code(cls, url: str, response: Response) -> Self:
         """The response is bad because the status code is wrong."""
         message = cls.BAD_STATUS_CODE_MESSAGE % response.status_code
-        return cls.from_response(
+        return cls(
             url,
             message,
             response,
@@ -399,9 +369,9 @@ class HTTP(LoggerMixin):
             raise BadResponseException(
                 url,
                 error_message % code,
-                status_code=response.status_code,
                 debug_message="Response content: %s"
                 % cls._decode_response_content(response, url),
+                response=response,
             )
         return response
 

@@ -44,7 +44,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 
@@ -195,11 +195,11 @@ class TestOPDS2WithODLApi:
         loan, _ = opds2_with_odl_api_fixture.license.loan_to(
             opds2_with_odl_api_fixture.patron
         )
-        opds2_with_odl_api_fixture.api.queue_response(
+        opds2_with_odl_api_fixture.mock_http.queue_response(
             201, content=json.dumps(dict(status="ready"))
         )
         opds2_with_odl_api_fixture.api.get_license_status_document(loan)
-        requested_url = opds2_with_odl_api_fixture.api.requests[0][0]
+        requested_url = opds2_with_odl_api_fixture.mock_http.requests.pop()
 
         parsed = urlparse(requested_url)
         assert "https" == parsed.scheme
@@ -250,11 +250,11 @@ class TestOPDS2WithODLApi:
         )
         loan.external_identifier = opds2_with_odl_api_fixture.db.fresh_str()
 
-        opds2_with_odl_api_fixture.api.queue_response(
+        opds2_with_odl_api_fixture.mock_http.queue_response(
             200, content=json.dumps(dict(status="active"))
         )
         opds2_with_odl_api_fixture.api.get_license_status_document(loan)
-        requested_url = opds2_with_odl_api_fixture.api.requests[1][0]
+        requested_url = opds2_with_odl_api_fixture.mock_http.requests.pop()
         assert loan.external_identifier == requested_url
 
     def test_get_license_status_document_errors(
@@ -266,25 +266,27 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.patron
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content="not json")
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content="not json")
         pytest.raises(
-            BadResponseException,
+            RemoteIntegrationException,
             opds2_with_odl_api_fixture.api.get_license_status_document,
             loan,
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(
+        opds2_with_odl_api_fixture.mock_http.queue_response(
             200, content=json.dumps(dict(status="unknown"))
         )
         pytest.raises(
-            BadResponseException,
+            RemoteIntegrationException,
             opds2_with_odl_api_fixture.api.get_license_status_document,
             loan,
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(403, content="just junk " * 100)
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            403, content="just junk " * 100
+        )
         pytest.raises(
-            BadResponseException,
+            RemoteIntegrationException,
             opds2_with_odl_api_fixture.api.get_license_status_document,
             loan,
         )
@@ -307,10 +309,10 @@ class TestOPDS2WithODLApi:
 
         # The patron returns the book successfully.
         opds2_with_odl_api_fixture.checkin()
-        assert 3 == len(opds2_with_odl_api_fixture.api.requests)
-        assert "http://loan" in opds2_with_odl_api_fixture.api.requests[0][0]
-        assert "http://return" == opds2_with_odl_api_fixture.api.requests[1][0]
-        assert "http://loan" in opds2_with_odl_api_fixture.api.requests[2][0]
+        assert 3 == len(opds2_with_odl_api_fixture.mock_http.requests)
+        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[0]
+        assert "http://return" == opds2_with_odl_api_fixture.mock_http.requests[1]
+        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[2]
 
         # The pool's availability has increased, and the local loan has
         # been deleted.
@@ -342,10 +344,10 @@ class TestOPDS2WithODLApi:
 
         # The first patron returns the book successfully.
         opds2_with_odl_api_fixture.checkin()
-        assert 3 == len(opds2_with_odl_api_fixture.api.requests)
-        assert "http://loan" in opds2_with_odl_api_fixture.api.requests[0][0]
-        assert "http://return" == opds2_with_odl_api_fixture.api.requests[1][0]
-        assert "http://loan" in opds2_with_odl_api_fixture.api.requests[2][0]
+        assert 3 == len(opds2_with_odl_api_fixture.mock_http.requests)
+        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[0]
+        assert "http://return" == opds2_with_odl_api_fixture.mock_http.requests[1]
+        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[2]
 
         # Now the license is reserved for the next patron.
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
@@ -373,12 +375,12 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         # Checking in the book silently does nothing.
         opds2_with_odl_api_fixture.api.checkin(
             opds2_with_odl_api_fixture.patron, "pinn", opds2_with_odl_api_fixture.pool
         )
-        assert 1 == len(opds2_with_odl_api_fixture.api.requests)
+        assert 1 == len(opds2_with_odl_api_fixture.mock_http.requests)
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 1 == db.session.query(Loan).count()
 
@@ -409,7 +411,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         pytest.raises(
             NotCheckedOut,
             opds2_with_odl_api_fixture.api.checkin,
@@ -436,7 +438,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         # Checking in silently does nothing.
         opds2_with_odl_api_fixture.api.checkin(
             opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
@@ -456,9 +458,9 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
-        opds2_with_odl_api_fixture.api.queue_response(200, content="Deleted")
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content="Deleted")
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         opds2_with_odl_api_fixture.api.checkin(
             opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
         )
@@ -772,7 +774,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         pytest.raises(
             CannotLoan,
             opds2_with_odl_api_fixture.api.checkout,
@@ -792,7 +794,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         pytest.raises(
             CannotLoan,
             opds2_with_odl_api_fixture.api.checkout,
@@ -876,7 +878,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         fulfillment = opds2_with_odl_api_fixture.api.fulfill(
             opds2_with_odl_api_fixture.patron,
             "pin",
@@ -1036,7 +1038,7 @@ class TestOPDS2WithODLApi:
             }
         )
 
-        opds2_with_odl_api_fixture.api.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         pytest.raises(
             CannotFulfill,
             opds2_with_odl_api_fixture.api.fulfill,
