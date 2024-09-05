@@ -22,12 +22,29 @@ def upgrade() -> None:
 
     op.add_column(
         "playtime_entries",
-        sa.Column("loan_identifier", sa.String(length=40), nullable=False, default=""),
+        sa.Column("loan_identifier", sa.String(length=40), nullable=True, default=""),
     )
 
     op.add_column(
         "playtime_summaries",
-        sa.Column("loan_identifier", sa.String(length=40), nullable=False, default=""),
+        sa.Column("loan_identifier", sa.String(length=40), nullable=True, default=""),
+    )
+
+    # Migrate the existing playtime records before we set the new columns to not nullable.
+    conn.execute("UPDATE playtime_entries SET loan_identifier = ''")
+    conn.execute("UPDATE playtime_summaries SET loan_identifier = ''")
+
+    op.alter_column(
+        "playtime_entries",
+        "loan_identifier",
+        existing_type=sa.String(length=40),
+        nullable=False,
+    )
+    op.alter_column(
+        "playtime_summaries",
+        "loan_identifier",
+        existing_type=sa.String(length=40),
+        nullable=False,
     )
 
     op.drop_constraint("unique_playtime_summary", "playtime_summaries", type_="unique")
