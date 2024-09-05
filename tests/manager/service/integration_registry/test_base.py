@@ -100,7 +100,7 @@ def test_registry_get_returns_default_if_name_not_registered(
     # default is not none
     assert registry.get("test_class", "default") == "default"
 
-    # __get__ throws KeyError
+    # __get__ throws LookupException
     with pytest.raises(LookupException):
         _ = registry["test_class"]
 
