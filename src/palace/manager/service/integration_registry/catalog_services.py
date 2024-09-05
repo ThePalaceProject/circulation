@@ -14,4 +14,4 @@ class CatalogServicesRegistry(IntegrationRegistry["MarcExporter"]):
         from palace.manager.marc.exporter import MarcExporter
 
         super().__init__(Goals.CATALOG_GOAL)
-        self.register(MarcExporter, aliases=["MARCExporter"])
+        self.register(MarcExporter)
