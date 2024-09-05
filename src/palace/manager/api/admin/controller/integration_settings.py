@@ -106,10 +106,18 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 f"IntegrationConfiguration {service.name}({service.id}) has no goal set. Skipping."
             )
             return None
+
+        if service.protocol is None or service.protocol not in self.registry:
+            self.log.warning(
+                f"Unknown protocol: {service.protocol} for goal {self.registry.goal}"
+            )
+            return None
+
+        canonical_protocol = self.registry.canonicalize(service.protocol)
         return {
             "id": service.id,
             "name": service.name,
-            "protocol": service.protocol,
+            "protocol": canonical_protocol,
             "settings": service.settings_dict,
             "goal": service.goal.value,
         }
@@ -138,12 +146,6 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             .filter(IntegrationConfiguration.goal == self.registry.goal)
             .order_by(IntegrationConfiguration.name)
         ):
-            if service.protocol not in self.registry:
-                self.log.warning(
-                    f"Unknown protocol: {service.protocol} for goal {self.registry.goal}"
-                )
-                continue
-
             service_info = self.configured_service_info(service)
             if service_info is None:
                 continue
@@ -168,9 +170,9 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """
         Query for an existing service to edit.
 
-        Raises ProblemError if the service doesn't exist, or if the protocol
+        Raises ProblemDetailException if the service doesn't exist, or if the protocol
         doesn't match. If the name is provided, the service will be renamed if
-        necessary and a ProblemError will be raised if the name is already in
+        necessary and a ProblemDetailException will be raised if the name is already in
         use.
         """
         service: IntegrationConfiguration | None = get_one(
@@ -181,8 +183,12 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         )
         if service is None:
             raise ProblemDetailException(MISSING_SERVICE)
-        if protocol is not None and service.protocol != protocol:
+        if protocol is not None and not self.registry.equivalent(
+            service.protocol, protocol
+        ):
             raise ProblemDetailException(CANNOT_CHANGE_PROTOCOL)
+        if service.protocol is None or service.protocol not in self.registry:
+            raise ProblemDetailException(UNKNOWN_PROTOCOL)
         if name is not None and service.name != name:
             service_with_name = get_one(self._db, IntegrationConfiguration, name=name)
             if service_with_name is not None:
@@ -251,13 +257,8 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         if protocol is None and _id is None:
             raise ProblemDetailException(NO_PROTOCOL_FOR_NEW_SERVICE)
 
-        # Lookup the protocol class to make sure it exists
-        # this will raise a ProblemError if the protocol is unknown
-        self.get_protocol_class(protocol)
-
-        # This should never happen, due to the call to get_protocol_class but
-        # mypy doesn't know that, so we make sure that protocol is not None before we use it.
-        assert protocol is not None
+        if protocol is None or protocol not in self.registry:
+            raise ProblemDetailException(UNKNOWN_PROTOCOL)
 
         if _id is not None:
             # Find an existing service to edit
