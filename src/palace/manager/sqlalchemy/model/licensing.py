@@ -1482,7 +1482,6 @@ class LicensePoolDeliveryMechanism(Base):
         drm_scheme,
         rights_uri,
         resource=None,
-        autocommit=True,
     ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
         certain format.
@@ -1496,13 +1495,6 @@ class LicensePoolDeliveryMechanism(Base):
             title.
         :param resource: A Resource representing the book itself in
             a freely redistributable form.
-        :param autocommit: Commit the database session immediately if
-            anything changes in the database. If you're already inside
-            a nested transaction, pass in False here to avoid
-            committing prematurely, but understand that if a
-            LicensePool's open-access status changes as a result of
-            calling this method, the change may not be properly
-            reflected in LicensePool.open_access.
         """
         _db = Session.object_session(data_source)
         delivery_mechanism, ignore = DeliveryMechanism.lookup(
@@ -1524,18 +1516,14 @@ class LicensePoolDeliveryMechanism(Base):
             dirty = True
 
         if dirty:
-            # TODO: We need to explicitly commit here so that
-            # LicensePool.delivery_mechanisms gets updated. It would be
-            # better if we didn't have to do this, but I haven't been able
-            # to get LicensePool.delivery_mechanisms to notice that it's
-            # out of date.
-            if autocommit:
-                _db.commit()
-
-            # Creating or modifying a LPDM might change the open-access status
-            # of all LicensePools for that DataSource/Identifier.
             for pool in lpdm.license_pools:
+                # without this refresh, the pools are not updating their delivery mechanisms.
+                _db.refresh(pool)
+
+                # Creating or modifying a LPDM might change the open-access status
+                # of all LicensePools for that DataSource/Identifier.
                 pool.set_open_access_status()
+
         return lpdm
 
     @property
