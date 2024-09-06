@@ -1612,9 +1612,6 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 or ""
             )
 
-            # Arguments common to FulfillmentInfo and
-            # Axis360FulfillmentInfo.
-
             fulfillment: Fulfillment | None
             if download_url and self.internal_format != self.api.AXISNOW:
                 # The patron wants a direct link to the book, which we can deliver
@@ -1637,7 +1634,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 # need to make a second request to get the audiobook
                 # metadata.
                 #
-                # Axis360FulfillmentInfo can handle both cases.
+                # Axis360Fulfillment can handle both cases.
                 fulfillment = Axis360Fulfillment(
                     data_source_name=DataSource.AXIS_360,
                     identifier_type=self.id_type,

@@ -485,7 +485,7 @@ class TestAxis360API:
         pytest.raises(NoActiveLoan, fulfill)
 
         # If an ebook is checked out and we're not asking for it to be
-        # fulfilled through AxisNow, we get a regular FulfillmentInfo
+        # fulfilled through AxisNow, we get a Axis360AcsFulfillment
         # object with a content link.
         data = axis360.sample_data("availability_with_loan_and_hold.xml")
         axis360.api.queue_response(200, content=data)
@@ -495,7 +495,7 @@ class TestAxis360API:
         assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
         assert "http://fulfillment/" == fulfillment.content_link
 
-        # If we ask for AxisNow format, we get an Axis360FulfillmentInfo
+        # If we ask for AxisNow format, we get an Axis360Fulfillment
         # containing an AxisNow manifest document.
         data = axis360.sample_data("availability_with_axisnow_fulfillment.xml")
         data = data.replace(b"0016820953", pool.identifier.identifier.encode("utf8"))
@@ -504,9 +504,9 @@ class TestAxis360API:
         fulfillment = fulfill()
         assert isinstance(fulfillment, Axis360Fulfillment)
 
-        # Looking up the details of the Axis360FulfillmentInfo will
+        # Looking up the details of the Axis360Fulfillment will
         # trigger another API request, so we won't do that; that's
-        # tested in TestAxis360FulfillmentInfo.
+        # tested in TestAxis360Fulfillment.
 
         # If the title is checked out but Axis provides no fulfillment
         # info, the exception is CannotFulfill.
@@ -515,7 +515,8 @@ class TestAxis360API:
         axis360.api.queue_response(200, content=data)
         pytest.raises(CannotFulfill, fulfill)
 
-        # If we ask to fulfill an audiobook, we get an AudiobookFulfillmentInfo.
+        # If we ask to fulfill an audiobook, we get an Axis360Fulfillment, since
+        # it can handle both cases.
         #
         # Change our test LicensePool's identifier to match the data we're about
         # to load into the API.
@@ -1462,7 +1463,7 @@ class TestCheckoutResponseParser:
         assert Identifier.AXIS_360_ID == parsed.identifier_type
         assert datetime_utc(2015, 8, 11, 18, 57, 42) == parsed.end_date
 
-        # There is no FulfillmentInfo associated with the LoanInfo,
+        # There is no Fulfillment associated with the LoanInfo,
         # because we don't need it (checkout and fulfillment are
         # separate steps).
         assert parsed.fulfillment == None
@@ -1568,7 +1569,7 @@ class TestAvailabilityResponseParser:
 
         # The transaction ID is stored as the .key. If we actually
         # need to make a manifest for this book, the key will be used
-        # in two more API requests. (See TestAudiobookFulfillmentInfo
+        # in two more API requests. (See TestAxis360Fulfillment
         # for that.)
         assert "C3F71F8D-1883-2B34-061F-96570678AEB0" == fulfillment.key
 
@@ -1859,7 +1860,7 @@ class TestAudiobookMetadataParser:
         assert Representation.MP3_MEDIA_TYPE == item.media_type
 
 
-class TestAxis360FulfillmentInfo:
+class TestAxis360Fulfillment:
     """An Axis360Fulfillment can fulfill a title whether it's an ebook
     (fulfilled through AxisNow) or an audiobook (fulfilled through
     Findaway).
@@ -2051,7 +2052,7 @@ class TestAxis360BibliographicCoverageProvider:
         assert [] == identifier.primarily_identifies
 
 
-class Axis360AcsFulfillmentInfoFixture:
+class Axis360AcsFulfillmentFixture:
     def __init__(self, mock_urlopen: MagicMock):
         self.fulfillment_info = partial(
             Axis360AcsFulfillment,
@@ -2077,34 +2078,34 @@ class Axis360AcsFulfillmentInfoFixture:
     @contextmanager
     def fixture(self):
         with patch("urllib.request.urlopen") as mock_urlopen:
-            yield Axis360AcsFulfillmentInfoFixture(mock_urlopen)
+            yield Axis360AcsFulfillmentFixture(mock_urlopen)
 
 
 @pytest.fixture
-def axis360_acs_fulfillment_info_fixture():
-    with Axis360AcsFulfillmentInfoFixture.fixture() as fixture:
+def axis360_acs_fulfillment_fixture():
+    with Axis360AcsFulfillmentFixture.fixture() as fixture:
         yield fixture
 
 
-class TestAxis360AcsFulfillmentInfo:
+class TestAxis360AcsFulfillment:
     def test_url_encoding_not_capitalized(
-        self, axis360_acs_fulfillment_info_fixture: Axis360AcsFulfillmentInfoFixture
+        self, axis360_acs_fulfillment_fixture: Axis360AcsFulfillmentFixture
     ):
         # Mock the urllopen function to make sure that the URL is not actually requested
         # then make sure that when the request is built the %3a character encoded in the
         # string is not uppercased to be %3A.
 
-        fulfillment = axis360_acs_fulfillment_info_fixture.fulfillment_info(
+        fulfillment = axis360_acs_fulfillment_fixture.fulfillment_info(
             content_link="https://test.com/?param=%3atest123"
         )
         response = fulfillment.response()
-        axis360_acs_fulfillment_info_fixture.mock_urlopen.assert_called()
-        called_url = axis360_acs_fulfillment_info_fixture.mock_urlopen.call_args[0][0]
+        axis360_acs_fulfillment_fixture.mock_urlopen.assert_called()
+        called_url = axis360_acs_fulfillment_fixture.mock_urlopen.call_args[0][0]
         assert called_url is not None
         assert called_url.selector == "/?param=%3atest123"
         assert called_url.host == "test.com"
         assert type(response) == Response
-        mock_request = axis360_acs_fulfillment_info_fixture.mock_request
+        mock_request = axis360_acs_fulfillment_fixture.mock_request
         mock_request.__enter__.assert_called()
         mock_request.__enter__.return_value.read.assert_called()
         assert "status" in dir(mock_request.__enter__.return_value)
@@ -2123,14 +2124,14 @@ class TestAxis360AcsFulfillmentInfo:
     )
     def test_exception_raises_problem_detail_exception(
         self,
-        axis360_acs_fulfillment_info_fixture: Axis360AcsFulfillmentInfoFixture,
+        axis360_acs_fulfillment_fixture: Axis360AcsFulfillmentFixture,
         exception: Exception,
     ):
         # Check that when the urlopen function throws an exception, we catch the exception and
         # we turn it into a problem detail to be returned to the client. This mimics the behavior
         # of the http utils function that we are bypassing with this fulfillment method.
-        axis360_acs_fulfillment_info_fixture.mock_urlopen.side_effect = exception
-        fulfillment = axis360_acs_fulfillment_info_fixture.fulfillment_info()
+        axis360_acs_fulfillment_fixture.mock_urlopen.side_effect = exception
+        fulfillment = axis360_acs_fulfillment_fixture.fulfillment_info()
         with pytest.raises(BaseProblemDetailException):
             fulfillment.response()
 
@@ -2140,7 +2141,7 @@ class TestAxis360AcsFulfillmentInfo:
     )
     def test_verify_ssl(
         self,
-        axis360_acs_fulfillment_info_fixture: Axis360AcsFulfillmentInfoFixture,
+        axis360_acs_fulfillment_fixture: Axis360AcsFulfillmentFixture,
         verify: bool,
         verify_mode: ssl.VerifyMode,
         check_hostname: bool,
@@ -2148,16 +2149,10 @@ class TestAxis360AcsFulfillmentInfo:
         # Make sure that when the verify parameter of the fulfillment method is set we use the
         # correct SSL context to either verify or not verify the ssl certificate for the
         # URL we are fetching.
-        fulfillment = axis360_acs_fulfillment_info_fixture.fulfillment_info(
-            verify=verify
-        )
+        fulfillment = axis360_acs_fulfillment_fixture.fulfillment_info(verify=verify)
         fulfillment.response()
-        axis360_acs_fulfillment_info_fixture.mock_urlopen.assert_called()
-        assert (
-            "context" in axis360_acs_fulfillment_info_fixture.mock_urlopen.call_args[1]
-        )
-        context = axis360_acs_fulfillment_info_fixture.mock_urlopen.call_args[1][
-            "context"
-        ]
+        axis360_acs_fulfillment_fixture.mock_urlopen.assert_called()
+        assert "context" in axis360_acs_fulfillment_fixture.mock_urlopen.call_args[1]
+        context = axis360_acs_fulfillment_fixture.mock_urlopen.call_args[1]["context"]
         assert context.verify_mode == verify_mode
         assert context.check_hostname == check_hostname
