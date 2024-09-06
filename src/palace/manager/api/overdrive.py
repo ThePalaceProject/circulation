@@ -562,10 +562,10 @@ class OverdriveAPI(
         if status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
-                raise BadResponseException.from_response(
+                raise BadResponseException(
                     url,
                     "Something's wrong with the Overdrive OAuth Bearer Token!",
-                    (status_code, headers, content),
+                    response,
                 )
             else:
                 # Refresh the token and try again.

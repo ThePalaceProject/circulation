@@ -1,6 +1,9 @@
 import json
 import logging
-from typing import Any
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any, NamedTuple
+from unittest.mock import patch
 
 from requests import Request, Response
 
@@ -13,6 +16,7 @@ from palace.manager.core.coverage import (
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
+from palace.manager.util.http import HTTP
 
 
 def _normalize_level(level):
@@ -216,10 +220,18 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
         return []
 
 
+class Args(NamedTuple):
+    """A simple container for positional and keyword arguments."""
+
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
+
+
 class MockHTTPClient:
     def __init__(self) -> None:
         self.responses: list[Response] = []
         self.requests: list[str] = []
+        self.requests_args: list[Args] = []
 
     def queue_response(
         self,
@@ -235,9 +247,18 @@ class MockHTTPClient:
 
         self.responses.append(MockRequestsResponse(response_code, headers, content))
 
+    def _get(self, *args: Any, **kwargs: Any) -> Response:
+        return self.responses.pop(0)
+
     def do_get(self, url: str, *args: Any, **kwargs: Any) -> Response:
         self.requests.append(url)
-        return self.responses.pop(0)
+        self.requests_args.append(Args(args, kwargs))
+        return HTTP._request_with_timeout(url, self._get, *args, **kwargs)
+
+    @contextmanager
+    def patch(self) -> Generator[None, None, None]:
+        with patch.object(HTTP, "get_with_timeout", self.do_get):
+            yield
 
 
 class MockRepresentationHTTPClient:

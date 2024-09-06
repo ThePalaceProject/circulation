@@ -1,6 +1,7 @@
 import datetime
 import json
 from collections.abc import Generator
+from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,12 @@ from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo
 from palace.manager.api.circulation_exceptions import CannotFulfill
-from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, RWPMManifestParser
+from palace.manager.core.opds2_import import (
+    OPDS2API,
+    OPDS2Importer,
+    OPDS2ImportMonitor,
+    RWPMManifestParser,
+)
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierType,
@@ -29,8 +35,10 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
+from tests.mocks.mock import MockRequestsResponse
 
 
 class OPDS2Test:
@@ -893,3 +901,43 @@ class TestOpds2Api:
             OPDS2API.get_authentication_token(
                 opds2_api_fixture.patron, opds2_api_fixture.data_source, ""
             )
+
+
+class TestOPDS2ImportMonitor:
+    @pytest.mark.parametrize(
+        "content_type,exception",
+        [
+            ("application/json", False),
+            ("application/opds+json", False),
+            ("application/xml", True),
+            ("foo/xyz", True),
+        ],
+    )
+    def test__verify_media_type(
+        self, db: DatabaseTransactionFixture, content_type: str, exception: bool
+    ) -> None:
+        collection = db.collection(
+            protocol=OPDS2API.label(),
+            data_source_name="test",
+            external_account_id="http://test.com",
+        )
+        monitor = OPDS2ImportMonitor(
+            db.session,
+            collection,
+            OPDS2Importer,
+            parser=RWPMManifestParser(OPDS2FeedParserFactory()),
+        )
+
+        ctx_manager = (
+            nullcontext()
+            if not exception
+            else pytest.raises(
+                BadResponseException, match="Bad response from http://test.com"
+            )
+        )
+
+        mock_response = MockRequestsResponse(
+            status_code=200, headers={"Content-Type": content_type}
+        )
+        with ctx_manager:
+            monitor._verify_media_type("http://test.com", mock_response)

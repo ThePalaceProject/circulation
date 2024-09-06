@@ -1855,17 +1855,15 @@ class OPDSImportMonitor(CollectionMonitor):
                 return True
         return False
 
-    def _verify_media_type(
-        self, url: str, status_code: int, headers: Mapping[str, str], feed: bytes
-    ) -> None:
+    def _verify_media_type(self, url: str, resp: Response) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
         # sent with a 200 status code.
-        media_type = headers.get("content-type")
+        media_type = resp.headers.get("content-type")
         if not media_type or not any(
             x in media_type for x in (OPDSFeed.ATOM_LIKE_TYPES)
         ):
             message = "Expected Atom feed, got %s" % media_type
-            raise BadResponseException(url, message=message, status_code=status_code)
+            raise BadResponseException(url, message=message, response=resp)
 
     def follow_one_link(
         self, url: str, do_get: Callable[..., Response] | None = None
@@ -1881,10 +1879,8 @@ class OPDSImportMonitor(CollectionMonitor):
         get = do_get or self._get
         resp = get(url, {})
         feed = resp.content
-        status_code = resp.status_code
-        headers = resp.headers
 
-        self._verify_media_type(url, status_code, headers, feed)
+        self._verify_media_type(url, resp)
 
         new_data = self.feed_contains_new_data(feed)
 

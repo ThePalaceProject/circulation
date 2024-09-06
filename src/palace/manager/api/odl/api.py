@@ -63,7 +63,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 
 
 class OPDS2WithODLApi(
@@ -246,8 +246,10 @@ class OPDS2WithODLApi(
                 hint_url=self.settings.passphrase_hint_url,
             )
 
-        response = self._get(url)
-        if not (200 <= response.status_code < 300):
+        try:
+            response = self._get(url, allowed_response_codes=["2xx"])
+        except BadResponseException as e:
+            response = e.response
             header_string = ", ".join(
                 {f"{k}: {v}" for k, v in response.headers.items()}
             )
@@ -261,16 +263,17 @@ class OPDS2WithODLApi(
                 f"status code {response.status_code}. Expected 2XX. Response headers: {header_string}. "
                 f"Response content: {response_string}."
             )
-            raise BadResponseException(url, "License Status Document request failed.")
-
+            raise RemoteIntegrationException(
+                url, "License Status Document request failed."
+            ) from e
         try:
             status_doc = json.loads(response.content)
         except ValueError as e:
-            raise BadResponseException(
+            raise RemoteIntegrationException(
                 url, "License Status Document was not valid JSON."
-            )
+            ) from e
         if status_doc.get("status") not in self.STATUS_VALUES:
-            raise BadResponseException(
+            raise RemoteIntegrationException(
                 url, "License Status Document had an unknown status value."
             )
         return status_doc  # type: ignore[no-any-return]
@@ -958,7 +961,7 @@ class OPDS2WithODLApi(
         # We already check that the status is valid in get_license_status_document,
         # but if the document came from a notification it hasn't been checked yet.
         if status not in self.STATUS_VALUES:
-            raise BadResponseException(
+            raise RemoteIntegrationException(
                 str(loan.license.checkout_url),
                 "The License Status Document had an unknown status value.",
             )

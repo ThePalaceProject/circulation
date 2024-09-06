@@ -394,14 +394,14 @@ class TestRemoteIntegrationException:
 
 
 class TestBadResponseException:
-    def test_from_response(self):
+    def test__init__(self):
         response = MockRequestsResponse(102, content="nonsense")
-        exc = BadResponseException.from_response(
+        exc = BadResponseException(
             "http://url/", "Terrible response, just terrible", response
         )
 
-        # the status code gets set on the exception
-        assert exc.status_code == 102
+        # the response gets set on the exception
+        assert exc.response is response
 
         # Turn the exception into a problem detail document, and it's full
         # of useful information.
@@ -418,7 +418,7 @@ class TestBadResponseException:
         )
         assert problem_detail.status_code == 502
 
-    def test_bad_status_code(object):
+    def test_bad_status_code(self):
         response = MockRequestsResponse(500, content="Internal Server Error!")
         exc = BadResponseException.bad_status_code("http://url/", response)
         doc = exc.problem_detail
@@ -434,11 +434,12 @@ class TestBadResponseException:
         )
 
     def test_problem_detail(self):
+        response = MockRequestsResponse(401, content="You are not authorized!")
         exception = BadResponseException(
             "http://url/",
             "What even is this",
             debug_message="some debug info",
-            status_code=401,
+            response=response,
         )
         document = exception.problem_detail
         assert 502 == document.status_code
@@ -451,7 +452,7 @@ class TestBadResponseException:
             "Bad response from http://url/: What even is this\n\nsome debug info"
             == document.debug_message
         )
-        assert exception.status_code == 401
+        assert exception.response is response
 
 
 class TestRequestTimedOut:
