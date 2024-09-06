@@ -19,6 +19,8 @@ from palace.manager.api.circulation import (
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
+    RedirectFulfillment,
+    UrlFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
@@ -473,7 +475,7 @@ class EnkiAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FetchFulfillment:
+    ) -> UrlFulfillment:
         """Get the actual resource file to the patron."""
         book_id = licensepool.identifier.identifier
         enki_library_id = self.enki_library_id(patron.library)
@@ -509,20 +511,13 @@ class EnkiAPI(
                 drm_type = mechanism.drm_scheme
                 break
 
-        # TODO: I think in this case we should be returning a RedirectFulfillment
-        #   instead of a FetchFulfillment. I think we are setting the "Accept-Encoding"
-        #   header here to minimize the size of the response, but I think we would be
-        #   better off just returning the URL and letting the client handle the request.
-        #   However I need to test this case, so I'm leaving it as is for now.
-        headers = {}
         if drm_type == DeliveryMechanism.NO_DRM:
-            headers["Accept-Encoding"] = "deflate"
-
-        return FetchFulfillment(
-            content_link=url,
-            content_type=drm_type,
-            include_headers=headers,
-        )
+            return RedirectFulfillment(url)
+        else:
+            return FetchFulfillment(
+                content_link=url,
+                content_type=drm_type,
+            )
 
     def parse_fulfill_result(
         self, result: Mapping[str, Any]

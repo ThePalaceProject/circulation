@@ -7,7 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.circulation import FetchFulfillment, LoanInfo
+from palace.manager.api.circulation import (
+    FetchFulfillment,
+    LoanInfo,
+    RedirectFulfillment,
+)
 from palace.manager.api.circulation_exceptions import (
     NoAvailableCopies,
     PatronAuthorizationFailedException,
@@ -512,7 +516,7 @@ class TestEnkiAPI:
         )
         assert fulfill_data[1] == "epub"
 
-    def test_fulfill_success(self, enki_test_fixture: EnkiTestFixure):
+    def test_fulfill_success_acsm(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         # Test the fulfill() method.
         patron = db.patron()
@@ -548,6 +552,23 @@ class TestEnkiAPI:
         assert fulfillment.content_link is not None
         assert fulfillment.content_link.startswith(
             "http://afs.enkilibrary.org/fulfillment/URLLink.acsm"
+        )
+
+    def test_fulfill_success_open(self, enki_test_fixture: EnkiTestFixure):
+        db = enki_test_fixture.db
+        patron = db.patron()
+        patron.authorization_identifier = "123"
+        pool = db.licensepool(None, with_open_access_download=True)
+
+        data = enki_test_fixture.files.sample_data("checked_out_direct.json")
+        enki_test_fixture.api.queue_response(200, content=data)
+        fulfillment = enki_test_fixture.api.fulfill(patron, "pin", pool, MagicMock())
+
+        # A Fulfillment for the loan was returned.
+        assert isinstance(fulfillment, RedirectFulfillment)
+        assert (
+            fulfillment.content_link
+            == "http://cccl.enkilibrary.org/API/UserAPI?method=downloadEContentFile&username=21901000008080&password=deng&lib=1&recordId=2"
         )
 
     def test_patron_activity(self, enki_test_fixture: EnkiTestFixure):
