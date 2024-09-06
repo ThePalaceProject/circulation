@@ -16,10 +16,13 @@ from uritemplate import URITemplate
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
-    FulfillmentInfo,
+    DirectFulfillment,
+    FetchFulfillment,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
+    RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -468,7 +471,7 @@ class OPDS2WithODLApi(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         _db = Session.object_session(patron)
 
@@ -514,23 +517,14 @@ class OPDS2WithODLApi(
 
     def _unlimited_access_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         licensepool = loan.license_pool
         fulfillment = self._find_matching_delivery_mechanism(
             delivery_mechanism.delivery_mechanism, licensepool
         )
         content_link = fulfillment.resource.representation.public_url
         content_type = fulfillment.resource.representation.media_type
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            content_link,
-            content_type,
-            None,
-            None,
-        )
+        return RedirectFulfillment(content_link, content_type)
 
     def _find_matching_delivery_mechanism(
         self, requested_delivery_mechanism: DeliveryMechanism, licensepool: LicensePool
@@ -549,7 +543,7 @@ class OPDS2WithODLApi(
 
     def _lcp_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         doc = self.get_license_status_document(loan)
         status = doc.get("status")
 
@@ -570,20 +564,14 @@ class OPDS2WithODLApi(
             links, delivery_mechanism.delivery_mechanism.drm_scheme
         )
 
-        return FulfillmentInfo(
-            loan.license_pool.collection,
-            loan.license_pool.data_source.name,
-            loan.license_pool.identifier.type,
-            loan.license_pool.identifier.identifier,
-            content_link,
-            content_type,
-            None,
-            expires,
-        )
+        if content_link is None or content_type is None:
+            raise CannotFulfill()
+
+        return FetchFulfillment(content_link, content_type)
 
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         licensepool = loan.license_pool
         fulfillment_mechanism = self._find_matching_delivery_mechanism(
             delivery_mechanism.delivery_mechanism, licensepool
@@ -609,22 +597,16 @@ class OPDS2WithODLApi(
             location=fulfillment_mechanism.resource.url,
         )
 
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            content_link=None,
+        return DirectFulfillment(
             content_type=DeliveryMechanism.BEARER_TOKEN,
             content=json.dumps(token_document),
-            content_expires=self._session_token.expires,
         )
 
     def _fulfill(
         self,
         loan: Loan,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         if loan.license_pool.open_access or loan.license_pool.unlimited_access:
             if (
                 delivery_mechanism.delivery_mechanism.drm_scheme

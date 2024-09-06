@@ -12,7 +12,13 @@ import dateutil
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.api.circulation import HoldInfo, LoanInfo
+from palace.manager.api.circulation import (
+    DirectFulfillment,
+    FetchFulfillment,
+    HoldInfo,
+    LoanInfo,
+    RedirectFulfillment,
+)
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -885,23 +891,7 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.pool,
             lpdm,
         )
-
-        assert opds2_with_odl_api_fixture.collection == fulfillment.collection(
-            db.session
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.data_source.name
-            == fulfillment.data_source_name
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.identifier.type
-            == fulfillment.identifier_type
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.identifier.identifier
-            == fulfillment.identifier
-        )
-        assert datetime_utc(2017, 10, 21, 11, 12, 13) == fulfillment.content_expires
+        assert isinstance(fulfillment, FetchFulfillment)
         assert correct_link == fulfillment.content_link
         assert correct_type == fulfillment.content_type
 
@@ -936,16 +926,7 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
         )
 
-        assert opds2_with_odl_api_fixture.collection == fulfillment.collection(
-            db.session
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.data_source.name
-            == fulfillment.data_source_name
-        )
-        assert fulfillment.identifier_type == pool.identifier.type
-        assert fulfillment.identifier == pool.identifier.identifier
-        assert fulfillment.content_expires is None
+        assert isinstance(fulfillment, RedirectFulfillment)
         assert fulfillment.content_link == pool.open_access_download_url
         assert fulfillment.content_type == lpdm.delivery_mechanism.content_type
 
@@ -983,24 +964,11 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
         )
 
-        assert opds2_with_odl_api_fixture.collection == fulfillment.collection(
-            db.session
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.data_source.name
-            == fulfillment.data_source_name
-        )
-        assert fulfillment.identifier_type == pool.identifier.type
-        assert fulfillment.identifier == pool.identifier.identifier
-        assert opds2_with_odl_api_fixture.api._session_token is not None
-        assert (
-            fulfillment.content_expires
-            == opds2_with_odl_api_fixture.api._session_token.expires
-        )
-        assert fulfillment.content_link is None
+        assert isinstance(fulfillment, DirectFulfillment)
         assert fulfillment.content_type == DeliveryMechanism.BEARER_TOKEN
         assert fulfillment.content is not None
         token_doc = json.loads(fulfillment.content)
+        assert opds2_with_odl_api_fixture.api._session_token is not None
         assert (
             token_doc.get("access_token")
             == opds2_with_odl_api_fixture.api._session_token.token
@@ -1018,13 +986,31 @@ class TestOPDS2WithODLApi:
         fulfillment_2 = opds2_with_odl_api_fixture.api.fulfill(
             opds2_with_odl_api_fixture.patron, "pin", pool, lpdm
         )
+        assert isinstance(fulfillment_2, DirectFulfillment)
         assert fulfillment_2.content == fulfillment.content
         assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
 
+    @pytest.mark.parametrize(
+        "status_document, updated_availability",
+        [
+            ({"status": "revoked"}, True),
+            ({"status": "cancelled"}, True),
+            (
+                {
+                    "status": "active",
+                    "potential_rights": {"end": "2017-10-21T11:12:13Z"},
+                    "links": [],
+                },
+                False,
+            ),
+        ],
+    )
     def test_fulfill_cannot_fulfill(
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        status_document: dict[str, Any],
+        updated_availability: bool,
     ) -> None:
         opds2_with_odl_api_fixture.setup_license(concurrency=7, available=7)
         opds2_with_odl_api_fixture.checkout()
@@ -1032,27 +1018,23 @@ class TestOPDS2WithODLApi:
         assert 1 == db.session.query(Loan).count()
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
 
-        lsd = json.dumps(
-            {
-                "status": "revoked",
-            }
-        )
+        lsd = json.dumps(status_document)
 
         opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        pytest.raises(
-            CannotFulfill,
-            opds2_with_odl_api_fixture.api.fulfill,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(CannotFulfill):
+            opds2_with_odl_api_fixture.api.fulfill(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+                MagicMock(),
+            )
 
-        # The pool's availability has been updated and the local
-        # loan has been deleted, since we found out the loan is
-        # no longer active.
-        assert 7 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 0 == db.session.query(Loan).count()
+        if updated_availability:
+            # The pool's availability has been updated and the local
+            # loan has been deleted, since we found out the loan is
+            # no longer active.
+            assert 7 == opds2_with_odl_api_fixture.pool.licenses_available
+            assert 0 == db.session.query(Loan).count()
 
     def _holdinfo_from_hold(self, hold: Hold) -> HoldInfo:
         pool: LicensePool = hold.license_pool

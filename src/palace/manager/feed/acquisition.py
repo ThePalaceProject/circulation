@@ -44,7 +44,7 @@ from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import ProblemDetail
 
 if TYPE_CHECKING:
-    from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo
+    from palace.manager.api.circulation import CirculationAPI, UrlFulfillment
     from palace.manager.sqlalchemy.model.lane import WorkList
 
 
@@ -525,7 +525,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         circulation: Any,
         item: LicensePool | Loan | Hold | None,
         annotator: LibraryAnnotator | None = None,
-        fulfillment: FulfillmentInfo | None = None,
+        fulfillment: UrlFulfillment | None = None,
         **response_kwargs: Any,
     ) -> OPDSEntryResponse | ProblemDetail | None:
         """A single entry as a standalone feed specific to a patron"""

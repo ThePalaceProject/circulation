@@ -1,4 +1,3 @@
-import datetime
 import json
 from collections.abc import Callable
 from unittest.mock import MagicMock, patch
@@ -479,34 +478,18 @@ class TestOPDSForDistributorsAPI:
         opds_dist_api_fixture.api.queue_response(200, content=token_response)
 
         fulfillment_time = utc_now()
-        fulfillment_info = opds_dist_api_fixture.api.fulfill(
+        fulfillment = opds_dist_api_fixture.api.fulfill(
             patron, "1234", pool, delivery_mechanism
         )
-        assert opds_dist_api_fixture.collection.id == fulfillment_info.collection_id
-        assert data_source.name == fulfillment_info.data_source_name
-        assert Identifier.URI == fulfillment_info.identifier_type
-        assert pool.identifier.identifier == fulfillment_info.identifier
-        assert None == fulfillment_info.content_link
 
-        assert DeliveryMechanism.BEARER_TOKEN == fulfillment_info.content_type
-        assert fulfillment_info.content is not None
-        bearer_token_document = json.loads(fulfillment_info.content)
+        assert DeliveryMechanism.BEARER_TOKEN == fulfillment.content_type
+        assert fulfillment.content is not None
+        bearer_token_document = json.loads(fulfillment.content)
         expires_in = bearer_token_document["expires_in"]
         assert expires_in < 60
         assert "Bearer" == bearer_token_document["token_type"]
         assert "token" == bearer_token_document["access_token"]
         assert url == bearer_token_document["location"]
-
-        # The FulfillmentInfo's content_expires is approximately the
-        # time you get if you add the number of seconds until the
-        # bearer token expires to the time at which the title was
-        # originally fulfilled.
-        expect_expiration = fulfillment_time + datetime.timedelta(seconds=expires_in)
-        assert fulfillment_info.content_expires is not None
-        assert (
-            abs((fulfillment_info.content_expires - expect_expiration).total_seconds())
-            < 5
-        )
 
 
 class TestOPDSForDistributorsImporter:

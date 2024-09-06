@@ -16,9 +16,11 @@ from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.circulation import (
     CirculationAPI,
-    FulfillmentInfo,
+    FetchFulfillment,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
+    RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
@@ -43,7 +45,7 @@ from palace.manager.api.overdrive import (
     OverdriveCollectionReaper,
     OverdriveConstants,
     OverdriveFormatSweep,
-    OverdriveManifestFulfillmentInfo,
+    OverdriveManifestFulfillment,
     OverdriveRepresentationExtractor,
     RecentOverdriveCollectionMonitor,
 )
@@ -1483,23 +1485,18 @@ class TestOverdriveAPI:
     ):
         db = overdrive_api_fixture.db
 
-        # If get_fulfillment_link returns a FulfillmentInfo, it is returned
+        # If get_fulfillment_link returns a Fulfillment, it is returned
         # immediately and the rest of fulfill() does not run.
-        fulfillment = FulfillmentInfo(
-            overdrive_api_fixture.collection, None, None, None, None, None, None, None
-        )
-
-        class MockAPI(OverdriveAPI):
-            def get_fulfillment_link(*args, **kwargs):
-                return fulfillment
-
-            def internal_format(
-                self, delivery_mechanism: LicensePoolDeliveryMechanism
-            ) -> str:
-                return "format"
+        fulfillment = create_autospec(Fulfillment)
 
         edition, pool = db.edition(with_license_pool=True)
-        api = MockAPI(db.session, overdrive_api_fixture.collection)
+        api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+        api.get_fulfillment_link = create_autospec(
+            api.get_fulfillment_link, return_value=fulfillment
+        )
+        api.internal_format = create_autospec(
+            api.internal_format, return_value="format"
+        )
         result = api.fulfill(MagicMock(), MagicMock(), pool, MagicMock())
         assert result is fulfillment
 
@@ -1615,7 +1612,7 @@ class TestOverdriveAPI:
 
         # When the format requested would result in a link to a
         # manifest file, the manifest link is returned as-is (wrapped
-        # in an OverdriveFulfillmentInfo) rather than being retrieved
+        # in an OverdriveManifestFulfillment) rather than being retrieved
         # and processed.
 
         # To keep things simple, our mock API will always return the same
@@ -1650,9 +1647,9 @@ class TestOverdriveAPI:
             "http://download-link",
             overdrive_format,
         )
-        assert isinstance(fulfillmentinfo, OverdriveManifestFulfillmentInfo)
+        assert isinstance(fulfillmentinfo, OverdriveManifestFulfillment)
 
-        # Before looking at the OverdriveManifestFulfillmentInfo,
+        # Before looking at the OverdriveManifestFulfillment,
         # let's see how we got there.
 
         # First, our mocked get_loan() was called.
@@ -1677,10 +1674,9 @@ class TestOverdriveAPI:
 
         # Since the manifest formats cannot be retrieved by the
         # circulation manager, the result of get_download_link was
-        # wrapped in an OverdriveManifestFulfillmentInfo and returned.
+        # wrapped in an OverdriveManifestFulfillment and returned.
         # get_fulfillment_link_from_download_link was never called.
         assert "http://fulfillment-link/" == fulfillmentinfo.content_link
-        assert None == fulfillmentinfo.content_type
 
     def test_update_formats(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
@@ -2239,9 +2235,38 @@ class TestOverdriveAPI:
         fulfill = od_api.fulfill(
             patron, "pin", work.active_license_pool(), delivery_mechanism
         )
-
-        assert fulfill.content_link_redirect is True
+        assert isinstance(fulfill, RedirectFulfillment)
+        assert fulfill.content_type == Representation.EPUB_MEDIA_TYPE
         assert fulfill.content_link == "https://example.org/epub-redirect"
+
+    def test_drm_fulfillment(self, overdrive_api_fixture: OverdriveAPIFixture):
+        db = overdrive_api_fixture.db
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+
+        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
+
+        # Mock get fulfillment link
+        od_api.get_fulfillment_link = MagicMock(
+            return_value=("http://example.com/acsm", "application/vnd.adobe.adept+xml")
+        )
+
+        # Mock delivery mechanism
+        delivery_mechanism = create_autospec(LicensePoolDeliveryMechanism)
+        delivery_mechanism.delivery_mechanism = create_autospec(DeliveryMechanism)
+        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
+        delivery_mechanism.delivery_mechanism.content_type = (
+            Representation.EPUB_MEDIA_TYPE
+        )
+
+        fulfill = od_api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+        assert isinstance(fulfill, FetchFulfillment)
+        assert fulfill.content_type == "application/vnd.adobe.adept+xml"
+        assert fulfill.content_link == "http://example.com/acsm"
 
     def test_no_recently_changed_books(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -2620,7 +2645,7 @@ class TestExtractData:
         assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
 
         # TODO: In the future both of these tests should return a
-        # LoanInfo with appropriate FulfillmentInfo. The calling code
+        # LoanInfo with appropriate Fulfillment. The calling code
         # would then decide whether or not to show the loan.
 
 
@@ -2825,21 +2850,18 @@ class TestSyncBookshelf:
         assert overdrive_hold in patron.holds
 
 
-class TestOverdriveManifestFulfillmentInfo:
-    def test_as_response(self, overdrive_api_fixture: OverdriveAPIFixture):
+class TestOverdriveManifestFulfillment:
+    def test_response(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
 
-        # An OverdriveManifestFulfillmentInfo just links the client
-        # directly to the manifest file, bypassing normal FulfillmentInfo
-        # processing.
-        info = OverdriveManifestFulfillmentInfo(
-            db.default_collection(),
+        # An OverdriveManifestFulfillment just redirects the client
+        # directly to the manifest file
+        info = OverdriveManifestFulfillment(
             "http://content-link/",
-            "abcd-efgh",
             "scope string",
             "access token",
         )
-        response = info.as_response
+        response = info.response()
         assert 302 == response.status_code
         assert "" == response.get_data(as_text=True)
         headers = response.headers

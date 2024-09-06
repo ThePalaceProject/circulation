@@ -12,7 +12,7 @@ from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
-    FulfillmentInfo,
+    RedirectFulfillment,
 )
 from palace.manager.api.lanes import ContributorLane
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
@@ -1313,23 +1313,12 @@ class TestLibraryAnnotator:
         )
         pool = work.license_pools[0]
         loan, _ = pool.loan_to(patron)
-        fulfillment = FulfillmentInfo(
-            pool.collection,
-            pool.data_source.name,
-            pool.identifier.type,
-            pool.identifier.identifier,
-            "http://link",
-            Representation.EPUB_MEDIA_TYPE,
-            None,
-            None,
-        )
 
         annotator = LibraryLoanAndHoldAnnotator(circulation, None, circulation.library)
         feed_obj = OPDSAcquisitionFeed.single_entry_loans_feed(
             circulation,
             loan,
             annotator,
-            fulfillment=fulfillment,
         )
         raw = str(feed_obj)
 
@@ -1375,15 +1364,9 @@ class TestLibraryAnnotator:
 
         now = utc_now()
         loan, ignore = pool.loan_to(patron, start=now)
-        fulfillment = FulfillmentInfo(
-            pool.collection,
-            pool.data_source.name,
-            pool.identifier.type,
-            pool.identifier.identifier,
+        fulfillment = RedirectFulfillment(
             "http://streaming_link",
             Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE,
-            None,
-            None,
         )
 
         annotator = LibraryLoanAndHoldAnnotator(None, None, patron.library)
@@ -1695,7 +1678,7 @@ class TestLibraryAnnotator:
         # non-open-access works that are available without
         # authentication.  To get such link, you pass in a list of
         # LicensePoolDeliveryMechanisms as
-        # `direct_fufillment_delivery_mechanisms`.
+        # `direct_fulfillment_delivery_mechanisms`.
         [lp4] = work4.license_pools
         [lpdm4] = lp4.delivery_mechanisms
         lpdm4.set_rights_status(RightsStatus.IN_COPYRIGHT)

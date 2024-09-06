@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
-
 import flask
-from flask import Response, redirect
+from flask import Response
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from pydantic import parse_obj_as
 from werkzeug import Response as wkResponse
 
+from palace.manager.api.circulation import UrlFulfillment
 from palace.manager.api.circulation_exceptions import (
     CirculationException,
     RemoteInitiatedServerError,
@@ -28,19 +27,15 @@ from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.service.redis.models.patron_activity import PatronActivity
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.flask_util import OPDSEntryResponse
-from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 
 class LoanController(CirculationManagerController):
@@ -273,7 +268,6 @@ class LoanController(CirculationManagerController):
         self,
         license_pool_id: int,
         mechanism_id: int | None = None,
-        do_get: Any | None = None,
     ) -> wkResponse | ProblemDetail:
         """Fulfill a book that has already been checked out,
         or which can be fulfilled with no active loan.
@@ -286,8 +280,6 @@ class LoanController(CirculationManagerController):
         :param license_pool_id: Database ID of a LicensePool.
         :param mechanism_id: Database ID of a DeliveryMechanism.
         """
-        do_get = do_get or Representation.simple_http_get
-
         # Unlike most controller methods, this one has different
         # behavior whether or not the patron is authenticated. This is
         # why we're about to do something we don't usually do--call
@@ -368,22 +360,12 @@ class LoanController(CirculationManagerController):
         except (CirculationException, RemoteInitiatedServerError) as e:
             return e.problem_detail
 
-        # A subclass of FulfillmentInfo may want to bypass the whole
-        # response creation process.
-        response = fulfillment.as_response
-        if response is not None:
-            return response
-
-        headers = dict()
-        encoding_header = dict()
-        if (
-            fulfillment.data_source_name == DataSource.ENKI
-            and mechanism.delivery_mechanism.drm_scheme_media_type
-            == DeliveryMechanism.NO_DRM
+        # TODO: This should really be turned into its own Fulfillment class,
+        #   so each integration can choose when to return a feed response like
+        #   this, and when to return a direct response.
+        if mechanism.delivery_mechanism.is_streaming and isinstance(
+            fulfillment, UrlFulfillment
         ):
-            encoding_header["Accept-Encoding"] = "deflate"
-
-        if mechanism.delivery_mechanism.is_streaming:
             # If this is a streaming delivery mechanism, create an OPDS entry
             # with a fulfillment link to the streaming reader url.
             feed = OPDSAcquisitionFeed.single_entry_loans_feed(
@@ -397,38 +379,16 @@ class LoanController(CirculationManagerController):
                 return feed
             else:
                 content = etree.tostring(feed)
-            status_code = 200
-            headers["Content-Type"] = OPDSFeed.ACQUISITION_FEED_TYPE
-        elif fulfillment.content_link_redirect is True and fulfillment.content_link:
-            # The fulfillment API has asked us to not be a proxy and instead redirect the client directly
-            return redirect(fulfillment.content_link)
-        else:
-            content = fulfillment.content
-            if fulfillment.content_link:
-                # If we have a link to the content on a remote server, web clients may not
-                # be able to access it if the remote server does not support CORS requests.
+            return Response(
+                response=content,
+                status=200,
+                content_type=OPDSFeed.ACQUISITION_FEED_TYPE,
+            )
 
-                # If the pool is open access though, the web client can link directly to the
-                # file to download it, so it's safe to redirect.
-                if requested_license_pool.open_access:
-                    return redirect(fulfillment.content_link)
-
-                # Otherwise, we need to fetch the content and return it instead
-                # of redirecting to it, since it may be downloaded through an
-                # indirect acquisition link.
-                try:
-                    status_code, resp_headers, content = do_get(
-                        fulfillment.content_link, headers=encoding_header
-                    )
-                    headers = dict(resp_headers)
-                except RemoteIntegrationException as e:
-                    return e.problem_detail
-            else:
-                status_code = 200
-            if fulfillment.content_type:
-                headers["Content-Type"] = fulfillment.content_type
-
-        return Response(response=content, status=status_code, headers=headers)
+        try:
+            return fulfillment.response()
+        except BaseProblemDetailException as e:
+            return e.problem_detail
 
     def can_fulfill_without_loan(
         self,

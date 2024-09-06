@@ -23,7 +23,7 @@ from webpub_manifest_parser.opds2.registry import (
 )
 from webpub_manifest_parser.utils import encode, first_or_default
 
-from palace.manager.api.circulation import FulfillmentInfo
+from palace.manager.api.circulation import RedirectFulfillment
 from palace.manager.api.circulation_exceptions import CannotFulfill
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import (
@@ -220,14 +220,11 @@ class OPDS2API(BaseOPDSAPI):
         return token
 
     def fulfill_token_auth(
-        self, patron: Patron, licensepool: LicensePool, fulfillment: FulfillmentInfo
-    ) -> FulfillmentInfo:
-        if not fulfillment.content_link:
-            self.log.warning(
-                "No content link found in fulfillment, unable to fulfill via OPDS2 token auth."
-            )
-            return fulfillment
-
+        self,
+        patron: Patron,
+        licensepool: LicensePool,
+        fulfillment: RedirectFulfillment,
+    ) -> RedirectFulfillment:
         templated = URITemplate(fulfillment.content_link)
         if "authentication_token" not in templated.variable_names:
             self.log.warning(
@@ -245,7 +242,6 @@ class OPDS2API(BaseOPDSAPI):
             patron, licensepool.data_source, self.token_auth_configuration
         )
         fulfillment.content_link = templated.expand(authentication_token=token)
-        fulfillment.content_link_redirect = True
         return fulfillment
 
     def fulfill(
@@ -254,13 +250,11 @@ class OPDS2API(BaseOPDSAPI):
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
-        fufillment_info = super().fulfill(patron, pin, licensepool, delivery_mechanism)
+    ) -> RedirectFulfillment:
+        fulfillment = super().fulfill(patron, pin, licensepool, delivery_mechanism)
         if self.token_auth_configuration:
-            fufillment_info = self.fulfill_token_auth(
-                patron, licensepool, fufillment_info
-            )
-        return fufillment_info
+            fulfillment = self.fulfill_token_auth(patron, licensepool, fulfillment)
+        return fulfillment
 
 
 class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
-    FulfillmentInfo,
+    FetchFulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
@@ -473,7 +473,7 @@ class EnkiAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> FetchFulfillment:
         """Get the actual resource file to the patron."""
         book_id = licensepool.identifier.identifier
         enki_library_id = self.enki_library_id(patron.library)
@@ -509,15 +509,19 @@ class EnkiAPI(
                 drm_type = mechanism.drm_scheme
                 break
 
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
+        # TODO: I think in this case we should be returning a RedirectFulfillment
+        #   instead of a FetchFulfillment. I think we are setting the "Accept-Encoding"
+        #   header here to minimize the size of the response, but I think we would be
+        #   better off just returning the URL and letting the client handle the request.
+        #   However I need to test this case, so I'm leaving it as is for now.
+        headers = {}
+        if drm_type == DeliveryMechanism.NO_DRM:
+            headers["Accept-Encoding"] = "deflate"
+
+        return FetchFulfillment(
             content_link=url,
             content_type=drm_type,
-            content=None,
-            content_expires=expires,
+            include_headers=headers,
         )
 
     def parse_fulfill_result(
@@ -587,7 +591,7 @@ class EnkiAPI(
             enki_id,
             start_date=start_date,
             end_date=end_date,
-            fulfillment_info=None,
+            fulfillment=None,
         )
 
     def parse_patron_holds(self, hold_data: Mapping[str, Any]) -> HoldInfo | None:

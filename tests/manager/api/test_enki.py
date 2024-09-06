@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.circulation import FulfillmentInfo, LoanInfo
+from palace.manager.api.circulation import FetchFulfillment, LoanInfo
 from palace.manager.api.circulation_exceptions import (
     NoAvailableCopies,
     PatronAuthorizationFailedException,
@@ -542,16 +542,13 @@ class TestEnkiAPI:
         # patron's library was used as the 'lib' parameter.
         assert "c" == params["lib"]
 
-        # A FulfillmentInfo for the loan was returned.
-        assert isinstance(fulfillment, FulfillmentInfo)
-        assert fulfillment.identifier == pool.identifier.identifier
-        assert fulfillment.collection_id == pool.collection.id
-        assert DeliveryMechanism.ADOBE_DRM == fulfillment.content_type
+        # A Fulfillment for the loan was returned.
+        assert isinstance(fulfillment, FetchFulfillment)
+        assert fulfillment.content_type == DeliveryMechanism.ADOBE_DRM
         assert fulfillment.content_link is not None
         assert fulfillment.content_link.startswith(
             "http://afs.enkilibrary.org/fulfillment/URLLink.acsm"
         )
-        assert fulfillment.content_expires == datetime_utc(2017, 9, 13, 19, 42, 35, 0)
 
     def test_patron_activity(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db

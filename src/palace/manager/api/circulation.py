@@ -5,9 +5,10 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Any, Literal, TypeVar
+from typing import Literal, TypeVar
 
 import flask
+import requests
 from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -57,8 +58,8 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import HTTP, BadResponseException
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.problem_detail import ProblemDetail
 
 
 class CirculationInfo:
@@ -214,213 +215,116 @@ class DeliveryMechanismInfo(CirculationInfo):
         return lpdm
 
 
-class FulfillmentInfo(CirculationInfo):
-    """A record of a technique that can be used *right now* to fulfill
-    a loan.
+class Fulfillment(ABC):
     """
-
-    def __init__(
-        self,
-        collection: Collection | int | None,
-        data_source_name: str | DataSource | None,
-        identifier_type: str | None,
-        identifier: str | None,
-        content_link: str | None,
-        content_type: str | None,
-        content: str | None,
-        content_expires: datetime.datetime | None,
-        content_link_redirect: bool = False,
-    ) -> None:
-        """Constructor.
-
-        One and only one of `content_link` and `content` should be
-        provided.
-
-        :param collection: A Collection object explaining which Collection
-            the loan is found in.
-        :param identifier_type: A possible value for Identifier.type indicating
-            a type of identifier such as ISBN.
-        :param identifier: A possible value for Identifier.identifier containing
-            the identifier used to designate the item beinf fulfilled.
-        :param content_link: A "next step" URL towards fulfilling the
-            work. This may be a link to an ACSM file, a
-            streaming-content web application, a direct download, etc.
-        :param content_type: Final media type of the content, once acquired.
-            E.g. EPUB_MEDIA_TYPE or
-            Representation.TEXT_HTML_MEDIA_TYPE + DeliveryMechanism.STREAMING_PROFILE
-        :param content: "Next step" content to be served. This may be
-            the actual content of the item on loan (in which case its
-            is of the type mentioned in `content_type`) or an
-            intermediate document such as an ACSM file or audiobook
-            manifest (in which case its media type will differ from
-            `content_type`).
-        :param content_expires: A time after which the "next step"
-            link or content will no longer be usable.
-        :param content_link_redirect: Force the API layer to redirect the client to
-            the content_link
-        """
-        super().__init__(collection, data_source_name, identifier_type, identifier)
-        self._content_link = content_link
-        self._content_type = content_type
-        self._content = content
-        self._content_expires = content_expires
-        self.content_link_redirect = content_link_redirect
-
-    def __repr__(self) -> str:
-        if self.content:
-            blength = len(self.content)
-        else:
-            blength = 0
-        return (
-            "<FulfillmentInfo: content_link: %r, content_type: %r, content: %d bytes, expires: %r, content_link_redirect: %s>"
-            % (
-                self.content_link,
-                self.content_type,
-                blength,
-                self.fd(self.content_expires),
-                self.content_link_redirect,
-            )
-        )
-
-    @property
-    def as_response(self) -> Response | ProblemDetail | None:
-        """Bypass the normal process of creating a Flask Response.
-
-        :return: A Response object, or None if you're okay with the
-           normal process.
-        """
-        return None
-
-    @property
-    def content_link(self) -> str | None:
-        return self._content_link
-
-    @content_link.setter
-    def content_link(self, value: str | None) -> None:
-        self._content_link = value
-
-    @property
-    def content_type(self) -> str | None:
-        return self._content_type
-
-    @content_type.setter
-    def content_type(self, value: str | None) -> None:
-        self._content_type = value
-
-    @property
-    def content(self) -> str | None:
-        return self._content
-
-    @content.setter
-    def content(self, value: str | None) -> None:
-        self._content = value
-
-    @property
-    def content_expires(self) -> datetime.datetime | None:
-        return self._content_expires
-
-    @content_expires.setter
-    def content_expires(self, value: datetime.datetime | None) -> None:
-        self._content_expires = value
-
-
-class APIAwareFulfillmentInfo(FulfillmentInfo, ABC):
-    """This that acts like FulfillmentInfo but is prepared to make an API
-    request on demand to get data, rather than having all the data
-    ready right now.
-
-    This class is useful in situations where generating a full
-    FulfillmentInfo object would be costly. We only want to incur that
-    cost when the patron wants to fulfill this title and is not just
-    looking at their loans.
+    Represents a method of fulfilling a loan.
     """
-
-    def __init__(
-        self,
-        api: CirculationApiType,
-        data_source_name: str | None,
-        identifier_type: str | None,
-        identifier: str | None,
-        key: Any,
-    ) -> None:
-        """Constructor.
-
-        :param api: An object that knows how to make API requests.
-        :param data_source_name: The name of the data source that's
-           offering to fulfill a book.
-        :param identifier: The Identifier of the book being fulfilled.
-        :param key: Any special data, such as a license key, which must
-           be used to fulfill the book.
-        """
-        super().__init__(
-            api.collection,
-            data_source_name,
-            identifier_type,
-            identifier,
-            None,
-            None,
-            None,
-            None,
-        )
-        self.api = api
-        self.key = key
-
-        self._fetched = False
-        self.content_link_redirect = False
-
-    def fetch(self) -> None:
-        """It's time to tell the API that we want to fulfill this book."""
-        if self._fetched:
-            # We already sent the API request..
-            return None
-        self.do_fetch()
-        self._fetched = True
 
     @abstractmethod
-    def do_fetch(self) -> None:
-        """Actually make the API request.
-
-        When implemented, this method must set values for some or all
-        of _content_link, _content_type, _content, and
-        _content_expires.
+    def response(self) -> Response:
+        """
+        Return a Flask Response object that can be used to fulfill a loan.
         """
         ...
 
-    @property
-    def content_link(self) -> str | None:
-        self.fetch()
-        return self._content_link
 
-    @content_link.setter
-    def content_link(self, value: str | None) -> None:
-        raise NotImplementedError()
+class UrlFulfillment(Fulfillment, ABC):
+    """
+    Represents a method of fulfilling a loan that has a URL to an external resource.
+    """
 
-    @property
-    def content_type(self) -> str | None:
-        self.fetch()
-        return self._content_type
+    def __init__(self, content_link: str, content_type: str | None = None) -> None:
+        self.content_link = content_link
+        self.content_type = content_type
 
-    @content_type.setter
-    def content_type(self, value: str | None) -> None:
-        raise NotImplementedError()
+    def __repr__(self) -> str:
+        repr_data = [f"content_link: {self.content_link}"]
+        if self.content_type:
+            repr_data.append(f"content_type: {self.content_type}")
+        return f"<{self.__class__.__name__}: {', '.join(repr_data)}>"
 
-    @property
-    def content(self) -> str | None:
-        self.fetch()
-        return self._content
 
-    @content.setter
-    def content(self, value: str | None) -> None:
-        raise NotImplementedError()
+class DirectFulfillment(Fulfillment):
+    """
+    Represents a method of fulfilling a loan by directly serving some content
+    that we know about locally.
+    """
 
-    @property
-    def content_expires(self) -> datetime.datetime | None:
-        self.fetch()
-        return self._content_expires
+    def __init__(self, content: str, content_type: str | None) -> None:
+        self.content = content
+        self.content_type = content_type
 
-    @content_expires.setter
-    def content_expires(self, value: datetime.datetime | None) -> None:
-        raise NotImplementedError()
+    def response(self) -> Response:
+        return Response(self.content, content_type=self.content_type)
+
+    def __repr__(self) -> str:
+        length = len(self.content)
+        return f"<{self.__class__.__name__}: content_type: {self.content_type}, content: {length} bytes>"
+
+
+class RedirectFulfillment(UrlFulfillment):
+    """
+    Fulfill a loan by redirecting the client to a URL.
+    """
+
+    def response(self) -> Response:
+        return Response(
+            f"Redirecting to {self.content_link} ...",
+            status=302,
+            headers={"Location": self.content_link},
+            content_type="text/plain",
+        )
+
+
+class FetchFulfillment(UrlFulfillment, LoggerMixin):
+    """
+    Fulfill a loan by fetching a URL and returning the content. This should be
+    avoided for large files, since it will be slow and unreliable as well as
+    blocking the server.
+
+    In some cases for small files like ACSM or LCPL files, the server may be
+    the only entity that can fetch the file, so we fetch it and then return it
+    to the client.
+    """
+
+    def __init__(
+        self,
+        content_link: str,
+        content_type: str | None = None,
+        *,
+        include_headers: dict[str, str] | None = None,
+        allowed_response_codes: list[str | int] | None = None,
+    ) -> None:
+        super().__init__(content_link, content_type)
+        self.include_headers = include_headers or {}
+        self.allowed_response_codes = allowed_response_codes or []
+
+    def get(self, url: str) -> requests.Response:
+        return HTTP.get_with_timeout(
+            url,
+            headers=self.include_headers,
+            allowed_response_codes=self.allowed_response_codes,
+            allow_redirects=True,
+        )
+
+    def response(self) -> Response:
+        try:
+            response = self.get(self.content_link)
+        except BadResponseException as ex:
+            response = ex.response
+            self.log.exception(
+                f"Error fulfilling loan. Bad response from: {self.content_link}. "
+                f"Status code: {response.status_code}. "
+                f"Response: {response.text}."
+            )
+            raise
+
+        headers = dict(response.headers)
+
+        if self.content_type:
+            headers["Content-Type"] = self.content_type
+
+        return Response(response.content, status=response.status_code, headers=headers)
 
 
 class LoanInfo(CirculationInfo):
@@ -434,7 +338,7 @@ class LoanInfo(CirculationInfo):
         identifier: str | None,
         start_date: datetime.datetime | None,
         end_date: datetime.datetime | None,
-        fulfillment_info: FulfillmentInfo | None = None,
+        fulfillment: Fulfillment | None = None,
         external_identifier: str | None = None,
         locked_to: DeliveryMechanismInfo | None = None,
     ):
@@ -442,7 +346,7 @@ class LoanInfo(CirculationInfo):
 
         :param start_date: A datetime reflecting when the patron borrowed the book.
         :param end_date: A datetime reflecting when the checked-out book is due.
-        :param fulfillment_info: A FulfillmentInfo object representing an
+        :param fulfillment: A Fulfillment object representing an
             active attempt to fulfill the loan.
         :param locked_to: A DeliveryMechanismInfo object representing the
             delivery mechanism to which this loan is 'locked'.
@@ -450,13 +354,13 @@ class LoanInfo(CirculationInfo):
         super().__init__(collection, data_source_name, identifier_type, identifier)
         self.start_date = start_date
         self.end_date = end_date
-        self.fulfillment_info = fulfillment_info
+        self.fulfillment = fulfillment
         self.locked_to = locked_to
         self.external_identifier = external_identifier
 
     def __repr__(self) -> str:
-        if self.fulfillment_info:
-            fulfillment = " Fulfilled by: " + repr(self.fulfillment_info)
+        if self.fulfillment:
+            fulfillment = " Fulfilled by: " + repr(self.fulfillment)
         else:
             fulfillment = ""
         f = "%Y/%m/%d"
@@ -707,7 +611,7 @@ class BaseCirculationAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         ...
 
@@ -1395,7 +1299,7 @@ class CirculationAPI(LoggerMixin):
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         """Fulfil a book that a patron has previously checked out.
 
         :param delivery_mechanism: A LicensePoolDeliveryMechanism
@@ -1404,10 +1308,9 @@ class CirculationAPI(LoggerMixin):
             mechanism, this parameter is ignored and the previously used
             mechanism takes precedence.
 
-        :return: A FulfillmentInfo object.
+        :return: A Fulfillment object.
 
         """
-        fulfillment: FulfillmentInfo
         loan = get_one(
             self._db,
             Loan,
@@ -1442,7 +1345,7 @@ class CirculationAPI(LoggerMixin):
             licensepool,
             delivery_mechanism=delivery_mechanism,
         )
-        if not fulfillment or not (fulfillment.content_link or fulfillment.content):
+        if not fulfillment:
             raise NoAcceptableFormat()
 
         # Send out an analytics event to record the fact that

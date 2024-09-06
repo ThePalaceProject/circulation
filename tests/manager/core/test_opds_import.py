@@ -10,7 +10,7 @@ import requests_mock
 from lxml import etree
 from psycopg2.extras import NumericRange
 
-from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo, LoanInfo
+from palace.manager.api.circulation import CirculationAPI, LoanInfo, RedirectFulfillment
 from palace.manager.api.circulation_exceptions import (
     CurrentlyAvailable,
     FormatNotAvailable,
@@ -2255,9 +2255,6 @@ class TestOPDSAPI:
             opds_api_fixture.mock_licensepool,
             mock_lpdm,
         )
-        assert isinstance(fulfillment, FulfillmentInfo)
+        assert isinstance(fulfillment, RedirectFulfillment)
         assert fulfillment.content_link == mock_lpdm.resource.representation.public_url
         assert fulfillment.content_type == mock_lpdm.resource.representation.media_type
-        assert fulfillment.content is None
-        assert fulfillment.content_expires is None
-        assert fulfillment.collection_id == opds_api_fixture.collection.id

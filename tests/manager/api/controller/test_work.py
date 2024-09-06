@@ -10,7 +10,7 @@ import flask
 import pytest
 from flask import url_for
 
-from palace.manager.api.circulation import FulfillmentInfo, LoanInfo
+from palace.manager.api.circulation import Fulfillment, LoanInfo
 from palace.manager.api.lanes import (
     ContributorFacets,
     ContributorLane,
@@ -29,7 +29,6 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
 from palace.manager.search.external_search import SortKeyPagination
-from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -434,17 +433,9 @@ class TestWorkController:
             )
             work_fixture.manager.d_circulation.queue_checkout(pool, loan_info)
 
-            fulfillment = FulfillmentInfo(
-                pool.collection,
-                pool.data_source,
-                pool.identifier.type,
-                pool.identifier.identifier,
-                content_link=content_link,
-                content_type=MediaTypes.EPUB_MEDIA_TYPE,
-                content=None,
-                content_expires=None,
+            work_fixture.manager.d_circulation.queue_fulfill(
+                pool, create_autospec(Fulfillment)
             )
-            work_fixture.manager.d_circulation.queue_fulfill(pool, fulfillment)
 
             # Both patrons have loans:
             # - the first patron's loan and fulfillment will be created via API.
@@ -457,13 +448,12 @@ class TestWorkController:
             work_fixture.manager.loans.fulfill(
                 pool.id,
                 delivery_mechanism.delivery_mechanism.id,
-                do_get=MagicMock(return_value=(200, {}, b"")),
             )
 
             patron1_loan = pool.loans[0]
             # We have to create a Resource object manually
             # to assign a URL to the fulfillment that will be used to generate an acquisition link.
-            patron1_loan.fulfillment.resource = Resource(url=fulfillment.content_link)
+            patron1_loan.fulfillment.resource = Resource(url=content_link)
 
             patron2_loan, _ = pool.loan_to(patron_2)
 

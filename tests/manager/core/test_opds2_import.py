@@ -5,12 +5,15 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pytest import LogCaptureFixture
 from requests import Response
 from webpub_manifest_parser.core.ast import Contributor as WebpubContributor
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
-from palace.manager.api.circulation import CirculationAPI, FulfillmentInfo
+from palace.manager.api.circulation import (
+    CirculationAPI,
+    Fulfillment,
+    RedirectFulfillment,
+)
 from palace.manager.api.circulation_exceptions import CannotFulfill
 from palace.manager.core.opds2_import import (
     OPDS2API,
@@ -728,7 +731,7 @@ class Opds2ApiFixture:
 
         self.api = OPDS2API(db.session, self.collection)
 
-    def fulfill(self) -> FulfillmentInfo:
+    def fulfill(self) -> Fulfillment:
         return self.api.fulfill(self.patron, "", self.pool, self.mechanism)
 
 
@@ -794,17 +797,16 @@ class TestOpds2Api:
                 patron, "pin", work.license_pools[0], epub_mechanism
             )
 
+        assert isinstance(fulfillment, RedirectFulfillment)
         assert (
             fulfillment.content_link
             == "http://example.org//getDrmFreeFile.action?documentId=1543720&mediaType=epub&authToken=plaintext-token"
         )
         assert fulfillment.content_type == "application/epub+zip"
-        assert fulfillment.content is None
-        assert fulfillment.content_expires is None
-        assert fulfillment.content_link_redirect is True
 
     def test_token_fulfill(self, opds2_api_fixture: Opds2ApiFixture):
-        ff_info = opds2_api_fixture.fulfill()
+        fulfillment = opds2_api_fixture.fulfill()
+        assert isinstance(fulfillment, RedirectFulfillment)
 
         patron_id = opds2_api_fixture.patron.identifier_to_remote_service(
             opds2_api_fixture.data_source
@@ -817,20 +819,20 @@ class TestOpds2Api:
         )
 
         assert (
-            ff_info.content_link
+            fulfillment.content_link
             == "http://example.org/11234/fulfill?authToken=plaintext-auth-token"
         )
-        assert ff_info.content_link_redirect is True
 
     def test_token_fulfill_alternate_template(self, opds2_api_fixture: Opds2ApiFixture):
         # Alternative templating
         opds2_api_fixture.mechanism.resource.representation.public_url = (
             "http://example.org/11234/fulfill{?authentication_token}"
         )
-        ff_info = opds2_api_fixture.fulfill()
+        fulfillment = opds2_api_fixture.fulfill()
+        assert isinstance(fulfillment, RedirectFulfillment)
 
         assert (
-            ff_info.content_link
+            fulfillment.content_link
             == "http://example.org/11234/fulfill?authentication_token=plaintext-auth-token"
         )
 
@@ -845,26 +847,11 @@ class TestOpds2Api:
         opds2_api_fixture.mechanism.resource.representation.public_url = (
             "http://example.org/11234/fulfill"
         )
-        ff_info = opds2_api_fixture.fulfill()
-        assert ff_info.content_link_redirect is False
+        fulfillment = opds2_api_fixture.fulfill()
+        assert isinstance(fulfillment, RedirectFulfillment)
         assert (
-            ff_info.content_link
+            fulfillment.content_link
             == opds2_api_fixture.mechanism.resource.representation.public_url
-        )
-
-    def test_token_fulfill_no_content_link(
-        self, opds2_api_fixture: Opds2ApiFixture, caplog: LogCaptureFixture
-    ):
-        # No content_link on the fulfillment info coming into the function
-        mock = MagicMock(spec=FulfillmentInfo)
-        mock.content_link = None
-        response = opds2_api_fixture.api.fulfill_token_auth(
-            opds2_api_fixture.patron, opds2_api_fixture.pool, mock
-        )
-        assert response is mock
-        assert (
-            "No content link found in fulfillment, unable to fulfill via OPDS2 token auth"
-            in caplog.text
         )
 
     def test_token_fulfill_no_endpoint_config(self, opds2_api_fixture: Opds2ApiFixture):

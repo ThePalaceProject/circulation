@@ -35,10 +35,12 @@ from palace.manager.api.circulation import (
     BaseCirculationEbookLoanSettings,
     CirculationInternalFormatsMixin,
     DeliveryMechanismInfo,
-    FulfillmentInfo,
+    FetchFulfillment,
+    Fulfillment,
     HoldInfo,
     LoanInfo,
     PatronActivityCirculationAPI,
+    RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
@@ -1224,7 +1226,7 @@ class OverdriveAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         internal_format = self.internal_format(delivery_mechanism)
         if licensepool.identifier.identifier is None:
@@ -1236,9 +1238,9 @@ class OverdriveAPI(
             result = self.get_fulfillment_link(
                 patron, pin, licensepool.identifier.identifier, internal_format
             )
-            if isinstance(result, FulfillmentInfo):
+            if isinstance(result, Fulfillment):
                 # The fulfillment process was short-circuited, probably
-                # by the creation of an OverdriveManifestFulfillmentInfo.
+                # by the creation of an OverdriveManifestFulfillment.
                 return result
 
             url, media_type = result
@@ -1269,21 +1271,20 @@ class OverdriveAPI(
             "ebook-pdf-open",
         ]
 
-        return FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            content_link=url,
-            content_type=media_type,
-            content=None,
-            content_expires=None,
-            content_link_redirect=fulfillment_force_redirect,
-        )
+        if fulfillment_force_redirect:
+            return RedirectFulfillment(
+                content_link=url,
+                content_type=media_type,
+            )
+        else:
+            return FetchFulfillment(
+                content_link=url,
+                content_type=media_type,
+            )
 
     def get_fulfillment_link(
         self, patron: Patron, pin: str | None, overdrive_id: str, format_type: str
-    ) -> OverdriveManifestFulfillmentInfo | tuple[str, str]:
+    ) -> OverdriveManifestFulfillment | tuple[str, str]:
         """Get the link to the ACSM or manifest for an existing loan."""
         try:
             loan = self.get_loan(patron, pin, overdrive_id)
@@ -1344,10 +1345,11 @@ class OverdriveAPI(
                     pin,
                     is_fulfillment=True,
                 ).credential
-                return OverdriveManifestFulfillmentInfo(
-                    self.collection,
+                # The credential should never be None, but mypy doesn't know that, so
+                # we assert to be safe.
+                assert fulfillment_access_token is not None
+                return OverdriveManifestFulfillment(
                     download_link,
-                    overdrive_id,
                     scope_string,
                     fulfillment_access_token,
                 )
@@ -3150,36 +3152,17 @@ class OverdriveAdvantageAccountListScript(Script):
                 break
 
 
-class OverdriveManifestFulfillmentInfo(FulfillmentInfo):
-    def __init__(
-        self, collection, content_link, overdrive_identifier, scope_string, access_token
-    ):
-        """Constructor.
-
-        Most of the arguments to the superconstructor can be assumed,
-        and none of them matter all that much, since this class
-        overrides the normal process by which a FulfillmentInfo becomes
-        a Flask response.
-        """
-        super().__init__(
-            collection=collection,
-            data_source_name=DataSource.OVERDRIVE,
-            identifier_type=Identifier.OVERDRIVE_ID,
-            identifier=overdrive_identifier,
-            content_link=content_link,
-            content_type=None,
-            content=None,
-            content_expires=None,
-        )
+class OverdriveManifestFulfillment(RedirectFulfillment):
+    def __init__(self, content_link: str, scope_string: str, access_token: str) -> None:
+        super().__init__(content_link)
         self.scope_string = scope_string
         self.access_token = access_token
 
-    @property
-    def as_response(self):
+    def response(self) -> flask.Response:
         headers = {
             "Location": self.content_link,
             "X-Overdrive-Scope": self.scope_string,
             "X-Overdrive-Patron-Authorization": f"Bearer {self.access_token}",
-            "Content-Type": self.content_type or "text/plain",
+            "Content-Type": "text/plain",
         }
         return flask.Response("", 302, headers)

@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.annotations import AnnotationWriter
-from palace.manager.api.circulation import BaseCirculationAPI, CirculationAPI
+from palace.manager.api.circulation import (
+    BaseCirculationAPI,
+    CirculationAPI,
+    UrlFulfillment,
+)
 from palace.manager.api.config import Configuration
 from palace.manager.api.lanes import DynamicLane
 from palace.manager.api.metadata.novelist import NoveListAPI
@@ -194,7 +198,7 @@ class CirculationManagerAnnotator(Annotator):
         lane: WorkList | None,
         active_loans_by_work: dict[Work, Loan] | None = None,
         active_holds_by_work: dict[Work, Hold] | None = None,
-        active_fulfillments_by_work: dict[Work, Any] | None = None,
+        active_fulfillments_by_work: dict[Work, UrlFulfillment] | None = None,
         hidden_content_types: list[str] | None = None,
         analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
@@ -404,7 +408,7 @@ class CirculationManagerAnnotator(Annotator):
         active_license_pool: LicensePool | None,
         active_loan: Loan | None,
         active_hold: Hold | None,
-        active_fulfillment: Any | None,
+        active_fulfillment: UrlFulfillment | None,
         identifier: Identifier,
         can_hold: bool = True,
         can_revoke_hold: bool = True,
@@ -502,7 +506,10 @@ class CirculationManagerAnnotator(Annotator):
                 url = active_fulfillment.content_link
                 rel = OPDSFeed.ACQUISITION_REL
                 link_tag = self.acquisition_link(
-                    rel=rel, href=url, types=[type], active_loan=active_loan
+                    rel=rel,
+                    href=url,
+                    types=[type] if type else None,
+                    active_loan=active_loan,
                 )
                 fulfill_links.append(link_tag)
 
@@ -695,7 +702,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         patron: Patron | None = None,
         active_loans_by_work: dict[Work, Loan] | None = None,
         active_holds_by_work: dict[Work, Hold] | None = None,
-        active_fulfillments_by_work: dict[Work, Any] | None = None,
+        active_fulfillments_by_work: dict[Work, UrlFulfillment] | None = None,
         facet_view: str = "feed",
         top_level_title: str = "All Books",
         library_identifies_patrons: bool = True,

@@ -25,9 +25,9 @@ from sqlalchemy.orm.session import Session
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
-    FulfillmentInfo,
     HoldInfo,
     LoanInfo,
+    RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     CurrentlyAvailable,
@@ -248,8 +248,8 @@ class BaseOPDSAPI(
         pass
 
     def fulfill_saml_wayfless(
-        self, template: str, patron: Patron, fulfillment: FulfillmentInfo
-    ) -> FulfillmentInfo:
+        self, template: str, patron: Patron, fulfillment: RedirectFulfillment
+    ) -> RedirectFulfillment:
         self.log.debug(f"WAYFless acquisition link template: {template}")
 
         db = Session.object_session(patron)
@@ -277,17 +277,10 @@ class BaseOPDSAPI(
             SAMLWAYFlessConstants.IDP_PLACEHOLDER,
             urllib.parse.quote(saml_subject.idp, safe=""),
         )
-        if fulfillment.content_link is None:
-            self.log.warning(
-                f"Fulfillment {fulfillment} has no content link, unable to transform it"
-            )
-            content_link = ""
-        else:
-            content_link = fulfillment.content_link
 
         acquisition_link = acquisition_link.replace(
             SAMLWAYFlessConstants.ACQUISITION_LINK_PLACEHOLDER,
-            urllib.parse.quote(content_link, safe=""),
+            urllib.parse.quote(fulfillment.content_link, safe=""),
         )
 
         self.log.debug(
@@ -303,7 +296,7 @@ class BaseOPDSAPI(
         pin: str,
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
-    ) -> FulfillmentInfo:
+    ) -> RedirectFulfillment:
         requested_mechanism = delivery_mechanism.delivery_mechanism
         fulfillment = None
         for lpdm in licensepool.delivery_mechanisms:
@@ -330,23 +323,17 @@ class BaseOPDSAPI(
         content_link = rep.public_url
         media_type = rep.media_type
 
-        fulfillment_info = FulfillmentInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            identifier_type=licensepool.identifier.type,
-            identifier=licensepool.identifier.identifier,
+        fulfillment_strategy = RedirectFulfillment(
             content_link=content_link,
             content_type=media_type,
-            content=None,
-            content_expires=None,
         )
 
         if self.saml_wayfless_url_template:
-            fulfillment_info = self.fulfill_saml_wayfless(
-                self.saml_wayfless_url_template, patron, fulfillment_info
+            fulfillment_strategy = self.fulfill_saml_wayfless(
+                self.saml_wayfless_url_template, patron, fulfillment_strategy
             )
 
-        return fulfillment_info
+        return fulfillment_strategy
 
     def checkout(
         self,
