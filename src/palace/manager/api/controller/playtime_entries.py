@@ -4,7 +4,7 @@ import hashlib
 
 import flask
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
@@ -79,7 +79,7 @@ class PlaytimeEntriesController(CirculationManagerController):
                 LicensePool.identifier == identifier,
                 Loan.patron == flask.request.patron,
                 Loan.start <= entry_max_start_time,
-                Loan.end > entry_min_end_time,
+                or_(Loan.end > entry_min_end_time, Loan.end == None),
             )
             .order_by(Loan.start.desc())
         ).first()

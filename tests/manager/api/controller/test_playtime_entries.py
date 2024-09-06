@@ -3,6 +3,7 @@ import hashlib
 from unittest.mock import patch
 
 import flask
+import pytest
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.controller.playtime_entries import (
@@ -27,7 +28,16 @@ def date_string(hour=None, minute=None):
 
 
 class TestPlaytimeEntriesController:
-    def test_track_playtime(self, circulation_fixture: CirculationControllerFixture):
+    @pytest.mark.parametrize(
+        "no_loan_end_date",
+        [
+            pytest.param(False),
+            pytest.param(True),
+        ],
+    )
+    def test_track_playtime(
+        self, circulation_fixture: CirculationControllerFixture, no_loan_end_date: bool
+    ):
         db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
@@ -42,7 +52,11 @@ class TestPlaytimeEntriesController:
 
         loan_exists_date_str = date_string(hour=12, minute=0)
         inscope_loan_start = datetime.datetime.fromisoformat(loan_exists_date_str)
-        inscope_loan_end = inscope_loan_start + datetime.timedelta(days=14)
+        inscope_loan_end = (
+            None
+            if no_loan_end_date
+            else inscope_loan_start + datetime.timedelta(days=14)
+        )
 
         loan, _ = pool.loan_to(
             patron,
