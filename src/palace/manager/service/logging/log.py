@@ -35,11 +35,7 @@ except ImportError:
 class JSONFormatter(logging.Formatter):
     def __init__(self) -> None:
         super().__init__()
-        hostname = socket.gethostname()
-        fqdn = socket.getfqdn()
-        if len(fqdn) > len(hostname):
-            hostname = fqdn
-        self.hostname = hostname
+        self.hostname = socket.getfqdn()
         self.main_thread_id = threading.main_thread().ident
 
     def format(self, record: logging.LogRecord) -> str:
