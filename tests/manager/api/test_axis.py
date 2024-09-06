@@ -2057,7 +2057,6 @@ class Axis360AcsFulfillmentInfoFixture:
             Axis360AcsFulfillment,
             content_link="https://fake.url",
             verify=False,
-            content_type=None,
         )
         self.mock_request = self.create_mock_request()
         self.mock_urlopen = mock_urlopen

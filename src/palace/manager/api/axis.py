@@ -2002,7 +2002,10 @@ class Axis360AcsFulfillment(UrlFulfillment, LoggerMixin):
     """
 
     def __init__(
-        self, content_link: str, content_type: str | None, verify: bool
+        self,
+        content_link: str,
+        verify: bool,
+        content_type: str = DeliveryMechanism.ADOBE_DRM,
     ) -> None:
         super().__init__(content_link, content_type)
         self.verify = verify
