@@ -110,7 +110,6 @@ class BadResponseException(RemoteIntegrationException):
             )
 
         super().__init__(url_or_service, message, debug_message)
-        # to be set to 500, etc.
         self.response = response
 
     @classmethod
