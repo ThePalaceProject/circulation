@@ -894,6 +894,7 @@ class TestOPDS2WithODLApi:
         assert isinstance(fulfillment, FetchFulfillment)
         assert correct_link == fulfillment.content_link
         assert correct_type == fulfillment.content_type
+        assert ["2xx"] == fulfillment.allowed_response_codes
 
     def test_fulfill_open_access(
         self,

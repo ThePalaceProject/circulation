@@ -567,7 +567,9 @@ class OPDS2WithODLApi(
         if content_link is None or content_type is None:
             raise CannotFulfill()
 
-        return FetchFulfillment(content_link, content_type)
+        return FetchFulfillment(
+            content_link, content_type, allowed_response_codes=["2xx"]
+        )
 
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
