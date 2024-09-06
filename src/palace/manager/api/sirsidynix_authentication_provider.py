@@ -193,7 +193,7 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def remote_patron_lookup(
         self, patron_or_patrondata: Patron | PatronData
-    ) -> None | SirsiDynixPatronData | PatronData:
+    ) -> None | PatronData:
         """Do a remote patron lookup, this method can only look up a patron with a patrondata object
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
@@ -206,7 +206,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         # if the patron data object is not authenticated just pass it back after ensuring the
         # complete flag is set to False
         if (
-            not hasattr(patron_or_patrondata, "session_token")
+            not isinstance(patron_or_patrondata, SirsiDynixPatronData)
             or patron_or_patrondata.session_token is None
         ):
             patron_or_patrondata.complete = False
@@ -216,7 +216,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         # Pull and parse the basic patron information
         data = self.api_read_patron_data(
             patron_key=patrondata.permanent_id,
-            session_token=patrondata.session_token,  # type: ignore[attr-defined]
+            session_token=patrondata.session_token,
         )
         if not data or "fields" not in data:
             return None
@@ -243,7 +243,7 @@ class SirsiDynixHorizonAuthenticationProvider(
         # Get patron "fines" information
         status = self.api_patron_status_info(
             patron_key=patrondata.permanent_id,
-            session_token=patrondata.session_token,  # type: ignore[attr-defined]
+            session_token=patrondata.session_token,
         )
 
         if not status or "fields" not in status:
