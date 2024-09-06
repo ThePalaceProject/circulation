@@ -83,6 +83,18 @@ class TestPatronController:
                 == response.detail
             )
 
+        # Authenticator can find patron with this identifier
+        auth_provider = MockAuthenticationProvider(
+            {identifier: {"authorization_identifier": identifier}}
+        )
+        authenticator.unique_patron_lookup_providers.clear()
+        authenticator.unique_patron_lookup_providers.append(auth_provider)
+
+        with patron_controller_fixture.request_context_with_library_and_admin("/"):
+            flask.request.form = form
+            response = m(authenticator)
+            assert identifier == response["authorization_identifier"]
+
     def test_lookup_patron(self, patron_controller_fixture: PatronControllerFixture):
         # Here's a patron.
         patron = patron_controller_fixture.ctrl.db.patron()

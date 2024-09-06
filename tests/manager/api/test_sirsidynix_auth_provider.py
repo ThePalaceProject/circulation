@@ -288,19 +288,25 @@ class TestSirsiDynixAuthenticationProvider:
         assert patrondata.block_reason == block_reason
 
     def test_remote_patron_lookup_bad_patrondata(
-        self, sirsi_auth_fixture: SirsiAuthFixture
+        self,
+        sirsi_auth_fixture: SirsiAuthFixture,
+        db: DatabaseTransactionFixture,
     ):
         # Test no session token
         provider = sirsi_auth_fixture.provider_mocked_api().provider
-        assert (
-            provider.remote_patron_lookup(
-                SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
-            )
-            is None
+        patron_data = provider.remote_patron_lookup(
+            SirsiDynixPatronData(permanent_id="xxxx", session_token=None)
         )
 
+        assert patron_data and not patron_data.complete
+
         # Test incorrect patrondata type
-        assert provider.remote_patron_lookup(PatronData(permanent_id="xxxx")) is None
+        patron_data = provider.remote_patron_lookup(PatronData(permanent_id="xxxx"))
+        assert patron_data and not patron_data.complete
+
+        # Test remote_patron_lookup with Patron object
+        patron = db.patron()
+        assert provider.remote_patron_lookup(patron) is None
 
     def test_remote_patron_lookup_bad_patron_read_data(
         self, sirsi_auth_fixture: SirsiAuthFixture

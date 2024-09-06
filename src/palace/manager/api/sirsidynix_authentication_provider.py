@@ -25,12 +25,11 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http import HTTP
 
 if TYPE_CHECKING:
     from requests import Response
-
-    from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class SirsiBlockReasons:
@@ -194,16 +193,24 @@ class SirsiDynixHorizonAuthenticationProvider(
 
     def remote_patron_lookup(
         self, patron_or_patrondata: Patron | PatronData
-    ) -> None | SirsiDynixPatronData:
+    ) -> None | PatronData:
         """Do a remote patron lookup, this method can only look up a patron with a patrondata object
         with a session_token already setup within it.
         This method also checks all the reasons that a patron may be blocked for.
         """
-        # We cannot do a remote lookup without a session token
-        if not isinstance(patron_or_patrondata, SirsiDynixPatronData):
+
+        # Return None if a patron object is passed in.
+        if isinstance(patron_or_patrondata, Patron):
             return None
-        elif not patron_or_patrondata.session_token:
-            return None
+
+        # if the patron data object is not authenticated just pass it back after ensuring the
+        # complete flag is set to False
+        if (
+            not isinstance(patron_or_patrondata, SirsiDynixPatronData)
+            or patron_or_patrondata.session_token is None
+        ):
+            patron_or_patrondata.complete = False
+            return patron_or_patrondata
 
         patrondata = patron_or_patrondata
         # Pull and parse the basic patron information
