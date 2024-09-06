@@ -1813,6 +1813,18 @@ class TestOPDS2WithODLApi:
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 1 == db.session.query(Loan).count()
 
+    def test_update_loan_bad_status(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ) -> None:
+        status_doc = {
+            "status": "foo",
+        }
+
+        with pytest.raises(RemoteIntegrationException, match="unknown status value"):
+            opds2_with_odl_api_fixture.api.update_loan(MagicMock(), status_doc)
+
     def test_update_loan_removes_loan(
         self,
         db: DatabaseTransactionFixture,
