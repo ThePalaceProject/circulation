@@ -346,8 +346,9 @@ class TestSIP2AuthenticationProvider:
         create_library_settings: Callable[..., SIP2Settings],
     ):
         # This patron authentication library instance is configured with "TestLoc".
+        library_restriction = "TestLoc"
         library_settings = create_library_settings(
-            patron_location_restriction="TestLoc"
+            patron_location_restriction=library_restriction
         )
         provider = create_provider(library_settings=library_settings)
         client = cast(MockSIPClient, provider.client)
@@ -364,14 +365,22 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.end_session_response)
         with pytest.raises(ProblemDetailException) as exc:
             provider.remote_authenticate("user", "pass")
-        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY
+        debug_message = provider._location_mismatch_message(None, library_restriction)
+        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
+            debug_message
+        )
 
         # This patron has the WRONG location.
         client.queue_response(self.evergreen_patron_with_wrong_loc)
         client.queue_response(self.end_session_response)
         with pytest.raises(ProblemDetailException) as exc:
             provider.remote_authenticate("user", "pass")
-        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY
+        debug_message = provider._location_mismatch_message(
+            "OtherLoc", library_restriction
+        )
+        assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
+            debug_message
+        )
 
     def test_encoding(
         self,
