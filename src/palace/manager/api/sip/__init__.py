@@ -352,6 +352,18 @@ class SIP2AuthenticationProvider(
         self._enforce_patron_location_restriction(info)
         return self.info_to_patrondata(info)
 
+    def _location_mismatch_message(
+        self, patron_location: str | None, library_restriction: str | None = None
+    ) -> str:
+        library_restriction = library_restriction or self.patron_location_restriction
+        patron_location = (
+            f"'{patron_location}'" if patron_location is not None else "(missing)"
+        )
+        return (
+            f"Patron location ({patron_location}) does not match "
+            f"library location restriction ('{library_restriction}')."
+        )
+
     def _enforce_patron_location_restriction(
         self, info: dict[str, Any] | ProblemDetail
     ) -> None:
@@ -365,9 +377,13 @@ class SIP2AuthenticationProvider(
         if (
             not isinstance(info, ProblemDetail)
             and self.patron_location_restriction is not None
-            and info.get("permanent_location") != self.patron_location_restriction
+            and self.patron_location_restriction != info.get("permanent_location")
         ):
-            raise ProblemDetailException(PATRON_OF_ANOTHER_LIBRARY)
+            raise ProblemDetailException(
+                PATRON_OF_ANOTHER_LIBRARY.with_debug(
+                    self._location_mismatch_message(info.get("permanent_location"))
+                )
+            )
 
     def _run_self_tests(self, _db):
         def makeConnection(sip):

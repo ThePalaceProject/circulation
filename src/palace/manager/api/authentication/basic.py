@@ -41,7 +41,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.log import elapsed_time_logging
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class LibraryIdentifierRestriction(Enum):
@@ -412,28 +412,33 @@ class BasicAuthenticationProvider(
         if self.test_username is None:
             raise CannotLoadConfiguration("No test patron identifier is configured.")
 
-        patron, password = self.testing_patron(_db)
+        try:
+            patron, password = self.testing_patron(_db)
+        except ProblemDetailException as e:
+            patron = e.problem_detail
+
         if isinstance(patron, Patron):
             return patron, password
 
+        debug_message = None
         if not patron:
             message = (
                 "Remote declined to authenticate the test patron. "
                 "The patron may not exist or its password may be wrong."
             )
         elif isinstance(patron, ProblemDetail):
-            message = (
-                "Test patron lookup returned a problem detail - {}: {} ({})".format(
-                    patron.title, patron.detail, patron.uri
-                )
-            )
+            pd = patron
+            message = f"Test patron lookup returned a problem detail - {pd.title}: {pd.detail} ({pd.uri})"
+            if pd.debug_message:
+                message += f" [{pd.debug_message}]"
+                debug_message = pd.debug_message
         else:
             message = (  # type: ignore[unreachable]
                 "Test patron lookup returned invalid value for patron: {!r}".format(
                     patron
                 )
             )
-        raise IntegrationException(message)
+        raise IntegrationException(message, debug_message=debug_message)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
         """Verify the credentials of the test patron for this integration,
