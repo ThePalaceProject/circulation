@@ -97,6 +97,8 @@ class JSONFormatter(logging.Formatter):
             }
             if flask_request.query_string:
                 data["request"]["query"] = flask_request.query_string.decode()
+            if user_agent := flask_request.headers.get("User-Agent"):
+                data["request"]["user_agent"] = user_agent
 
         # If we are running in uwsgi context, we include the worker id in the log
         if uwsgi:
