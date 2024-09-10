@@ -1,15 +1,12 @@
-import re
 import string
 
 import pytest
 
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.service.redis.models.marc import (
     MarcFileUpload,
     MarcFileUploadSession,
     MarcFileUploadSessionError,
     MarcFileUploadState,
-    PathEscapeMixin,
 )
 from palace.manager.service.redis.redis import Pipeline
 from palace.manager.service.storage.s3 import MultipartS3UploadPart
@@ -28,8 +25,8 @@ class MarcFileUploadSessionFixture:
 
         # Some keys with special characters to make sure they are handled correctly.
         self.mock_upload_key_1 = "test/test1/?$xyz.abc"
-        self.mock_upload_key_2 = "test/test2.ext`"
-        self.mock_upload_key_3 = "//t/e/s/t3!!\\~'\"`"
+        self.mock_upload_key_2 = "t'est💣/tëst2.\"ext`"
+        self.mock_upload_key_3 = string.printable
 
         self.mock_unset_upload_key = "test4"
 
@@ -473,59 +470,3 @@ class TestMarcFileUploadSession:
         with uploads.lock():
             uploads.set_state(MarcFileUploadState.UPLOADING)
             assert uploads.state() == MarcFileUploadState.UPLOADING
-
-
-class TestPathEscapeMixin:
-    @pytest.mark.parametrize(
-        "path",
-        [
-            "",
-            "test",
-            string.printable,
-            "test/test1/?$xyz.abc",
-            "`",
-            "```",
-            "/~`\\",
-            "`\\~/``/",
-            "a",
-            "/",
-            "~",
-            " ",
-        ],
-    )
-    def test_escape_path(self, path: str) -> None:
-        # Test a round trip
-        escaper = PathEscapeMixin()
-        escaped = escaper._escape_path(path)
-        unescaped = escaper._unescape_path(escaped)
-        assert unescaped == path
-
-        # Test that we can handle escaping the escaped path multiple times
-        escaped = path
-        for _ in range(10):
-            escaped = escaper._escape_path(escaped)
-
-        unescaped = escaped
-        for _ in range(10):
-            unescaped = escaper._unescape_path(unescaped)
-
-        assert unescaped == path
-
-    def test_unescape(self) -> None:
-        escaper = PathEscapeMixin()
-        assert escaper._unescape_path("") == ""
-
-        with pytest.raises(
-            PalaceValueError, match=re.escape("Invalid escape sequence '`?'")
-        ):
-            escaper._unescape_path("test `?")
-
-        with pytest.raises(
-            PalaceValueError, match=re.escape("Invalid escape sequence '` '")
-        ):
-            escaper._unescape_path("``` test")
-
-        with pytest.raises(
-            PalaceValueError, match=re.escape("Unterminated escape sequence")
-        ):
-            escaper._unescape_path("`")

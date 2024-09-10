@@ -6,8 +6,10 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import cached_property
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 from uuid import uuid4
+
+from redis.exceptions import ResponseError
 
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import BasePalaceException
@@ -373,6 +375,18 @@ class RedisJsonLock(BaseRedisLock, ABC):
         if parsed_value is None:
             raise LockError(f"Could not parse value ({json.dumps(value)})")
         return parsed_value
+
+    @staticmethod
+    def _validate_pipeline_results(results: list[Any]) -> bool:
+        """
+        This function validates that all the results of the pipeline are successful,
+        and not a ResponseError.
+
+        NOTE: The AWS ElastiCache implementation returns slightly different results then Redis.
+        In redis, unsuccessful results when a key is not found are `None`, but in AWS they are
+        returned as a `ResponseError`, so we are careful to check for both in this function.
+        """
+        return all(r and not isinstance(r, ResponseError) for r in results)
 
     def acquire(self) -> bool:
         return (
