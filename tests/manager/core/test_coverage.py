@@ -535,9 +535,6 @@ class TestBaseCoverageProvider:
         class MockProvider1(AlwaysSuccessfulCoverageProvider):
             OPERATION = "i succeed"
 
-            def finalize_batch(self):
-                self.finalized = True
-
         success_provider = MockProvider1(db.session)
 
         batch = [i1, i2]
@@ -545,9 +542,6 @@ class TestBaseCoverageProvider:
 
         # Two successes.
         assert (2, 0, 0) == counts
-
-        # finalize_batch() was called.
-        assert True == success_provider.finalized
 
         # Each represented with a CoverageRecord with status='success'
         assert all(isinstance(x, CoverageRecord) for x in successes)

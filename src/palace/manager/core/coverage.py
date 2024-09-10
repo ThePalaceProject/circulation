@@ -383,7 +383,7 @@ class BaseCoverageProvider:
             transient_failures,
             persistent_failures,
         ), results = self.process_batch_and_handle_results(batch_results)
-
+        self.finalize_batch()
         # Update the running totals so that the service's eventual timestamp
         # will have a useful .achievements.
         progress.successes += successes
@@ -485,9 +485,6 @@ class BaseCoverageProvider:
             persistent_failures,
             num_ignored,
         )
-
-        # Finalize this batch before moving on to the next one.
-        self.finalize_batch()
 
         # For all purposes outside this method, treat an ignored identifier
         # as a transient failure.
@@ -910,6 +907,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         while index < len(need_coverage):
             batch = need_coverage[index : index + self.batch_size]
             (s, t, p), r = self.process_batch_and_handle_results(batch)
+            self.finalize_batch()
             successes += s
             transient_failures += t
             persistent_failures += p
