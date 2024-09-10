@@ -419,7 +419,9 @@ class TestOPDSFeedController:
 
         library = circulation_fixture.db.default_library()
         lane = circulation_fixture.manager.top_level_lanes[library.id]
-        lane = circulation_fixture.db.session.merge(lane)
+        session = circulation_fixture.db.session
+        lane = session.merge(lane)
+        session.expire_all()
 
         # Mock NavigationFeed.navigation so we can see the arguments going
         # into it.
