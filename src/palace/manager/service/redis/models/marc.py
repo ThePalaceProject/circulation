@@ -273,12 +273,10 @@ class MarcFileUploadSession(RedisJsonLock, PathEscapeMixin, LoggerMixin):
 
         set_results = {}
         with self._pipeline(begin_transaction=False) as pipe:
-            existing_uploads: list[str] = [
-                self._unescape_path(r)
-                for r in self._parse_value_or_raise(
-                    pipe.json().objkeys(self.key, self._uploads_json_key)
-                )
-            ]
+            existing_uploads: list[str] = self._parse_value_or_raise(
+                pipe.json().objkeys(self.key, self._uploads_json_key)
+            )
+            existing_uploads = [self._unescape_path(p) for p in existing_uploads]
             pipe.multi()
             for key, value in data.items():
                 if value == "":
