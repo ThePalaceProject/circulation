@@ -7,6 +7,7 @@ import datetime
 import json
 import re
 from collections.abc import Callable
+from contextlib import nullcontext
 from decimal import Decimal
 from functools import partial
 from typing import TYPE_CHECKING, Literal, cast
@@ -14,6 +15,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import flask
 import pytest
+from _pytest._code import ExceptionInfo
 from flask import url_for
 from freezegun import freeze_time
 from money import Money
@@ -72,7 +74,7 @@ from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDoc
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
 from tests.mocks.analytics_provider import MockAnalyticsProvider
@@ -1421,14 +1423,14 @@ class TestBasicAuthenticationProvider:
                 True,
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
-            # returns None, we don't call remote_patron_lookup and get a ProblemDetail
+            # raises a ProblemDetail, then we don't call remote_patron_lookup and get that ProblemDetail.
             (
                 PatronData(authorization_identifier="a", complete=False),
-                None,
+                PATRON_OF_ANOTHER_LIBRARY.with_debug("some debug details"),
                 None,
                 0,
                 False,
-                PATRON_OF_ANOTHER_LIBRARY,
+                PATRON_OF_ANOTHER_LIBRARY.with_debug("some debug details"),
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
             # returns an incomplete patrondata, we call remote_patron_lookup
@@ -1489,16 +1491,21 @@ class TestBasicAuthenticationProvider:
         lookup_return,
         calls_lookup,
         create_patron,
-        expected,
+        expected: Literal[True] | ProblemDetail,
     ):
         # The call to remote_patron_lookup is potentially expensive, so we want to avoid calling it
         # more than once. This test makes sure that if we have a complete patrondata from remote_authenticate,
         # or from enforce_library_identifier_restriction, we don't call remote_patron_lookup.
         provider = mock_basic()
         provider.remote_authenticate = MagicMock(return_value=auth_return)
-        provider.enforce_library_identifier_restriction = MagicMock(
-            return_value=enforce_return
-        )
+        if isinstance(enforce_return, ProblemDetail):
+            provider.enforce_library_identifier_restriction = MagicMock(
+                side_effect=ProblemDetailException(enforce_return)
+            )
+        else:
+            provider.enforce_library_identifier_restriction = MagicMock(
+                return_value=enforce_return
+            )
         provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
 
         username = "a"
@@ -1510,8 +1517,16 @@ class TestBasicAuthenticationProvider:
             db_patron = db.patron()
             db_patron.authorization_identifier = username
 
-        patron = provider.authenticated_patron(db.session, credentials)
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if isinstance(expected, ProblemDetail)
+            else nullcontext()
+        )
+        with context_manager as ctx:
+            patron = provider.authenticated_patron(db.session, credentials)
+
         provider.remote_authenticate.assert_called_once_with(username, password)
+
         if auth_return is not None:
             provider.enforce_library_identifier_restriction.assert_called_once_with(
                 auth_return
@@ -1519,13 +1534,18 @@ class TestBasicAuthenticationProvider:
         else:
             provider.enforce_library_identifier_restriction.assert_not_called()
         assert provider.remote_patron_lookup.call_count == calls_lookup
-        if expected is True:
+
+        if isinstance(expected, ProblemDetail):
+            assert isinstance(ctx, ExceptionInfo)
+            problem_detail = ctx.value.problem_detail
+            assert problem_detail == expected
+        elif expected is True:
             # Make sure we get a Patron object back and that the patrondata has been
             # properly applied to it
             assert isinstance(patron, Patron)
             assert patron.external_type == "xyz"
         else:
-            assert patron is expected
+            assert patron is expected  # type: ignore[unreachable]
 
     def test_update_patron_metadata(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
@@ -1576,7 +1596,10 @@ class TestBasicAuthenticationProvider:
 
     def test_restriction_matches(self):
         """Test the behavior of the library identifier restriction algorithm."""
-        m = BasicAuthenticationProvider._restriction_matches
+
+        def m(*args) -> bool:
+            result, reason = BasicAuthenticationProvider._restriction_matches(*args)
+            return result
 
         # If restriction is none, we always return True.
         assert (
@@ -1823,7 +1846,8 @@ class TestBasicAuthenticationProvider:
                 == patrondata
             )
         else:
-            assert provider.enforce_library_identifier_restriction(patrondata) is None
+            with pytest.raises(ProblemDetailException) as exc:
+                provider.enforce_library_identifier_restriction(patrondata)
 
         # Test match applied to library_identifier field on complete patrondata
         provider.library_identifier_field = "other"
@@ -1834,7 +1858,8 @@ class TestBasicAuthenticationProvider:
                 == patrondata
             )
         else:
-            assert provider.enforce_library_identifier_restriction(patrondata) is None
+            with pytest.raises(ProblemDetailException) as exc:
+                provider.enforce_library_identifier_restriction(patrondata)
 
         # Test match applied to library_identifier field on incomplete patrondata
         provider.library_identifier_field = "other"
@@ -1849,10 +1874,8 @@ class TestBasicAuthenticationProvider:
                 == remote_patrondata
             )
         else:
-            assert (
+            with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(local_patrondata)
-                is None
-            )
         provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
     def test_enforce_library_identifier_restriction_library_identifier_field_none(

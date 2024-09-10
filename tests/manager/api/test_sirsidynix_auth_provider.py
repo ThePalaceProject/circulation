@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
@@ -6,6 +7,7 @@ from typing import Any, Literal
 from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
+from _pytest._code import ExceptionInfo
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import LibraryIdentifierRestriction
@@ -21,6 +23,7 @@ from palace.manager.api.sirsidynix_authentication_provider import (
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http import HTTP
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import MockRequestsResponse
 
@@ -376,7 +379,9 @@ class TestSirsiDynixAuthenticationProvider:
             (
                 LibraryIdentifierRestriction.PREFIX,
                 "abc",
-                PATRON_OF_ANOTHER_LIBRARY,
+                PATRON_OF_ANOTHER_LIBRARY.with_debug(
+                    "'patronType' does not match library restriction: 'testtype' does not start with 'abc'."
+                ),
             ),
         ],
     )
@@ -386,7 +391,7 @@ class TestSirsiDynixAuthenticationProvider:
         sirsi_auth_fixture: SirsiAuthFixture,
         restriction_type: LibraryIdentifierRestriction,
         restriction: str,
-        expected: Literal[True] | PatronData,
+        expected: Literal[True] | ProblemDetail,
     ):
         library = db.default_library()
         library_settings = sirsi_auth_fixture.library_settings(
@@ -412,9 +417,15 @@ class TestSirsiDynixAuthenticationProvider:
                 library_identifier="testtype",
             )
         )
-        patron = provider.authenticated_patron(
-            db.session, {"username": "testuser", "password": "testpass"}
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if isinstance(expected, ProblemDetail)
+            else nullcontext()
         )
+        with context_manager as ctx:
+            patron = provider.authenticated_patron(
+                db.session, {"username": "testuser", "password": "testpass"}
+            )
         provider.remote_authenticate.assert_called_with("testuser", "testpass")
         provider.remote_patron_lookup.assert_called()
         if expected is True:
@@ -422,7 +433,9 @@ class TestSirsiDynixAuthenticationProvider:
             assert patron.fines == 50.00
             assert patron.block_reason is None
         else:
-            assert patron == expected
+            assert isinstance(ctx, ExceptionInfo)
+            problem_detail = ctx.value.problem_detail
+            assert problem_detail == expected
 
     def test_blocked_patron_status_info(self, sirsi_auth_fixture: SirsiAuthFixture):
         provider = sirsi_auth_fixture.provider()
