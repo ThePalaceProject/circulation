@@ -1517,8 +1517,8 @@ class LicensePoolDeliveryMechanism(Base):
 
         if dirty:
             for pool in lpdm.license_pools:
-                # without this refresh, the pools are not updating their delivery mechanisms.
-                _db.refresh(pool)
+                # expire pool required in order ensure delivery mechanisms are updated.
+                _db.expire(pool)
 
                 # Creating or modifying a LPDM might change the open-access status
                 # of all LicensePools for that DataSource/Identifier.
