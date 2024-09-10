@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from enum import Enum
 from re import Pattern
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from flask import url_for
 from pydantic import PositiveInt, validator
@@ -50,6 +50,11 @@ class LibraryIdentifierRestriction(Enum):
     PREFIX = "prefix"
     STRING = "string"
     LIST = "list"
+
+
+class LibraryIdenfitierRestrictionFields(Enum):
+    BARCODE = "barcode"
+    PATRON_LIBRARY = "patron location"
 
 
 class Keyboards(Enum):
@@ -223,7 +228,8 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
             "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
             "is set to 'No restriction'.",
             options={
-                "barcode": "Barcode",
+                LibraryIdenfitierRestrictionFields.BARCODE: "Barcode",
+                LibraryIdenfitierRestrictionFields.PATRON_LIBRARY: "Patron Location",
             },
         ),
     )
@@ -487,8 +493,6 @@ class BasicAuthenticationProvider(
 
         # Check that the patron belongs to this library.
         patrondata = self.enforce_library_identifier_restriction(patrondata)
-        if patrondata is None:
-            return PATRON_OF_ANOTHER_LIBRARY
 
         # At this point we know there is _some_ authenticated patron,
         # but it might not correspond to a Patron in our database, and
@@ -721,39 +725,52 @@ class BasicAuthenticationProvider(
     @classmethod
     def _restriction_matches(
         cls,
-        field: str | None,
+        value: str | None,
         restriction: str | list[str] | re.Pattern | None,
         match_type: LibraryIdentifierRestriction,
-    ) -> bool:
-        """Does the given patron match the given restriction?"""
-        if not field:
-            # No field -- nothing matches.
-            return False
+    ) -> tuple[bool, str]:
+        """Does the given patron match the given restriction?
 
-        if not restriction:
-            # No restriction -- anything matches.
-            return True
+        :param value: The value from the field we're matching against the restriction.
+        :param restriction: The restriction value.
+        :param match_type: The type of match we're performing.
+        :returns: True if the value matches the restriction, False otherwise.
+        """
+        value = value or ""
 
-        if match_type == LibraryIdentifierRestriction.REGEX:
-            if restriction.search(field):  # type: ignore[union-attr]
-                return True
-        elif match_type == LibraryIdentifierRestriction.PREFIX:
-            if field.startswith(restriction):  # type: ignore[arg-type]
-                return True
-        elif match_type == LibraryIdentifierRestriction.STRING:
-            if field == restriction:
-                return True
-        elif match_type == LibraryIdentifierRestriction.LIST:
-            if field in restriction:  # type: ignore[operator]
-                return True
+        failure_reason = ""
+        match [match_type, restriction, value]:
+            case [LibraryIdentifierRestriction.NONE, *_]:
+                pass
+            case [_, _restriction, _] if not _restriction:
+                pass
+            case [_, _, _value] if _value is None or _value == "":
+                failure_reason = "No value in field."
+            case [LibraryIdentifierRestriction.REGEX, *_]:
+                if not (_pattern := cast(Pattern, restriction)).search(value):
+                    failure_reason = f"{value!r} does not match regular expression {_pattern.pattern!r}"
+            case [LibraryIdentifierRestriction.PREFIX, *_]:
+                if not value.startswith(_string := cast(str, restriction)):
+                    failure_reason = f"{value!r} does not start with {_string!r}"
+            case [LibraryIdentifierRestriction.STRING, *_]:
+                if value != (_string := cast(str, restriction)):
+                    failure_reason = f"{value!r} does not exactly match {_string!r}"
+            case [LibraryIdentifierRestriction.LIST, *_]:
+                if value not in (_list := cast(list, restriction)):
+                    failure_reason = f"{value!r} not in list {restriction!r}"
 
-        return False
+        return (False, failure_reason) if failure_reason else (True, "")
 
     def get_library_identifier_field_data(
         self, patrondata: PatronData
     ) -> tuple[PatronData, str | None]:
-        if self.library_identifier_field.lower() == "barcode":
-            return patrondata, patrondata.authorization_identifier
+        supported_fields = {
+            LibraryIdenfitierRestrictionFields.BARCODE.value: patrondata.authorization_identifier,
+            LibraryIdenfitierRestrictionFields.PATRON_LIBRARY.value: patrondata.library_identifier,
+        }
+        library_verification_field = self.library_identifier_field.lower()
+        if library_verification_field in supported_fields:
+            return patrondata, supported_fields[library_verification_field]
 
         if not patrondata.complete:
             remote_patrondata = self.remote_patron_lookup(patrondata)
@@ -766,8 +783,16 @@ class BasicAuthenticationProvider(
 
     def enforce_library_identifier_restriction(
         self, patrondata: PatronData
-    ) -> PatronData | None:
-        """Does the given patron match the configured library identifier restriction?"""
+    ) -> PatronData:
+        """Does the given patron match the configured library identifier restriction?
+
+        If not, raise a ProblemDetail exception.
+
+        :param patrondata: A PatronData object.
+        :returns: A PatronData object.
+        :raises ProblemDetailException: With `PATRON_OF_ANOTHER_LIBRARY`
+            ProblemDetail, if the given patron does not match.
+        """
         if (
             self.library_identifier_restriction_type
             == LibraryIdentifierRestriction.NONE
@@ -783,14 +808,18 @@ class BasicAuthenticationProvider(
             return patrondata
 
         patrondata, field = self.get_library_identifier_field_data(patrondata)
-        if self._restriction_matches(
+        isValid, reason = self._restriction_matches(
             field,
             self.library_identifier_restriction_criteria,
             self.library_identifier_restriction_type,
-        ):
-            return patrondata
-        else:
-            return None
+        )
+        if not isValid:
+            raise ProblemDetailException(
+                PATRON_OF_ANOTHER_LIBRARY.with_debug(
+                    f"{self.library_identifier_field!r} does not match library restriction: {reason}."
+                )
+            )
+        return patrondata
 
     def authenticated_patron(
         self, _db: Session, authorization: dict | str

@@ -465,6 +465,8 @@ class SIP2AuthenticationProvider(
             patrondata.email_address = info["email_address"]
         if "personal_name" in info:
             patrondata.personal_name = info["personal_name"]
+        if "permanent_location" in info:
+            patrondata.library_identifier = info["permanent_location"]
         if "fee_amount" in info:
             fines = info["fee_amount"]
         else:
