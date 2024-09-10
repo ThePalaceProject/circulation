@@ -659,7 +659,6 @@ class OPDS2WithODLApi(
         self, holdinfo: HoldInfo, pool: LicensePool, library: Library
     ) -> None:
         _db = Session.object_session(pool)
-
         # First make sure the hold position is up-to-date, since we'll
         # need it to calculate the end date.
         original_position = holdinfo.hold_position
@@ -744,6 +743,8 @@ class OPDS2WithODLApi(
             holdinfo.end_date = utc_now() + datetime.timedelta(
                 days=default_reservation_period
             )
+
+        _db.expire_all()
 
     def _update_hold_position(self, holdinfo: HoldInfo, pool: LicensePool) -> None:
         _db = Session.object_session(pool)
