@@ -2,6 +2,7 @@ import datetime
 import json
 from unittest.mock import MagicMock, create_autospec
 
+import dateutil.parser
 import pytest
 from pytest import MonkeyPatch
 
@@ -465,7 +466,8 @@ class TestNoveListAPI:
 
         # Set up a book for this library.
         edition = novelist_fixture.db.edition(
-            identifier_type=Identifier.ISBN, publication_date="2012-01-01"
+            identifier_type=Identifier.ISBN,
+            publication_date=dateutil.parser.parse("2012-01-01"),
         )
         pool = novelist_fixture.db.licensepool(
             edition, collection=novelist_fixture.db.default_collection()
