@@ -288,10 +288,9 @@ class MarcFileUploadSession(RedisJsonLock, PathEscapeMixin, LoggerMixin):
                         self.key, path=self._buffer_path(key), value=value
                     )
                 else:
-                    path = self._upload_path(key)
                     pipe.json().set(
                         self.key,
-                        path=path,
+                        path=(self._upload_path(key)),
                         obj=self._upload_initial_value(value),
                     )
                     set_results[key] = len(value)
