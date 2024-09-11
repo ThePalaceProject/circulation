@@ -70,11 +70,10 @@ class JsonPathEscapeMixin:
                     )
                 unescaped.append(self._REVERSE_MAPPING[char])
                 in_escape = False
+            elif char == self._ESCAPE_CHAR:
+                in_escape = True
             else:
-                if char == self._ESCAPE_CHAR:
-                    in_escape = True
-                else:
-                    unescaped.append(char)
+                unescaped.append(char)
 
         if in_escape:
             raise PalaceValueError("Unterminated escape sequence.")

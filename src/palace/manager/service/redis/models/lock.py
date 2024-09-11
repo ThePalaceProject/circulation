@@ -382,8 +382,8 @@ class RedisJsonLock(BaseRedisLock, ABC):
         This function validates that all the results of the pipeline are successful,
         and not a ResponseError.
 
-        NOTE: The AWS ElastiCache implementation returns slightly different results then Redis.
-        In redis, unsuccessful results when a key is not found are `None`, but in AWS they are
+        NOTE: The AWS ElastiCache implementation returns slightly different results than Redis.
+        In Redis, unsuccessful results when a key is not found are `None`, but in AWS they are
         returned as a `ResponseError`, so we are careful to check for both in this function.
         """
         return all(r and not isinstance(r, ResponseError) for r in results)
