@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from mypy_boto3_s3 import S3Client
 from pydantic import AnyHttpUrl
 
 from palace.manager.service.configuration.service_configuration import (
@@ -138,6 +137,9 @@ class MockS3Service(S3Service):
         self, key: str, upload_id: str, part_number: int, content: bytes
     ) -> MultipartS3UploadPart:
         etag = str(uuid4())
+        if not 1 <= part_number <= 10000:
+            raise ValueError("Part number must be between 1 and 10000")
+
         part = MultipartS3UploadPart(etag=etag, part_number=part_number)
         assert key in self.upload_in_progress
         assert self.upload_in_progress[key].upload_id == upload_id
