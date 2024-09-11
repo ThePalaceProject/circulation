@@ -9,8 +9,9 @@ from functools import cached_property
 from typing import Any
 
 from pydantic import BaseModel
-from redis import ResponseError, WatchError
+from redis import WatchError
 
+from palace.manager.service.redis.escape import JsonPathEscapeMixin
 from palace.manager.service.redis.models.lock import LockError, RedisJsonLock
 from palace.manager.service.redis.redis import Pipeline, Redis
 from palace.manager.service.storage.s3 import MultipartS3UploadPart
@@ -40,7 +41,7 @@ class MarcFileUploadState(StrEnum):
     UPLOADING = auto()
 
 
-class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
+class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
     """
     This class is used as a lock for the Celery MARC export task, to ensure that only one
     task can upload MARC files for a given collection at a time. It increments an update
@@ -106,7 +107,8 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         return MarcFileUpload(buffer=buffer_data).dict(exclude_none=True)
 
     def _upload_path(self, upload_key: str) -> str:
-        return f"{self._uploads_json_key}['{upload_key}']"
+        upload_key = self._escape_path(upload_key, self._redis_client.elasticache)
+        return f'{self._uploads_json_key}["{upload_key}"]'
 
     def _buffer_path(self, upload_key: str) -> str:
         upload_path = self._upload_path(upload_key)
@@ -166,7 +168,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         pipe.json().numincrby(self.key, self._update_number_json_key, updates)
         pipe.pexpire(self.key, self._lock_timeout_ms)
         try:
-            pipe_results = pipe.execute()
+            pipe_results = pipe.execute(raise_on_error=False)
         except WatchError as e:
             raise MarcFileUploadSessionError(
                 "Failed to update buffers. Another process is modifying the buffers."
@@ -184,6 +186,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
             existing_uploads: list[str] = self._parse_value_or_raise(
                 pipe.json().objkeys(self.key, self._uploads_json_key)
             )
+            existing_uploads = [self._unescape_path(p) for p in existing_uploads]
             pipe.multi()
             for key, value in data.items():
                 if value == "":
@@ -195,14 +198,14 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
                 else:
                     pipe.json().set(
                         self.key,
-                        path=self._upload_path(key),
+                        path=(self._upload_path(key)),
                         obj=self._upload_initial_value(value),
                     )
                     set_results[key] = len(value)
 
             pipe_results = self._execute_pipeline(pipe, len(data))
 
-        if not all(pipe_results):
+        if not self._validate_pipeline_results(pipe_results):
             raise MarcFileUploadSessionError("Failed to append buffers.")
 
         return {
@@ -224,7 +227,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
             )
             pipe_results = self._execute_pipeline(pipe, 1)
 
-        if not all(pipe_results):
+        if not self._validate_pipeline_results(pipe_results):
             raise MarcFileUploadSessionError("Failed to add part and clear buffer.")
 
     def set_upload_id(self, key: str, upload_id: str) -> None:
@@ -237,7 +240,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
             )
             pipe_results = self._execute_pipeline(pipe, 1)
 
-        if not all(pipe_results):
+        if not self._validate_pipeline_results(pipe_results):
             raise MarcFileUploadSessionError("Failed to set upload ID.")
 
     def clear_uploads(self) -> None:
@@ -245,7 +248,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
             pipe.json().clear(self.key, self._uploads_json_key)
             pipe_results = self._execute_pipeline(pipe, 1)
 
-        if not all(pipe_results):
+        if not self._validate_pipeline_results(pipe_results):
             raise MarcFileUploadSessionError("Failed to clear uploads.")
 
     def _get_specific(
@@ -269,7 +272,7 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         if results is None:
             return {}
 
-        return results
+        return {self._unescape_path(k): v for k, v in results.items()}
 
     def get(self, keys: str | Sequence[str] | None = None) -> dict[str, MarcFileUpload]:
         if keys is None:
@@ -285,15 +288,14 @@ class MarcFileUploadSession(RedisJsonLock, LoggerMixin):
         return self._get_specific(keys, self._upload_id_path)
 
     def get_part_num_and_buffer(self, key: str) -> tuple[int, str]:
-        try:
-            with self._redis_client.pipeline() as pipe:
-                pipe.json().get(self.key, self._buffer_path(key))
-                pipe.json().arrlen(self.key, self._parts_path(key))
-                results = pipe.execute()
-        except ResponseError as e:
+        with self._redis_client.pipeline() as pipe:
+            pipe.json().get(self.key, self._buffer_path(key))
+            pipe.json().arrlen(self.key, self._parts_path(key))
+            results = pipe.execute(raise_on_error=False)
+        if not self._validate_pipeline_results(results):
             raise MarcFileUploadSessionError(
                 "Failed to get part number and buffer data."
-            ) from e
+            )
 
         buffer_data: str = self._parse_value_or_raise(results[0])
         part_number: int = self._parse_value_or_raise(results[1])

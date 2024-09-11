@@ -1,3 +1,5 @@
+import string
+
 import pytest
 
 from palace.manager.service.redis.models.marc import (
@@ -21,9 +23,10 @@ class MarcFileUploadSessionFixture:
             self._redis_fixture.client, self.mock_collection_id
         )
 
-        self.mock_upload_key_1 = "test1"
-        self.mock_upload_key_2 = "test2"
-        self.mock_upload_key_3 = "test3"
+        # Some keys with special characters to make sure they are handled correctly.
+        self.mock_upload_key_1 = "test/test1/?$xyz.abc"
+        self.mock_upload_key_2 = "t'est💣/tëst2.\"ext`"
+        self.mock_upload_key_3 = string.printable
 
         self.mock_unset_upload_key = "test4"
 
@@ -49,7 +52,7 @@ class MarcFileUploadSessionFixture:
 
         return return_value
 
-    def test_data_records(self, *keys: str):
+    def test_data_records(self, *keys: str) -> dict[str, MarcFileUpload]:
         return {key: MarcFileUpload(buffer=self.test_data[key]) for key in keys}
 
 

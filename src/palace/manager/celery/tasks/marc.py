@@ -133,32 +133,37 @@ def marc_export_collection(
         # Sync the upload_manager to ensure that all the data is written to storage.
         upload_manager.sync()
 
-        if len(works) == batch_size:
-            # This task is complete, but there are more works waiting to be exported. So we requeue ourselves
-            # to process the next batch.
-            raise task.replace(
-                marc_export_collection.s(
-                    collection_id=collection_id,
-                    start_time=start_time,
-                    libraries=[l.dict() for l in libraries_info],
-                    batch_size=batch_size,
-                    last_work_id=works[-1].id,
-                    update_number=upload_manager.update_number,
+        if len(works) != batch_size:
+            # We have finished generating MARC records. Cleanup and exit.
+            with task.transaction() as session:
+                collection = MarcExporter.collection(session, collection_id)
+                collection_name = collection.name if collection else "unknown"
+                completed_uploads = upload_manager.complete()
+                MarcExporter.create_marc_upload_records(
+                    session,
+                    start_time,
+                    collection_id,
+                    libraries_info,
+                    completed_uploads,
                 )
+                upload_manager.remove_session()
+            task.log.info(
+                f"Finished generating MARC records for collection '{collection_name}' ({collection_id})."
             )
+            return
 
-        # If we got here, we have finished generating MARC records. Cleanup and exit.
-        with task.transaction() as session:
-            collection = MarcExporter.collection(session, collection_id)
-            collection_name = collection.name if collection else "unknown"
-            completed_uploads = upload_manager.complete()
-            MarcExporter.create_marc_upload_records(
-                session, start_time, collection_id, libraries_info, completed_uploads
-            )
-            upload_manager.remove_session()
-        task.log.info(
-            f"Finished generating MARC records for collection '{collection_name}' ({collection_id})."
+    # This task is complete, but there are more works waiting to be exported. So we requeue ourselves
+    # to process the next batch.
+    raise task.replace(
+        marc_export_collection.s(
+            collection_id=collection_id,
+            start_time=start_time,
+            libraries=[l.dict() for l in libraries_info],
+            batch_size=batch_size,
+            last_work_id=works[-1].id,
+            update_number=upload_manager.update_number,
         )
+    )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
