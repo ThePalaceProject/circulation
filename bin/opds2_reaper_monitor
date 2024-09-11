@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Remove availability of items no longer present in OPDS 2.0 import collections."""
 import json
-from typing import Any
+from collections.abc import Generator
+from typing import Any, cast
 
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
@@ -45,6 +46,28 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
         self.publication_count = 0
         self.dry_run = dry_run
         super().__init__(*args, **import_class_kwargs)
+
+    def _get_feeds(self) -> Generator[tuple[str, bytes], None, None]:
+        """Yield each feed page in the order that it is first fetched.
+
+        This is okay for a reaper, since it has to visit every page
+        in the feed and the order is unimportant.
+        """
+        queue = [cast(str, self.feed_url)]
+        seen_links = set()
+
+        # Follow the feed's next links until we reach a page with nothing new.
+        while queue:
+            new_queue = []
+            for link in queue:
+                if link in seen_links:
+                    continue
+                next_links, feed = self.follow_one_link(link)
+                new_queue.extend(next_links)
+                if feed:
+                    yield link, feed
+                seen_links.add(link)
+            queue = new_queue
 
     def feed_contains_new_data(self, feed: bytes | str) -> bool:
         # Always return True so that the reaper will crawl the entire feed.
