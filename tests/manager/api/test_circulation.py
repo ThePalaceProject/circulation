@@ -55,7 +55,10 @@ class TestFetchFulfillment:
     def test_fetch_fulfillment(self) -> None:
         http = MockHTTPClient()
         http.queue_response(
-            204, content="This is some content.", media_type="application/xyz"
+            204,
+            content="This is some content.",
+            media_type="application/xyz",
+            other_headers={"X-Test": "test"},
         )
         fulfillment = FetchFulfillment("http://some.location", "foo/bar")
         with http.patch():
@@ -68,6 +71,7 @@ class TestFetchFulfillment:
         # Any content type set on the fulfillment, overrides the content type from the request.
         assert response.content_type == "foo/bar"
         assert http.requests == ["http://some.location"]
+        assert "X-Test" not in response.headers
 
         # If no content type is set on the fulfillment, the content type from the request is used.
         http = MockHTTPClient()

@@ -314,10 +314,14 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
             )
             raise
 
-        headers = dict(response.headers)
+        headers = {}
 
         if self.content_type:
             headers["Content-Type"] = self.content_type
+        elif "Content-Type" in response.headers:
+            headers["Content-Type"] = response.headers["Content-Type"]
+
+        headers["Cache-Control"] = "private"
 
         return Response(response.content, status=response.status_code, headers=headers)
 
