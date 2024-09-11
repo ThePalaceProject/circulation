@@ -102,10 +102,14 @@ class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvi
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.attempts = []
+        self.finalize_batch_called = False
 
     def process_item(self, item):
         self.attempts.append(item)
         return item
+
+    def finalize_batch(self):
+        self.finalize_batch_called = True
 
 
 class InstrumentedWorkCoverageProvider(MockCoverageProvider, WorkCoverageProvider):
