@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
+from dateutil.tz import tzutc
 from requests import Response
 from webpub_manifest_parser.core.ast import Contributor as WebpubContributor
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
@@ -198,7 +199,10 @@ class TestOPDS2Importer(OPDS2Test):
         assert data.data_source == moby_dick_edition.data_source
 
         assert "Test Publisher" == moby_dick_edition.publisher
-        assert datetime.date(2015, 9, 29) == moby_dick_edition.published
+        assert (
+            datetime.datetime(2015, 9, 29, tzinfo=tzutc())
+            == moby_dick_edition.published
+        )
 
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
         assert (
@@ -255,7 +259,10 @@ class TestOPDS2Importer(OPDS2Test):
         assert data.data_source == huckleberry_finn_edition.data_source
 
         assert "Test Publisher" == huckleberry_finn_edition.publisher
-        assert datetime.date(2014, 9, 28) == huckleberry_finn_edition.published
+        assert (
+            datetime.datetime(2014, 9, 28, tzinfo=tzutc())
+            == huckleberry_finn_edition.published
+        )
 
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
 

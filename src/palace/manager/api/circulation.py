@@ -164,14 +164,13 @@ class DeliveryMechanismInfo(CirculationInfo):
         self.resource = resource
 
     def apply(
-        self, loan: Loan, autocommit: bool = True
+        self,
+        loan: Loan,
     ) -> LicensePoolDeliveryMechanism | None:
         """Set an appropriate LicensePoolDeliveryMechanism on the given
         `Loan`, creating a DeliveryMechanism if necessary.
 
         :param loan: A Loan object.
-        :param autocommit: Set this to false if you are in the middle
-            of a nested transaction.
         :return: A LicensePoolDeliveryMechanism if one could be set on the
             given Loan; None otherwise.
         """
@@ -199,9 +198,6 @@ class DeliveryMechanismInfo(CirculationInfo):
         # Look up the LicensePoolDeliveryMechanism for the way the
         # server says this book is available, creating the object if
         # necessary.
-        #
-        # We set autocommit=False because we're probably in the middle
-        # of a nested transaction.
         lpdm = LicensePoolDeliveryMechanism.set(
             pool.data_source,
             pool.identifier,
@@ -209,7 +205,6 @@ class DeliveryMechanismInfo(CirculationInfo):
             self.drm_scheme,
             self.rights_uri,
             self.resource,
-            autocommit=autocommit,
         )
         loan.fulfillment = lpdm
         return lpdm
@@ -763,7 +758,7 @@ class PatronActivityCirculationAPI(
                 # this is the first we've heard of this loan,
                 # it may have been created in another app or through
                 # a library-website integration.
-                loan.locked_to.apply(local_loan, autocommit=False)
+                loan.locked_to.apply(local_loan)
 
         loans_to_delete = [
             local_loans[i] for i in local_loans.keys() - remote_loans.keys()
