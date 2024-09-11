@@ -515,6 +515,7 @@ class TestBaseCoverageProvider:
         assert 1 == progress.successes
         assert 2 == progress.transient_failures
         assert 3 == progress.persistent_failures
+        assert provider.finalize_batch_called
 
         assert (
             "Items processed: 6. Successes: 1, transient failures: 2, persistent failures: 3"
@@ -535,9 +536,6 @@ class TestBaseCoverageProvider:
         class MockProvider1(AlwaysSuccessfulCoverageProvider):
             OPERATION = "i succeed"
 
-            def finalize_batch(self):
-                self.finalized = True
-
         success_provider = MockProvider1(db.session)
 
         batch = [i1, i2]
@@ -545,9 +543,6 @@ class TestBaseCoverageProvider:
 
         # Two successes.
         assert (2, 0, 0) == counts
-
-        # finalize_batch() was called.
-        assert True == success_provider.finalized
 
         # Each represented with a CoverageRecord with status='success'
         assert all(isinstance(x, CoverageRecord) for x in successes)
@@ -613,6 +608,9 @@ class TestBaseCoverageProvider:
         ]
         assert [CoverageRecord.PERSISTENT_FAILURE] * 2 == [x.status for x in results]
         assert ["i will always fail"] * 2 == [x.operation for x in results]
+
+        assert not success_provider.finalize_batch_called
+        assert not persistent_failure_provider.finalize_batch_called
 
     def test_process_batch(self, db: DatabaseTransactionFixture):
         class Mock(BaseCoverageProvider):
@@ -1156,6 +1154,8 @@ class TestIdentifierCoverageProvider:
         for i in not_to_be_tested:
             assert i not in provider.attempts
 
+        assert provider.finalize_batch_called
+
     def test_run_on_specific_identifiers_respects_cutoff_time(
         self, db: DatabaseTransactionFixture
     ):
@@ -1199,6 +1199,7 @@ class TestIdentifierCoverageProvider:
         # reflect the failure.
         assert records[0] == record
         assert "What did you expect?" == record.exception
+        assert provider.finalize_batch_called
 
     def test_run_never_successful(self, db: DatabaseTransactionFixture):
         """Verify that NeverSuccessfulCoverageProvider works the
