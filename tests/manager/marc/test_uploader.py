@@ -354,13 +354,10 @@ class TestMarcUploadManager:
             # 1. A small record that isn't in S3 at the time `complete` is called (test1).
             # 2. A large record that needs to be uploaded in parts. On the first `sync`
             #    call, its buffer is large enough to trigger an upload. When `complete` is
-            #    called, the buffer has enough data waiting that it would normally trigger
-            #    another upload (test2).
+            #    called, the buffer has data waiting for upload (test2).
             # 3. A large record that needs to be uploaded in parts. On the first `sync`
             #    call, its buffer is large enough to trigger the upload. When `complete`
-            #    is called, there is data in the buffer, but not enough to trigger another
-            #    upload normally. However, since the record is complete, it still
-            #    needs to be uploaded (test3).
+            #    is called, the buffer is empty (test3).
 
             uploader.add_record("test1", b"test_record")
             uploader.add_record("test2", b"a" * batch_size)
@@ -372,7 +369,6 @@ class TestMarcUploadManager:
             # Add some more data
             uploader.add_record("test1", b"test_record")
             uploader.add_record("test2", b"a" * batch_size)
-            uploader.add_record("test3", b"b")
 
             # Complete the uploads
             completed = uploader.complete()
@@ -391,5 +387,5 @@ class TestMarcUploadManager:
         )
         assert (
             s3_service_integration_fixture.get_object("public", "test3")
-            == b"b" * batch_size + b"b"
+            == b"b" * batch_size
         )
