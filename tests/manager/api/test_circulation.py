@@ -87,6 +87,16 @@ class TestFetchFulfillment:
         [(args, kwargs)] = http.requests_args
         assert kwargs["allow_redirects"] is True
 
+        # If the content type is not set on the fulfillment, and the response does not have a content type,
+        # we fall back to no content type.
+        http = MockHTTPClient()
+        http.queue_response(200, content="Other content.")
+        fulfillment = FetchFulfillment("http://some.other.location")
+        with http.patch():
+            response = fulfillment.response()
+        assert isinstance(response, Response)
+        assert response.content_type is None
+
     def test_fetch_fulfillment_include_headers(self) -> None:
         # If include_headers is set, the headers are set when the fetch is made, but
         # not included in the response.
