@@ -86,7 +86,7 @@ class MockMultipartUploadPart:
 class MockMultipartUpload:
     key: str
     upload_id: str
-    parts: list[MockMultipartUploadPart] = field(default_factory=list)
+    parts: dict[int, MockMultipartUploadPart] = field(default_factory=dict)
     content_type: str | None = None
 
 
@@ -143,8 +143,8 @@ class MockS3Service(S3Service):
         part = MultipartS3UploadPart(etag=etag, part_number=part_number)
         assert key in self.upload_in_progress
         assert self.upload_in_progress[key].upload_id == upload_id
-        self.upload_in_progress[key].parts.append(
-            MockMultipartUploadPart(part, content)
+        self.upload_in_progress[key].parts[part_number] = MockMultipartUploadPart(
+            part, content
         )
         return part
 
@@ -154,11 +154,15 @@ class MockS3Service(S3Service):
         assert key in self.upload_in_progress
         assert self.upload_in_progress[key].upload_id == upload_id
         complete_upload = self.upload_in_progress.pop(key)
-        for part_stored, part_passed_in in zip(complete_upload.parts, parts):
-            assert part_stored.part_data == part_passed_in
+        assert len(complete_upload.parts) == len(parts)
+        expected_parts = [x.part_data for x in complete_upload.parts.values()]
+        expected_parts.sort(key=lambda x: x.part_number)
+        assert parts == expected_parts
         self.uploads[key] = MockS3ServiceUpload(
             key,
-            b"".join(part_stored.content for part_stored in complete_upload.parts),
+            b"".join(
+                part_stored.content for part_stored in complete_upload.parts.values()
+            ),
             complete_upload.content_type,
         )
 

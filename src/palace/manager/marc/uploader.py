@@ -109,7 +109,10 @@ class MarcUploadManager(LoggerMixin):
                     # Upload the last chunk if the buffer is not empty, the final part has no
                     # minimum size requirement.
                     upload_part = self.storage_service.multipart_upload(
-                        key, upload.upload_id, len(upload.parts), upload.buffer.encode()
+                        key,
+                        upload.upload_id,
+                        len(upload.parts) + 1,
+                        upload.buffer.encode(),
                     )
                     upload.parts.append(upload_part)
 

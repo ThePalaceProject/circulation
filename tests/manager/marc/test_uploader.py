@@ -10,7 +10,7 @@ from palace.manager.service.redis.models.marc import (
 )
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.redis import RedisFixture
-from tests.fixtures.s3 import S3ServiceFixture
+from tests.fixtures.s3 import S3ServiceFixture, S3ServiceIntegrationFixture
 
 
 class MarcUploadManagerFixture:
@@ -189,7 +189,7 @@ class TestMarcUploadManager:
         ]
         assert upload.upload_id is not None
         assert upload.content_type is Representation.MARC_MEDIA_TYPE
-        [part] = upload.parts
+        [part] = upload.parts.values()
         assert part.content == marc_upload_manager_fixture.test_record1 * 5
 
         # And the s3 part data and upload_id is synced to redis
@@ -332,3 +332,64 @@ class TestMarcUploadManager:
 
         # The redis record should have been deleted
         mock_delete.assert_called_once()
+
+    def test_real_storage_service(
+        self,
+        redis_fixture: RedisFixture,
+        s3_service_integration_fixture: S3ServiceIntegrationFixture,
+    ):
+        """
+        Full end-to-end test of the MarcUploadManager using the real S3Service
+        """
+        s3_service = s3_service_integration_fixture.public
+        uploads = MarcFileUploadSession(redis_fixture.client, 99)
+        uploader = MarcUploadManager(s3_service, uploads)
+        batch_size = s3_service.MINIMUM_MULTIPART_UPLOAD_SIZE + 1
+
+        with uploader.begin() as locked:
+            assert locked
+
+            # Test all three cases for the complete() method.
+            #
+            # 1. A small record that doesn't need to be uploaded in parts, it just
+            #    gets uploaded directly when complete is called (test1).
+            # 2. A large record that needs to be uploaded in parts, on the first sync
+            #    call its buffer is large enough to trigger the upload. When complete
+            #    is called, there is no data in the buffer, so no final part needs to be
+            #    uploaded (test2).
+            # 3. A large record that needs to be uploaded in parts, on the first sync
+            #    call its buffer is large enough to trigger the upload. When complete
+            #    is called, there is data in the buffer, so a final part needs to be
+            #    uploaded (test3).
+
+            uploader.add_record("test1", b"test_record")
+            uploader.add_record("test2", b"a" * batch_size)
+            uploader.add_record("test3", b"b" * batch_size)
+
+            # Start the sync. This will begin the multipart upload for test2 and test3.
+            uploader.sync()
+
+            # Add some more data
+            uploader.add_record("test1", b"test_record")
+            uploader.add_record("test2", b"a" * batch_size)
+            uploader.add_record("test3", b"b")
+
+            # Complete the uploads
+            completed = uploader.complete()
+
+        assert completed == {"test1", "test2", "test3"}
+        assert uploads.get() == {}
+        assert set(s3_service_integration_fixture.list_objects("public")) == completed
+
+        assert (
+            s3_service_integration_fixture.get_object("public", "test1")
+            == b"test_record" * 2
+        )
+        assert (
+            s3_service_integration_fixture.get_object("public", "test2")
+            == b"a" * batch_size * 2
+        )
+        assert (
+            s3_service_integration_fixture.get_object("public", "test3")
+            == b"b" * batch_size + b"b"
+        )
