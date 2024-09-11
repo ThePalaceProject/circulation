@@ -418,7 +418,7 @@ class TestMarcFileUploadSession:
         assert uploads.get_part_num_and_buffer(
             marc_file_upload_session_fixture.mock_upload_key_1
         ) == (
-            0,
+            1,
             marc_file_upload_session_fixture.test_data[
                 marc_file_upload_session_fixture.mock_upload_key_1
             ],
@@ -442,7 +442,7 @@ class TestMarcFileUploadSession:
 
         assert uploads.get_part_num_and_buffer(
             marc_file_upload_session_fixture.mock_upload_key_1
-        ) == (2, "1234567")
+        ) == (3, "1234567")
 
     def test_state(
         self, marc_file_upload_session_fixture: MarcFileUploadSessionFixture

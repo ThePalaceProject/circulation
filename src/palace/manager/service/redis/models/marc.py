@@ -298,7 +298,7 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
             )
 
         buffer_data: str = self._parse_value_or_raise(results[0])
-        part_number: int = self._parse_value_or_raise(results[1])
+        part_number: int = self._parse_value_or_raise(results[1]) + 1
 
         return part_number, buffer_data
 
