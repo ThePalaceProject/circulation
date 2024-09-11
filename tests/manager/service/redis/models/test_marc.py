@@ -414,7 +414,8 @@ class TestMarcFileUploadSession:
 
         marc_file_upload_session_fixture.load_test_data()
 
-        # If the buffer has been set, but no parts have been added
+        # If the buffer has been set, but no parts have been added. The first part number
+        # should be 1. The buffer should be the same as the original data.
         assert uploads.get_part_num_and_buffer(
             marc_file_upload_session_fixture.mock_upload_key_1
         ) == (
@@ -426,10 +427,12 @@ class TestMarcFileUploadSession:
 
         with uploads.lock() as locked:
             assert locked
+            # Add part 1
             uploads.add_part_and_clear_buffer(
                 marc_file_upload_session_fixture.mock_upload_key_1,
                 marc_file_upload_session_fixture.part_1,
             )
+            # Add part 2
             uploads.add_part_and_clear_buffer(
                 marc_file_upload_session_fixture.mock_upload_key_1,
                 marc_file_upload_session_fixture.part_2,
@@ -440,6 +443,7 @@ class TestMarcFileUploadSession:
                 }
             )
 
+        # The next part number should be 3, and the buffer should be the new data
         assert uploads.get_part_num_and_buffer(
             marc_file_upload_session_fixture.mock_upload_key_1
         ) == (3, "1234567")

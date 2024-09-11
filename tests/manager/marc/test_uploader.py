@@ -349,18 +349,18 @@ class TestMarcUploadManager:
         with uploader.begin() as locked:
             assert locked
 
-            # Test all three cases for the complete() method.
+            # Test three buffer size cases for the complete() method.
             #
-            # 1. A small record that doesn't need to be uploaded in parts, it just
-            #    gets uploaded directly when complete is called (test1).
-            # 2. A large record that needs to be uploaded in parts, on the first sync
-            #    call its buffer is large enough to trigger the upload. When complete
-            #    is called, there is no data in the buffer, so no final part needs to be
-            #    uploaded (test2).
-            # 3. A large record that needs to be uploaded in parts, on the first sync
-            #    call its buffer is large enough to trigger the upload. When complete
-            #    is called, there is data in the buffer, so a final part needs to be
-            #    uploaded (test3).
+            # 1. A small record that isn't in S3 at the time `complete` is called (test1).
+            # 2. A large record that needs to be uploaded in parts. On the first `sync`
+            #    call, its buffer is large enough to trigger an upload. When `complete` is
+            #    called, the buffer has enough data waiting that it would normally trigger
+            #    another upload (test2).
+            # 3. A large record that needs to be uploaded in parts. On the first `sync`
+            #    call, its buffer is large enough to trigger the upload. When `complete`
+            #    is called, there is data in the buffer, but not enough to trigger another
+            #    upload normally. However, since the record is complete, it still
+            #    needs to be uploaded (test3).
 
             uploader.add_record("test1", b"test_record")
             uploader.add_record("test2", b"a" * batch_size)

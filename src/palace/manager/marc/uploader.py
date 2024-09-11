@@ -56,16 +56,17 @@ class MarcUploadManager(LoggerMixin):
             )
             self.upload_session.add_part_and_clear_buffer(key, upload_part)
 
-    def sync(self) -> None:
+    def sync(self, *, complete: bool = False) -> None:
         # First sync our buffers to redis
         buffer_lengths = self.upload_session.append_buffers(self._buffers)
         self._buffers.clear()
 
-        # Then, if any of our redis buffers are large enough, upload them to S3
+        # Then, if any of our redis buffers are large enough, or the upload is complete
+        # sync them to S3.
         needs_upload = [
             key
             for key, length in buffer_lengths.items()
-            if length > self.storage_service.MINIMUM_MULTIPART_UPLOAD_SIZE
+            if length > self.storage_service.MINIMUM_MULTIPART_UPLOAD_SIZE or complete
         ]
 
         if not needs_upload:
@@ -94,32 +95,17 @@ class MarcUploadManager(LoggerMixin):
 
     def complete(self) -> set[str]:
         # Make sure any local data we have is synced
-        self.sync()
+        self.sync(complete=True)
 
         in_progress = self.upload_session.get()
         for key, upload in in_progress.items():
-            if upload.upload_id is None:
-                # We haven't started the upload. At this point there is no reason to start a
-                # multipart upload, just upload the file directly and continue.
-                self.storage_service.store(
-                    key, upload.buffer, Representation.MARC_MEDIA_TYPE
-                )
-            else:
-                if upload.buffer != "":
-                    # Upload the last chunk if the buffer is not empty, the final part has no
-                    # minimum size requirement.
-                    upload_part = self.storage_service.multipart_upload(
-                        key,
-                        upload.upload_id,
-                        len(upload.parts) + 1,
-                        upload.buffer.encode(),
-                    )
-                    upload.parts.append(upload_part)
+            # Since the sync method is called with complete=True, all the data should be in S3
+            # and have a valid upload_id. Therefore, we can complete the upload. Mypy doesn't
+            # know that upload_id shouldn't be None though, so we assert it for safety.
+            assert upload.upload_id is not None
 
-                # Complete the multipart upload
-                self.storage_service.multipart_complete(
-                    key, upload.upload_id, upload.parts
-                )
+            # Complete the multipart upload
+            self.storage_service.multipart_complete(key, upload.upload_id, upload.parts)
 
         # Delete our in-progress uploads data from redis
         if in_progress:
