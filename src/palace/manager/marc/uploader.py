@@ -6,7 +6,7 @@ from celery.exceptions import Ignore, Retry
 from typing_extensions import Self
 
 from palace.manager.service.redis.models.marc import MarcFileUploadSession
-from palace.manager.service.storage.s3 import S3Service
+from palace.manager.service.storage.s3 import MultipartS3UploadPart, S3Service
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.log import LoggerMixin
 
@@ -40,6 +40,14 @@ class MarcUploadManager(LoggerMixin):
     def add_record(self, key: str, record: bytes) -> None:
         self._buffers[key] += record.decode()
 
+    def _s3_upload_part(self, key: str, upload_id: str) -> MultipartS3UploadPart:
+        part_number, data = self.upload_session.get_part_num_and_buffer(key)
+        upload_part = self.storage_service.multipart_upload(
+            key, upload_id, part_number, data.encode()
+        )
+        self.upload_session.add_part_and_clear_buffer(key, upload_part)
+        return upload_part
+
     def _s3_sync(self, needs_upload: Sequence[str]) -> None:
         upload_ids = self.upload_session.get_upload_ids(needs_upload)
         for key in needs_upload:
@@ -50,18 +58,18 @@ class MarcUploadManager(LoggerMixin):
                 self.upload_session.set_upload_id(key, upload_id)
                 upload_ids[key] = upload_id
 
-            part_number, data = self.upload_session.get_part_num_and_buffer(key)
-            upload_part = self.storage_service.multipart_upload(
-                key, upload_ids[key], part_number, data.encode()
-            )
-            self.upload_session.add_part_and_clear_buffer(key, upload_part)
+            self._s3_upload_part(key, upload_ids[key])
+
+    def _sync_buffers_to_redis(self) -> dict[str, int]:
+        buffer_lengths = self.upload_session.append_buffers(self._buffers)
+        self._buffers.clear()
+        return buffer_lengths
 
     def sync(self) -> None:
         # First sync our buffers to redis
-        buffer_lengths = self.upload_session.append_buffers(self._buffers)
-        self._buffers.clear()
+        buffer_lengths = self._sync_buffers_to_redis()
 
-        # Then, if any of our redis buffers are large enough, upload them to S3
+        # Then, if any of our redis buffers are large enough sync them to S3.
         needs_upload = [
             key
             for key, length in buffer_lengths.items()
@@ -93,36 +101,32 @@ class MarcUploadManager(LoggerMixin):
         self.remove_session()
 
     def complete(self) -> set[str]:
-        # Make sure any local data we have is synced
-        self.sync()
+        # Ensure any local data is synced to Redis.
+        self._sync_buffers_to_redis()
 
         in_progress = self.upload_session.get()
         for key, upload in in_progress.items():
             if upload.upload_id is None:
-                # We haven't started the upload. At this point there is no reason to start a
-                # multipart upload, just upload the file directly and continue.
+                # The multipart upload hasn't started. Perform a regular S3 upload since all data is in the buffer.
                 self.storage_service.store(
                     key, upload.buffer, Representation.MARC_MEDIA_TYPE
                 )
             else:
                 if upload.buffer != "":
-                    # Upload the last chunk if the buffer is not empty, the final part has no
-                    # minimum size requirement.
-                    upload_part = self.storage_service.multipart_upload(
-                        key, upload.upload_id, len(upload.parts), upload.buffer.encode()
-                    )
-                    upload.parts.append(upload_part)
+                    # Upload the last chunk if the buffer is not empty. The final part has no minimum size requirement.
+                    last_part = self._s3_upload_part(key, upload.upload_id)
+                    upload.parts.append(last_part)
 
-                # Complete the multipart upload
+                # Complete the multipart upload.
                 self.storage_service.multipart_complete(
                     key, upload.upload_id, upload.parts
                 )
 
-        # Delete our in-progress uploads data from redis
+        # Delete the in-progress uploads data from Redis.
         if in_progress:
             self.upload_session.clear_uploads()
 
-        # Return the keys that were uploaded
+        # Return the keys that were uploaded.
         return set(in_progress.keys())
 
     def remove_session(self) -> None:

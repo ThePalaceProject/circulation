@@ -298,6 +298,11 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
             )
 
         buffer_data: str = self._parse_value_or_raise(results[0])
+        # AWS S3 requires part numbers to start at 1, so we need to increment by 1.
+        #
+        # NOTE: This is not true in MinIO (our local development environment). MinIO
+        # allows both 0 and 1 as the first part number. Therefore, tests will pass if this is
+        # changed, but it will fail when running in an actual AWS environment.
         part_number: int = self._parse_value_or_raise(results[1]) + 1
 
         return part_number, buffer_data
