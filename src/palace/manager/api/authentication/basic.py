@@ -745,7 +745,7 @@ class BasicAuthenticationProvider(
             case [_, _restriction, _] if not _restriction:
                 pass
             case [_, _, _value] if _value is None or _value == "":
-                failure_reason = "No value in field."
+                failure_reason = "No value in field"
             case [LibraryIdentifierRestriction.REGEX, *_]:
                 if not (_pattern := cast(Pattern, restriction)).search(value):
                     failure_reason = f"{value!r} does not match regular expression {_pattern.pattern!r}"

@@ -11,6 +11,8 @@ from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     Keyboards,
+    LibraryIdenfitierRestrictionFields,
+    LibraryIdentifierRestriction,
 )
 from palace.manager.api.problem_details import (
     INVALID_CREDENTIALS,
@@ -348,7 +350,9 @@ class TestSIP2AuthenticationProvider:
         # This patron authentication library instance is configured with "TestLoc".
         library_restriction = "TestLoc"
         library_settings = create_library_settings(
-            patron_location_restriction=library_restriction
+            library_identifier_restriction_type=LibraryIdentifierRestriction.STRING,
+            library_identifier_field=LibraryIdenfitierRestrictionFields.PATRON_LIBRARY.value,
+            library_identifier_restriction_criteria=library_restriction,
         )
         provider = create_provider(library_settings=library_settings)
         client = cast(MockSIPClient, provider.client)
@@ -357,29 +361,28 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_patron_with_location)
         client.queue_response(self.end_session_response)
         patrondata = provider.remote_authenticate("user", "pass")
+        patrondata = provider.enforce_library_identifier_restriction(patrondata)
         assert isinstance(patrondata, PatronData)
         assert "Patron Name" == patrondata.personal_name
 
         # This patron does NOT have an associated location.
         client.queue_response(self.evergreen_patron_wo_location)
         client.queue_response(self.end_session_response)
+        patrondata = provider.remote_authenticate("user", "pass")
         with pytest.raises(ProblemDetailException) as exc:
-            provider.remote_authenticate("user", "pass")
-        debug_message = provider._location_mismatch_message(None, library_restriction)
+            provider.enforce_library_identifier_restriction(patrondata)
         assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
-            debug_message
+            "'patron location' does not match library restriction: No value in field."
         )
 
         # This patron has the WRONG location.
         client.queue_response(self.evergreen_patron_with_wrong_loc)
         client.queue_response(self.end_session_response)
+        patrondata = provider.remote_authenticate("user", "pass")
         with pytest.raises(ProblemDetailException) as exc:
-            provider.remote_authenticate("user", "pass")
-        debug_message = provider._location_mismatch_message(
-            "OtherLoc", library_restriction
-        )
+            provider.enforce_library_identifier_restriction(patrondata)
         assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
-            debug_message
+            "'patron location' does not match library restriction: 'OtherLoc' does not exactly match 'TestLoc'."
         )
 
     def test_encoding(
