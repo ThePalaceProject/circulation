@@ -271,6 +271,14 @@ class RedirectFulfillment(UrlFulfillment):
         )
 
 
+class FetchResponse(Response):
+    """
+    Response object that defaults to no mimetype if none is provided.
+    """
+
+    default_mimetype = None
+
+
 class FetchFulfillment(UrlFulfillment, LoggerMixin):
     """
     Fulfill a loan by fetching a URL and returning the content. This should be
@@ -314,12 +322,16 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
             )
             raise
 
-        headers = dict(response.headers)
+        headers = {"Cache-Control": "private"}
 
         if self.content_type:
             headers["Content-Type"] = self.content_type
+        elif "Content-Type" in response.headers:
+            headers["Content-Type"] = response.headers["Content-Type"]
 
-        return Response(response.content, status=response.status_code, headers=headers)
+        return FetchResponse(
+            response.content, status=response.status_code, headers=headers
+        )
 
 
 class LoanInfo(CirculationInfo):
