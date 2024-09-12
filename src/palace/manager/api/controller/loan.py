@@ -420,7 +420,9 @@ class LoanController(CirculationManagerController):
                     status_code, resp_headers, content = do_get(
                         fulfillment.content_link, headers=encoding_header
                     )
-                    headers = dict(resp_headers)
+                    headers = {"Cache-Control": "private"}
+                    if "Content-Type" in resp_headers:
+                        headers["Content-Type"] = resp_headers["Content-Type"]
                 except RemoteIntegrationException as e:
                     return e.problem_detail
             else:
