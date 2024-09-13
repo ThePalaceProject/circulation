@@ -714,6 +714,40 @@ class TestOPDS2WithODLApi:
 
         assert 0 == db.session.query(Loan).count()
 
+    @pytest.mark.parametrize(
+        "response_type",
+        ["application/api-problem+json", "application/problem+json"],
+    )
+    def test_checkout_no_available_copies_unknown_to_us(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        response_type: str,
+    ) -> None:
+        """
+        The title has no available copies, but we are out of sync with the distributor, so we think there
+        are copies available.
+        """
+        # We think there are copies available.
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+
+        # But the distributor says there are no available copies.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            response_type,
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
+
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api.checkout(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+                MagicMock(),
+            )
+
+        assert db.session.query(Loan).count() == 0
+
     def test_checkout_no_licenses(
         self,
         db: DatabaseTransactionFixture,
