@@ -50,7 +50,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 
@@ -747,6 +747,21 @@ class TestOPDS2WithODLApi:
             )
 
         assert db.session.query(Loan).count() == 0
+
+        # Test the case where we get bad JSON back from the distributor.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            response_type,
+            content="hot garbage",
+        )
+
+        with pytest.raises(BadResponseException):
+            opds2_with_odl_api_fixture.api.checkout(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+                MagicMock(),
+            )
 
     def test_checkout_no_licenses(
         self,
