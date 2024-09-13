@@ -427,7 +427,7 @@ class OPDS2WithODLApi(
         except BadResponseException as e:
             _db.delete(loan)
             response = e.response
-            # DeMarque sends "application/api-problem+json", but the ODL spect says we should
+            # DeMarque sends "application/api-problem+json", but the ODL spec says we should
             # expect "application/problem+json", so we need to check for both.
             if response.headers.get("Content-Type") in [
                 "application/api-problem+json",
