@@ -52,7 +52,7 @@ class LibraryIdentifierRestriction(Enum):
     LIST = "list"
 
 
-class LibraryIdenfitierRestrictionFields(Enum):
+class LibraryIdenfitierRestrictionField(Enum):
     BARCODE = "barcode"
     PATRON_LIBRARY = "patron location"
 
@@ -228,8 +228,8 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
             "values here. This value is not used if <em>Library Identifier Restriction Type</em> "
             "is set to 'No restriction'.",
             options={
-                LibraryIdenfitierRestrictionFields.BARCODE: "Barcode",
-                LibraryIdenfitierRestrictionFields.PATRON_LIBRARY: "Patron Location",
+                LibraryIdenfitierRestrictionField.BARCODE: "Barcode",
+                LibraryIdenfitierRestrictionField.PATRON_LIBRARY: "Patron Location",
             },
         ),
     )
@@ -765,8 +765,8 @@ class BasicAuthenticationProvider(
         self, patrondata: PatronData
     ) -> tuple[PatronData, str | None]:
         supported_fields = {
-            LibraryIdenfitierRestrictionFields.BARCODE.value: patrondata.authorization_identifier,
-            LibraryIdenfitierRestrictionFields.PATRON_LIBRARY.value: patrondata.library_identifier,
+            LibraryIdenfitierRestrictionField.BARCODE.value: patrondata.authorization_identifier,
+            LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value: patrondata.library_identifier,
         }
         library_verification_field = self.library_identifier_field.lower()
         if library_verification_field in supported_fields:

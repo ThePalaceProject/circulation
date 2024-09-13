@@ -31,6 +31,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
     Keyboards,
+    LibraryIdenfitierRestrictionField,
     LibraryIdentifierRestriction,
 )
 from palace.manager.api.authentication.basic_token import (
@@ -1594,188 +1595,131 @@ class TestBasicAuthenticationProvider:
         assert library1 != library2
         assert patron_metadata is None
 
-    def test_restriction_matches(self):
-        """Test the behavior of the library identifier restriction algorithm."""
-
-        def m(*args) -> bool:
-            result, reason = BasicAuthenticationProvider._restriction_matches(*args)
-            return result
-
-        # If restriction is none, we always return True.
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.PREFIX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.STRING,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-
-        # If field is None we always return False.
-        assert (
-            m(
+    @pytest.mark.parametrize(
+        "field_value, restriction_value, restriction_type,"
+        "expect_success, expected_reason",
+        (
+            # If restriction is none, we always return True.
+            (123, None, LibraryIdentifierRestriction.PREFIX, True, ""),
+            (123, None, LibraryIdentifierRestriction.STRING, True, ""),
+            (123, None, LibraryIdentifierRestriction.REGEX, True, ""),
+            (123, None, LibraryIdentifierRestriction.LIST, True, ""),
+            # If field is None we always return False.
+            (
                 None,
                 "1234",
                 LibraryIdentifierRestriction.PREFIX,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 re.compile(".*"),
                 LibraryIdentifierRestriction.REGEX,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 ["1", "2"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
-        )
-
-        # Test prefix
-        assert (
-            m(
-                "12345a",
-                "1234",
-                LibraryIdentifierRestriction.PREFIX,
-            )
-            is True
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            # Test PREFIX
+            ("12345a", "1234", LibraryIdentifierRestriction.PREFIX, True, ""),
+            (
                 "a1234",
                 "1234",
                 LibraryIdentifierRestriction.PREFIX,
-            )
-            is False
-        )
-
-        # Test string
-        assert (
-            m(
+                False,
+                "'a1234' does not start with '1234'",
+            ),
+            # Test STRING/exact
+            (
                 "12345a",
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "'12345a' does not exactly match '1234'",
+            ),
+            (
                 "a1234",
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
-                "1234",
-                "1234",
-                LibraryIdentifierRestriction.STRING,
-            )
-            is True
-        )
-
-        # Test list
-        assert (
-            True
-            == m(
-                "1234",
-                ["1234", "4321"],
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-        assert (
-            m(
-                "4321",
-                ["1234", "4321"],
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-        assert (
-            m(
+                False,
+                "'a1234' does not exactly match '1234'",
+            ),
+            ("1234", "1234", LibraryIdentifierRestriction.STRING, True, ""),
+            # Test LIST
+            ("1234", ["1234", "4321"], LibraryIdentifierRestriction.LIST, True, ""),
+            ("4321", ["1234", "4321"], LibraryIdentifierRestriction.LIST, True, ""),
+            (
                 "12345",
                 ["1234", "4321"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "'12345' not in list ['1234', '4321']",
+            ),
+            (
                 "54321",
                 ["1234", "4321"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
+                False,
+                "'54321' not in list ['1234', '4321']",
+            ),
+            # Test Regex
+            (
+                "123",
+                re.compile(r"^(12|34)"),
+                LibraryIdentifierRestriction.REGEX,
+                True,
+                "",
+            ),
+            (
+                "345",
+                re.compile(r"^(12|34)"),
+                LibraryIdentifierRestriction.REGEX,
+                True,
+                "",
+            ),
+            (
+                "abc",
+                re.compile(r"^bc"),
+                LibraryIdentifierRestriction.REGEX,
+                False,
+                "'abc' does not match regular expression '^bc'",
+            ),
+        ),
+    )
+    def test_restriction_matches(
+        self,
+        field_value: str | None,
+        restriction_value: str | list[str] | re.Pattern | None,
+        restriction_type: LibraryIdentifierRestriction,
+        expect_success: bool,
+        expected_reason: str,
+    ):
+        """Test the behavior of the library identifier restriction algorithm."""
+        success, reason = BasicAuthenticationProvider._restriction_matches(
+            field_value, restriction_value, restriction_type
         )
 
-        # Test Regex
-        assert (
-            m(
-                "123",
-                re.compile("^(12|34)"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "345",
-                re.compile("^(12|34)"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "abc",
-                re.compile("^bc"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is False
-        )
+        # Reason should always be absent when we expect success and always
+        # present when we don't; so, ensure that our test cases reflect that.
+        assert expected_reason == "" if expect_success else expected_reason != ""
+        assert success == expect_success
+        assert reason == expected_reason
 
     @pytest.mark.parametrize(
-        "restriction_type, restriction, identifier, expected",
+        "restriction_type, restriction, identifier, expected_success, expected_reason",
         [
             # Test regex
             (
@@ -1783,18 +1727,21 @@ class TestBasicAuthenticationProvider:
                 re.compile("23[46]5"),
                 "23456",
                 True,
+                "",
             ),
             (
                 LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
                 "2365",
                 True,
+                "",
             ),
             (
                 LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
                 "2375",
                 False,
+                "???",
             ),
             # Test prefix
             (
@@ -1802,12 +1749,14 @@ class TestBasicAuthenticationProvider:
                 "2345",
                 "23456",
                 True,
+                "",
             ),
             (
                 LibraryIdentifierRestriction.PREFIX,
                 "2345",
                 "123456",
                 False,
+                "???",
             ),
             # Test string
             (
@@ -1815,22 +1764,25 @@ class TestBasicAuthenticationProvider:
                 "2345",
                 "2345",
                 True,
+                "",
             ),
             (
                 LibraryIdentifierRestriction.STRING,
                 "2345",
                 "12345",
                 False,
+                "???",
             ),
         ],
     )
     def test_enforce_library_identifier_restriction(
         self,
         mock_basic: MockBasicFixture,
-        restriction_type,
-        restriction,
-        identifier,
-        expected,
+        restriction_type: LibraryIdentifierRestriction,
+        restriction: str | list[str] | re.Pattern | None,
+        identifier: str,
+        expected_success: bool,
+        expected_reason: str,
     ):
         """Test the enforce_library_identifier_restriction method."""
         provider = mock_basic()
@@ -1838,9 +1790,11 @@ class TestBasicAuthenticationProvider:
         provider.library_identifier_restriction_criteria = restriction
 
         # Test match applied to barcode
-        provider.library_identifier_field = "barcode"
+        provider.library_identifier_field = (
+            LibraryIdenfitierRestrictionField.BARCODE.value
+        )
         patrondata = PatronData(authorization_identifier=identifier)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(patrondata)
                 == patrondata
@@ -1852,7 +1806,7 @@ class TestBasicAuthenticationProvider:
         # Test match applied to library_identifier field on complete patrondata
         provider.library_identifier_field = "other"
         patrondata = PatronData(library_identifier=identifier)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(patrondata)
                 == patrondata
@@ -1868,7 +1822,7 @@ class TestBasicAuthenticationProvider:
             library_identifier=identifier, authorization_identifier="123"
         )
         provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(local_patrondata)
                 == remote_patrondata

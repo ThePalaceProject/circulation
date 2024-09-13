@@ -11,7 +11,7 @@ from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     Keyboards,
-    LibraryIdenfitierRestrictionFields,
+    LibraryIdenfitierRestrictionField,
     LibraryIdentifierRestriction,
 )
 from palace.manager.api.problem_details import (
@@ -351,7 +351,7 @@ class TestSIP2AuthenticationProvider:
         library_restriction = "TestLoc"
         library_settings = create_library_settings(
             library_identifier_restriction_type=LibraryIdentifierRestriction.STRING,
-            library_identifier_field=LibraryIdenfitierRestrictionFields.PATRON_LIBRARY.value,
+            library_identifier_field=LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value,
             library_identifier_restriction_criteria=library_restriction,
         )
         provider = create_provider(library_settings=library_settings)
@@ -361,6 +361,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_patron_with_location)
         client.queue_response(self.end_session_response)
         patrondata = provider.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         patrondata = provider.enforce_library_identifier_restriction(patrondata)
         assert isinstance(patrondata, PatronData)
         assert "Patron Name" == patrondata.personal_name
@@ -369,6 +370,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_patron_wo_location)
         client.queue_response(self.end_session_response)
         patrondata = provider.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         with pytest.raises(ProblemDetailException) as exc:
             provider.enforce_library_identifier_restriction(patrondata)
         assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
@@ -379,6 +381,7 @@ class TestSIP2AuthenticationProvider:
         client.queue_response(self.evergreen_patron_with_wrong_loc)
         client.queue_response(self.end_session_response)
         patrondata = provider.remote_authenticate("user", "pass")
+        assert isinstance(patrondata, PatronData)
         with pytest.raises(ProblemDetailException) as exc:
             provider.enforce_library_identifier_restriction(patrondata)
         assert exc.value.problem_detail == PATRON_OF_ANOTHER_LIBRARY.with_debug(
