@@ -4,6 +4,7 @@ import datetime
 import json
 import urllib
 import uuid
+from functools import partial
 from typing import Any
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
@@ -728,6 +729,14 @@ class TestOPDS2WithODLApi:
         The title has no available copies, but we are out of sync with the distributor, so we think there
         are copies available.
         """
+        checkout = partial(
+            opds2_with_odl_api_fixture.api.checkout,
+            opds2_with_odl_api_fixture.patron,
+            "pin",
+            opds2_with_odl_api_fixture.pool,
+            MagicMock(),
+        )
+
         # We think there are copies available.
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
 
@@ -739,12 +748,7 @@ class TestOPDS2WithODLApi:
         )
 
         with pytest.raises(NoAvailableCopies):
-            opds2_with_odl_api_fixture.api.checkout(
-                opds2_with_odl_api_fixture.patron,
-                "pin",
-                opds2_with_odl_api_fixture.pool,
-                MagicMock(),
-            )
+            checkout()
 
         assert db.session.query(Loan).count() == 0
 
@@ -756,12 +760,14 @@ class TestOPDS2WithODLApi:
         )
 
         with pytest.raises(BadResponseException):
-            opds2_with_odl_api_fixture.api.checkout(
-                opds2_with_odl_api_fixture.patron,
-                "pin",
-                opds2_with_odl_api_fixture.pool,
-                MagicMock(),
-            )
+            checkout()
+
+        # Test the case where we just get an unknown bad response.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            500, "text/plain", content="halt and catch fire 🔥"
+        )
+        with pytest.raises(BadResponseException):
+            checkout()
 
     def test_checkout_no_licenses(
         self,
