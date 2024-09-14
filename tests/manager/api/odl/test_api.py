@@ -4,6 +4,7 @@ import datetime
 import json
 import urllib
 import uuid
+from functools import partial
 from typing import Any
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
@@ -50,7 +51,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import RemoteIntegrationException
+from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 
@@ -713,6 +714,60 @@ class TestOPDS2WithODLApi:
         )
 
         assert 0 == db.session.query(Loan).count()
+
+    @pytest.mark.parametrize(
+        "response_type",
+        ["application/api-problem+json", "application/problem+json"],
+    )
+    def test_checkout_no_available_copies_unknown_to_us(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        response_type: str,
+    ) -> None:
+        """
+        The title has no available copies, but we are out of sync with the distributor, so we think there
+        are copies available.
+        """
+        checkout = partial(
+            opds2_with_odl_api_fixture.api.checkout,
+            opds2_with_odl_api_fixture.patron,
+            "pin",
+            opds2_with_odl_api_fixture.pool,
+            MagicMock(),
+        )
+
+        # We think there are copies available.
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+
+        # But the distributor says there are no available copies.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            response_type,
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
+
+        with pytest.raises(NoAvailableCopies):
+            checkout()
+
+        assert db.session.query(Loan).count() == 0
+
+        # Test the case where we get bad JSON back from the distributor.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            response_type,
+            content="hot garbage",
+        )
+
+        with pytest.raises(BadResponseException):
+            checkout()
+
+        # Test the case where we just get an unknown bad response.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            500, "text/plain", content="halt and catch fire 🔥"
+        )
+        with pytest.raises(BadResponseException):
+            checkout()
 
     def test_checkout_no_licenses(
         self,
