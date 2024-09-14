@@ -1,0 +1,1 @@
+{"type":"http://opds-spec.org/odl/error/checkout/unavailable","title":"the license has reached its concurrent checkouts limit","detail":"all 1 of 1 concurrent loans exceeded","status":400}
