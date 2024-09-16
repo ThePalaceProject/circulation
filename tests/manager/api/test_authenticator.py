@@ -1784,7 +1784,11 @@ class TestBasicAuthenticationProvider:
         identifier: str,
         expected_success: bool,
     ):
-        def assert_pd_debug(debug_message: str | None, field_name: str) -> None:
+        def assert_problem_detail(pd: ProblemDetail, field_name: str) -> None:
+            debug_message = pd.debug_message
+            # Aside from whatever's in the `debug_message`, our ProblemDetail
+            # should be a PATRON_OF_ANOTHER_LIBRARY.
+            assert pd.with_debug("") == PATRON_OF_ANOTHER_LIBRARY.with_debug("")
             assert debug_message is not None
             assert debug_message.startswith(
                 f"'{field_name}' does not match library restriction: "
@@ -1810,7 +1814,7 @@ class TestBasicAuthenticationProvider:
         else:
             with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(patrondata)
-            assert_pd_debug(exc.value.problem_detail.debug_message, "barcode")
+            assert_problem_detail(exc.value.problem_detail, "barcode")
 
         # Test match applied to patron library code.
         # It's not in the local data, so we need a complete PatronData.
@@ -1830,7 +1834,7 @@ class TestBasicAuthenticationProvider:
         else:
             with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(local_patrondata)
-            assert_pd_debug(exc.value.problem_detail.debug_message, "patron location")
+            assert_problem_detail(exc.value.problem_detail, "patron location")
         provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
         # Test match applied to library_identifier field on complete patrondata
@@ -1844,7 +1848,7 @@ class TestBasicAuthenticationProvider:
         else:
             with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(patrondata)
-            assert_pd_debug(exc.value.problem_detail.debug_message, "Other")
+            assert_problem_detail(exc.value.problem_detail, "Other")
 
         # Test match applied to library_identifier field on incomplete patrondata
         provider.library_identifier_field = "other"
@@ -1861,7 +1865,7 @@ class TestBasicAuthenticationProvider:
         else:
             with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(local_patrondata)
-            assert_pd_debug(exc.value.problem_detail.debug_message, "other")
+            assert_problem_detail(exc.value.problem_detail, "other")
         provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
     def test_enforce_library_identifier_restriction_library_identifier_field_none(
@@ -2012,6 +2016,21 @@ class TestBasicAuthenticationProvider:
             integration_exception.value
         )
 
+        # And testing_patron_or_bust() returns a similar result if the
+        # problem details comes is wrapped in an exception.
+        problem_patron.authenticated_patron = MagicMock(
+            side_effect=ProblemDetailException(
+                problem_detail=PATRON_OF_ANOTHER_LIBRARY.with_debug(
+                    "some debug message"
+                )
+            )
+        )
+        with pytest.raises(IntegrationException) as integration_exception:
+            problem_patron.testing_patron_or_bust(db.session)
+        message = str(integration_exception.value)
+        assert message.startswith("Test patron lookup returned a problem detail")
+        assert message.endswith("[some debug message]")
+
         # We configure a testing patron but authenticating them
         # results in something (non None) that's not a Patron
         # or a problem detail document.
@@ -2073,6 +2092,8 @@ class TestBasicAuthenticationProvider:
         assert "Syncing patron metadata" == update_metadata.name
         assert update_metadata.success is True
         assert "some metadata" == update_metadata.result
+
+        #
 
     def test_server_side_validation(self, mock_basic: MockBasicFixture):
         provider = mock_basic(

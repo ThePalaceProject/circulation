@@ -761,18 +761,26 @@ class BasicAuthenticationProvider(
 
         return (False, failure_reason) if failure_reason else (True, "")
 
-    def get_library_identifier_field_data(
-        self, patrondata: PatronData
-    ) -> tuple[PatronData, str | None]:
-        predefined_field = {
+    @staticmethod
+    def _lookup_in_predefined_field(
+        patrondata: PatronData, id_field: str
+    ) -> str | None:
+        predefined_fields = {
             k.lower(): v
             for k, v in {
                 LibraryIdenfitierRestrictionField.BARCODE.value: patrondata.authorization_identifier,
                 LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value: patrondata.library_identifier,
             }.items()
         }
-        id_field = self.library_identifier_field.lower()
-        if (field_value := predefined_field.get(id_field)) is not None:
+        return predefined_fields.get(id_field.lower())
+
+    def get_library_identifier_field_data(
+        self, patrondata: PatronData
+    ) -> tuple[PatronData, str | None]:
+        id_field = self.library_identifier_field
+        if (
+            field_value := self._lookup_in_predefined_field(patrondata, id_field)
+        ) is not None:
             return patrondata, field_value
 
         if not patrondata.complete:
@@ -782,7 +790,9 @@ class BasicAuthenticationProvider(
                 return patrondata, None
             patrondata = remote_patrondata
 
-        if (field_value := predefined_field.get(id_field)) is not None:
+        if (
+            field_value := self._lookup_in_predefined_field(patrondata, id_field)
+        ) is not None:
             return patrondata, field_value
 
         # By default, we'll return the `library_identifier` value.
