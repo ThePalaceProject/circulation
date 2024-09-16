@@ -1784,7 +1784,8 @@ class TestBasicAuthenticationProvider:
         identifier: str,
         expected_success: bool,
     ):
-        def assert_pd_debug(debug_message: str, field_name: str) -> None:
+        def assert_pd_debug(debug_message: str | None, field_name: str) -> None:
+            assert debug_message is not None
             assert debug_message.startswith(
                 f"'{field_name}' does not match library restriction: "
             )
