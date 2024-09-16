@@ -764,13 +764,16 @@ class BasicAuthenticationProvider(
     def get_library_identifier_field_data(
         self, patrondata: PatronData
     ) -> tuple[PatronData, str | None]:
-        supported_fields = {
-            LibraryIdenfitierRestrictionField.BARCODE.value: patrondata.authorization_identifier,
-            LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value: patrondata.library_identifier,
+        predefined_field = {
+            k.lower(): v
+            for k, v in {
+                LibraryIdenfitierRestrictionField.BARCODE.value: patrondata.authorization_identifier,
+                LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value: patrondata.library_identifier,
+            }.items()
         }
-        library_verification_field = self.library_identifier_field.lower()
-        if library_verification_field in supported_fields:
-            return patrondata, supported_fields[library_verification_field]
+        id_field = self.library_identifier_field.lower()
+        if (field_value := predefined_field.get(id_field)) is not None:
+            return patrondata, field_value
 
         if not patrondata.complete:
             remote_patrondata = self.remote_patron_lookup(patrondata)
@@ -779,6 +782,10 @@ class BasicAuthenticationProvider(
                 return patrondata, None
             patrondata = remote_patrondata
 
+        if (field_value := predefined_field.get(id_field)) is not None:
+            return patrondata, field_value
+
+        # By default, we'll return the `library_identifier` value.
         return patrondata, patrondata.library_identifier
 
     def enforce_library_identifier_restriction(
@@ -807,9 +814,9 @@ class BasicAuthenticationProvider(
             # Restriction field is blank, so everything matches.
             return patrondata
 
-        patrondata, field = self.get_library_identifier_field_data(patrondata)
+        patrondata, field_value = self.get_library_identifier_field_data(patrondata)
         isValid, reason = self._restriction_matches(
-            field,
+            field_value,
             self.library_identifier_restriction_criteria,
             self.library_identifier_restriction_type,
         )
