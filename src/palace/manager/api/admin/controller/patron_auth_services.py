@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import flask
 from flask import Response
@@ -189,6 +189,11 @@ class PatronAuthServicesController(
     def get_library_configuration(
         integration: IntegrationConfiguration,
     ) -> IntegrationLibraryConfiguration | None:
-        if not integration.library_configurations:
+        """Find the first library (lowest id) associated with this service."""
+        if not (library_configurations := integration.library_configurations):
             return None
-        return integration.library_configurations[0]
+        # We sort by library id to ensure that the result is predictable.
+        # We cast the library id to `int`, since mypy doesn't understand the relationship.
+        return sorted(
+            library_configurations, key=lambda config: cast(int, config.library_id)
+        )[0]
