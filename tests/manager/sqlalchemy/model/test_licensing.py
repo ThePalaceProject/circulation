@@ -1457,10 +1457,13 @@ class TestLicensePoolDeliveryMechanism:
         assert (mech2.delivery_mechanism, True) == Mock.called_with
 
     @pytest.mark.parametrize(
-        "_,data_source,identifier,delivery_mechanism",
-        [("ascii_sy", "a", "a", "a"), ("", "ą", "ą", "ą")],
+        "data_source,identifier,delivery_mechanism",
+        [
+            pytest.param("a", "a", "a", id="ascii_sy"),
+            pytest.param("ą", "ą", "ą", id=""),
+        ],
     )
-    def test_repr(self, _, data_source, identifier, delivery_mechanism):
+    def test_repr(self, data_source, identifier, delivery_mechanism):
         """Test that LicensePoolDeliveryMechanism.__repr__ correctly works for both ASCII and non-ASCII symbols.
 
         :param _: Name of the test case

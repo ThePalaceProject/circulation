@@ -71,10 +71,9 @@ def create_patron_data_mock():
 
 class TestSAMLController:
     @pytest.mark.parametrize(
-        "_, provider_name, idp_entity_id, redirect_uri, expected_problem, expected_relay_state",
+        "provider_name, idp_entity_id, redirect_uri, expected_problem, expected_relay_state",
         [
-            (
-                "with_missing_provider_name",
+            pytest.param(
                 None,
                 None,
                 None,
@@ -84,9 +83,9 @@ class TestSAMLController:
                     )
                 ),
                 None,
+                id="with_missing_provider_name",
             ),
-            (
-                "with_missing_idp_entity_id",
+            pytest.param(
                 SAMLWebSSOAuthenticationProvider.label(),
                 None,
                 None,
@@ -96,9 +95,9 @@ class TestSAMLController:
                     )
                 ),
                 None,
+                id="with_missing_idp_entity_id",
             ),
-            (
-                "with_missing_redirect_uri",
+            pytest.param(
                 SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 None,
@@ -115,9 +114,9 @@ class TestSAMLController:
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                     }
                 ),
+                id="with_missing_redirect_uri",
             ),
-            (
-                "with_all_parameters_set",
+            pytest.param(
                 SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost",
@@ -130,9 +129,9 @@ class TestSAMLController:
                         SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
                     }
                 ),
+                id="with_all_parameters_set",
             ),
-            (
-                "with_all_parameters_set_and_fragment",
+            pytest.param(
                 SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost#fragment",
@@ -146,9 +145,9 @@ class TestSAMLController:
                     }
                 )
                 + "#fragment",
+                id="with_all_parameters_set_and_fragment",
             ),
-            (
-                "with_all_parameters_set_and_redirect_uri_containing_other_parameters",
+            pytest.param(
                 SAMLWebSSOAuthenticationProvider.label(),
                 IDENTITY_PROVIDERS[0].entity_id,
                 "http://localhost?patron_info=%7B%7D&access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
@@ -163,13 +162,13 @@ class TestSAMLController:
                         "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
                     }
                 ),
+                id="with_all_parameters_set_and_redirect_uri_containing_other_parameters",
             ),
         ],
     )
     def test_saml_authentication_redirect(
         self,
         controller_fixture: ControllerFixture,
-        _,
         provider_name,
         idp_entity_id,
         redirect_uri,
@@ -253,10 +252,9 @@ class TestSAMLController:
                 )
 
     @pytest.mark.parametrize(
-        "_, data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
+        "data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
         [
-            (
-                "with_missing_relay_state",
+            pytest.param(
                 None,
                 None,
                 None,
@@ -267,9 +265,9 @@ class TestSAMLController:
                         SAMLController.RELAY_STATE
                     )
                 ),
+                id="with_missing_relay_state",
             ),
-            (
-                "with_incorrect_relay_state",
+            pytest.param(
                 {SAMLController.RELAY_STATE: "<>"},
                 None,
                 None,
@@ -280,9 +278,9 @@ class TestSAMLController:
                         SAMLController.LIBRARY_SHORT_NAME
                     )
                 ),
+                id="with_incorrect_relay_state",
             ),
-            (
-                "with_missing_provider_name",
+            pytest.param(
                 {
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode({SAMLController.LIBRARY_SHORT_NAME: "default"})
@@ -296,9 +294,9 @@ class TestSAMLController:
                         SAMLController.PROVIDER_NAME
                     )
                 ),
+                id="with_missing_provider_name",
             ),
-            (
-                "with_missing_idp_entity_id",
+            pytest.param(
                 {
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
@@ -317,9 +315,9 @@ class TestSAMLController:
                         SAMLController.IDP_ENTITY_ID
                     )
                 ),
+                id="with_missing_idp_entity_id",
             ),
-            (
-                "when_finish_authentication_fails",
+            pytest.param(
                 {
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
@@ -337,9 +335,9 @@ class TestSAMLController:
                 None,
                 None,
                 None,
+                id="when_finish_authentication_fails",
             ),
-            (
-                "when_saml_callback_fails",
+            pytest.param(
                 {
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
@@ -357,9 +355,9 @@ class TestSAMLController:
                 None,
                 None,
                 None,
+                id="when_saml_callback_fails",
             ),
-            (
-                "when_saml_callback_returns_correct_patron",
+            pytest.param(
                 {
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
@@ -377,13 +375,13 @@ class TestSAMLController:
                 "ABCDEFG",
                 "http://localhost?access_token=ABCDEFG&patron_info=%22%22",
                 None,
+                id="when_saml_callback_returns_correct_patron",
             ),
         ],
     )
     def test_saml_authentication_callback(
         self,
         controller_fixture: ControllerFixture,
-        _,
         data,
         finish_authentication_result,
         saml_callback_result,

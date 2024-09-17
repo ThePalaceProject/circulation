@@ -19,10 +19,9 @@ from palace.manager.api.saml.python_expression_dsl.parser import DSLParser
 
 class TestSAMLSubjectFilter:
     @pytest.mark.parametrize(
-        "_,expression,subject,expected_result,expected_exception",
+        "expression,subject,expected_result,expected_exception",
         [
-            (
-                "fails_in_the_case_of_syntax_error",
+            pytest.param(
                 'subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
                     "http://idp.example.com",
@@ -38,9 +37,9 @@ class TestSAMLSubjectFilter:
                 ),
                 None,
                 SAMLSubjectFilterError,
+                id="fails_in_the_case_of_syntax_error",
             ),
-            (
-                "fails_in_the_case_of_unknown_attribute",
+            pytest.param(
                 'subject.attribute_statement.attributes["mail"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
                     "http://idp.example.com",
@@ -56,9 +55,9 @@ class TestSAMLSubjectFilter:
                 ),
                 None,
                 SAMLSubjectFilterError,
+                id="fails_in_the_case_of_unknown_attribute",
             ),
-            (
-                "fails_when_subject_is_not_used",
+            pytest.param(
                 'attributes["eduPersonEntitlement"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubject(
                     "http://idp.example.com",
@@ -74,9 +73,9 @@ class TestSAMLSubjectFilter:
                 ),
                 None,
                 SAMLSubjectFilterError,
+                id="fails_when_subject_is_not_used",
             ),
-            (
-                "can_filter_when_attribute_has_one_value",
+            pytest.param(
                 '"urn:mace:nyu.edu:entl:lib:eresources" == subject.attribute_statement.attributes["eduPersonEntitlement"].values[0]',
                 SAMLSubject(
                     "http://idp.example.com",
@@ -92,9 +91,9 @@ class TestSAMLSubjectFilter:
                 ),
                 True,
                 None,
+                id="can_filter_when_attribute_has_one_value",
             ),
-            (
-                "can_filter_when_attribute_has_multiple_values",
+            pytest.param(
                 '"urn:mace:nyu.edu:entl:lib:eresources" in subject.attribute_statement.attributes["eduPersonEntitlement"].values',
                 SAMLSubject(
                     "http://idp.example.com",
@@ -113,10 +112,11 @@ class TestSAMLSubjectFilter:
                 ),
                 True,
                 None,
+                id="can_filter_when_attribute_has_multiple_values",
             ),
         ],
     )
-    def test_execute(self, _, expression, subject, expected_result, expected_exception):
+    def test_execute(self, expression, subject, expected_result, expected_exception):
         # Arrange
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -134,36 +134,36 @@ class TestSAMLSubjectFilter:
             assert expected_result == result
 
     @pytest.mark.parametrize(
-        "_,expression,expected_exception",
+        "expression,expected_exception",
         [
-            (
-                "fails_in_the_case_of_syntax_error",
+            pytest.param(
                 'subject.attribute_statement.attributes["eduPersonEntitlement"].values[0 == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubjectFilterError,
+                id="fails_in_the_case_of_syntax_error",
             ),
-            (
-                "fails_when_subject_is_not_used",
+            pytest.param(
                 'attributes["eduPersonEntitlement"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 SAMLSubjectFilterError,
+                id="fails_when_subject_is_not_used",
             ),
-            (
-                "can_filter_by_attribute_oid",
+            pytest.param(
                 'subject.attribute_statement.attributes["urn:oid:1.3.6.1.4.1.5923.1.8"].values[0] == "urn:mace:nyu.edu:entl:lib:eresources"',
                 None,
+                id="can_filter_by_attribute_oid",
             ),
-            (
-                "can_filter_when_attribute_has_one_value",
+            pytest.param(
                 '"urn:mace:nyu.edu:entl:lib:eresources" == subject.attribute_statement.attributes["eduPersonEntitlement"].values[0]',
                 None,
+                id="can_filter_when_attribute_has_one_value",
             ),
-            (
-                "can_filter_when_attribute_has_multiple_values",
+            pytest.param(
                 '"urn:mace:nyu.edu:entl:lib:eresources" in subject.attribute_statement.attributes["eduPersonEntitlement"].values',
                 None,
+                id="can_filter_when_attribute_has_multiple_values",
             ),
         ],
     )
-    def test_validate(self, _, expression, expected_exception):
+    def test_validate(self, expression, expected_exception):
         # Arrange
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()

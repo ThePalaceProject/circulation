@@ -43,18 +43,17 @@ class TestAttributeStatement:
 
 class TestSAMLSubjectPatronIDExtractor:
     @pytest.mark.parametrize(
-        "_,subject,expected_patron_id,use_name_id,patron_id_attributes,patron_id_regular_expression",
+        "subject,expected_patron_id,use_name_id,patron_id_attributes,patron_id_regular_expression",
         [
-            (
-                "subject_without_patron_id",
+            pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
                 None,
                 True,
                 None,
                 None,
+                id="subject_without_patron_id",
             ),
-            (
-                "subject_with_eduPersonTargetedID_attribute",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -78,9 +77,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 True,
                 None,
                 None,
+                id="subject_with_eduPersonTargetedID_attribute",
             ),
-            (
-                "subject_with_eduPersonUniqueId_attribute",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -100,9 +99,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 True,
                 None,
                 None,
+                id="subject_with_eduPersonUniqueId_attribute",
             ),
-            (
-                "subject_with_uid_attribute",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -114,9 +113,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 True,
                 None,
                 None,
+                id="subject_with_uid_attribute",
             ),
-            (
-                "subject_with_name_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -133,9 +132,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 True,
                 None,
                 None,
+                id="subject_with_name_id",
             ),
-            (
-                "subject_with_switched_off_use_of_name_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -152,9 +151,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 False,
                 None,
                 None,
+                id="subject_with_switched_off_use_of_name_id",
             ),
-            (
-                "patron_id_attributes_matching_attributes_in_subject",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -178,9 +177,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 False,
                 [SAMLAttributeType.uid.name],
                 None,
+                id="patron_id_attributes_matching_attributes_in_subject",
             ),
-            (
-                "patron_id_attributes_matching_second_saml_attribute",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -207,9 +206,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.uid.name,
                 ],
                 None,
+                id="patron_id_attributes_matching_second_saml_attribute",
             ),
-            (
-                "patron_id_attributes_not_matching_attributes_in_subject",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -233,9 +232,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 False,
                 [SAMLAttributeType.givenName.name],
                 None,
+                id="patron_id_attributes_not_matching_attributes_in_subject",
             ),
-            (
-                "patron_id_attributes_not_matching_attributes_in_subject_and_using_name_id_instead",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -259,9 +258,9 @@ class TestSAMLSubjectPatronIDExtractor:
                 True,
                 [SAMLAttributeType.givenName.name],
                 None,
+                id="patron_id_attributes_not_matching_attributes_in_subject_and_using_name_id_instead",
             ),
-            (
-                "patron_id_regular_expression_matching_saml_subject",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -288,9 +287,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.mail.name,
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="patron_id_regular_expression_matching_saml_subject",
             ),
-            (
-                "patron_id_regular_expression_matching_second_saml_attribute",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -318,9 +317,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.mail.name,
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="patron_id_regular_expression_matching_second_saml_attribute",
             ),
-            (
-                "unicode_patron_id_regular_expression_matching_saml_subject",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -347,9 +346,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.mail.name,
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="unicode_patron_id_regular_expression_matching_saml_subject",
             ),
-            (
-                "patron_id_regular_expression_not_matching_saml_subject",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
@@ -376,9 +375,9 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.mail.name,
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
+                id="patron_id_regular_expression_not_matching_saml_subject",
             ),
-            (
-                "patron_id_regular_expression_not_matching_saml_attributes_but_matching_name_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
@@ -410,12 +409,12 @@ class TestSAMLSubjectPatronIDExtractor:
                     SAMLAttributeType.mail.name,
                 ],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_COM,
+                id="patron_id_regular_expression_not_matching_saml_attributes_but_matching_name_id",
             ),
         ],
     )
     def test(
         self,
-        _,
         subject,
         expected_patron_id,
         use_name_id,

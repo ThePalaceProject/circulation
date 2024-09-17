@@ -8,15 +8,23 @@ from palace.manager.api.saml.python_expression_dsl.parser import (
 
 class TestDSLParser:
     @pytest.mark.parametrize(
-        "_,expression,expected_error_message",
+        "expression,expected_error_message",
         [
-            ("incorrect_expression", "?", "Unexpected symbol '?' at position 0"),
-            ("incorrect_expression_2", "(+", "Unexpected symbol '+' at position 1"),
-            ("incorrect_expression_2", "(1 +", "Unexpected symbol '+' at position 3"),
+            pytest.param(
+                "?", "Unexpected symbol '?' at position 0", id="incorrect_expression"
+            ),
+            pytest.param(
+                "(+", "Unexpected symbol '+' at position 1", id="incorrect_expression_2"
+            ),
+            pytest.param(
+                "(1 +",
+                "Unexpected symbol '+' at position 3",
+                id="incorrect_expression_3",
+            ),
         ],
     )
     def test_parse_generates_correct_error_message(
-        self, _, expression, expected_error_message
+        self, expression, expected_error_message
     ):
         # Arrange
         parser = DSLParser()

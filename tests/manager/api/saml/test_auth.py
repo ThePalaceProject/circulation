@@ -83,17 +83,17 @@ IDENTITY_PROVIDERS = [
 
 class TestSAMLAuthenticationManager:
     @pytest.mark.parametrize(
-        "_, service_provider, identity_providers",
+        "service_provider, identity_providers",
         [
-            (
-                "with_unsigned_authentication_request",
+            pytest.param(
                 SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
                 IDENTITY_PROVIDERS,
+                id="with_unsigned_authentication_request",
             ),
-            (
-                "with_signed_authentication_request",
+            pytest.param(
                 SERVICE_PROVIDER_WITH_SIGNED_REQUESTS,
                 IDENTITY_PROVIDERS,
+                id="with_signed_authentication_request",
             ),
         ],
     )
@@ -101,7 +101,6 @@ class TestSAMLAuthenticationManager:
         self,
         controller_fixture: ControllerFixture,
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
-        _,
         service_provider,
         identity_providers,
     ):
@@ -162,10 +161,9 @@ class TestSAMLAuthenticationManager:
             )
 
     @pytest.mark.parametrize(
-        "_, saml_response, current_time, filter_expression, expected_value, mock_validation",
+        "saml_response, current_time, filter_expression, expected_value, mock_validation",
         [
-            (
-                "with_name_id_and_attributes",
+            pytest.param(
                 saml_strings.SAML_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 None,
@@ -189,17 +187,17 @@ class TestSAMLAuthenticationManager:
                     ),
                 ),
                 False,
+                id="with_name_id_and_attributes",
             ),
-            (
-                "with_name_id_attributes_and_filter_expression_returning_false",
+            pytest.param(
                 saml_strings.SAML_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['uid'].values[0] != 'student1'",
                 SAML_NO_ACCESS_ERROR,
                 False,
+                id="with_name_id_attributes_and_filter_expression_returning_false",
             ),
-            (
-                "with_name_id_attributes_and_filter_expression_returning_true",
+            pytest.param(
                 saml_strings.SAML_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['uid'].values[0] == 'student1'",
@@ -223,9 +221,9 @@ class TestSAMLAuthenticationManager:
                     ),
                 ),
                 False,
+                id="with_name_id_attributes_and_filter_expression_returning_true",
             ),
-            (
-                "with_name_id_inside_edu_person_targeted_id_attribute",
+            pytest.param(
                 saml_strings.SAML_COLUMBIA_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 None,
@@ -254,17 +252,17 @@ class TestSAMLAuthenticationManager:
                     ),
                 ),
                 True,
+                id="with_name_id_inside_edu_person_targeted_id_attribute",
             ),
-            (
-                "with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_false",
+            pytest.param(
                 saml_strings.SAML_COLUMBIA_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['eduPersonScopedAffiliation'].values[0] != 'alum@columbia.edu'",
                 SAML_NO_ACCESS_ERROR,
                 True,
+                id="with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_false",
             ),
-            (
-                "with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_true",
+            pytest.param(
                 saml_strings.SAML_COLUMBIA_RESPONSE,
                 datetime_utc(2020, 6, 7, 23, 43, 0),
                 "subject.attribute_statement.attributes['eduPersonScopedAffiliation'].values[0] == 'alum@columbia.edu'",
@@ -293,6 +291,7 @@ class TestSAMLAuthenticationManager:
                     ),
                 ),
                 True,
+                id="with_name_id_inside_edu_person_targeted_id_attribute_and_filter_expression_returning_true",
             ),
         ],
     )
@@ -301,7 +300,6 @@ class TestSAMLAuthenticationManager:
         controller_fixture: ControllerFixture,
         create_saml_configuration,
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
-        _,
         saml_response,
         current_time,
         filter_expression,

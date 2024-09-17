@@ -45,214 +45,279 @@ class Subject:
 
 class TestDSLEvaluator:
     @pytest.mark.parametrize(
-        "_,expression,expected_result,context,safe_classes,expected_exception",
+        "expression,expected_result,context,safe_classes,expected_exception",
         [
-            ("incorrect_expression", "?", None, None, None, DSLParseError),
-            ("numeric_literal", "9", 9, None, None, None),
-            ("numeric_float_literal", "9.5", 9.5, None, None, None),
-            ("unknown_identifier", "foo", None, None, None, DSLEvaluationError),
-            ("known_identifier", "foo", 9, {"foo": 9}, None, None),
-            (
-                "unknown_nested_identifier",
+            pytest.param(
+                "?", None, None, None, DSLParseError, id="incorrect_expression"
+            ),
+            pytest.param("9", 9, None, None, None, id="numeric_literal"),
+            pytest.param("9.5", 9.5, None, None, None, id="numeric_float_literal"),
+            pytest.param(
+                "foo", None, None, None, DSLEvaluationError, id="unknown_identifier"
+            ),
+            pytest.param("foo", 9, {"foo": 9}, None, None, id="known_identifier"),
+            pytest.param(
                 "foo.bar",
                 None,
                 {"foo": 9},
                 None,
                 DSLEvaluationError,
+                id="unknown_nested_identifier",
             ),
-            ("known_nested_identifier", "foo.bar", 9, {"foo": {"bar": 9}}, None, None),
-            (
-                "known_nested_identifier",
+            pytest.param(
+                "foo.bar",
+                9,
+                {"foo": {"bar": 9}},
+                None,
+                None,
+                id="known_nested_identifier",
+            ),
+            pytest.param(
                 "foo.bar.baz",
                 9,
                 {"foo": {"bar": {"baz": 9}}},
                 None,
                 None,
+                id="known_nested_identifier",
             ),
-            (
-                "known_nested_identifier",
+            pytest.param(
                 "foo.bar[0].baz",
                 9,
                 {"foo": {"bar": [{"baz": 9}]}},
                 None,
                 None,
+                id="known_nested_identifier",
             ),
-            (
-                "identifier_pointing_to_the_object",
+            pytest.param(
                 "'eresources' in subject.attributes",
                 True,
                 {"subject": Subject(["eresources"])},
                 None,
                 None,
+                id="identifier_pointing_to_the_object",
             ),
-            ("simple_negation", "-9", -9, None, None, None),
-            (
-                "simple_parenthesized_expression_negation",
+            pytest.param("-9", -9, None, None, None, id="simple_negation"),
+            pytest.param(
                 "-(9)",
                 -(9),
                 None,
                 None,
                 None,
+                id="simple_parenthesized_expression_negation",
             ),
-            (
-                "parenthesized_expression_negation",
+            pytest.param(
                 "-(9 + 3)",
                 -(9 + 3),
                 None,
                 None,
                 None,
+                id="parenthesized_expression_negation",
             ),
-            (
-                "slice_expression_negation",
+            pytest.param(
                 "-(arr[1])",
                 -12,
                 {"arr": [1, 12, 3]},
                 None,
                 None,
+                id="slice_expression_negation",
             ),
-            ("addition_with_two_operands", "9 + 3", 9 + 3, None, None, None),
-            ("addition_with_three_operands", "9 + 3 + 3", 9 + 3 + 3, None, None, None),
-            (
-                "addition_with_four_operands",
+            pytest.param(
+                "9 + 3", 9 + 3, None, None, None, id="addition_with_two_operands"
+            ),
+            pytest.param(
+                "9 + 3 + 3",
+                9 + 3 + 3,
+                None,
+                None,
+                None,
+                id="addition_with_three_operands",
+            ),
+            pytest.param(
                 "9 + 3 + 3 + 3",
                 9 + 3 + 3 + 3,
                 None,
                 None,
                 None,
+                id="addition_with_four_operands",
             ),
-            ("subtraction_with_two_operands", "9 - 3", 9 - 3, None, None, None),
-            ("multiplication_with_two_operands", "9 * 3", 9 * 3, None, None, None),
-            ("division_with_two_operands", "9 / 3", 9 / 3, None, None, None),
-            (
-                "division_with_two_operands_and_remainder",
+            pytest.param(
+                "9 - 3", 9 - 3, None, None, None, id="subtraction_with_two_operands"
+            ),
+            pytest.param(
+                "9 * 3", 9 * 3, None, None, None, id="multiplication_with_two_operands"
+            ),
+            pytest.param(
+                "9 / 3", 9 / 3, None, None, None, id="division_with_two_operands"
+            ),
+            pytest.param(
                 "9 / 4",
                 9.0 / 4.0,
                 None,
                 None,
                 None,
+                id="division_with_two_operands_and_remainder",
             ),
-            ("exponentiation_with_two_operands", "9 ** 3", 9**3, None, None, None),
-            (
-                "exponentiation_with_three_operands",
+            pytest.param(
+                "9 ** 3",
+                9**3,
+                None,
+                None,
+                None,
+                id="exponentiation_with_two_operands",
+            ),
+            pytest.param(
                 "2 ** 3 ** 3",
                 2**3**3,
                 None,
                 None,
                 None,
+                id="exponentiation_with_three_operands",
             ),
-            (
-                "associative_law_for_addition",
+            pytest.param(
                 "(a + b) + c == a + (b + c)",
                 True,
                 {"a": 9, "b": 3, "c": 3},
                 None,
                 None,
+                id="associative_law_for_addition",
             ),
-            (
-                "associative_law_for_multiplication",
+            pytest.param(
                 "(a * b) * c == a * (b * c)",
                 True,
                 {"a": 9, "b": 3, "c": 3},
                 None,
                 None,
+                id="associative_law_for_multiplication",
             ),
-            (
-                "commutative_law_for_addition",
+            pytest.param(
                 "a + b == b + a",
                 True,
                 {"a": 9, "b": 3},
                 None,
                 None,
+                id="commutative_law_for_addition",
             ),
-            (
-                "commutative_law_for_multiplication",
+            pytest.param(
                 "a * b == b * a",
                 True,
                 {"a": 9, "b": 3},
                 None,
                 None,
+                id="commutative_law_for_multiplication",
             ),
-            (
-                "distributive_law",
+            pytest.param(
                 "a * (b + c) == a * b + a * c",
                 True,
                 {"a": 9, "b": 3, "c": 3},
                 None,
                 None,
+                id="distributive_law",
             ),
-            ("less_comparison", "9 < 3", 9 < 3, None, None, None),
-            ("less_or_equal_comparison", "3 <= 3", 3 <= 3, None, None, None),
-            ("greater_comparison", "9 > 3", 9 > 3, None, None, None),
-            ("greater_or_equal_comparison", "3 >= 2", 3 >= 2, None, None, None),
-            ("in_operator", "3 in list", True, {"list": [1, 2, 3]}, None, None),
-            ("inversion", "not 9 < 3", not 9 < 3, None, None, None),
-            ("double_inversion", "not not 9 < 3", not not 9 < 3, None, None, None),
-            (
-                "triple_inversion",
+            pytest.param("9 < 3", 9 < 3, None, None, None, id="less_comparison"),
+            pytest.param(
+                "3 <= 3", 3 <= 3, None, None, None, id="less_or_equal_comparison"
+            ),
+            pytest.param("9 > 3", 9 > 3, None, None, None, id="greater_comparison"),
+            pytest.param(
+                "3 >= 2", 3 >= 2, None, None, None, id="greater_or_equal_comparison"
+            ),
+            pytest.param(
+                "3 in list", True, {"list": [1, 2, 3]}, None, None, id="in_operator"
+            ),
+            pytest.param("not 9 < 3", not 9 < 3, None, None, None, id="inversion"),
+            pytest.param(
+                "not not 9 < 3", not not 9 < 3, None, None, None, id="double_inversion"
+            ),
+            pytest.param(
                 "not not not 9 < 3",
                 not not not 9 < 3,
                 None,
                 None,
                 None,
+                id="triple_inversion",
             ),
-            ("conjunction", "9 == 9 and 3 == 3", 9 == 9 and 3 == 3, None, None, None),
-            ("disjunction", "9 == 3 or 3 == 3", 9 == 3 or 3 == 3, None, None, None),
-            ("simple_parenthesized_expression", "(9 + 3)", (9 + 3), None, None, None),
-            (
-                "arithmetic_parenthesized_expression",
+            pytest.param(
+                "9 == 9 and 3 == 3",
+                9 == 9 and 3 == 3,
+                None,
+                None,
+                None,
+                id="conjunction",
+            ),
+            pytest.param(
+                "9 == 3 or 3 == 3", 9 == 3 or 3 == 3, None, None, None, id="disjunction"
+            ),
+            pytest.param(
+                "(9 + 3)",
+                (9 + 3),
+                None,
+                None,
+                None,
+                id="simple_parenthesized_expression",
+            ),
+            pytest.param(
                 "2 * (9 + 3) * 2",
                 2 * (9 + 3) * 2,
                 None,
                 None,
                 None,
+                id="arithmetic_parenthesized_expression",
             ),
-            ("slice_expression", "arr[1] == 12", True, {"arr": [1, 12, 3]}, None, None),
-            (
-                "complex_slice_expression",
+            pytest.param(
+                "arr[1] == 12",
+                True,
+                {"arr": [1, 12, 3]},
+                None,
+                None,
+                id="slice_expression",
+            ),
+            pytest.param(
                 "arr[1] + arr[2]",
                 15,
                 {"arr": [1, 12, 3]},
                 None,
                 None,
+                id="complex_slice_expression",
             ),
-            (
-                "method_call",
+            pytest.param(
                 "string.upper()",
                 "HELLO WORLD",
                 {"string": "Hello World"},
                 None,
                 None,
+                id="method_call",
             ),
-            ("builtin_function_call", "min(1, 2)", min(1, 2), None, None, None),
-            (
-                "unsafe_class_method_call",
+            pytest.param(
+                "min(1, 2)", min(1, 2), None, None, None, id="builtin_function_call"
+            ),
+            pytest.param(
                 "subject.get_attribute_value(0)",
                 "eresources",
                 {"subject": Subject(["eresources"])},
                 None,
                 DSLEvaluationError,
+                id="unsafe_class_method_call",
             ),
-            (
-                "safe_class_method_call",
+            pytest.param(
                 "subject.get_attribute_value(0)",
                 "eresources",
                 {"subject": Subject(["eresources"])},
                 [Subject],
                 None,
+                id="safe_class_method_call",
             ),
-            (
-                "safe_class_method_call_with_direct_context",
+            pytest.param(
                 "get_attribute_value(0)",
                 "eresources",
                 Subject(["eresources"]),
                 [Subject],
                 None,
+                id="safe_class_method_call_with_direct_context",
             ),
         ],
     )
     def test(
         self,
-        _,
         expression,
         expected_result,
         context,

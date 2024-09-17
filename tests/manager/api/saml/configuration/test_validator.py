@@ -15,69 +15,68 @@ from tests.mocks import saml_strings
 
 class TestSAMLSettingsValidator:
     @pytest.mark.parametrize(
-        "_,sp_xml_metadata,idp_xml_metadata,patron_id_regular_expression,expected_validation_result",
+        "sp_xml_metadata,idp_xml_metadata,patron_id_regular_expression,expected_validation_result",
         [
-            (
-                "missing_sp_metadata_and_missing_idp_metadata",
+            pytest.param(
                 None,
                 None,
                 None,
                 INCOMPLETE_CONFIGURATION,
+                id="missing_sp_metadata_and_missing_idp_metadata",
             ),
-            (
-                "empty_sp_metadata_and_empty_idp_metadata",
+            pytest.param(
                 saml_strings.INCORRECT_XML,
                 saml_strings.INCORRECT_XML,
                 None,
                 INCOMPLETE_CONFIGURATION,
+                id="empty_sp_metadata_and_empty_idp_metadata",
             ),
-            (
-                "incorrect_sp_metadata_and_incorrect_idp_metadata",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
                 SAML_INCORRECT_METADATA,
+                id="incorrect_sp_metadata_and_incorrect_idp_metadata",
             ),
-            (
-                "correct_sp_metadata_and_incorrect_idp_metadata",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
                 None,
                 SAML_INCORRECT_METADATA,
+                id="correct_sp_metadata_and_incorrect_idp_metadata",
             ),
-            (
-                "correct_sp_and_idp_metadata",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 None,
                 None,
+                id="correct_sp_and_idp_metadata",
             ),
-            (
-                "correct_patron_id_regular_expression",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"(?P<patron_id>.+)@university\.org",
                 None,
+                id="correct_patron_id_regular_expression",
             ),
-            (
-                "correct_patron_id_regular_expression_without_patron_id_named_group",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"(?P<patron>.+)@university\.org",
                 SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
+                id="correct_patron_id_regular_expression_without_patron_id_named_group",
             ),
-            (
-                "incorrect_patron_id_regular_expression",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP,
                 saml_strings.CORRECT_XML_WITH_IDP_1,
                 r"[",
                 INVALID_CONFIGURATION_OPTION,
+                id="incorrect_patron_id_regular_expression",
             ),
         ],
     )
     def test_validate(
         self,
-        _,
         sp_xml_metadata,
         idp_xml_metadata,
         patron_id_regular_expression,
