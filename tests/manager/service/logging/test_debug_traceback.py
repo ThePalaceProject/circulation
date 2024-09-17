@@ -8,8 +8,10 @@ def test_setup_debug_traceback():
     with patch.object(
         faulthandler, "dump_traceback_later"
     ) as mock_dump_traceback_later:
-        # If the interval is 0, the feature should be disabled.
+        # If the interval is 0 or None, the feature should be disabled.
         setup_debug_traceback(0)
+        mock_dump_traceback_later.assert_not_called()
+        setup_debug_traceback(None)
         mock_dump_traceback_later.assert_not_called()
 
         # Otherwise, we should call dump_traceback_later with the correct arguments.
