@@ -6,7 +6,7 @@ from enum import auto
 from typing import Any
 
 import boto3
-from pydantic import PositiveInt, validator
+from pydantic import NonNegativeInt, PositiveInt, validator
 from watchtower import DEFAULT_LOG_STREAM_NAME
 
 from palace.manager.service.configuration.service_configuration import (
@@ -72,6 +72,11 @@ class LogLevel(StrEnum):
 class LoggingConfiguration(ServiceConfiguration):
     level: LogLevel = LogLevel.info
     verbose_level: LogLevel = LogLevel.warning
+
+    # This config is useful when debugging, it will print a traceback to stderr
+    # at the specified interval (in seconds). It should not be enabled in normal
+    # production operation. The default value of 0 disables this feature.
+    debug_traceback_interval: NonNegativeInt = 0
 
     cloudwatch_enabled: bool = False
     cloudwatch_region: str | None = None

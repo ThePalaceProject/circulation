@@ -8,6 +8,7 @@ from dependency_injector import providers
 from dependency_injector.containers import DeclarativeContainer
 from dependency_injector.providers import Provider, Singleton
 
+from palace.manager.service.logging.debug_traceback import setup_debug_traceback
 from palace.manager.service.logging.log import (
     JSONFormatter,
     create_cloudwatch_handler,
@@ -53,4 +54,9 @@ class Logging(DeclarativeContainer):
         stream=stream_handler,
         cloudwatch_enabled=config.cloudwatch_enabled,
         cloudwatch_callable=cloudwatch_handler.provider,
+    )
+
+    debug_traceback = providers.Resource(
+        setup_debug_traceback,
+        interval=config.debug_traceback_interval,
     )
