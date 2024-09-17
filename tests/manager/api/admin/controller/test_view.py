@@ -191,6 +191,7 @@ class TestViewController:
             assert '"enableAutoList": true' in feature_flags
             assert '"showCircEventsDownload": true' in feature_flags
             assert '"reportsOnlyForSysadmins": true' in feature_flags
+            assert '"quicksightOnlyForSysadmins": true' in feature_flags
 
     def test_feature_flags_overridden(
         self,
@@ -207,6 +208,9 @@ class TestViewController:
         monkeypatch.setenv("PALACE_ADMINUI_FEATURE_ENABLE_AUTO_LIST", "false")
         monkeypatch.setenv("PALACE_ADMINUI_FEATURE_SHOW_CIRC_EVENTS_DOWNLOAD", "false")
         monkeypatch.setenv("PALACE_ADMINUI_FEATURE_REPORTS_ONLY_FOR_SYSADMINS", "false")
+        monkeypatch.setenv(
+            "PALACE_ADMINUI_FEATURE_QUICKSIGHT_ONLY_FOR_SYSADMINS", "false"
+        )
 
         with (
             patch(
@@ -235,3 +239,4 @@ class TestViewController:
             assert '"enableAutoList": true' in feature_flags
             assert '"showCircEventsDownload": true' in feature_flags
             assert '"reportsOnlyForSysadmins": false' in feature_flags
+            assert '"quicksightOnlyForSysadmins": false' in feature_flags

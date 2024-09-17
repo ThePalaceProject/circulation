@@ -19,6 +19,10 @@ class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):
         True,
         description="Show inventory reports only for sysadmins.",
     )
+    quicksight_only_for_sysadmins: bool = Field(
+        True,
+        description="Show QuickSight dashboards only for sysadmins.",
+    )
 
     # The following fields CANNOT be overridden by environment variables.
     # Setting `const=True` ensures that the default value is not overridden.
