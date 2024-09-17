@@ -442,6 +442,11 @@ class OPDS2WithODLApi(
                     json_response.get("type")
                     == "http://opds-spec.org/odl/error/checkout/unavailable"
                 ):
+                    # TODO: This would be a good place to do an async availability update, since we know
+                    #   the book is unavailable, when we thought it was available. For now, we know that
+                    #   the license has no checkouts_available, so we do that update.
+                    license.checkouts_available = 0
+                    licensepool.update_availability_from_licenses()
                     raise NoAvailableCopies()
             raise
 
