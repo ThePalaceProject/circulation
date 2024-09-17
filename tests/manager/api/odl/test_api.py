@@ -738,7 +738,7 @@ class TestOPDS2WithODLApi:
         )
 
         # We think there are copies available.
-        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+        license = opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
 
         # But the distributor says there are no available copies.
         opds2_with_odl_api_fixture.mock_http.queue_response(
@@ -751,11 +751,29 @@ class TestOPDS2WithODLApi:
             checkout()
 
         assert db.session.query(Loan).count() == 0
+        assert license.license_pool.licenses_available == 0
+        assert license.checkouts_available == 0
+
+    def test_checkout_failures(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ) -> None:
+        checkout = partial(
+            opds2_with_odl_api_fixture.api.checkout,
+            opds2_with_odl_api_fixture.patron,
+            "pin",
+            opds2_with_odl_api_fixture.pool,
+            MagicMock(),
+        )
+
+        # We think there are copies available.
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
 
         # Test the case where we get bad JSON back from the distributor.
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
-            response_type,
+            "application/api-problem+json",
             content="hot garbage",
         )
 
