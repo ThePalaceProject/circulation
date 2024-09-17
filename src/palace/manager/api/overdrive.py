@@ -2112,6 +2112,7 @@ class OverdriveCollectionReaper(IdentifierSweepMonitor):
 
     SERVICE_NAME = "Overdrive Collection Reaper"
     PROTOCOL = OverdriveAPI.label()
+    DEFAULT_BATCH_SIZE = 10
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
         super().__init__(_db, collection)
@@ -2163,7 +2164,7 @@ class OverdriveFormatSweep(IdentifierSweepMonitor):
     """
 
     SERVICE_NAME = "Overdrive Format Sweep"
-    DEFAULT_BATCH_SIZE = 25
+    DEFAULT_BATCH_SIZE = 10
     PROTOCOL = OverdriveAPI.label()
 
     def __init__(self, _db, collection, api_class=OverdriveAPI):
