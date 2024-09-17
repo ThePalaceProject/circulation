@@ -1,8 +1,11 @@
 import logging
 
+from sqlalchemy.orm import Session
+
 from palace.manager.core.monitor import CollectionMonitor, ReaperMonitor
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import CollectionArgumentsScript
+from palace.manager.sqlalchemy.session import production_session
 
 
 class RunMonitorScript(Script):
@@ -93,6 +96,12 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
     """Run a CollectionMonitor on every Collection that comes through a
     certain protocol.
     """
+
+    @property
+    def _db(self) -> Session:
+        if not hasattr(self, "_session"):
+            self._session = production_session(self.monitor_class.__class__)
+        return self._session
 
     def __init__(self, monitor_class, _db=None, cmd_args=None, **kwargs):
         """Constructor.
