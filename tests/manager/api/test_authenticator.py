@@ -7,6 +7,7 @@ import datetime
 import json
 import re
 from collections.abc import Callable
+from contextlib import nullcontext
 from decimal import Decimal
 from functools import partial
 from typing import TYPE_CHECKING, Literal, cast
@@ -14,6 +15,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import flask
 import pytest
+from _pytest._code import ExceptionInfo
 from flask import url_for
 from freezegun import freeze_time
 from money import Money
@@ -29,6 +31,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
     Keyboards,
+    LibraryIdenfitierRestrictionField,
     LibraryIdentifierRestriction,
 )
 from palace.manager.api.authentication.basic_token import (
@@ -72,7 +75,7 @@ from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDoc
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.library import LibraryFixture
 from tests.mocks.analytics_provider import MockAnalyticsProvider
@@ -1421,14 +1424,14 @@ class TestBasicAuthenticationProvider:
                 True,
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
-            # returns None, we don't call remote_patron_lookup and get a ProblemDetail
+            # raises a ProblemDetail, then we don't call remote_patron_lookup and get that ProblemDetail.
             (
                 PatronData(authorization_identifier="a", complete=False),
-                None,
+                PATRON_OF_ANOTHER_LIBRARY.with_debug("some debug details"),
                 None,
                 0,
                 False,
-                PATRON_OF_ANOTHER_LIBRARY,
+                PATRON_OF_ANOTHER_LIBRARY.with_debug("some debug details"),
             ),
             # If we get an incomplete patrondata from remote_authenticate, and enforce_library_identifier_restriction
             # returns an incomplete patrondata, we call remote_patron_lookup
@@ -1489,16 +1492,21 @@ class TestBasicAuthenticationProvider:
         lookup_return,
         calls_lookup,
         create_patron,
-        expected,
+        expected: Literal[True] | ProblemDetail,
     ):
         # The call to remote_patron_lookup is potentially expensive, so we want to avoid calling it
         # more than once. This test makes sure that if we have a complete patrondata from remote_authenticate,
         # or from enforce_library_identifier_restriction, we don't call remote_patron_lookup.
         provider = mock_basic()
         provider.remote_authenticate = MagicMock(return_value=auth_return)
-        provider.enforce_library_identifier_restriction = MagicMock(
-            return_value=enforce_return
-        )
+        if isinstance(enforce_return, ProblemDetail):
+            provider.enforce_library_identifier_restriction = MagicMock(
+                side_effect=ProblemDetailException(enforce_return)
+            )
+        else:
+            provider.enforce_library_identifier_restriction = MagicMock(
+                return_value=enforce_return
+            )
         provider.remote_patron_lookup = MagicMock(return_value=lookup_return)
 
         username = "a"
@@ -1510,8 +1518,16 @@ class TestBasicAuthenticationProvider:
             db_patron = db.patron()
             db_patron.authorization_identifier = username
 
-        patron = provider.authenticated_patron(db.session, credentials)
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if isinstance(expected, ProblemDetail)
+            else nullcontext()
+        )
+        with context_manager as ctx:
+            patron = provider.authenticated_patron(db.session, credentials)
+
         provider.remote_authenticate.assert_called_once_with(username, password)
+
         if auth_return is not None:
             provider.enforce_library_identifier_restriction.assert_called_once_with(
                 auth_return
@@ -1519,13 +1535,18 @@ class TestBasicAuthenticationProvider:
         else:
             provider.enforce_library_identifier_restriction.assert_not_called()
         assert provider.remote_patron_lookup.call_count == calls_lookup
-        if expected is True:
+
+        if isinstance(expected, ProblemDetail):
+            assert isinstance(ctx, ExceptionInfo)
+            problem_detail = ctx.value.problem_detail
+            assert problem_detail == expected
+        elif expected is True:
             # Make sure we get a Patron object back and that the patrondata has been
             # properly applied to it
             assert isinstance(patron, Patron)
             assert patron.external_type == "xyz"
         else:
-            assert patron is expected
+            assert patron is expected  # type: ignore[unreachable]
 
     def test_update_patron_metadata(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
@@ -1574,202 +1595,151 @@ class TestBasicAuthenticationProvider:
         assert library1 != library2
         assert patron_metadata is None
 
-    def test_restriction_matches(self):
-        """Test the behavior of the library identifier restriction algorithm."""
-        m = BasicAuthenticationProvider._restriction_matches
-
-        # If restriction is none, we always return True.
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.PREFIX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.STRING,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "123",
-                None,
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-
-        # If field is None we always return False.
-        assert (
-            m(
+    @pytest.mark.parametrize(
+        "field_value, restriction_value, restriction_type,"
+        "expect_success, expected_reason",
+        (
+            # If restriction is none, we always return True.
+            (123, None, LibraryIdentifierRestriction.PREFIX, True, ""),
+            (123, None, LibraryIdentifierRestriction.STRING, True, ""),
+            (123, None, LibraryIdentifierRestriction.REGEX, True, ""),
+            (123, None, LibraryIdentifierRestriction.LIST, True, ""),
+            # If field is None we always return False.
+            (
                 None,
                 "1234",
                 LibraryIdentifierRestriction.PREFIX,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 re.compile(".*"),
                 LibraryIdentifierRestriction.REGEX,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            (
                 None,
                 ["1", "2"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
-        )
-
-        # Test prefix
-        assert (
-            m(
-                "12345a",
-                "1234",
-                LibraryIdentifierRestriction.PREFIX,
-            )
-            is True
-        )
-        assert (
-            m(
+                False,
+                "No value in field",
+            ),
+            # Test PREFIX
+            ("12345a", "1234", LibraryIdentifierRestriction.PREFIX, True, ""),
+            (
                 "a1234",
                 "1234",
                 LibraryIdentifierRestriction.PREFIX,
-            )
-            is False
-        )
-
-        # Test string
-        assert (
-            m(
+                False,
+                "'a1234' does not start with '1234'",
+            ),
+            # Test STRING/exact
+            (
                 "12345a",
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "'12345a' does not exactly match '1234'",
+            ),
+            (
                 "a1234",
                 "1234",
                 LibraryIdentifierRestriction.STRING,
-            )
-            is False
-        )
-        assert (
-            m(
-                "1234",
-                "1234",
-                LibraryIdentifierRestriction.STRING,
-            )
-            is True
-        )
-
-        # Test list
-        assert (
-            True
-            == m(
-                "1234",
-                ["1234", "4321"],
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-        assert (
-            m(
-                "4321",
-                ["1234", "4321"],
-                LibraryIdentifierRestriction.LIST,
-            )
-            is True
-        )
-        assert (
-            m(
+                False,
+                "'a1234' does not exactly match '1234'",
+            ),
+            ("1234", "1234", LibraryIdentifierRestriction.STRING, True, ""),
+            # Test LIST
+            ("1234", ["1234", "4321"], LibraryIdentifierRestriction.LIST, True, ""),
+            ("4321", ["1234", "4321"], LibraryIdentifierRestriction.LIST, True, ""),
+            (
                 "12345",
                 ["1234", "4321"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
-        )
-        assert (
-            m(
+                False,
+                "'12345' not in list ['1234', '4321']",
+            ),
+            (
                 "54321",
                 ["1234", "4321"],
                 LibraryIdentifierRestriction.LIST,
-            )
-            is False
+                False,
+                "'54321' not in list ['1234', '4321']",
+            ),
+            # Test Regex
+            (
+                "123",
+                re.compile(r"^(12|34)"),
+                LibraryIdentifierRestriction.REGEX,
+                True,
+                "",
+            ),
+            (
+                "345",
+                re.compile(r"^(12|34)"),
+                LibraryIdentifierRestriction.REGEX,
+                True,
+                "",
+            ),
+            (
+                "abc",
+                re.compile(r"^bc"),
+                LibraryIdentifierRestriction.REGEX,
+                False,
+                "'abc' does not match regular expression '^bc'",
+            ),
+        ),
+    )
+    def test_restriction_matches(
+        self,
+        field_value: str | None,
+        restriction_value: str | list[str] | re.Pattern | None,
+        restriction_type: LibraryIdentifierRestriction,
+        expect_success: bool,
+        expected_reason: str,
+    ):
+        """Test the behavior of the library identifier restriction algorithm."""
+        success, reason = BasicAuthenticationProvider._restriction_matches(
+            field_value, restriction_value, restriction_type
         )
 
-        # Test Regex
-        assert (
-            m(
-                "123",
-                re.compile("^(12|34)"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "345",
-                re.compile("^(12|34)"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is True
-        )
-        assert (
-            m(
-                "abc",
-                re.compile("^bc"),
-                LibraryIdentifierRestriction.REGEX,
-            )
-            is False
-        )
+        # Reason should always be absent when we expect success and always
+        # present when we don't; so, ensure that our test cases reflect that.
+        assert expected_reason == "" if expect_success else expected_reason != ""
+        assert success == expect_success
+        assert reason == expected_reason
 
     @pytest.mark.parametrize(
-        "restriction_type, restriction, identifier, expected",
+        "restriction_type, restriction, restriction_as_string, identifier, expected_success",
         [
             # Test regex
             (
                 LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
+                "23[46]5",
                 "23456",
                 True,
             ),
             (
                 LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
+                "23[46]5",
                 "2365",
                 True,
             ),
             (
                 LibraryIdentifierRestriction.REGEX,
                 re.compile("23[46]5"),
+                "23[46]5",
                 "2375",
                 False,
             ),
@@ -1777,11 +1747,13 @@ class TestBasicAuthenticationProvider:
             (
                 LibraryIdentifierRestriction.PREFIX,
                 "2345",
+                "2345",
                 "23456",
                 True,
             ),
             (
                 LibraryIdentifierRestriction.PREFIX,
+                "2345",
                 "2345",
                 "123456",
                 False,
@@ -1791,10 +1763,12 @@ class TestBasicAuthenticationProvider:
                 LibraryIdentifierRestriction.STRING,
                 "2345",
                 "2345",
+                "2345",
                 True,
             ),
             (
                 LibraryIdentifierRestriction.STRING,
+                "2345",
                 "2345",
                 "12345",
                 False,
@@ -1804,37 +1778,77 @@ class TestBasicAuthenticationProvider:
     def test_enforce_library_identifier_restriction(
         self,
         mock_basic: MockBasicFixture,
-        restriction_type,
-        restriction,
-        identifier,
-        expected,
+        restriction_type: LibraryIdentifierRestriction,
+        restriction: str | list[str] | re.Pattern | None,
+        restriction_as_string: str,
+        identifier: str,
+        expected_success: bool,
     ):
+        def assert_problem_detail(pd: ProblemDetail, field_name: str) -> None:
+            debug_message = pd.debug_message
+            # Aside from whatever's in the `debug_message`, our ProblemDetail
+            # should be a PATRON_OF_ANOTHER_LIBRARY.
+            assert pd.with_debug("") == PATRON_OF_ANOTHER_LIBRARY.with_debug("")
+            assert debug_message is not None
+            assert debug_message.startswith(
+                f"'{field_name}' does not match library restriction: "
+            )
+            assert identifier in debug_message
+            assert restriction_as_string in debug_message
+
         """Test the enforce_library_identifier_restriction method."""
         provider = mock_basic()
         provider.library_identifier_restriction_type = restriction_type
         provider.library_identifier_restriction_criteria = restriction
 
         # Test match applied to barcode
-        provider.library_identifier_field = "barcode"
+        provider.library_identifier_field = (
+            LibraryIdenfitierRestrictionField.BARCODE.value
+        )
         patrondata = PatronData(authorization_identifier=identifier)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(patrondata)
                 == patrondata
             )
         else:
-            assert provider.enforce_library_identifier_restriction(patrondata) is None
+            with pytest.raises(ProblemDetailException) as exc:
+                provider.enforce_library_identifier_restriction(patrondata)
+            assert_problem_detail(exc.value.problem_detail, "barcode")
+
+        # Test match applied to patron library code.
+        # It's not in the local data, so we need a complete PatronData.
+        provider.library_identifier_field = (
+            LibraryIdenfitierRestrictionField.PATRON_LIBRARY.value
+        )
+        local_patrondata = PatronData(complete=False, authorization_identifier="123")
+        remote_patrondata = PatronData(
+            library_identifier=identifier, authorization_identifier="123"
+        )
+        provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
+        if expected_success:
+            assert (
+                provider.enforce_library_identifier_restriction(local_patrondata)
+                == remote_patrondata
+            )
+        else:
+            with pytest.raises(ProblemDetailException) as exc:
+                provider.enforce_library_identifier_restriction(local_patrondata)
+            assert_problem_detail(exc.value.problem_detail, "patron location")
+        provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
         # Test match applied to library_identifier field on complete patrondata
-        provider.library_identifier_field = "other"
+        provider.library_identifier_field = "Other"
         patrondata = PatronData(library_identifier=identifier)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(patrondata)
                 == patrondata
             )
         else:
-            assert provider.enforce_library_identifier_restriction(patrondata) is None
+            with pytest.raises(ProblemDetailException) as exc:
+                provider.enforce_library_identifier_restriction(patrondata)
+            assert_problem_detail(exc.value.problem_detail, "Other")
 
         # Test match applied to library_identifier field on incomplete patrondata
         provider.library_identifier_field = "other"
@@ -1843,16 +1857,15 @@ class TestBasicAuthenticationProvider:
             library_identifier=identifier, authorization_identifier="123"
         )
         provider.remote_patron_lookup = MagicMock(return_value=remote_patrondata)
-        if expected:
+        if expected_success:
             assert (
                 provider.enforce_library_identifier_restriction(local_patrondata)
                 == remote_patrondata
             )
         else:
-            assert (
+            with pytest.raises(ProblemDetailException) as exc:
                 provider.enforce_library_identifier_restriction(local_patrondata)
-                is None
-            )
+            assert_problem_detail(exc.value.problem_detail, "other")
         provider.remote_patron_lookup.assert_called_once_with(local_patrondata)
 
     def test_enforce_library_identifier_restriction_library_identifier_field_none(
@@ -2003,6 +2016,21 @@ class TestBasicAuthenticationProvider:
             integration_exception.value
         )
 
+        # And testing_patron_or_bust() returns a similar result if the
+        # problem details comes is wrapped in an exception.
+        problem_patron.authenticated_patron = MagicMock(
+            side_effect=ProblemDetailException(
+                problem_detail=PATRON_OF_ANOTHER_LIBRARY.with_debug(
+                    "some debug message"
+                )
+            )
+        )
+        with pytest.raises(IntegrationException) as integration_exception:
+            problem_patron.testing_patron_or_bust(db.session)
+        message = str(integration_exception.value)
+        assert message.startswith("Test patron lookup returned a problem detail")
+        assert message.endswith("[some debug message]")
+
         # We configure a testing patron but authenticating them
         # results in something (non None) that's not a Patron
         # or a problem detail document.
@@ -2064,6 +2092,8 @@ class TestBasicAuthenticationProvider:
         assert "Syncing patron metadata" == update_metadata.name
         assert update_metadata.success is True
         assert "some metadata" == update_metadata.result
+
+        #
 
     def test_server_side_validation(self, mock_basic: MockBasicFixture):
         provider = mock_basic(

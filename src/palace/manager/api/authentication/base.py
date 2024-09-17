@@ -167,6 +167,7 @@ class PatronData:
 
     def __init__(
         self,
+        *,
         permanent_id=None,
         authorization_identifier=None,
         username=None,

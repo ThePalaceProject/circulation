@@ -195,19 +195,6 @@ class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
             description="A specific identifier for the library or branch, if used in patron authentication",
         ),
     )
-    # Used with SIP2, when it is available in the patron information response.
-    patron_location_restriction: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
-            label="Patron Location Restriction",
-            description=(
-                "A code for the library or branch, which, when specified, "
-                "must exactly match the permanent location for the patron."
-                "<br>If an ILS does not return a location for its patrons, specifying "
-                "a value here will always result in authentication failure."
-            ),
-        ),
-    )
 
 
 class SIP2AuthenticationProvider(
@@ -257,7 +244,6 @@ class SIP2AuthenticationProvider(
         self.ssl_verification = settings.ssl_verification
         self.dialect = settings.ils
         self.institution_id = library_settings.institution_id
-        self.patron_location_restriction = library_settings.patron_location_restriction
         self._client = client
 
         # Check if patrons should be blocked based on SIP status
@@ -349,25 +335,7 @@ class SIP2AuthenticationProvider(
             # passing it on.
             password = None
         info = self.patron_information(username, password)
-        self._enforce_patron_location_restriction(info)
         return self.info_to_patrondata(info)
-
-    def _enforce_patron_location_restriction(
-        self, info: dict[str, Any] | ProblemDetail
-    ) -> None:
-        """Raise an exception if patron location does not match the restriction.
-
-        If a location restriction is specified for the library against which the
-        patron is attempting to authenticate, then the authentication will fail
-        if either (1) the patron does not have an associated location or (2) the
-        patron's location does not exactly match the one configured.
-        """
-        if (
-            not isinstance(info, ProblemDetail)
-            and self.patron_location_restriction is not None
-            and info.get("permanent_location") != self.patron_location_restriction
-        ):
-            raise ProblemDetailException(PATRON_OF_ANOTHER_LIBRARY)
 
     def _run_self_tests(self, _db):
         def makeConnection(sip):
@@ -449,6 +417,8 @@ class SIP2AuthenticationProvider(
             patrondata.email_address = info["email_address"]
         if "personal_name" in info:
             patrondata.personal_name = info["personal_name"]
+        if "permanent_location" in info:
+            patrondata.library_identifier = info["permanent_location"]
         if "fee_amount" in info:
             fines = info["fee_amount"]
         else:
