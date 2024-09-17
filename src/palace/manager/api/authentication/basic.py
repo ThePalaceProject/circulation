@@ -825,12 +825,12 @@ class BasicAuthenticationProvider(
             return patrondata
 
         patrondata, field_value = self.get_library_identifier_field_data(patrondata)
-        isValid, reason = self._restriction_matches(
+        is_valid, reason = self._restriction_matches(
             field_value,
             self.library_identifier_restriction_criteria,
             self.library_identifier_restriction_type,
         )
-        if not isValid:
+        if not is_valid:
             raise ProblemDetailException(
                 PATRON_OF_ANOTHER_LIBRARY.with_debug(
                     f"{self.library_identifier_field!r} does not match library restriction: {reason}."
