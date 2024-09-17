@@ -54,32 +54,36 @@ class TestAtomFeed:
         ) in etree.tostring(entry, method="c14n2")
 
     @pytest.mark.parametrize(
-        "_,obj,formatted",
+        "obj,formatted",
         [
-            ("date", datetime.date(2020, 1, 2), "2020-01-02T00:00:00Z"),
-            ("naive", datetime.datetime(2020, 1, 2, 3, 4, 5), "2020-01-02T03:04:05Z"),
-            (
-                "explicit_utc",
+            pytest.param(datetime.date(2020, 1, 2), "2020-01-02T00:00:00Z", id="date"),
+            pytest.param(
+                datetime.datetime(2020, 1, 2, 3, 4, 5),
+                "2020-01-02T03:04:05Z",
+                id="naive",
+            ),
+            pytest.param(
                 datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=pytz.UTC),
                 "2020-01-02T03:04:05+00:00",
+                id="explicit_utc",
             ),
-            (
-                "eastern",
+            pytest.param(
                 pytz.timezone("US/Eastern").localize(
                     datetime.datetime(2020, 1, 2, 3, 4, 5)
                 ),
                 "2020-01-02T08:04:05+00:00",
+                id="eastern",
             ),
-            (
-                "central",
+            pytest.param(
                 pytz.timezone("US/Central").localize(
                     datetime.datetime(2020, 1, 2, 3, 4, 5)
                 ),
                 "2020-01-02T09:04:05+00:00",
+                id="central",
             ),
         ],
     )
-    def test__strftime(self, _, obj, formatted):
+    def test__strftime(self, obj, formatted):
         # Verify that dates and datetimes are formatted according to
         # the rules laid down in the Atom spec.
         assert AtomFeed._strftime(obj) == formatted

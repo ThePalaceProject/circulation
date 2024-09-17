@@ -116,10 +116,9 @@ IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES = SAMLIdentityProviderMetadata(
 
 class TestSAMLWebSSOAuthenticationProvider:
     @pytest.mark.parametrize(
-        "_, identity_providers, expected_result",
+        "identity_providers, expected_result",
         [
-            (
-                "identity_provider_with_display_name",
+            pytest.param(
                 [IDENTITY_PROVIDER_WITH_DISPLAY_NAME],
                 {
                     "type": "http://librarysimplified.org/authtype/SAML-2.0",
@@ -181,9 +180,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                         }
                     ],
                 },
+                id="identity_provider_with_display_name",
             ),
-            (
-                "identity_provider_with_organization_display_name",
+            pytest.param(
                 [IDENTITY_PROVIDER_WITH_ORGANIZATION_DISPLAY_NAME],
                 {
                     "type": "http://librarysimplified.org/authtype/SAML-2.0",
@@ -209,9 +208,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                         }
                     ],
                 },
+                id="identity_provider_with_organization_display_name",
             ),
-            (
-                "identity_provider_without_display_names_and_default_template",
+            pytest.param(
                 [
                     IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES,
                     IDENTITY_PROVIDER_WITHOUT_DISPLAY_NAMES,
@@ -250,6 +249,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                         },
                     ],
                 },
+                id="identity_provider_without_display_names_and_default_template",
             ),
         ],
     )
@@ -259,7 +259,6 @@ class TestSAMLWebSSOAuthenticationProvider:
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
-        _,
         identity_providers,
         expected_result,
     ):
@@ -311,34 +310,33 @@ class TestSAMLWebSSOAuthenticationProvider:
             assert expected_result == result
 
     @pytest.mark.parametrize(
-        "_, subject, expected_result, patron_id_use_name_id, patron_id_attributes, patron_id_regular_expression",
+        "subject, expected_result, patron_id_use_name_id, patron_id_attributes, patron_id_regular_expression",
         [
-            (
-                "empty_subject",
+            pytest.param(
                 None,
                 SAML_INVALID_SUBJECT.detailed("Subject is empty"),
                 None,
                 None,
                 None,
+                id="empty_subject",
             ),
-            (
-                "subject_is_patron_data",
+            pytest.param(
                 PatronData(permanent_id=12345),
                 PatronData(permanent_id=12345),
                 None,
                 None,
                 None,
+                id="subject_is_patron_data",
             ),
-            (
-                "subject_does_not_have_unique_id",
+            pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 None,
                 None,
                 None,
+                id="subject_does_not_have_unique_id",
             ),
-            (
-                "subject_has_unique_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -360,9 +358,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 None,
+                id="subject_has_unique_id",
             ),
-            (
-                "subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_string_literal",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "12345"),
@@ -372,9 +370,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "false",
                 None,
                 None,
+                id="subject_has_unique_name_id_but_use_of_name_id_is_switched_off_using_string_literal",
             ),
-            (
-                "subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "12345"),
@@ -389,9 +387,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "true",
                 None,
                 None,
+                id="subject_has_unique_name_id_and_use_of_name_id_is_switched_on_using_string_literal_true",
             ),
-            (
-                "subject_has_unique_id_matching_the_regular_expression",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -413,9 +411,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 False,
                 [SAMLAttributeType.eduPersonPrincipalName.name],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="subject_has_unique_id_matching_the_regular_expression",
             ),
-            (
-                "subject_has_unique_id_not_matching_the_regular_expression",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -432,6 +430,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                 False,
                 [SAMLAttributeType.eduPersonPrincipalName.name],
                 saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                id="subject_has_unique_id_not_matching_the_regular_expression",
             ),
         ],
     )
@@ -439,7 +438,6 @@ class TestSAMLWebSSOAuthenticationProvider:
         self,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-        _,
         subject,
         expected_result,
         patron_id_use_name_id,
@@ -467,26 +465,25 @@ class TestSAMLWebSSOAuthenticationProvider:
             assert result == expected_result
 
     @pytest.mark.parametrize(
-        "_, subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
+        "subject, expected_patron_data, expected_credential, expected_expiration_time, cm_session_lifetime",
         [
-            (
-                "empty_subject",
+            pytest.param(
                 None,
                 SAML_INVALID_SUBJECT.detailed("Subject is empty"),
                 None,
                 None,
                 None,
+                id="empty_subject",
             ),
-            (
-                "subject_does_not_have_unique_id",
+            pytest.param(
                 SAMLSubject("http://idp.example.com", None, None),
                 SAML_INVALID_SUBJECT.detailed("Subject does not have a unique ID"),
                 None,
                 None,
                 None,
+                id="subject_does_not_have_unique_id",
             ),
-            (
-                "subject_has_unique_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -508,9 +505,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 None,
+                id="subject_has_unique_id",
             ),
-            (
-                "subject_has_unique_id_and_persistent_name_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
@@ -537,9 +534,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 None,
+                id="subject_has_unique_id_and_persistent_name_id",
             ),
-            (
-                "subject_has_unique_id_and_transient_name_id",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     SAMLNameID(
@@ -566,9 +563,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 '{"idp": "http://idp.example.com", "attributes": {"eduPersonUniqueId": ["12345"]}}',
                 None,
                 None,
+                id="subject_has_unique_id_and_transient_name_id",
             ),
-            (
-                "subject_has_unique_id_and_custom_session_lifetime",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -590,9 +587,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 datetime_utc(2020, 1, 1) + datetime.timedelta(days=42),
                 42,
+                id="subject_has_unique_id_and_custom_session_lifetime",
             ),
-            (
-                "subject_has_unique_id_and_empty_session_lifetime",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -614,9 +611,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 "",
+                id="subject_has_unique_id_and_empty_session_lifetime",
             ),
-            (
-                "subject_has_unique_id_and_non_default_expiration_timeout",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -639,9 +636,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 None,
+                id="subject_has_unique_id_and_non_default_expiration_timeout",
             ),
-            (
-                "subject_has_unique_id_non_default_expiration_timeout_and_custom_session_lifetime",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -664,9 +661,9 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 datetime_utc(2020, 1, 1) + datetime.timedelta(days=42),
                 42,
+                id="subject_has_unique_id_non_default_expiration_timeout_and_custom_session_lifetime",
             ),
-            (
-                "subject_has_unique_id_non_default_expiration_timeout_and_empty_session_lifetime",
+            pytest.param(
                 SAMLSubject(
                     "http://idp.example.com",
                     None,
@@ -689,6 +686,7 @@ class TestSAMLWebSSOAuthenticationProvider:
                 None,
                 None,
                 "",
+                id="subject_has_unique_id_non_default_expiration_timeout_and_empty_session_lifetime",
             ),
         ],
     )
@@ -698,7 +696,6 @@ class TestSAMLWebSSOAuthenticationProvider:
         controller_fixture: ControllerFixture,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-        _,
         subject,
         expected_patron_data,
         expected_credential,

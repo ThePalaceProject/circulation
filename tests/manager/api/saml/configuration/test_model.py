@@ -324,10 +324,9 @@ class TestSAMLOneLoginConfiguration:
         onelogin_configuration.get_identity_providers.assert_called_once_with(db)
 
     @pytest.mark.parametrize(
-        "_,service_provider,expected_result",
+        "service_provider,expected_result",
         [
-            (
-                "service_provider_without_certificates",
+            pytest.param(
                 SERVICE_PROVIDER_WITHOUT_CERTIFICATE,
                 {
                     "sp": {
@@ -344,9 +343,9 @@ class TestSAMLOneLoginConfiguration:
                         "authnRequestsSigned": SERVICE_PROVIDER_WITH_CERTIFICATE.authn_requests_signed
                     },
                 },
+                id="service_provider_without_certificates",
             ),
-            (
-                "service_provider_with_certificate",
+            pytest.param(
                 SERVICE_PROVIDER_WITH_CERTIFICATE,
                 {
                     "sp": {
@@ -365,11 +364,12 @@ class TestSAMLOneLoginConfiguration:
                         "authnRequestsSigned": SERVICE_PROVIDER_WITH_CERTIFICATE.authn_requests_signed
                     },
                 },
+                id="service_provider_with_certificate",
             ),
         ],
     )
     def test_get_service_provider_settings_returns_correct_result(
-        self, _, service_provider, expected_result
+        self, service_provider, expected_result
     ):
         # Arrange
         configuration = create_autospec(spec=SAMLWebSSOAuthSettings)

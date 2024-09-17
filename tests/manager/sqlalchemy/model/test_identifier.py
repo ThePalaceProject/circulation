@@ -632,23 +632,39 @@ class TestIdentifier:
         ).all()
 
     @pytest.mark.parametrize(
-        "_,identifier_type,identifier,title",
+        "identifier_type,identifier,title",
         [
-            ("ascii_type_ascii_identifier_no_title", "a", "a", None),
-            ("ascii_type_non_ascii_identifier_no_title", "a", "ą", None),
-            ("non_ascii_type_ascii_identifier_no_title", "ą", "a", None),
-            ("non_ascii_type_non_ascii_identifier_no_title", "ą", "ą", None),
-            ("ascii_type_ascii_identifier_ascii_title", "a", "a", "a"),
-            ("ascii_type_non_ascii_identifier_ascii_title", "a", "ą", "a"),
-            ("non_ascii_type_ascii_identifier_ascii_title", "ą", "a", "a"),
-            ("non_ascii_type_non_ascii_identifier_ascii_title", "ą", "ą", "a"),
-            ("ascii_type_ascii_identifier_non_ascii_title", "a", "a", "ą"),
-            ("ascii_type_non_ascii_identifier_non_ascii_title", "a", "ą", "ą"),
-            ("non_ascii_type_ascii_identifier_non_ascii_title", "ą", "a", "ą"),
-            ("non_ascii_type_non_ascii_identifier_non_ascii_title", "ą", "ą", "ą"),
+            pytest.param("a", "a", None, id="ascii_type_ascii_identifier_no_title"),
+            pytest.param("a", "ą", None, id="ascii_type_non_ascii_identifier_no_title"),
+            pytest.param("ą", "a", None, id="non_ascii_type_ascii_identifier_no_title"),
+            pytest.param(
+                "ą", "ą", None, id="non_ascii_type_non_ascii_identifier_no_title"
+            ),
+            pytest.param("a", "a", "a", id="ascii_type_ascii_identifier_ascii_title"),
+            pytest.param(
+                "a", "ą", "a", id="ascii_type_non_ascii_identifier_ascii_title"
+            ),
+            pytest.param(
+                "ą", "a", "a", id="non_ascii_type_ascii_identifier_ascii_title"
+            ),
+            pytest.param(
+                "ą", "ą", "a", id="non_ascii_type_non_ascii_identifier_ascii_title"
+            ),
+            pytest.param(
+                "a", "a", "ą", id="ascii_type_ascii_identifier_non_ascii_title"
+            ),
+            pytest.param(
+                "a", "ą", "ą", id="ascii_type_non_ascii_identifier_non_ascii_title"
+            ),
+            pytest.param(
+                "ą", "a", "ą", id="non_ascii_type_ascii_identifier_non_ascii_title"
+            ),
+            pytest.param(
+                "ą", "ą", "ą", id="non_ascii_type_non_ascii_identifier_non_ascii_title"
+            ),
         ],
     )
-    def test_repr(self, _, identifier_type, identifier, title):
+    def test_repr(self, identifier_type, identifier, title):
         """Test that Identifier.__repr__ correctly works with both ASCII and non-ASCII symbols.
 
         :param _: Name of the test case
@@ -752,21 +768,21 @@ class TestRecursiveEquivalencyCache:
 
 class TestProQuestIdentifierParser:
     @pytest.mark.parametrize(
-        "_,identifier_string,expected_result",
+        "identifier_string,expected_result",
         [
-            (
-                "incorrect_identifier",
+            pytest.param(
                 "urn:librarysimplified.org/terms/id/Overdrive%20ID/adfcc11a-cc5b-4c82-8048-e005e4a90222",
                 None,
+                id="incorrect_identifier",
             ),
-            (
-                "correct_identifier",
+            pytest.param(
                 "urn:proquest.com/document-id/12345",
                 (Identifier.PROQUEST_ID, "12345"),
+                id="correct_identifier",
             ),
         ],
     )
-    def test_parse(self, _, identifier_string, expected_result):
+    def test_parse(self, identifier_string, expected_result):
         parser = ProQuestIdentifierParser()
         result = parser.parse(identifier_string)
         assert expected_result == result

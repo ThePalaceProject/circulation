@@ -30,14 +30,16 @@ from tests.mocks import saml_strings
 
 class TestSAMLMetadataParser:
     @pytest.mark.parametrize(
-        "_,incorrect_xml",
+        "incorrect_xml",
         [
-            ("incorrect_xml_str_type", saml_strings.INCORRECT_XML),
-            ("incorrect_xml_bytes_type", saml_strings.INCORRECT_XML.encode()),
+            pytest.param(saml_strings.INCORRECT_XML, id="incorrect_xml_str_type"),
+            pytest.param(
+                saml_strings.INCORRECT_XML.encode(), id="incorrect_xml_bytes_type"
+            ),
         ],
     )
     def test_parse_raises_exception_when_xml_metadata_has_incorrect_format(
-        self, _, incorrect_xml: str | bytes
+        self, incorrect_xml: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -47,21 +49,20 @@ class TestSAMLMetadataParser:
             metadata_parser.parse(incorrect_xml)
 
     @pytest.mark.parametrize(
-        "_,incorrect_xml_with_one_idp_metadata_without_sso_service",
+        "incorrect_xml_with_one_idp_metadata_without_sso_service",
         [
-            (
-                "incorrect_xml_with_one_idp_metadata_without_sso_service_str_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE,
+                id="incorrect_xml_with_one_idp_metadata_without_sso_service_str_type",
             ),
-            (
-                "incorrect_xml_with_one_idp_metadata_without_sso_service_bytes_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_SSO_SERVICE.encode(),
+                id="incorrect_xml_with_one_idp_metadata_without_sso_service_bytes_type",
             ),
         ],
     )
     def test_parse_raises_exception_when_idp_metadata_does_not_contain_sso_service(
         self,
-        _,
         incorrect_xml_with_one_idp_metadata_without_sso_service: str | bytes,
     ):
         # Arrange
@@ -74,21 +75,20 @@ class TestSAMLMetadataParser:
             )
 
     @pytest.mark.parametrize(
-        "_,incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding",
+        "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding",
         [
-            (
-                "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_str_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING,
+                id="incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_str_type",
             ),
-            (
-                "incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_bytes_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_IDP_METADATA_WITH_SSO_SERVICE_WITH_WRONG_BINDING.encode(),
+                id="incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding_bytes_type",
             ),
         ],
     )
     def test_parse_raises_exception_when_idp_metadata_contains_sso_service_with_wrong_binding(
         self,
-        _,
         incorrect_xml_with_one_idp_metadata_with_sso_service_with_wrong_binding: (
             str | bytes
         ),
@@ -103,21 +103,20 @@ class TestSAMLMetadataParser:
             )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_one_idp_metadata_without_display_names",
+        "correct_xml_with_one_idp_metadata_without_display_names",
         [
-            (
-                "correct_xml_with_one_idp_metadata_without_display_names_str_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES,
+                id="correct_xml_with_one_idp_metadata_without_display_names_str_type",
             ),
-            (
-                "correct_xml_with_one_idp_metadata_without_display_names_bytes_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITHOUT_DISPLAY_NAMES.encode(),
+                id="correct_xml_with_one_idp_metadata_without_display_names_bytes_type",
             ),
         ],
     )
     def test_parse_does_not_raise_exception_when_xml_metadata_does_not_have_display_names(
         self,
-        _,
         correct_xml_with_one_idp_metadata_without_display_names: str | bytes,
     ):
         # Arrange
@@ -156,17 +155,20 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_idp_1",
+        "correct_xml_with_idp_1",
         [
-            ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
-            (
-                "correct_xml_with_idp_1_bytes_type",
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_IDP_1,
+                id="correct_xml_with_idp_1_str_type",
+            ),
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
+                id="correct_xml_with_idp_1_bytes_type",
             ),
         ],
     )
     def test_parse_correctly_parses_one_idp_metadata(
-        self, _, correct_xml_with_idp_1: str | bytes
+        self, correct_xml_with_idp_1: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -258,17 +260,20 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_idp_1",
+        "correct_xml_with_idp_1",
         [
-            ("correct_xml_with_idp_1_str_type", saml_strings.CORRECT_XML_WITH_IDP_1),
-            (
-                "correct_xml_with_idp_1_bytes_type",
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_IDP_1,
+                id="correct_xml_with_idp_1_str_type",
+            ),
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_IDP_1.encode(),
+                id="correct_xml_with_idp_1_bytes_type",
             ),
         ],
     )
     def test_parse_correctly_parses_idp_metadata_without_name_id_format(
-        self, _, correct_xml_with_idp_1: str | bytes
+        self, correct_xml_with_idp_1: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -360,21 +365,20 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_one_idp_metadata_with_one_certificate",
+        "correct_xml_with_one_idp_metadata_with_one_certificate",
         [
-            (
-                "correct_xml_with_one_idp_metadata_with_one_certificate_str_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE,
+                id="correct_xml_with_one_idp_metadata_with_one_certificate_str_type",
             ),
-            (
-                "correct_xml_with_one_idp_metadata_with_one_certificate_bytes_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_IDP_METADATA_WITH_ONE_CERTIFICATE.encode(),
+                id="correct_xml_with_one_idp_metadata_with_one_certificate_bytes_type",
             ),
         ],
     )
     def test_parse_correctly_parses_idp_metadata_with_one_certificate(
         self,
-        _,
         correct_xml_with_one_idp_metadata_with_one_certificate: str | bytes,
     ):
         # Arrange
@@ -469,20 +473,20 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_multiple_idps",
+        "correct_xml_with_multiple_idps",
         [
-            (
-                "correct_xml_with_multiple_idps_str_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS,
+                id="correct_xml_with_multiple_idps_str_type",
             ),
-            (
-                "correct_xml_with_multiple_idps_bytes_type",
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS.encode(),
+                id="correct_xml_with_multiple_idps_bytes_type",
             ),
         ],
     )
     def test_parse_correctly_parses_metadata_with_multiple_descriptors(
-        self, _, correct_xml_with_multiple_idps: str | bytes
+        self, correct_xml_with_multiple_idps: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -615,21 +619,20 @@ class TestSAMLMetadataParser:
         )
 
     @pytest.mark.parametrize(
-        "_,incorrect_xml_with_one_sp_metadata_without_acs_service",
+        "incorrect_xml_with_one_sp_metadata_without_acs_service",
         [
-            (
-                "incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE,
+                id="incorrect_xml_with_one_sp_metadata_without_acs_service_str_type",
             ),
-            (
-                "incorrect_xml_with_one_sp_metadata_without_acs_service_bytes_type",
+            pytest.param(
                 saml_strings.INCORRECT_XML_WITH_ONE_SP_METADATA_WITHOUT_ACS_SERVICE.encode(),
+                id="incorrect_xml_with_one_sp_metadata_without_acs_service_bytes_type",
             ),
         ],
     )
     def test_parse_raises_exception_when_sp_metadata_does_not_contain_acs_service(
         self,
-        _,
         incorrect_xml_with_one_sp_metadata_without_acs_service: str | bytes,
     ):
         # Arrange
@@ -642,17 +645,20 @@ class TestSAMLMetadataParser:
             )
 
     @pytest.mark.parametrize(
-        "_,correct_xml_with_one_sp",
+        "correct_xml_with_one_sp",
         [
-            ("correct_xml_with_one_sp_str_type", saml_strings.CORRECT_XML_WITH_ONE_SP),
-            (
-                "correct_xml_with_one_sp_bytes_type",
+            pytest.param(
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                id="correct_xml_with_one_sp_str_type",
+            ),
+            pytest.param(
                 saml_strings.CORRECT_XML_WITH_ONE_SP.encode(),
+                id="correct_xml_with_one_sp_bytes_type",
             ),
         ],
     )
     def test_parse_correctly_parses_one_sp_metadata(
-        self, _, correct_xml_with_one_sp: str | bytes
+        self, correct_xml_with_one_sp: str | bytes
     ):
         # Arrange
         metadata_parser = SAMLMetadataParser()
@@ -741,10 +747,9 @@ class TestSAMLMetadataParser:
 
 class TestSAMLSubjectParser:
     @pytest.mark.parametrize(
-        "_,idp,name_id_format,name_id_nq,name_id_spnq,name_id,attributes,expected_result",
+        "idp,name_id_format,name_id_nq,name_id_spnq,name_id,attributes,expected_result",
         [
-            (
-                "name_id_and_attributes",
+            pytest.param(
                 "http://idp.example.com",
                 SAMLNameIDFormat.TRANSIENT.value,
                 saml_strings.IDP_1_ENTITY_ID,
@@ -767,9 +772,9 @@ class TestSAMLSubjectParser:
                         ]
                     ),
                 ),
+                id="name_id_and_attributes",
             ),
-            (
-                "edu_person_targeted_id_as_name_id",
+            pytest.param(
                 "http://idp.example.com",
                 None,
                 None,
@@ -802,9 +807,9 @@ class TestSAMLSubjectParser:
                         ]
                     ),
                 ),
+                id="edu_person_targeted_id_as_name_id",
             ),
-            (
-                "edu_person_targeted_id_as_name_id_and_other_attributes",
+            pytest.param(
                 "http://idp.example.com",
                 None,
                 None,
@@ -841,9 +846,9 @@ class TestSAMLSubjectParser:
                         ]
                     ),
                 ),
+                id="edu_person_targeted_id_as_name_id_and_other_attributes",
             ),
-            (
-                "edu_person_principal_name_as_name_id",
+            pytest.param(
                 "http://idp.example.com",
                 None,
                 None,
@@ -876,12 +881,12 @@ class TestSAMLSubjectParser:
                         ]
                     ),
                 ),
+                id="edu_person_principal_name_as_name_id",
             ),
         ],
     )
     def test_parse(
         self,
-        _,
         idp: str,
         name_id_format: str,
         name_id_nq: str,
