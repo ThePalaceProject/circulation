@@ -769,8 +769,6 @@ class OPDS2WithODLApi(
                 days=default_reservation_period
             )
 
-        _db.expire_all()
-
     def _update_hold_position(self, holdinfo: HoldInfo, pool: LicensePool) -> None:
         _db = Session.object_session(pool)
         loans_count = (

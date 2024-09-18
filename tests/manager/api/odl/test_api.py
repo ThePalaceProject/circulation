@@ -160,6 +160,8 @@ class TestOPDS2WithODLApi:
 
         # Do the same, patron1 checkout and test patron hold
         pool = work2.active_license_pool()
+        db.session.expire_all()
+
         assert pool is not None
         response = opds2_with_odl_api_fixture.checkout(patron=patron1, pool=pool)
         assert (
