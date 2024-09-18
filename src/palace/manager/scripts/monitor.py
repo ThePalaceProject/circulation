@@ -100,7 +100,7 @@ class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsS
     @property
     def _db(self) -> Session:
         if not hasattr(self, "_session"):
-            self._session = production_session(self.monitor_class.__class__)
+            self._session = production_session(self.monitor_class)
         return self._session
 
     def __init__(self, monitor_class, _db=None, cmd_args=None, **kwargs):
