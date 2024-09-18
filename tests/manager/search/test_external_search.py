@@ -2019,6 +2019,10 @@ class TestFeaturedFacets:
         # whether it has the default quality or no (i.e., missing) quality.
         # The missing quality case should not cause an exception during search.
         data.default_quality.quality = default_or_no_quality
+        # It is unclear why this is necessary, but without it, this test occasionally fails,
+        # approximately 1 out of 8 times when running in CI. The failure typically occurs on
+        # the first assertion.
+        session.expire_all()
         fixture.populate_search_index()
 
         def works(worklist, facets):
