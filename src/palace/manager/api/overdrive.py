@@ -2009,16 +2009,13 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     )
     def process_book(self, book, progress):
         # Attempt to create/update the book up to MAXIMUM_BOOK_RETRIES times.
-        book_changed = False
-        tx = self._db.begin_nested()
         try:
-            _, _, is_changed = self.api.update_licensepool(book)
-            tx.commit()
-            book_changed = is_changed
-        except Exception as e:
-            self.log.exception("exception on update_licensepool: ", exc_info=e)
-            tx.rollback()
-            raise e
+            with self._db.begin_nested():
+                _, _, is_changed = self.api.update_licensepool(book)
+                book_changed = is_changed
+        except Exception:
+            self.log.exception("exception on update_licensepool: ")
+            raise
         return book_changed
 
     def should_stop(self, start, api_description, is_changed):

@@ -794,8 +794,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
     def process_book(
         self, bibliographic: Metadata, circulation: CirculationData
     ) -> tuple[Edition, LicensePool]:
-        tx = self._db.begin_nested()
-        try:
+        with self._db.begin_nested():
             edition, new_edition, license_pool, new_license_pool = self.api.update_book(
                 bibliographic, circulation
             )
@@ -807,11 +806,7 @@ class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
                 self.bibliographic_coverage_provider.handle_success(identifier)
                 self.bibliographic_coverage_provider.add_coverage_record_for(identifier)
 
-            tx.commit()
             return edition, license_pool
-        except Exception as e:
-            tx.rollback()
-            raise e
 
 
 class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
