@@ -523,8 +523,7 @@ class SweepMonitor(CollectionMonitor):
     )
     def process_batch(self, offset):
         """Process one batch of work."""
-        tx = self._db.begin_nested()
-        try:
+        with self._db.begin_nested():
             offset = offset or 0
             items = self.fetch_batch(offset).all()
             if items:
@@ -538,9 +537,6 @@ class SweepMonitor(CollectionMonitor):
                 result = (0, 0)
 
             return result
-        except Exception as e:
-            tx.rollback()
-            raise e
 
     def process_items(self, items):
         """Process a list of items."""
