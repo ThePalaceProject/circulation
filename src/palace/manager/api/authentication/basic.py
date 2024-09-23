@@ -8,11 +8,11 @@ from re import Pattern
 from typing import Any, TypeVar, cast
 
 from flask import url_for
-from pydantic import PositiveInt, model_validator
+from pydantic import PositiveInt, field_validator
+from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
-from typing_extensions import Self
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.admin.problem_details import (
@@ -249,11 +249,13 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
         ),
     )
 
-    @model_validator(mode="after")
-    def validate_restriction_criteria(self) -> Self:
+    @field_validator("library_identifier_restriction_criteria")
+    @classmethod
+    def validate_restriction_criteria(
+        cls, restriction_criteria: str | None, info: ValidationInfo
+    ) -> str | None:
         """Validate the library_identifier_restriction_criteria field."""
-        restriction_criteria = self.library_identifier_restriction_criteria
-        restriction_type = self.library_identifier_restriction_type
+        restriction_type = info.data.get("library_identifier_restriction_type")
         if (
             restriction_criteria
             and restriction_type == LibraryIdentifierRestriction.REGEX
@@ -264,7 +266,7 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
                 raise SettingsValidationError(
                     problem_detail=INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION
                 )
-        return self
+        return restriction_criteria
 
 
 SettingsType = TypeVar("SettingsType", bound=BasicAuthProviderSettings, covariant=True)
