@@ -37,7 +37,18 @@ class ServiceConfiguration(BaseSettings):
             error_log_message = f"Error loading settings from environment:"
             for error in errors:
                 delimiter = self.model_config.get("env_nested_delimiter") or "__"
-                error_location = delimiter.join(str(e).upper() for e in error["loc"])
-                env_var_name = f"{self.model_config.get('env_prefix')}{error_location}"
-                error_log_message += f"\n  {env_var_name}:  {error['msg']}"
+                pydantic_location = error["loc"]
+                if pydantic_location:
+                    first_error_location = str(pydantic_location[0])
+                    env_var = (
+                        f"{self.model_config.get('env_prefix')}{first_error_location.upper()}"
+                        if self.model_fields.get(first_error_location)
+                        else first_error_location.upper()
+                    )
+                    location = delimiter.join(
+                        str(e).upper() for e in (env_var, *pydantic_location[1:])
+                    )
+                    error_log_message += f"\n  {location}:  {error['msg']}"
+                else:
+                    error_log_message += f"\n  {error['msg']}"
             raise CannotLoadConfiguration(error_log_message) from error_exception

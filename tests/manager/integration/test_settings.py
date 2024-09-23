@@ -1,5 +1,7 @@
 import dataclasses
 import logging
+from copy import deepcopy
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,226 +13,239 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
+    FormFieldInfo,
     SettingsValidationError,
 )
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
+mock_problem_detail = ProblemDetail("http://test.com", 400, "test", "testing 123")
+
+
+class MockSettings(BaseSettings):
+    """Mock settings class"""
+
+    @field_validator("test")
+    @classmethod
+    def custom_validator(cls, v):
+        if v == "xyz":
+            raise SettingsValidationError(mock_problem_detail)
+        return v
+
+    test: str | None = FormField(
+        "test",
+        form=ConfigurationFormItem(label="Test", description="Test description"),
+    )
+    number: PositiveInt = FormField(
+        ...,
+        form=ConfigurationFormItem(label="Number", description="Number description"),
+    )
+    with_alias: float = FormField(
+        -1.1,
+        form=ConfigurationFormItem(
+            label="With Alias", description="With Alias description"
+        ),
+        alias="has_alias",
+    )
+
+
+class BaseSettingsFixture:
+    def __init__(self):
+        self.test_config_dict = {
+            "default": "test",
+            "description": "Test description",
+            "key": "test",
+            "label": "Test",
+            "required": False,
+        }
+        self.number_config_dict = {
+            "description": "Number description",
+            "key": "number",
+            "label": "Number",
+            "required": True,
+        }
+        self.with_alias_config_dict = {
+            "default": -1.1,
+            "description": "With Alias description",
+            "key": "with_alias",
+            "label": "With Alias",
+            "required": False,
+        }
+        self.mock_db = MagicMock(spec=Session)
+        self._original_model_fields = MockSettings.model_fields
+        MockSettings.model_fields = deepcopy(self._original_model_fields)
+
+    def update_form(self, name: str, **kwargs: Any) -> None:
+        model_field = MockSettings.model_fields[name]
+        assert isinstance(model_field, FormFieldInfo)
+        model_field.form = dataclasses.replace(model_field.form, **kwargs)
+
+    def cleanup(self) -> None:
+        MockSettings.model_fields = self._original_model_fields
+
 
 @pytest.fixture
-def mock_problem_detail():
-    return ProblemDetail("http://test.com", 400, "test", "testing 123")
+def base_settings_fixture():
+    fixture = BaseSettingsFixture()
+    try:
+        yield fixture
+    finally:
+        fixture.cleanup()
 
 
-@pytest.fixture
-def mock_settings(mock_problem_detail):
-    class MockSettings(BaseSettings):
-        """Mock settings class"""
+class TestBaseSettings:
+    def test_init(self, base_settings_fixture: BaseSettingsFixture) -> None:
+        settings = MockSettings(number=1)
+        assert settings.test == "test"
+        assert settings.number == 1
 
-        @field_validator("test")
-        @classmethod
-        def custom_validator(cls, v):
-            if v == "xyz":
-                raise SettingsValidationError(mock_problem_detail)
-            return v
+    def test_init_invalid(self, base_settings_fixture: BaseSettingsFixture) -> None:
+        # Make sure that the settings class raises a ProblemError
+        # when there is a problem with validation.
+        with pytest.raises(ProblemDetailException) as e:
+            MockSettings(number=-1)
 
-        test: str | None = FormField(
+        problem_detail = e.value.problem_detail
+        assert isinstance(problem_detail, ProblemDetail)
+        assert (
+            problem_detail.detail
+            == "'Number' validation error: Input should be greater than 0."
+        )
+
+        with pytest.raises(ProblemDetailException) as e:
+            MockSettings()
+
+        problem_detail = e.value.problem_detail
+        assert isinstance(problem_detail, ProblemDetail)
+        assert problem_detail.detail == "Required field 'Number' is missing."
+
+    def test_settings_validation(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # We have a default validation function that replaces emtpy strings
+        # with None.
+        settings = MockSettings(number=1, test="")
+        assert settings.model_dump() == {"test": None, "number": 1}
+
+        # We also have a validation function that runs strip() on all strings.
+        settings = MockSettings(number=1, test=" foo ")
+        assert settings.model_dump() == {"test": "foo", "number": 1}
+
+    def test_validation_custom(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # We can also add custom validation functions to the settings class.
+        # These functions should raise a ProblemDetailException if there is
+        # a problem with validation.
+        with pytest.raises(ProblemDetailException) as e:
+            MockSettings(number=1, test="xyz")
+
+        problem_detail = e.value.problem_detail
+        assert isinstance(problem_detail, ProblemDetail)
+        assert problem_detail == mock_problem_detail
+
+    def test_model_dump(self, base_settings_fixture: BaseSettingsFixture) -> None:
+        # When we call model_dump() on a settings class, we get the settings,
+        # minus the default values, so that we are not storing defaults
+        # in the database, making it easy to change them in the future.
+
+        # Not in model_dump() when using the default
+        settings = MockSettings(number=1)
+        assert settings.model_dump() == {"number": 1}
+
+        # Not in model_dump() when set in constructor to the default either.
+        settings = MockSettings(number=1, test="test")
+        assert settings.model_dump() == {"number": 1}
+
+    def test_settings_no_mutation(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Make sure that we cannot mutate the settings dataclass
+        settings = MockSettings(number=1)
+        with pytest.raises(ValidationError, match="Instance is frozen"):
+            settings.number = 125  # type: ignore[misc]
+
+    def test_settings_extra_args(
+        self,
+        base_settings_fixture: BaseSettingsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # Set up our log level
+        caplog.set_level(logging.INFO)
+
+        # Make sure that we can pass extra args to the settings class
+        # and that the extra args get serialized back into the json.
+        settings = MockSettings(number=1, test="test", extra="extra")
+        assert settings.model_dump() == {"number": 1, "extra": "extra"}
+        assert settings.extra == "extra"  # type: ignore[attr-defined]
+
+        # Make sure that we record a log message when encountering an extra arg
+        assert len(caplog.records) == 1
+        assert "Unexpected extra argument 'extra' for model MockSettings" in caplog.text
+
+        # Exclude extra defaults to False, but we call it explicitly here
+        # to make sure it can be explicitly set to False.
+        assert settings.model_dump(exclude_extra=False) == {
+            "number": 1,
+            "extra": "extra",
+        }
+
+        # The extra args will be ignored if we call dict with exclude_extra=True
+        assert settings.model_dump(exclude_extra=True) == {"number": 1}
+
+    def test_logger(self) -> None:
+        log = MockSettings.logger()
+        assert isinstance(log, logging.Logger)
+        assert log.name == "tests.manager.integration.test_settings.MockSettings"
+
+    def test_configuration_form(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Make sure that we can get the configuration form from the settings class
+        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
+        assert form == [
+            base_settings_fixture.test_config_dict,
+            base_settings_fixture.number_config_dict,
+            base_settings_fixture.with_alias_config_dict,
+        ]
+
+    def test_configuration_form_weights(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # Make sure that the configuration form is sorted by weight
+        base_settings_fixture.update_form("test", weight=100)
+        base_settings_fixture.update_form("number", weight=1)
+        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
+        assert form == [
+            base_settings_fixture.with_alias_config_dict,
+            base_settings_fixture.number_config_dict,
+            base_settings_fixture.test_config_dict,
+        ]
+
+    def test_configuration_form_options(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        base_settings_fixture.update_form(
             "test",
-            form=ConfigurationFormItem(label="Test", description="Test description"),
+            options={"option1": "Option 1", "option2": "Option 2"},
+            type=ConfigurationFormItemType.SELECT,
         )
-        number: PositiveInt = FormField(
-            ...,
-            form=ConfigurationFormItem(
-                label="Number", description="Number description"
-            ),
+        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
+        assert form[0]["options"] == [
+            {"key": "option1", "label": "Option 1"},
+            {"key": "option2", "label": "Option 2"},
+        ]
+
+    def test_configuration_form_options_callable(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        options_callable = MagicMock(return_value={"xyz": "ABC"})
+
+        base_settings_fixture.update_form(
+            "test", options=options_callable, type=ConfigurationFormItemType.SELECT
         )
+        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
 
-    return MockSettings
-
-
-@pytest.fixture
-def test_config_dict():
-    return {
-        "default": "test",
-        "description": "Test description",
-        "key": "test",
-        "label": "Test",
-        "required": False,
-    }
-
-
-@pytest.fixture
-def number_config_dict():
-    return {
-        "description": "Number description",
-        "key": "number",
-        "label": "Number",
-        "required": True,
-    }
-
-
-@pytest.fixture
-def mock_db():
-    return MagicMock(spec=Session)
-
-
-def test_settings_init(mock_settings):
-    settings = mock_settings(number=1)
-    assert settings.test == "test"
-    assert settings.number == 1
-
-
-def test_settings_init_invalid(mock_settings):
-    # Make sure that the settings class raises a ProblemError
-    # when there is a problem with validation.
-    with pytest.raises(ProblemDetailException) as e:
-        mock_settings(number=-1)
-
-    problem_detail = e.value.problem_detail
-    assert isinstance(problem_detail, ProblemDetail)
-    assert (
-        problem_detail.detail
-        == "'Number' validation error: Input should be greater than 0."
-    )
-
-    with pytest.raises(ProblemDetailException) as e:
-        mock_settings()
-
-    problem_detail = e.value.problem_detail
-    assert isinstance(problem_detail, ProblemDetail)
-    assert problem_detail.detail == "Required field 'Number' is missing."
-
-
-def test_settings_validation(mock_settings):
-    # We have a default validation function that replaces emtpy strings
-    # with None.
-    settings = mock_settings(number=1, test="")
-    assert settings.model_dump() == {"test": None, "number": 1}
-
-    # We also have a validation function that runs strip() on all strings.
-    settings = mock_settings(number=1, test=" foo ")
-    assert settings.model_dump() == {"test": "foo", "number": 1}
-
-
-def test_settings_validation_custom(mock_settings, mock_problem_detail):
-    # We can also add custom validation functions to the settings class.
-    # These functions should raise a ProblemError if there is
-    # a problem with validation.
-    with pytest.raises(ProblemDetailException) as e:
-        mock_settings(number=1, test="xyz")
-
-    problem_detail = e.value.problem_detail
-    assert isinstance(problem_detail, ProblemDetail)
-    assert problem_detail == mock_problem_detail
-
-
-def test_settings_dict(mock_settings):
-    # When we call to_dict() on a settings class, we get the settings,
-    # minus the default values, so that we are not storing defaults
-    # in the database, making it easy to change them in the future.
-
-    # Not in dict() when using the default
-    settings = mock_settings(number=1)
-    assert settings.model_dump() == {"number": 1}
-
-    # Not in dict() when set in constructor to the default either.
-    settings = mock_settings(number=1, test="test")
-    assert settings.model_dump() == {"number": 1}
-
-
-def test_settings_no_mutation(mock_settings):
-    # Make sure that we cannot mutate the settings dataclass
-    settings = mock_settings(number=1)
-    with pytest.raises(ValidationError, match="Instance is frozen"):
-        settings.number = 125
-
-
-def test_settings_extra_args(mock_settings, caplog):
-    # Set up our log level
-    caplog.set_level(logging.INFO)
-
-    # Make sure that we can pass extra args to the settings class
-    # and that the extra args get serialized back into the json.
-    settings = mock_settings(number=1, test="test", extra="extra")
-    assert settings.model_dump() == {"number": 1, "extra": "extra"}
-    assert settings.extra == "extra"
-
-    # Make sure that we record a log message when encountering an extra arg
-    assert len(caplog.records) == 1
-    assert "Unexpected extra argument 'extra' for model MockSettings" in caplog.text
-
-    # Exclude extra defaults to False, but we call it explicitly here
-    # to make sure it can be explicitly set to False.
-    assert settings.model_dump(exclude_extra=False) == {"number": 1, "extra": "extra"}
-
-    # The extra args will be ignored if we call dict with exclude_extra=True
-    assert settings.model_dump(exclude_extra=True) == {"number": 1}
-
-
-def test_settings_logger(mock_settings):
-    log = mock_settings.logger()
-    assert isinstance(log, logging.Logger)
-    assert log.name == "tests.manager.integration.test_settings.MockSettings"
-
-
-def test_settings_configuration_form(
-    mock_settings, test_config_dict, number_config_dict, mock_db
-):
-    # Make sure that we can get the configuration form from the settings class
-    form = mock_settings.configuration_form(mock_db)
-    assert form == [test_config_dict, number_config_dict]
-
-
-def test_settings_configuration_form_weights(
-    mock_settings, test_config_dict, number_config_dict, mock_db
-):
-    # Make sure that the configuration form is sorted by weight
-    mock_settings.model_fields["test"].form = dataclasses.replace(
-        mock_settings.model_fields["test"].form, weight=100
-    )
-    mock_settings.model_fields["number"].form = dataclasses.replace(
-        mock_settings.model_fields["number"].form, weight=1
-    )
-    form = mock_settings.configuration_form(mock_db)
-    assert form == [number_config_dict, test_config_dict]
-
-
-def test_settings_configuration_form_options(mock_settings, mock_db):
-    mock_settings.model_fields["test"].form = dataclasses.replace(
-        mock_settings.model_fields["test"].form,
-        options={"option1": "Option 1", "option2": "Option 2"},
-        type=ConfigurationFormItemType.SELECT,
-    )
-    form = mock_settings.configuration_form(mock_db)
-    assert form[0]["options"] == [
-        {"key": "option1", "label": "Option 1"},
-        {"key": "option2", "label": "Option 2"},
-    ]
-
-
-def test_settings_configuration_form_options_callable(mock_settings, mock_db):
-    called_with = None
-
-    def options_callable(db):
-        nonlocal called_with
-        called_with = db
-        return {"xyz": "ABC"}
-
-    mock_settings.model_fields["test"].form = dataclasses.replace(
-        mock_settings.model_fields["test"].form,
-        options=options_callable,
-        type=ConfigurationFormItemType.SELECT,
-    )
-
-    form = mock_settings.configuration_form(mock_db)
-    assert called_with == mock_db
-    assert form[0]["options"] == [
-        {"key": "xyz", "label": "ABC"},
-    ]
-
-
-def test_form_field_no_form():
-    # Make we cannot create a FormField without a form
-    with pytest.raises(
-        TypeError, match="missing 1 required keyword-only argument: 'form'"
-    ) as e:
-        FormField("default value")
+        options_callable.assert_called_once_with(base_settings_fixture.mock_db)
+        assert form[0]["options"] == [
+            {"key": "xyz", "label": "ABC"},
+        ]
