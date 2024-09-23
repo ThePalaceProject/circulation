@@ -4,7 +4,7 @@ import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import parse_obj_as
+from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.circulation import UrlFulfillment
@@ -49,7 +49,9 @@ class LoanController(CirculationManagerController):
 
         try:
             # Parse the refresh query parameter as a boolean.
-            refresh = parse_obj_as(bool, flask.request.args.get("refresh", "true"))
+            refresh = TypeAdapter(bool).validate_python(
+                flask.request.args.get("refresh", "true")
+            )
         except ValueError:
             # If we can't parse the refresh query parameter, default to True.
             self.log.exception(f"Could not parse refresh query parameter.")

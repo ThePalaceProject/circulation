@@ -8,7 +8,9 @@ def test_region_validation_fail():
     with pytest.raises(CannotLoadConfiguration) as exc_info:
         StorageConfiguration(region="foo bar baz")
 
-    assert "PALACE_STORAGE_REGION:  Invalid region: foo bar baz." in str(exc_info.value)
+    assert "PALACE_STORAGE_REGION:  Value error, Invalid region: foo bar baz." in str(
+        exc_info.value
+    )
 
 
 def test_region_validation_success():
@@ -35,8 +37,8 @@ def test_endpoint_url_validation_success(url: str):
 @pytest.mark.parametrize(
     "url, error",
     [
-        ("ftp://localhost:9000", "URL scheme not permitted"),
-        ("foo bar baz", "invalid or missing URL scheme"),
+        ("ftp://localhost:9000", "URL scheme should be 'http' or 'https'"),
+        ("foo bar baz", "Input should be a valid URL"),
     ],
 )
 def test_endpoint_url_validation_fail(url: str, error: str):

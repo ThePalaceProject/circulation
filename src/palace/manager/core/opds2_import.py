@@ -145,7 +145,6 @@ class OPDS2ImporterSettings(OPDSImporterSettings):
     )
 
     ignored_identifier_types: list[str] = FormField(
-        alias="IGNORED_IDENTIFIER_TYPE",
         default=[],
         form=ConfigurationFormItem(
             label=_("List of identifiers that will be skipped"),

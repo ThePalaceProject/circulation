@@ -44,7 +44,7 @@ def integration_settings_load(
     settings_dict = (
         integration if isinstance(integration, dict) else integration.settings_dict
     )
-    return settings_cls(**settings_dict)
+    return settings_cls.model_validate(settings_dict)
 
 
 def integration_settings_update(
@@ -70,10 +70,12 @@ def integration_settings_update(
     """
     settings_dict = integration.settings_dict if merge else {}
     new_settings_dict = (
-        new_settings.dict() if isinstance(new_settings, BaseSettings) else new_settings
+        new_settings.model_dump()
+        if isinstance(new_settings, BaseSettings)
+        else new_settings
     )
     settings_dict.update(new_settings_dict)
-    integration.settings_dict = settings_cls(**settings_dict).dict()
+    integration.settings_dict = settings_cls.model_validate(settings_dict).model_dump()
     flag_modified(integration, "settings_dict")
 
 
@@ -214,8 +216,8 @@ class HasChildIntegrationConfiguration(
             parent_settings = super().settings_load(parent)
             child_settings = cls.child_settings_load(integration)
 
-            merged_settings = parent_settings.dict()
-            merged_settings.update(child_settings.dict())
+            merged_settings = parent_settings.model_dump()
+            merged_settings.update(child_settings.model_dump())
             return integration_settings_load(cls.settings_class(), merged_settings)
 
     @classmethod

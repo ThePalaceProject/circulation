@@ -3,7 +3,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import PositiveInt, validator
+from pydantic import PositiveInt, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from palace.manager.integration.settings import (
@@ -26,7 +26,8 @@ def mock_settings(mock_problem_detail):
     class MockSettings(BaseSettings):
         """Mock settings class"""
 
-        @validator("test", allow_reuse=True)
+        @field_validator("test")
+        @classmethod
         def custom_validator(cls, v):
             if v == "xyz":
                 raise SettingsValidationError(mock_problem_detail)
@@ -42,8 +43,6 @@ def mock_settings(mock_problem_detail):
                 label="Number", description="Number description"
             ),
         )
-        # Intentionally not set with FormField
-        missing: bool = False
 
     return MockSettings
 
@@ -90,7 +89,7 @@ def test_settings_init_invalid(mock_settings):
     assert isinstance(problem_detail, ProblemDetail)
     assert (
         problem_detail.detail
-        == "'Number' validation error: ensure this value is greater than 0."
+        == "'Number' validation error: Input should be greater than 0."
     )
 
     with pytest.raises(ProblemDetailException) as e:
@@ -105,11 +104,11 @@ def test_settings_validation(mock_settings):
     # We have a default validation function that replaces emtpy strings
     # with None.
     settings = mock_settings(number=1, test="")
-    assert settings.dict() == {"test": None, "number": 1}
+    assert settings.model_dump() == {"test": None, "number": 1}
 
     # We also have a validation function that runs strip() on all strings.
     settings = mock_settings(number=1, test=" foo ")
-    assert settings.dict() == {"test": "foo", "number": 1}
+    assert settings.model_dump() == {"test": "foo", "number": 1}
 
 
 def test_settings_validation_custom(mock_settings, mock_problem_detail):
@@ -131,17 +130,17 @@ def test_settings_dict(mock_settings):
 
     # Not in dict() when using the default
     settings = mock_settings(number=1)
-    assert settings.dict() == {"number": 1}
+    assert settings.model_dump() == {"number": 1}
 
     # Not in dict() when set in constructor to the default either.
     settings = mock_settings(number=1, test="test")
-    assert settings.dict() == {"number": 1}
+    assert settings.model_dump() == {"number": 1}
 
 
 def test_settings_no_mutation(mock_settings):
     # Make sure that we cannot mutate the settings dataclass
     settings = mock_settings(number=1)
-    with pytest.raises(TypeError):
+    with pytest.raises(ValidationError, match="Instance is frozen"):
         settings.number = 125
 
 
@@ -152,7 +151,7 @@ def test_settings_extra_args(mock_settings, caplog):
     # Make sure that we can pass extra args to the settings class
     # and that the extra args get serialized back into the json.
     settings = mock_settings(number=1, test="test", extra="extra")
-    assert settings.dict() == {"number": 1, "extra": "extra"}
+    assert settings.model_dump() == {"number": 1, "extra": "extra"}
     assert settings.extra == "extra"
 
     # Make sure that we record a log message when encountering an extra arg
@@ -161,10 +160,10 @@ def test_settings_extra_args(mock_settings, caplog):
 
     # Exclude extra defaults to False, but we call it explicitly here
     # to make sure it can be explicitly set to False.
-    assert settings.dict(exclude_extra=False) == {"number": 1, "extra": "extra"}
+    assert settings.model_dump(exclude_extra=False) == {"number": 1, "extra": "extra"}
 
     # The extra args will be ignored if we call dict with exclude_extra=True
-    assert settings.dict(exclude_extra=True) == {"number": 1}
+    assert settings.model_dump(exclude_extra=True) == {"number": 1}
 
 
 def test_settings_logger(mock_settings):
@@ -185,26 +184,19 @@ def test_settings_configuration_form_weights(
     mock_settings, test_config_dict, number_config_dict, mock_db
 ):
     # Make sure that the configuration form is sorted by weight
-    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
-        mock_settings.__fields__["test"].field_info.form, weight=100
+    mock_settings.model_fields["test"].form = dataclasses.replace(
+        mock_settings.model_fields["test"].form, weight=100
     )
-    mock_settings.__fields__["number"].field_info.form = dataclasses.replace(
-        mock_settings.__fields__["number"].field_info.form, weight=1
+    mock_settings.model_fields["number"].form = dataclasses.replace(
+        mock_settings.model_fields["number"].form, weight=1
     )
     form = mock_settings.configuration_form(mock_db)
     assert form == [number_config_dict, test_config_dict]
 
 
-def test_settings_configuration_form_logs_missing(mock_settings, mock_db, caplog):
-    caplog.set_level(logging.WARNING)
-    _ = mock_settings.configuration_form(mock_db)
-    assert len(caplog.records) == 1
-    assert "was not initialized with FormField" in caplog.text
-
-
 def test_settings_configuration_form_options(mock_settings, mock_db):
-    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
-        mock_settings.__fields__["test"].field_info.form,
+    mock_settings.model_fields["test"].form = dataclasses.replace(
+        mock_settings.model_fields["test"].form,
         options={"option1": "Option 1", "option2": "Option 2"},
         type=ConfigurationFormItemType.SELECT,
     )
@@ -223,8 +215,8 @@ def test_settings_configuration_form_options_callable(mock_settings, mock_db):
         called_with = db
         return {"xyz": "ABC"}
 
-    mock_settings.__fields__["test"].field_info.form = dataclasses.replace(
-        mock_settings.__fields__["test"].field_info.form,
+    mock_settings.model_fields["test"].form = dataclasses.replace(
+        mock_settings.model_fields["test"].form,
         options=options_callable,
         type=ConfigurationFormItemType.SELECT,
     )
@@ -238,7 +230,7 @@ def test_settings_configuration_form_options_callable(mock_settings, mock_db):
 
 def test_form_field_no_form():
     # Make we cannot create a FormField without a form
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(
+        TypeError, match="missing 1 required keyword-only argument: 'form'"
+    ) as e:
         FormField("default value")
-
-    assert str(e.value) == "form parameter is required."

@@ -22,7 +22,6 @@ class MarcExporterSettings(BaseSettings):
             type=ConfigurationFormItemType.NUMBER,
             required=True,
         ),
-        alias="marc_update_frequency",
     )
 
 
@@ -37,7 +36,6 @@ class MarcExporterLibrarySettings(BaseSettings):
             description="MARC organization codes are assigned by the Library of Congress.",
             type=ConfigurationFormItemType.TEXT,
         ),
-        alias="marc_organization_code",
     )
 
     web_client_url: str | None = FormField(
@@ -47,7 +45,6 @@ class MarcExporterLibrarySettings(BaseSettings):
             description="If using a library registry that provides a web catalog, this can be left blank.",
             type=ConfigurationFormItemType.TEXT,
         ),
-        alias="marc_web_client_url",
     )
 
     include_summary: bool = FormField(
@@ -69,5 +66,4 @@ class MarcExporterLibrarySettings(BaseSettings):
                 "true": "Include Palace Collection Manager genres",
             },
         ),
-        alias="include_simplified_genres",
     )

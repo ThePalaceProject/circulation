@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 
 from flask_babel import lazy_gettext as _
-from pydantic import AnyHttpUrl, HttpUrl, NonNegativeInt, PositiveInt
+from pydantic import NonNegativeInt, PositiveInt
 
 from palace.manager.api.circulation import BaseCirculationEbookLoanSettings
 from palace.manager.api.lcp.hash import HashingAlgorithm
@@ -14,6 +14,7 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.util.pydantic import HttpUrl
 
 
 class OPDS2AuthType(Enum):
@@ -88,7 +89,7 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             required=True,
         )
     )
-    external_account_id: AnyHttpUrl = FormField(
+    external_account_id: HttpUrl = FormField(
         form=ConfigurationFormItem(
             label=_("ODL feed URL"),
             required=True,
@@ -96,7 +97,6 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
     )
     skipped_license_formats: list[str] = FormField(
         default=["text/html"],
-        alias="odl2_skipped_license_formats",
         form=ConfigurationFormItem(
             label=_("Skipped license formats"),
             description=_(
@@ -109,7 +109,6 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
 
     loan_limit: PositiveInt | None = FormField(
         default=None,
-        alias="odl2_loan_limit",
         form=ConfigurationFormItem(
             label=_("Loan limit per patron"),
             description=_(
@@ -122,7 +121,6 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
 
     hold_limit: NonNegativeInt | None = FormField(
         default=None,
-        alias="odl2_hold_limit",
         form=ConfigurationFormItem(
             label=_("Hold limit per patron"),
             description=_(

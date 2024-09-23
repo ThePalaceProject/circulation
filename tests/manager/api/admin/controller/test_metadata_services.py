@@ -575,7 +575,10 @@ class TestMetadataServices:
             assert "Successfully ran new self tests" == response.get_data(as_text=True)
 
         mock_run_self_tests.assert_called_once_with(
-            db.session, NYTBestSellerAPI, db.session, {"password": "xyz"}
+            db.session,
+            NYTBestSellerAPI,
+            db.session,
+            NytBestSellerApiSettings(password="xyz"),
         )
 
     def test_metadata_service_self_tests_post_not_supported(

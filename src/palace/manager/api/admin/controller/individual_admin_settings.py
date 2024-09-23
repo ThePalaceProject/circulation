@@ -3,7 +3,7 @@ import json
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from pydantic import EmailStr, parse_obj_as
+from pydantic import EmailStr, TypeAdapter
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -299,7 +299,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             )
 
         try:
-            parse_obj_as(EmailStr, email)
+            TypeAdapter(EmailStr).validate_python(email)
         except ValueError:
             return INVALID_EMAIL.detailed(
                 _('"%(email)s" is not a valid email address.', email=email)

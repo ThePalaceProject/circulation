@@ -25,7 +25,7 @@ class TestCeleryConfiguration:
         )
 
         config = celery_configuration()
-        result = config.dict(merge_options=False)
+        result = config.model_dump(merge_options=False)
         assert "broker_url" in result
         assert result.get("broker_transport_options_global_keyprefix") == "x"
         assert result.get("broker_transport_options_queue_order_strategy") == "y"
@@ -43,7 +43,7 @@ class TestCeleryConfiguration:
         monkeypatch.setenv("PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_OTHER_OPTION", "z")
 
         config = celery_configuration()
-        result = config.dict()
+        result = config.model_dump()
         assert "broker_url" in result
         assert "broker_transport_options" in result
         options = result["broker_transport_options"]
@@ -60,7 +60,7 @@ class TestCeleryConfiguration:
         monkeypatch.setenv("PALACE_CELERY_TEST", "test")
 
         config = celery_configuration()
-        result = config.dict()
+        result = config.model_dump()
         assert "broker_url" in result
         assert result.get("test") == "test"
-        assert "test" not in config.__fields__
+        assert "test" not in config.model_fields

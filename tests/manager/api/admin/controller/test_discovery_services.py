@@ -96,14 +96,15 @@ class TestDiscoveryServices:
 
         with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller_fixture.process_discovery_services()
-            assert isinstance(response, Response)
-            [service] = response.get_json().get("discovery_services")
+        db.session.expire(discovery_service)
+        assert isinstance(response, Response)
+        [service] = response.get_json().get("discovery_services")
 
-            assert discovery_service.id == service.get("id")
-            assert discovery_service.protocol == service.get("protocol")
-            assert discovery_service.settings_dict["url"] == service.get(
-                "settings"
-            ).get("url")
+        assert discovery_service.id == service.get("id")
+        assert discovery_service.protocol == service.get("protocol")
+        assert discovery_service.settings_dict["url"] == service.get("settings").get(
+            "url"
+        )
 
     def test_discovery_services_post_errors(
         self,

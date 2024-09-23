@@ -28,7 +28,7 @@ class HoldsNotificationMonitor(SweepMonitor):
     ) -> None:
         super().__init__(_db, collection, batch_size)
         self.notifications = notifications or PushNotifications(
-            self.services.config.sitewide.base_url(),
+            str(self.services.config.sitewide.base_url()),
             self.services.fcm.app(),
         )
 

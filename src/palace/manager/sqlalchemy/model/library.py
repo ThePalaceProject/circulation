@@ -470,7 +470,7 @@ class Library(Base, HasSessionCache):
         lines.append("")
         lines.append("Configuration settings:")
         lines.append("-----------------------")
-        for key, value in self.settings.dict(exclude_defaults=False).items():
+        for key, value in self.settings.model_dump(exclude_defaults=False).items():
             if value is not None:
                 lines.append(f"{key}='{value}'")
         lines.append("")

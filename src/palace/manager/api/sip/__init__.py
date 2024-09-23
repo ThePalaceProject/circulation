@@ -70,7 +70,6 @@ class SIP2Settings(BasicAuthProviderSettings):
         form=ConfigurationFormItem(
             label="Location Code",
         ),
-        alias="location code",
     )
     encoding: Sip2Encoding = FormField(
         Sip2Encoding.cp850,
@@ -167,7 +166,6 @@ class SIP2Settings(BasicAuthProviderSettings):
             label="Field Seperator",
             required=True,
         ),
-        alias="field seperator",
     )
     patron_status_block: bool = FormField(
         True,
@@ -182,7 +180,6 @@ class SIP2Settings(BasicAuthProviderSettings):
                 "false": "No blocks based on patron status field",
             },
         ),
-        alias="patron status block",
     )
 
 

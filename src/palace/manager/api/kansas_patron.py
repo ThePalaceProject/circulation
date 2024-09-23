@@ -1,6 +1,5 @@
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import HttpUrl
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
@@ -11,6 +10,7 @@ from palace.manager.api.authentication.basic import (
 from palace.manager.integration.settings import ConfigurationFormItem, FormField
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.http import HTTP
+from palace.manager.util.pydantic import HttpUrl
 
 
 class KansasAuthSettings(BasicAuthProviderSettings):

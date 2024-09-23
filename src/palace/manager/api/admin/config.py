@@ -1,19 +1,21 @@
 import os
 from enum import Enum
+from typing import Literal
 from urllib.parse import urljoin
 
-from pydantic import Field
+from pydantic import AliasGenerator, Field
+from pydantic.alias_generators import to_camel
+from pydantic_settings import SettingsConfigDict
 from requests import RequestException
 
-from palace.manager.service.configuration.limited_env_override import (
-    ServiceConfigurationWithLimitedEnvOverride,
+from palace.manager.service.configuration.service_configuration import (
+    ServiceConfiguration,
 )
-from palace.manager.util.flask_util import _snake_to_camel_case
 from palace.manager.util.http import HTTP, RequestNetworkException
 from palace.manager.util.log import LoggerMixin
 
 
-class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):
+class AdminClientFeatureFlags(ServiceConfiguration):
     # The following CAN be overridden by environment variables.
     reports_only_for_sysadmins: bool = Field(
         True,
@@ -24,38 +26,20 @@ class AdminClientFeatureFlags(ServiceConfigurationWithLimitedEnvOverride):
         description="Show QuickSight dashboards only for sysadmins.",
     )
 
-    # The following fields CANNOT be overridden by environment variables.
-    # Setting `const=True` ensures that the default value is not overridden.
-    # Add them to the one of the `environment_override_*` Config settings
-    # below to prevent them from being overridden.
-    # NB: Overriding the `env_prefix` with `env=...` here may lead to
-    #     incorrect values in warnings and exceptions, since `env_prefix`
-    #     is used to generate the full environment variable name.
-    enable_auto_list: bool = Field(
+    # The following fields CANNOT be overridden by environment variables, so
+    # their types are set to Literal[True] to prevent them from being overridden.
+    enable_auto_list: Literal[True] = Field(
         True,
-        const=True,
         description="Enable auto-list of items.",
     )
-    show_circ_events_download: bool = Field(
+    show_circ_events_download: Literal[True] = Field(
         True,
-        const=True,
         description="Show download button for Circulation Events.",
     )
-
-    class Config:
-        env_prefix = "PALACE_ADMINUI_FEATURE_"
-
-        # We use lower camel case aliases, since we're sending to the web.
-        alias_generator = _snake_to_camel_case
-
-        # Add any fields that should not be overridden by environment variables here.
-        # - environment_override_warning_fields: warnings and ignore environment
-        # - environment_override_error_fields: raise exception
-        environment_override_warning_fields: set[str] = {
-            "enable_auto_list",
-            "show_circ_events_download",
-        }
-        environment_override_error_fields: set[str] = set()
+    model_config = SettingsConfigDict(
+        env_prefix="PALACE_ADMINUI_FEATURE_",
+        alias_generator=AliasGenerator(serialization_alias=to_camel),
+    )
 
 
 class OperationalMode(str, Enum):

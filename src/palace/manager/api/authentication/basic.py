@@ -8,10 +8,11 @@ from re import Pattern
 from typing import Any, TypeVar, cast
 
 from flask import url_for
-from pydantic import PositiveInt, validator
+from pydantic import PositiveInt, model_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
+from typing_extensions import Self
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.admin.problem_details import (
@@ -246,27 +247,24 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
             "This value is not used if <em>Library Identifier Restriction Type</em> "
             "is set to 'No restriction'.",
         ),
-        alias="library_identifier_restriction",
     )
 
-    @validator("library_identifier_restriction_criteria")
-    def validate_restriction_criteria(
-        cls, v: str | None, values: dict[str, Any]
-    ) -> str | None:
+    @model_validator(mode="after")
+    def validate_restriction_criteria(self) -> Self:
         """Validate the library_identifier_restriction_criteria field."""
-        if not v:
-            return v
-
-        restriction_type = values.get("library_identifier_restriction_type")
-        if restriction_type == LibraryIdentifierRestriction.REGEX:
+        restriction_criteria = self.library_identifier_restriction_criteria
+        restriction_type = self.library_identifier_restriction_type
+        if (
+            restriction_criteria
+            and restriction_type == LibraryIdentifierRestriction.REGEX
+        ):
             try:
-                re.compile(v)
+                re.compile(restriction_criteria)
             except re.error:
                 raise SettingsValidationError(
                     problem_detail=INVALID_LIBRARY_IDENTIFIER_RESTRICTION_REGULAR_EXPRESSION
                 )
-
-        return v
+        return self
 
 
 SettingsType = TypeVar("SettingsType", bound=BasicAuthProviderSettings, covariant=True)

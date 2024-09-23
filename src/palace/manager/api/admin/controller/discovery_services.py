@@ -52,7 +52,7 @@ class DiscoveryServicesController(
         settings = OpdsRegistrationService.settings_class()(
             url=OpdsRegistrationService.DEFAULT_LIBRARY_REGISTRY_URL
         )
-        default_registry.settings_dict = settings.dict()
+        default_registry.settings_dict = settings.model_dump()
 
     def process_post(self) -> Response | ProblemDetail:
         try:
@@ -62,7 +62,7 @@ class DiscoveryServicesController(
             impl_cls = self.registry[protocol]
             settings_class = impl_cls.settings_class()
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
-            service.settings_dict = validated_settings.dict()
+            service.settings_dict = validated_settings.model_dump()
 
             # Make sure that the URL of the service is unique.
             self.check_url_unique(service, validated_settings.url)

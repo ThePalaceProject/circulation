@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-from pydantic.json import pydantic_encoder
+from pydantic_core import to_jsonable_python
 from sqlalchemy import create_engine, event, literal_column, select, table, text
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,7 +31,7 @@ def json_encoder(obj: Any) -> Any:
         return str(obj.__html__())
 
     # Pass everything else off to Pydantic JSON encoder.
-    return pydantic_encoder(obj)
+    return to_jsonable_python(obj)
 
 
 def json_serializer(*args, **kwargs) -> str:

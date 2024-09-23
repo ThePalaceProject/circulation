@@ -1,29 +1,44 @@
 from __future__ import annotations
 
+import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Union
 
+import annotated_types
+import typing_extensions
 from pydantic import (
+    AliasChoices,
+    AliasPath,
     BaseModel,
-    Extra,
-    PydanticValueError,
+    ConfigDict,
     ValidationError,
-    root_validator,
+    model_validator,
+    types,
 )
-from pydantic.fields import FieldInfo, NoArgAnyCallable, Undefined
+from pydantic.config import JsonDict
+from pydantic.fields import (
+    Deprecated,
+    FieldInfo,
+    _EmptyKwargs,
+    _FieldInfoInputs,
+    _Unset,
+)
+from pydantic_core import ErrorDetails, PydanticUndefined
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-
-if TYPE_CHECKING:
-    from pydantic.typing import AbstractSetIntStr, MappingIntStrAny
+from palace.manager.util.problem_detail import (
+    BaseProblemDetailException,
+    ProblemDetail,
+    ProblemDetailException,
+)
 
 
 class FormFieldInfo(FieldInfo):
@@ -40,56 +55,56 @@ class FormFieldInfo(FieldInfo):
     __slots__ = ("form",)
 
     def __init__(
-        self,
-        default: Any = Undefined,
-        form: ConfigurationFormItem = None,  # type: ignore[assignment]
-        **kwargs: Any,
+        self, *, form: ConfigurationFormItem, **kwargs: Unpack[_FieldInfoInputs]
     ) -> None:
-        super().__init__(default, **kwargs)
+        super().__init__(**kwargs)
         self.form = form
 
-    def _validate(self) -> None:
-        if self.form is None:
-            # We do a type ignore above so that we can give form a default of none,
-            # since it needs a default value because it comes after other arguments
-            # with defaults in the function signature.
-            # We know it will never be None in practice because this function
-            # is called before the field is used, and it will raise an exception if
-            # it is None.
-
-            raise ValueError("form parameter is required.")
-        super()._validate()
+    @staticmethod
+    def from_field(default: Any = PydanticUndefined, **kwargs: Any) -> FormFieldInfo:
+        return FormFieldInfo(default=default, **kwargs)
 
 
 def FormField(
-    default: Any = Undefined,
+    default: Any = PydanticUndefined,
     *,
-    form: ConfigurationFormItem = None,  # type: ignore[assignment]
-    default_factory: NoArgAnyCallable | None = None,
-    alias: str | None = None,
-    title: str | None = None,
-    description: str | None = None,
-    exclude: AbstractSetIntStr | MappingIntStrAny | Any = None,
-    include: AbstractSetIntStr | MappingIntStrAny | Any = None,
-    const: bool | None = None,
-    gt: float | None = None,
-    ge: float | None = None,
-    lt: float | None = None,
-    le: float | None = None,
-    multiple_of: float | None = None,
-    allow_inf_nan: bool | None = None,
-    max_digits: int | None = None,
-    decimal_places: int | None = None,
-    min_items: int | None = None,
-    max_items: int | None = None,
-    unique_items: bool | None = None,
-    min_length: int | None = None,
-    max_length: int | None = None,
-    allow_mutation: bool = True,
-    regex: str | None = None,
-    discriminator: str | None = None,
-    repr: bool = True,
-    **extra: Any,
+    form: ConfigurationFormItem,
+    default_factory: typing.Callable[[], Any] | None = _Unset,
+    alias: str | None = _Unset,
+    alias_priority: int | None = _Unset,
+    validation_alias: str | AliasPath | AliasChoices | None = _Unset,
+    serialization_alias: str | None = _Unset,
+    title: str | None = _Unset,
+    field_title_generator: typing_extensions.Callable[[str, FieldInfo], str]
+    | None = _Unset,
+    description: str | None = _Unset,
+    examples: list[Any] | None = _Unset,
+    exclude: bool | None = _Unset,
+    discriminator: str | types.Discriminator | None = _Unset,
+    deprecated: Deprecated | str | bool | None = _Unset,
+    json_schema_extra: JsonDict | typing.Callable[[JsonDict], None] | None = _Unset,
+    frozen: bool | None = _Unset,
+    validate_default: bool | None = _Unset,
+    repr: bool = _Unset,
+    init: bool | None = _Unset,
+    init_var: bool | None = _Unset,
+    kw_only: bool | None = _Unset,
+    pattern: str | typing.Pattern[str] | None = _Unset,
+    strict: bool | None = _Unset,
+    coerce_numbers_to_str: bool | None = _Unset,
+    gt: annotated_types.SupportsGt | None = _Unset,
+    ge: annotated_types.SupportsGe | None = _Unset,
+    lt: annotated_types.SupportsLt | None = _Unset,
+    le: annotated_types.SupportsLe | None = _Unset,
+    multiple_of: float | None = _Unset,
+    allow_inf_nan: bool | None = _Unset,
+    max_digits: int | None = _Unset,
+    decimal_places: int | None = _Unset,
+    min_length: int | None = _Unset,
+    max_length: int | None = _Unset,
+    union_mode: typing.Literal["smart", "left_to_right"] = _Unset,
+    fail_fast: bool | None = _Unset,
+    **extra: Unpack[_EmptyKwargs],
 ) -> Any:
     """
     This function is equivalent to the Pydantic Field function, but instead of creating
@@ -99,37 +114,44 @@ def FormField(
     use this function instead of Field to create fields that will be used to generate
     a configuration form in the admin interface.
     """
-    field_info = FormFieldInfo(
+    return FormFieldInfo.from_field(
         default,
         form=form,
         default_factory=default_factory,
         alias=alias,
+        alias_priority=alias_priority,
+        validation_alias=validation_alias,
+        serialization_alias=serialization_alias,
         title=title,
+        field_title_generator=field_title_generator,
         description=description,
+        examples=examples,
         exclude=exclude,
-        include=include,
-        const=const,
+        discriminator=discriminator,
+        deprecated=deprecated,
+        json_schema_extra=json_schema_extra,
+        frozen=frozen,
+        pattern=pattern,
+        validate_default=validate_default,
+        repr=repr,
+        init=init,
+        init_var=init_var,
+        kw_only=kw_only,
+        coerce_numbers_to_str=coerce_numbers_to_str,
+        strict=strict,
         gt=gt,
         ge=ge,
         lt=lt,
         le=le,
         multiple_of=multiple_of,
+        min_length=min_length,
+        max_length=max_length,
         allow_inf_nan=allow_inf_nan,
         max_digits=max_digits,
         decimal_places=decimal_places,
-        min_items=min_items,
-        max_items=max_items,
-        unique_items=unique_items,
-        min_length=min_length,
-        max_length=max_length,
-        allow_mutation=allow_mutation,
-        regex=regex,
-        discriminator=discriminator,
-        repr=repr,
-        **extra,
+        union_mode=union_mode,
+        fail_fast=fail_fast,
     )
-    field_info._validate()
-    return field_info
 
 
 class ConfigurationFormItemType(Enum):
@@ -215,7 +237,7 @@ class ConfigurationFormItem:
             "key": key,
             "required": required or self.required,
         }
-        if default is not None:
+        if default is not None and default is not PydanticUndefined:
             form_entry["default"] = self.get_form_value(default)
         if self.type.value is not None:
             form_entry["type"] = self.type.value
@@ -255,13 +277,20 @@ class BaseSettings(BaseModel, LoggerMixin):
       )
     """
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
+    @classmethod
     def extra_args(cls, values: dict[str, Any]) -> dict[str, Any]:
         # We log any extra arguments that are passed to the model, but
         # we don't raise an error, these arguments may be old configuration
         # settings that have not been cleaned up by a migration yet.
-        for field in values.keys() - cls.__fields__.keys():
-            msg = f"Unexpected extra argument '{field}' for model {cls.__name__}"  # type: ignore[attr-defined]
+        model_names_and_aliases = set()
+        for field_name, field_info in cls.model_fields.items():
+            model_names_and_aliases.add(field_name)
+            if field_info.alias is not None:
+                model_names_and_aliases.add(field_info.alias)
+
+        for field in values.keys() - model_names_and_aliases:
+            msg = f"Unexpected extra argument '{field}' for model {cls.__name__}"
             cls.logger().info(msg)
 
         # Because the admin interface sends empty strings for all fields
@@ -273,33 +302,30 @@ class BaseSettings(BaseModel, LoggerMixin):
 
         return values
 
-    # Custom validation can be done by adding additional @validator methods
+    # Custom validation can be done by adding additional validation methods
     # to the model. See the pydantic docs for more information:
     # https://docs.pydantic.dev/usage/validators/
     # If you want to return a ProblemDetail from the validator, you can
     # raise a SettingsValidationError instead of a ValidationError.
 
-    class Config:
+    model_config = ConfigDict(
         # See the pydantic docs for information on these settings
         # https://docs.pydantic.dev/usage/model_config/
-
         # Strip whitespace from all strings
-        anystr_strip_whitespace = True
-
-        # Forbid mutation, so that its clear that settings changes will
+        str_strip_whitespace=True,
+        # Make the settings model immutable, so it's clear that settings changes will
         # not automatically be saved to the database.
-        allow_mutation = False
-
+        frozen=True,
         # Allow extra arguments to be passed to the model. We allow this
         # because we want to preserve old configuration settings that
         # have not been cleaned up by a migration yet.
-        extra = Extra.allow
-
-        # Allow population by field name. We store old field names from
+        extra="allow",
+        # Allow population by field name. We store old field names
         # as aliases so that we can properly migrate old settings,
         # but we generally will populate the module using the field name
         # not the alias.
-        allow_population_by_field_name = True
+        populate_by_name=True,
+    )
 
     # If your settings class needs additional form fields that are not
     # defined on the model, you can add them here. This is useful if you
@@ -316,51 +342,51 @@ class BaseSettings(BaseModel, LoggerMixin):
     def configuration_form(cls, db: Session) -> list[dict[str, Any]]:
         """Get the configuration dictionary for this class"""
         config = []
-        for field in cls.__fields__.values():
-            if not isinstance(field.field_info, FormFieldInfo):
-                cls.logger().warning(
-                    f"{field.name} was not initialized with FormField, skipping."
-                )
-                continue
-            required = field.required if isinstance(field.required, bool) else False
+        for name, field_info in cls.model_fields.items():
+            assert isinstance(
+                field_info, FormFieldInfo
+            ), f"{name} was not initialized with FormField"
             config.append(
-                field.field_info.form.to_dict(db, field.name, required, field.default)
+                field_info.form.to_dict(
+                    db, name, field_info.is_required(), field_info.default
+                )
             )
 
-        for key, additional_field in cls._additional_form_fields.items():
+        for key, additional_field in cls.__private_attributes__[
+            "_additional_form_fields"
+        ].default.items():
             config.append(additional_field.to_dict(db, key))
 
         # Sort by weight then return only the settings
         config.sort(key=lambda x: x[0])
         return [item[1] for item in config]
 
-    def dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        """Override the dict method to remove the default values"""
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Override the model_dump method to remove the default values"""
 
-        if "exclude_defaults" not in kwargs:
-            kwargs["exclude_defaults"] = True
+        kwargs.setdefault("exclude_defaults", True)
 
         # Allow us to exclude extra fields that are not defined on the model
         if "exclude_extra" in kwargs:
             exclude_extra = kwargs.pop("exclude_extra")
             if exclude_extra:
-                kwargs["exclude"] = self.__fields_set__ - self.__fields__.keys()
+                kwargs["exclude"] = self.model_fields_set - self.model_fields.keys()
 
-        return super().dict(*args, **kwargs)
+        return super().model_dump(**kwargs)
 
     @classmethod
     def get_form_field_label(cls, field_name: str) -> str:
-        item = cls.__fields__.get(field_name)
+        item = cls.model_fields.get(field_name)
         if item is None:
             # Try to lookup field_name by alias instead
-            for field in cls.__fields__.values():
+            for field in cls.model_fields.values():
                 if field.alias == field_name:
                     item = field
                     break
-        if item is not None and isinstance(item.field_info, FormFieldInfo):
-            return item.field_info.form.label
-        else:
-            return field_name
+        if item is not None and isinstance(item, FormFieldInfo):
+            return item.form.label
+
+        return field_name
 
     def __init__(self, **data: Any):
         """
@@ -373,37 +399,31 @@ class BaseSettings(BaseModel, LoggerMixin):
         try:
             super().__init__(**data)
         except ValidationError as e:
-            error = e.errors()[0]
-            error_location = str(error["loc"][0])
-            item_label = self.get_form_field_label(error_location)
 
+            def get_error_label(er: ErrorDetails) -> str:
+                error_location = str(er["loc"][0])
+                return self.get_form_field_label(error_location)
+
+            error = e.errors()[0]
             if (
-                error["type"] == "value_error.problem_detail"
-                and "problem_detail" in error["ctx"]
+                error_exc := error.get("ctx", {}).get("error")
+            ) is not None and isinstance(error_exc, BaseProblemDetailException):
+                problem_detail = error_exc.problem_detail
+            elif error.get("type") == "missing" or (
+                error.get("type") == "string_type" and error.get("input", False) is None
             ):
-                # We have a ProblemDetail, so we return that instead of a
-                # generic validation error.
-                raise ProblemDetailException(
-                    problem_detail=error["ctx"]["problem_detail"]
-                )
-            elif (
-                error["type"] == "value_error.missing"
-                or error["type"] == "type_error.none.not_allowed"
-            ):
-                raise ProblemDetailException(
-                    problem_detail=INCOMPLETE_CONFIGURATION.detailed(
-                        f"Required field '{item_label}' is missing."
-                    )
+                problem_detail = INCOMPLETE_CONFIGURATION.detailed(
+                    f"Required field '{get_error_label(error)}' is missing."
                 )
             else:
-                raise ProblemDetailException(
-                    problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
-                        f"'{item_label}' validation error: {error['msg']}."
-                    )
+                problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{get_error_label(error)}' validation error: {error['msg']}."
                 )
 
+            raise ProblemDetailException(problem_detail=problem_detail) from e
 
-class SettingsValidationError(PydanticValueError):
+
+class SettingsValidationError(ProblemDetailException, ValueError):
     """
     Raised in a custom pydantic validator when there is a problem
     with the configuration settings. A ProblemDetail should
@@ -413,8 +433,5 @@ class SettingsValidationError(PydanticValueError):
     raise SettingsValidationError(problem_detail=INVALID_CONFIGURATION_OPTION)
     """
 
-    code = "problem_detail"
-    msg_template = "{problem_detail.detail}"
-
-    def __init__(self, problem_detail: ProblemDetail, **kwargs: Any):
-        super().__init__(problem_detail=problem_detail, **kwargs)
+    def __init__(self, problem_detail: ProblemDetail) -> None:
+        super().__init__(problem_detail=problem_detail)

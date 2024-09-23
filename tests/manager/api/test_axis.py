@@ -446,7 +446,7 @@ class TestAxis360API:
         library_settings = library_fixture.settings(library)
         patron = axis360.db.patron(library=library)
         library_settings.default_notification_email_address = (
-            "notifications@example.com"  # type: ignore[assignment]
+            "notifications@example.com"
         )
 
         response = axis360.api.place_hold(patron, "pin", pool, None)

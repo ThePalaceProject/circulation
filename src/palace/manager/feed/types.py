@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, cast
 
+from pydantic import ConfigDict
 from typing_extensions import Self
 
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -238,9 +239,7 @@ class FeedData(BaseModel):
     data_entries: list[DataEntry] = field(default_factory=list)
     metadata: FeedMetadata = field(default_factory=lambda: FeedMetadata())
     entrypoint: str | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def add_link(self, href: str, **kwargs: Any) -> None:
         self.links.append(Link(href=href, **kwargs))

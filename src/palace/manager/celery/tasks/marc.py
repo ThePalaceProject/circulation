@@ -80,7 +80,7 @@ def marc_export(task: Task, force: bool = False) -> None:
                 marc_export_collection.delay(
                     collection_id=collection.id,
                     start_time=start_time,
-                    libraries=[l.dict() for l in libraries_info],
+                    libraries=[l.model_dump() for l in libraries_info],
                 )
 
 
@@ -104,7 +104,7 @@ def marc_export_collection(
 
     base_url = task.services.config.sitewide.base_url()
     storage_service = task.services.storage.public()
-    libraries_info = [LibraryInfo.parse_obj(l) for l in libraries]
+    libraries_info = [LibraryInfo.model_validate(l) for l in libraries]
     upload_manager = MarcUploadManager(
         storage_service,
         MarcFileUploadSession(
@@ -158,7 +158,7 @@ def marc_export_collection(
         marc_export_collection.s(
             collection_id=collection_id,
             start_time=start_time,
-            libraries=[l.dict() for l in libraries_info],
+            libraries=[l.model_dump() for l in libraries_info],
             batch_size=batch_size,
             last_work_id=works[-1].id,
             update_number=upload_manager.update_number,

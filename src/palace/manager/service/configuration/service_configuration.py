@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseSettings, ValidationError
-from pydantic.env_settings import SettingsError
+from pydantic import ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from palace.manager.core.config import CannotLoadConfiguration
 
@@ -18,25 +18,14 @@ class ServiceConfiguration(BaseSettings):
     for each service.
     """
 
-    class Config:
-        # See the pydantic docs for information on these settings
-        # https://docs.pydantic.dev/usage/model_config/
-
-        # Each sub-config will have its own prefix
-        env_prefix = "PALACE_"
-
-        # Strip whitespace from all strings
-        anystr_strip_whitespace = True
-
-        # Forbid mutation, settings should be loaded once from environment.
-        allow_mutation = False
-
-        # Allow env vars to be loaded from a .env file
-        # This loads the .env file from the root of the project
-        env_file = ".env"
-
-        # Nested settings will be loaded from environment variables with this delimiter.
-        env_nested_delimiter = "__"
+    model_config = SettingsConfigDict(
+        env_prefix="PALACE_",
+        str_strip_whitespace=True,
+        frozen=True,
+        env_file=".env",
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
 
     def __init__(self, *args: Any, **kwargs: Any):
         try:
@@ -47,12 +36,8 @@ class ServiceConfiguration(BaseSettings):
             errors = error_exception.errors()
             error_log_message = f"Error loading settings from environment:"
             for error in errors:
-                delimiter = self.__config__.env_nested_delimiter or "__"
+                delimiter = self.model_config.get("env_nested_delimiter") or "__"
                 error_location = delimiter.join(str(e).upper() for e in error["loc"])
-                env_var_name = f"{self.__config__.env_prefix}{error_location}"
+                env_var_name = f"{self.model_config.get('env_prefix')}{error_location}"
                 error_log_message += f"\n  {env_var_name}:  {error['msg']}"
             raise CannotLoadConfiguration(error_log_message) from error_exception
-        except SettingsError as settings_error:
-            # The settings failed to load, we capture the SettingsError and raise a more
-            # specific CannotLoadConfiguration error.
-            raise CannotLoadConfiguration(str(settings_error)) from settings_error

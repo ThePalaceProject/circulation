@@ -18,7 +18,7 @@ from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from lxml.etree import _Element, _ElementTree
-from pydantic import validator
+from pydantic import field_validator
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
@@ -155,7 +155,8 @@ class Axis360Settings(BaseCirculationApiSettings):
         ),
     )
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def _validate_url(cls, v: str) -> str:
         # Validate if the url provided is valid http or a valid nickname
         valid_names = list(Axis360APIConstants.SERVER_NICKNAMES.keys())

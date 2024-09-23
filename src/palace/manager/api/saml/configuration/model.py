@@ -2,11 +2,11 @@ import html
 from datetime import datetime
 from re import Pattern
 from threading import Lock
-from typing import Any
+from typing import Annotated, Any
 
 from flask_babel import lazy_gettext as _
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import PositiveInt, conint, validator
+from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
 from palace.manager.api.authentication.base import (
@@ -120,7 +120,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.TEXTAREA,
         ),
-        alias="sp_xml_metadata",
     )
     service_provider_private_key: str = FormField(
         "",
@@ -129,7 +128,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             description="Private key used for encrypting SAML requests.",
             type=ConfigurationFormItemType.TEXTAREA,
         ),
-        alias="sp_private_key",
     )
     federated_identity_provider_entity_ids: list[str] | None = FormField(
         None,
@@ -143,7 +141,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             options=FederatedIdentityProviderOptions(),
             format="narrow",
         ),
-        alias="saml_federated_idp_entity_ids",
     )
     patron_id_use_name_id: bool = FormField(
         True,
@@ -159,7 +156,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "false": "Do NOT use SAML NameID",
             },
         ),
-        alias="saml_patron_id_use_name_id",
     )
     patron_id_attributes: list[str] | None = FormField(
         [
@@ -179,9 +175,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.MENU,
             options={attribute.name: attribute.name for attribute in SAMLAttributeType},
+            format="narrow",
         ),
-        alias="saml_patron_id_attributes",
-        format="narrow",
     )
     patron_id_regular_expression: Pattern | None = FormField(
         None,
@@ -205,7 +200,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.TEXT,
         ),
-        alias="saml_patron_id_regular_expression",
     )
     non_federated_identity_provider_xml_metadata: str | None = FormField(
         None,
@@ -219,7 +213,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.TEXTAREA,
         ),
-        alias="idp_xml_metadata",
     )
     session_lifetime: PositiveInt | None = FormField(
         None,
@@ -237,7 +230,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "will have to reauthenticate each time the IdP's session expires."
             ),
         ),
-        alias="saml_session_lifetime",
     )
     filter_expression: str | None = FormField(
         None,
@@ -266,28 +258,33 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=ConfigurationFormItemType.TEXTAREA,
         ),
-        alias="saml_filter_expression",
     )
-    service_provider_strict_mode: conint(ge=0, le=1) = FormField(  # type: ignore[valid-type]
-        0,
-        form=ConfigurationFormItem(
-            label="Service Provider's Strict Mode",
-            description=(
-                "If strict is 1, then the Python Toolkit will reject unsigned or unencrypted messages "
-                "if it expects them to be signed or encrypted. Also, it will reject the messages "
-                "if the SAML standard is not strictly followed."
+    service_provider_strict_mode: Annotated[
+        int,
+        FormField(
+            ge=0,
+            le=1,
+            form=ConfigurationFormItem(
+                label="Service Provider's Strict Mode",
+                description=(
+                    "If strict is 1, then the Python Toolkit will reject unsigned or unencrypted messages "
+                    "if it expects them to be signed or encrypted. Also, it will reject the messages "
+                    "if the SAML standard is not strictly followed."
+                ),
             ),
         ),
-        alias="strict",
-    )
-    service_provider_debug_mode: conint(ge=0, le=1) = FormField(  # type: ignore[valid-type]
-        0,
-        form=ConfigurationFormItem(
-            label="Service Provider's Debug Mode",
-            description="Enable debug mode (outputs errors).",
+    ] = 0
+    service_provider_debug_mode: Annotated[
+        int,
+        FormField(
+            ge=0,
+            le=1,
+            form=ConfigurationFormItem(
+                label="Service Provider's Debug Mode",
+                description="Enable debug mode (outputs errors).",
+            ),
         ),
-        alias="debug",
-    )
+    ] = 0
 
     @classmethod
     def validate_xml_metadata(cls, v: str, metadata_type: str):
@@ -314,7 +311,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             )
         return providers
 
-    @validator("service_provider_xml_metadata")
+    @field_validator("service_provider_xml_metadata")
+    @classmethod
     def validate_sp_xml_metadata(cls, v: str):
         providers = cls.validate_xml_metadata(v, "Service Provider")
         if len(providers) != 1:
@@ -324,7 +322,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             )
         return v
 
-    @validator("non_federated_identity_provider_xml_metadata")
+    @field_validator("non_federated_identity_provider_xml_metadata")
+    @classmethod
     def validate_idp_xml_metadata(cls, v: str):
         if v is not None:
             providers = cls.validate_xml_metadata(v, "Identity Provider")
@@ -335,7 +334,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
         return v
 
-    @validator("filter_expression")
+    @field_validator("filter_expression")
+    @classmethod
     def validate_filter_expression(cls, v: str):
         parser = DSLParser()
         visitor = DSLEvaluationVisitor()
@@ -354,7 +354,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
         return v
 
-    @validator("patron_id_regular_expression")
+    @field_validator("patron_id_regular_expression")
+    @classmethod
     def validate_patron_id_regular_expression(cls, v: Pattern):
         if v is not None:
             named_group = (

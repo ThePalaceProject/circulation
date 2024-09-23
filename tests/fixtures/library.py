@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import ConfigDict
 
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.sqlalchemy.model.library import Library
@@ -22,8 +23,7 @@ class MockLibrarySettings(LibrarySettings):
     only change is that it allows mutation of the settings.
     """
 
-    class Config(LibrarySettings.Config):
-        allow_mutation = True
+    model_config = ConfigDict(frozen=False)
 
 
 class LibraryFixture:
@@ -49,12 +49,12 @@ class LibraryFixture:
 
     def settings(self, library: Library) -> MockLibrarySettings:
         settings_dict = library.settings_dict
-        settings = MockLibrarySettings(**settings_dict)
+        settings = MockLibrarySettings.model_validate(settings_dict)
         self.set_mock_on_library(library, settings)
         return settings
 
     def mock_settings(self) -> MockLibrarySettings:
-        return MockLibrarySettings.construct()
+        return MockLibrarySettings.model_construct()
 
     def set_mock_on_library(
         self, library: Library, settings: MockLibrarySettings

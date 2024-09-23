@@ -126,7 +126,7 @@ class CollectionSettingsController(
 
             # Update settings
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
-            integration.settings_dict = validated_settings.dict()
+            integration.settings_dict = validated_settings.model_dump()
 
             # Update library settings
             if libraries_data:

@@ -80,7 +80,7 @@ class ViewController(AdminController):
                 roles=roles,
                 admin_js=admin_js,
                 admin_css=admin_css,
-                feature_flags=AdminClientConfig.admin_feature_flags().json(
+                feature_flags=AdminClientConfig.admin_feature_flags().model_dump_json(
                     by_alias=True
                 ),
             )

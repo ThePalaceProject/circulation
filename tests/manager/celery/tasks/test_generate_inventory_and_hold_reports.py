@@ -75,7 +75,7 @@ def test_job_run(
     od_collection_not_to_include = db.collection(
         name="Overdrive Test Collection",
         data_source_name="Overdrive",
-        settings=od_settings.dict(),
+        settings=od_settings.model_dump(),
     )
 
     od_collection_not_to_include.libraries = [library]
@@ -287,7 +287,7 @@ def create_test_opds_collection(
         external_account_id="http://opds.com",
         data_source=data_source,
     )
-    collection = db.collection(name=collection_name, settings=settings.dict())
+    collection = db.collection(name=collection_name, settings=settings.model_dump())
     collection.libraries = [library]
     return collection
 

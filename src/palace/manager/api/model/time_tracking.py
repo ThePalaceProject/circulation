@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import Any
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from palace.manager.util.flask_util import CustomBaseModel
 
@@ -16,7 +16,8 @@ class PlaytimeTimeEntry(CustomBaseModel):
         description="How many seconds were played within this minute"
     )
 
-    @validator("during_minute")
+    @field_validator("during_minute")
+    @classmethod
     def validate_minute_datetime(cls, value: datetime.datetime):
         """Coerce the datetime to a minute boundary"""
         if value.tzname() != "UTC":
@@ -27,7 +28,8 @@ class PlaytimeTimeEntry(CustomBaseModel):
         value = value.replace(second=0, microsecond=0)
         return value
 
-    @validator("seconds_played")
+    @field_validator("seconds_played")
+    @classmethod
     def validate_seconds_played(cls, value: int):
         """Coerce the seconds played to a max of 60 seconds"""
         if value > 60:
@@ -45,10 +47,10 @@ class PlaytimeTimeEntry(CustomBaseModel):
 
 class PlaytimeEntriesPost(CustomBaseModel):
     book_id: str | None = Field(
-        description="An identifier of a book (currently ignored)."
+        None, description="An identifier of a book (currently ignored)."
     )
     library_id: str | None = Field(
-        description="And identifier for the library (currently ignored)."
+        None, description="And identifier for the library (currently ignored)."
     )
     time_entries: list[PlaytimeTimeEntry] = Field(description="A List of time entries")
 

@@ -98,6 +98,6 @@ class PlaytimeEntriesController(CirculationManagerController):
         response_data = PlaytimeEntriesPostResponse(
             summary=summary, responses=responses
         )
-        response = flask.jsonify(response_data.dict())
+        response = flask.jsonify(response_data.model_dump())
         response.status_code = 207
         return response

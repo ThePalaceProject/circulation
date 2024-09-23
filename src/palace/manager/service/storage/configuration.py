@@ -1,9 +1,11 @@
 import boto3
-from pydantic import AnyHttpUrl, parse_obj_as, validator
+from pydantic import field_validator
+from pydantic_settings import SettingsConfigDict
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
+from palace.manager.util.pydantic import HttpUrl
 
 
 class StorageConfiguration(ServiceConfiguration):
@@ -14,13 +16,12 @@ class StorageConfiguration(ServiceConfiguration):
     public_access_bucket: str | None = None
     analytics_bucket: str | None = None
 
-    endpoint_url: AnyHttpUrl | None = None
+    endpoint_url: HttpUrl | None = None
 
-    url_template: AnyHttpUrl = parse_obj_as(
-        AnyHttpUrl, "https://{bucket}.s3.{region}.amazonaws.com/{key}"
-    )
+    url_template: str = "https://{bucket}.s3.{region}.amazonaws.com/{key}"
 
-    @validator("region")
+    @field_validator("region")
+    @classmethod
     def validate_region(cls, v: str | None) -> str | None:
         # No validation if region is not provided.
         if v is None:
@@ -34,5 +35,4 @@ class StorageConfiguration(ServiceConfiguration):
             )
         return v
 
-    class Config:
-        env_prefix = "PALACE_STORAGE_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_STORAGE_")

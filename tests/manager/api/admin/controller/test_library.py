@@ -625,7 +625,7 @@ class TestLibrarySettings:
         assert library.short_name == "nypl"
 
         # The library-wide settings were updated.
-        assert library.settings.website == "https://library.library/"
+        assert library.settings.website == "https://library.library"
         assert (
             library.settings.default_notification_email_address == "email@example.com"
         )

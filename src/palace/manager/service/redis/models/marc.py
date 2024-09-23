@@ -104,7 +104,7 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
 
     @staticmethod
     def _upload_initial_value(buffer_data: str) -> dict[str, Any]:
-        return MarcFileUpload(buffer=buffer_data).dict(exclude_none=True)
+        return MarcFileUpload(buffer=buffer_data).model_dump(exclude_none=True)
 
     def _upload_path(self, upload_key: str) -> str:
         upload_key = self._escape_path(upload_key, self._redis_client.elasticache)
@@ -218,7 +218,7 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
             pipe.json().arrappend(
                 self.key,
                 self._parts_path(key),
-                part.dict(),
+                part.model_dump(),
             )
             pipe.json().set(
                 self.key,
@@ -281,7 +281,9 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
             uploads = self._get_specific(keys, self._upload_path)
 
         return {
-            k: MarcFileUpload.parse_obj(v) for k, v in uploads.items() if v is not None
+            k: MarcFileUpload.model_validate(v)
+            for k, v in uploads.items()
+            if v is not None
         }
 
     def get_upload_ids(self, keys: str | Sequence[str]) -> dict[str, str]:

@@ -399,8 +399,8 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         Update the settings for any IntegrationLibraryConfigurations that were updated or added.
         """
         for integration, settings in libraries:
-            validated_settings = settings_class(**settings)
-            integration.settings_dict = validated_settings.dict()
+            validated_settings = settings_class.model_validate(settings)
+            integration.settings_dict = validated_settings.model_dump()
 
     def process_libraries(
         self,
