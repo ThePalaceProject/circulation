@@ -50,8 +50,7 @@ class FixtureTestUrlConfiguration(ServiceConfiguration):
         # normal as a fallback. This fallback is the normal behavior that will be used when
         # we are running outside tox-docker.
         prefix = cls.model_config.get("env_prefix")
-        if prefix is None:
-            raise ValueError("env_prefix must be set on the class")
+        assert prefix is not None, "env_prefix must be set on the class"
 
         prefix += "URL"
 
