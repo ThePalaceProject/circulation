@@ -239,7 +239,7 @@ isbnlib = "^3.10.14"
 itsdangerous = "^2.1.2"
 jsonschema = "^4.22.0"
 jwcrypto = "^1.4.2"
-levenshtein = "^0.25"
+levenshtein = "^0.26"
 lxml = {extras = ["html-clean"], version = "^5.2.1"}
 money = "1.3.0"
 multipledispatch = "^1.0"
