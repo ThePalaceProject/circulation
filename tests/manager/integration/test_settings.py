@@ -1,12 +1,14 @@
 import dataclasses
 import logging
 from copy import deepcopy
+from functools import partial
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import PositiveInt, ValidationError, field_validator
+from pydantic import PositiveInt, ValidationError, field_validator, model_validator
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -26,10 +28,22 @@ class MockSettings(BaseSettings):
 
     @field_validator("test")
     @classmethod
-    def custom_validator(cls, v):
+    def test_validation_pd(cls, v: str) -> str:
         if v == "xyz":
             raise SettingsValidationError(mock_problem_detail)
         return v
+
+    @field_validator("with_alias")
+    @classmethod
+    def alias_validation_no_pd(cls, v: float) -> float:
+        assert v != -212.55, "Sorry, -212.55 is a cursed number"
+        return v
+
+    @model_validator(mode="after")
+    def secret_number(self) -> Self:
+        if self.number == 66:
+            raise ValueError("Error! 66 is a secret number")
+        return self
 
     test: str | None = FormField(
         "test",
@@ -73,6 +87,7 @@ class BaseSettingsFixture:
         self.mock_db = MagicMock(spec=Session)
         self._original_model_fields = MockSettings.model_fields
         MockSettings.model_fields = deepcopy(self._original_model_fields)
+        self.settings = partial(MockSettings, number=1)
 
     def update_form(self, name: str, **kwargs: Any) -> None:
         model_field = MockSettings.model_fields[name]
@@ -94,7 +109,7 @@ def base_settings_fixture():
 
 class TestBaseSettings:
     def test_init(self, base_settings_fixture: BaseSettingsFixture) -> None:
-        settings = MockSettings(number=1)
+        settings = base_settings_fixture.settings()
         assert settings.test == "test"
         assert settings.number == 1
 
@@ -123,25 +138,56 @@ class TestBaseSettings:
     ) -> None:
         # We have a default validation function that replaces emtpy strings
         # with None.
-        settings = MockSettings(number=1, test="")
+        settings = base_settings_fixture.settings(test="")
         assert settings.model_dump() == {"test": None, "number": 1}
 
         # We also have a validation function that runs strip() on all strings.
-        settings = MockSettings(number=1, test=" foo ")
+        settings = base_settings_fixture.settings(test=" foo ")
         assert settings.model_dump() == {"test": "foo", "number": 1}
 
-    def test_validation_custom(
+    def test_field_validator_return_pd_exception(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
         # We can also add custom validation functions to the settings class.
         # These functions should raise a ProblemDetailException if there is
         # a problem with validation.
         with pytest.raises(ProblemDetailException) as e:
-            MockSettings(number=1, test="xyz")
+            base_settings_fixture.settings(test="xyz")
 
         problem_detail = e.value.problem_detail
         assert isinstance(problem_detail, ProblemDetail)
         assert problem_detail == mock_problem_detail
+
+    def test_field_validator_not_pd_exception(
+        self, base_settings_fixture: BaseSettingsFixture
+    ) -> None:
+        # We can also add custom validation functions to the settings class.
+        # These functions should raise a ProblemDetailException if there is
+        # a problem with validation.
+        with pytest.raises(ProblemDetailException) as e:
+            base_settings_fixture.settings(with_alias=-212.55)
+
+        problem_detail = e.value.problem_detail
+        assert isinstance(problem_detail, ProblemDetail)
+        assert problem_detail.detail is not None
+        assert (
+            "'With Alias' validation error: Assertion failed, Sorry, -212.55 is a cursed number"
+            in problem_detail.detail
+        )
+
+    def test_model_validator(self, base_settings_fixture: BaseSettingsFixture) -> None:
+        # We can also add model validators to the settings class.
+        # These functions should raise a ProblemDetailException if there is
+        # a problem with validation.
+        with pytest.raises(ProblemDetailException) as e:
+            base_settings_fixture.settings(number=66)
+
+        problem_detail = e.value.problem_detail
+        assert isinstance(problem_detail, ProblemDetail)
+        assert (
+            problem_detail.detail
+            == "Validation error: Value error, Error! 66 is a secret number."
+        )
 
     def test_model_dump(self, base_settings_fixture: BaseSettingsFixture) -> None:
         # When we call model_dump() on a settings class, we get the settings,
@@ -149,20 +195,20 @@ class TestBaseSettings:
         # in the database, making it easy to change them in the future.
 
         # Not in model_dump() when using the default
-        settings = MockSettings(number=1)
+        settings = base_settings_fixture.settings()
         assert settings.model_dump() == {"number": 1}
 
         # Not in model_dump() when set in constructor to the default either.
-        settings = MockSettings(number=1, test="test")
+        settings = base_settings_fixture.settings(test="test")
         assert settings.model_dump() == {"number": 1}
 
     def test_settings_no_mutation(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
         # Make sure that we cannot mutate the settings dataclass
-        settings = MockSettings(number=1)
+        settings = base_settings_fixture.settings()
         with pytest.raises(ValidationError, match="Instance is frozen"):
-            settings.number = 125  # type: ignore[misc]
+            settings.number = 125
 
     def test_settings_extra_args(
         self,
@@ -174,9 +220,9 @@ class TestBaseSettings:
 
         # Make sure that we can pass extra args to the settings class
         # and that the extra args get serialized back into the json.
-        settings = MockSettings(number=1, test="test", extra="extra")
+        settings = base_settings_fixture.settings(test="test", extra="extra")
         assert settings.model_dump() == {"number": 1, "extra": "extra"}
-        assert settings.extra == "extra"  # type: ignore[attr-defined]
+        assert settings.extra == "extra"
 
         # Make sure that we record a log message when encountering an extra arg
         assert len(caplog.records) == 1

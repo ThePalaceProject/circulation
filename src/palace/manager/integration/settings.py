@@ -388,6 +388,11 @@ class BaseSettings(BaseModel, LoggerMixin):
 
         return field_name
 
+    @classmethod
+    def _get_error_label(cls, er: ErrorDetails) -> str:
+        error_location = str(er["loc"][0])
+        return cls.get_form_field_label(error_location)
+
     def __init__(self, **data: Any):
         """
         Override the init method to return our custom ProblemError
@@ -399,11 +404,6 @@ class BaseSettings(BaseModel, LoggerMixin):
         try:
             super().__init__(**data)
         except ValidationError as e:
-
-            def get_error_label(er: ErrorDetails) -> str:
-                error_location = str(er["loc"][0])
-                return self.get_form_field_label(error_location)
-
             error = e.errors()[0]
             if (
                 error_exc := error.get("ctx", {}).get("error")
@@ -413,11 +413,15 @@ class BaseSettings(BaseModel, LoggerMixin):
                 error.get("type") == "string_type" and error.get("input", False) is None
             ):
                 problem_detail = INCOMPLETE_CONFIGURATION.detailed(
-                    f"Required field '{get_error_label(error)}' is missing."
+                    f"Required field '{self._get_error_label(error)}' is missing."
+                )
+            elif error.get("loc"):
+                problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{self._get_error_label(error)}' validation error: {error['msg']}."
                 )
             else:
                 problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
-                    f"'{get_error_label(error)}' validation error: {error['msg']}."
+                    f"Validation error: {error['msg']}."
                 )
 
             raise ProblemDetailException(problem_detail=problem_detail) from e
