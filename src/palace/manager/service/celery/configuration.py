@@ -53,7 +53,7 @@ class CeleryConfiguration(ServiceConfiguration):
     cloudwatch_statistics_region: str = "us-west-2"
     cloudwatch_statistics_upload_size: int = 500
 
-    model_config = SettingsConfigDict(env_prefix="PALACE_CELERY_", extra="allow")
+    model_config = SettingsConfigDict(env_prefix="PALACE_CELERY_")
 
     def model_dump(
         self, *, merge_options: bool = True, **kwargs: Any

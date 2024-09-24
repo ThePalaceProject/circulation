@@ -19,11 +19,18 @@ class ServiceConfiguration(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
+        # Each sub-config will have its own prefix
         env_prefix="PALACE_",
+        # Strip whitespace from all strings
         str_strip_whitespace=True,
+        # Forbid mutation, settings should be loaded once from environment.
         frozen=True,
+        # Allow env vars to be loaded from a .env file
+        # This loads the .env file from the root of the project
         env_file=".env",
+        # Nested settings will be loaded from environment variables with this delimiter.
         env_nested_delimiter="__",
+        # Ignore extra fields in the environment
         extra="ignore",
     )
 

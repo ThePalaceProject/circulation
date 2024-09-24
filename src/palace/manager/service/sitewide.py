@@ -26,7 +26,7 @@ class SitewideConfiguration(ServiceConfiguration):
             return v
         if v == "*":
             return "*"
-        return [hostname.strip().rstrip("/") for hostname in v.split("|")]
+        return [hostname.strip() for hostname in v.split("|")]
 
     @field_validator("patron_web_hostnames")
     @classmethod
