@@ -200,7 +200,7 @@ class TestBaseSettings:
         with base_settings_fixture.raises_problem_detail(
             detail="'With Alias' validation error: assert 666.0 != 666.0."
         ):
-            base_settings_fixture.settings(foo=666.0)
+            base_settings_fixture.settings(with_alias=666.0)
 
     def test_model_validator(self, base_settings_fixture: BaseSettingsFixture) -> None:
         # We can also add model validators to the settings class.

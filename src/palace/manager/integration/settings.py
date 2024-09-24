@@ -342,7 +342,7 @@ class BaseSettings(BaseModel, LoggerMixin):
         # as aliases so that we can properly migrate old settings,
         # but we generally will populate the module using the field name
         # not the alias.
-        # populate_by_name=True,
+        populate_by_name=True,
     )
 
     # If your settings class needs additional form fields that are not
