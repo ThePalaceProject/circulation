@@ -1,5 +1,7 @@
 import dataclasses
 import logging
+from collections.abc import Generator
+from contextlib import contextmanager
 from copy import deepcopy
 from functools import partial
 from typing import Any
@@ -37,6 +39,7 @@ class MockSettings(BaseSettings):
     @classmethod
     def alias_validation_no_pd(cls, v: float) -> float:
         assert v != -212.55, "Sorry, -212.55 is a cursed number"
+        assert v != 666.0
         return v
 
     @model_validator(mode="after")
@@ -60,6 +63,22 @@ class MockSettings(BaseSettings):
         ),
         alias="foo",
     )
+
+
+@dataclasses.dataclass
+class ProblemDetailInfo:
+    _value: ProblemDetail | None = None
+    _exception: ProblemDetailException | None = None
+
+    @property
+    def value(self) -> ProblemDetail:
+        assert self._value is not None
+        return self._value
+
+    @property
+    def exception(self) -> ProblemDetailException:
+        assert self._exception is not None
+        return self._exception
 
 
 class BaseSettingsFixture:
@@ -97,6 +116,22 @@ class BaseSettingsFixture:
     def cleanup(self) -> None:
         MockSettings.model_fields = self._original_model_fields
 
+    @contextmanager
+    def raises_problem_detail(
+        self, *, pd: ProblemDetail | None = None, detail: str | None = None
+    ) -> Generator[ProblemDetailInfo, None, None]:
+        info = ProblemDetailInfo()
+        with pytest.raises(ProblemDetailException) as e:
+            yield info
+        info._exception = e.value
+        info._value = e.value.problem_detail
+
+        if pd is not None:
+            assert info.value is pd
+
+        if detail is not None:
+            assert info.value.detail == detail
+
 
 @pytest.fixture
 def base_settings_fixture():
@@ -116,22 +151,20 @@ class TestBaseSettings:
     def test_init_invalid(self, base_settings_fixture: BaseSettingsFixture) -> None:
         # Make sure that the settings class raises a ProblemError
         # when there is a problem with validation.
-        with pytest.raises(ProblemDetailException) as e:
+        with base_settings_fixture.raises_problem_detail(
+            detail="'Number' validation error: Input should be greater than 0."
+        ):
             MockSettings(number=-1)
 
-        problem_detail = e.value.problem_detail
-        assert isinstance(problem_detail, ProblemDetail)
-        assert (
-            problem_detail.detail
-            == "'Number' validation error: Input should be greater than 0."
-        )
-
-        with pytest.raises(ProblemDetailException) as e:
+        with base_settings_fixture.raises_problem_detail(
+            detail="Required field 'Number' is missing."
+        ):
             MockSettings()
 
-        problem_detail = e.value.problem_detail
-        assert isinstance(problem_detail, ProblemDetail)
-        assert problem_detail.detail == "Required field 'Number' is missing."
+        with base_settings_fixture.raises_problem_detail(
+            detail="Required field 'Number' is missing."
+        ):
+            MockSettings(number=None)
 
     def test_settings_validation(
         self, base_settings_fixture: BaseSettingsFixture
@@ -151,29 +184,23 @@ class TestBaseSettings:
         # We can also add custom validation functions to the settings class.
         # These functions should raise a ProblemDetailException if there is
         # a problem with validation.
-        with pytest.raises(ProblemDetailException) as e:
+        with base_settings_fixture.raises_problem_detail(pd=mock_problem_detail):
             base_settings_fixture.settings(test="xyz")
-
-        problem_detail = e.value.problem_detail
-        assert isinstance(problem_detail, ProblemDetail)
-        assert problem_detail == mock_problem_detail
 
     def test_field_validator_not_pd_exception(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
-        # We can also add custom validation functions to the settings class.
-        # These functions should raise a ProblemDetailException if there is
-        # a problem with validation.
-        with pytest.raises(ProblemDetailException) as e:
+        # Our validation function can also just raise exceptions like a regular
+        # pydantic validation function.
+        with base_settings_fixture.raises_problem_detail(
+            detail="'With Alias' validation error: Sorry, -212.55 is a cursed number."
+        ):
             base_settings_fixture.settings(foo=-212.55)
 
-        problem_detail = e.value.problem_detail
-        assert isinstance(problem_detail, ProblemDetail)
-        assert problem_detail.detail is not None
-        assert (
-            "'With Alias' validation error: Assertion failed, Sorry, -212.55 is a cursed number"
-            in problem_detail.detail
-        )
+        with base_settings_fixture.raises_problem_detail(
+            detail="'With Alias' validation error: assert 666.0 != 666.0."
+        ):
+            base_settings_fixture.settings(foo=666.0)
 
     def test_model_validator(self, base_settings_fixture: BaseSettingsFixture) -> None:
         # We can also add model validators to the settings class.
@@ -185,8 +212,7 @@ class TestBaseSettings:
         problem_detail = e.value.problem_detail
         assert isinstance(problem_detail, ProblemDetail)
         assert (
-            problem_detail.detail
-            == "Validation error: Value error, Error! 66 is a secret number."
+            problem_detail.detail == "Validation error: Error! 66 is a secret number."
         )
 
     def test_model_dump(self, base_settings_fixture: BaseSettingsFixture) -> None:

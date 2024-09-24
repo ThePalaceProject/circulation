@@ -423,24 +423,51 @@ class BaseSettings(BaseModel, LoggerMixin):
             super().__init__(**data)
         except ValidationError as e:
             error = e.errors()[0]
-            if (
-                error_exc := error.get("ctx", {}).get("error")
-            ) is not None and isinstance(error_exc, BaseProblemDetailException):
-                problem_detail = error_exc.problem_detail
-            elif error.get("type") == "missing" or (
-                error.get("type") == "string_type" and error.get("input", False) is None
+            error_exc = error.get("ctx", {}).get("error")
+            error_type = error.get("type", "")
+            error_input = error.get("input", False)
+            error_loc = error.get("loc")
+            if error_exc is not None and isinstance(
+                error_exc, BaseProblemDetailException
             ):
+                # If the exception had a problem detail attached, we want to use that instead
+                # of trying to generate an error message.
+                problem_detail = error_exc.problem_detail
+            elif error_type == "missing" or (
+                error_type.endswith("_type") and error_input is None
+            ):
+                # If the error is a missing field, we return the INCOMPLETE_CONFIGURATION error.
+                # The admin UI returns empty strings for all fields, and we have a validator that
+                # turns empty strings into None, so we also want to return the INCOMPLETE_CONFIGURATION
+                # in the case where the input is None and the error is a type error.
                 problem_detail = INCOMPLETE_CONFIGURATION.detailed(
                     f"Required field '{self._get_error_label(error)}' is missing."
                 )
-            elif error.get("loc"):
-                problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
-                    f"'{self._get_error_label(error)}' validation error: {error['msg']}."
-                )
             else:
-                problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
-                    f"Validation error: {error['msg']}."
-                )
+                # Otherwise we create the error message based on Pydantic's error message.
+
+                error_msg = error["msg"]
+                if error_type == "assertion_error":
+                    # For failed assertions, we do a little editing to make the error message more readable in
+                    # the admin UI.
+                    error_msg = str.replace(error_msg, "Assertion failed, ", "")
+                    split_msg = error_msg.split("\n")
+                    if len(split_msg) > 1:
+                        error_msg = split_msg[0]
+                elif error_type == "value_error":
+                    # Same as above, but for value errors.
+                    error_msg = str.replace(error_msg, "Value error, ", "")
+
+                # If the error has a location, we turn that into the Admin UI field label and include it in the
+                # error message.
+                if error_loc:
+                    problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
+                        f"'{self._get_error_label(error)}' validation error: {error_msg}."
+                    )
+                else:
+                    problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
+                        f"Validation error: {error_msg}."
+                    )
 
             raise ProblemDetailException(problem_detail=problem_detail) from e
 
