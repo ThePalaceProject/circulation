@@ -87,6 +87,8 @@ class LicenseFunctions:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
+            if self.terms_concurrency is not None:
+                return min(self.checkouts_left, self.terms_concurrency)
             return self.checkouts_left
         else:
             return self.terms_concurrency
