@@ -458,15 +458,19 @@ class BaseSettings(BaseModel, LoggerMixin):
                     # Same as above, but for value errors.
                     error_msg = str.replace(error_msg, "Value error, ", "")
 
+                # Make sure the error message ends with a period.
+                if error_msg and error_msg[-1] not in [".", "!", "?"]:
+                    error_msg += "."
+
                 # If the error has a location, we turn that into the Admin UI field label and include it in the
                 # error message.
                 if error_loc:
                     problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
-                        f"'{self._get_error_label(error)}' validation error: {error_msg}."
+                        f"'{self._get_error_label(error)}' validation error: {error_msg}"
                     )
                 else:
                     problem_detail = INVALID_CONFIGURATION_OPTION.detailed(
-                        f"Validation error: {error_msg}."
+                        f"Validation error: {error_msg}"
                     )
 
             raise ProblemDetailException(problem_detail=problem_detail) from e
