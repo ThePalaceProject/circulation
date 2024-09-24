@@ -58,7 +58,7 @@ class MockSettings(BaseSettings):
         form=ConfigurationFormItem(
             label="With Alias", description="With Alias description"
         ),
-        alias="has_alias",
+        alias="foo",
     )
 
 
@@ -165,7 +165,7 @@ class TestBaseSettings:
         # These functions should raise a ProblemDetailException if there is
         # a problem with validation.
         with pytest.raises(ProblemDetailException) as e:
-            base_settings_fixture.settings(with_alias=-212.55)
+            base_settings_fixture.settings(foo=-212.55)
 
         problem_detail = e.value.problem_detail
         assert isinstance(problem_detail, ProblemDetail)

@@ -113,7 +113,25 @@ def FormField(
     When creating a Pydantic model based on the BaseSettings class below, you should
     use this function instead of Field to create fields that will be used to generate
     a configuration form in the admin interface.
+
+    There isn't a great way to override this function so this code is just copied from the
+    Pydantic Field function with the FormFieldInfo class used instead of FieldInfo.
     """
+    if (
+        validation_alias
+        and validation_alias is not _Unset
+        and not isinstance(validation_alias, (str, AliasChoices, AliasPath))
+    ):
+        raise TypeError(
+            "Invalid `validation_alias` type. it should be `str`, `AliasChoices`, or `AliasPath`"
+        )
+
+    if serialization_alias in (_Unset, None) and isinstance(alias, str):
+        serialization_alias = alias
+
+    if validation_alias in (_Unset, None):
+        validation_alias = alias
+
     return FormFieldInfo.from_field(
         default,
         form=form,
@@ -324,7 +342,7 @@ class BaseSettings(BaseModel, LoggerMixin):
         # as aliases so that we can properly migrate old settings,
         # but we generally will populate the module using the field name
         # not the alias.
-        populate_by_name=True,
+        # populate_by_name=True,
     )
 
     # If your settings class needs additional form fields that are not
