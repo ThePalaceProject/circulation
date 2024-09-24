@@ -35,6 +35,9 @@ def main():
 class OPDS2ReaperMonitor(OPDS2ImportMonitor):
     """Monitor to make unavailable any license pools without a matching identifier in the feed."""
 
+    # TODO: This should really go in a base `OPDSReaperMonitor` class.
+    SERVICE_NAME = "OPDS Reaper Monitor"
+
     def __init__(
         self,
         *args: Any,
@@ -100,6 +103,11 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
         :param progress: A TimestampData, ignored.
         """
         super().run_once(progress)
+        self.log.info(
+            f"Feed contained {self.publication_count} publication entries, "
+            f"{len(self.seen_identifiers)} unique identifiers, "
+            f"{self.missing_id_count} missing identifiers."
+        )
 
         # Convert feed identifiers to our identifiers, so we can find them.
         # Unlike the import case, we don't want to create identifiers, if
@@ -108,6 +116,10 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
             self._db, self.seen_identifiers, autocreate=False
         )
         identifier_ids = [x.id for x in list(identifiers.values())]
+        if failures:
+            self.log.warning(
+                f"Unable to parse {len(failures)} of {len(self.seen_identifiers)} identifiers."
+            )
 
         collection_license_pools_qu = self._db.query(LicensePool).filter(
             LicensePool.collection_id == self.collection.id
@@ -127,27 +139,24 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
         reap_count = to_be_reaped_qu.count()
         self.log.info(
             f"Reaping {reap_count} of {unlimited_access_license_pools} unlimited (of {collection_license_pools} total) license pools from collection '{self.collection.name}'. "
-            f"Feed contained {self.publication_count} publication entries, {len(self.seen_identifiers)} unique identifiers, {self.missing_id_count} missing identifiers. "
-            f"Unable to parse {len(failures)} of {len(self.seen_identifiers)} identifiers."
         )
 
         if self.dry_run:
             # TODO: Need to prevent timestamp update for dry runs.
-            self.log.info(
-                "Dry run. No license pools were reaped, but {} were eligible."
-            )
+            achievements = f"Dry run: {reap_count} license pools would have been removed. Failures parsing identifiers from feed: {len(failures)}."
         else:
+            achievements = f"License pools removed: {reap_count}. Failures parsing identifiers from feed: {len(failures)}."
             for pool in to_be_reaped_qu:
                 pool.unlimited_access = False
+        self.log.info(achievements)
 
-        achievements = f"License pools removed: {reap_count}. Failures parsing identifiers from feed: {len(failures)}."
         return TimestampData(achievements=achievements)
 
 
 class OPDS2ReaperScript(CollectionInputScript):
     """Import all books from the OPDS feed associated with a collection."""
 
-    name = "Reap books from a collection, if not present in its associate feed."
+    name = "OPDS Reaper Monitor"
 
     IMPORTER_CLASS = OPDS2Importer
     MONITOR_CLASS: type[OPDS2ReaperMonitor] = OPDS2ReaperMonitor
@@ -187,11 +196,22 @@ class OPDS2ReaperScript(CollectionInputScript):
         )
         return parser
 
-    def do_run(self, cmd_args=None):
+    def do_run(self, cmd_args=None) -> None:
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
         collections: list[Collection] = parsed.collections
+        if collections and parsed.all_protocol_collections:
+            self.log.error(
+                "Cannot specify both --all-collections-for-protocol and one or more individual collections."
+            )
+            return
+
         if not collections and parsed.all_protocol_collections:
             collections = list(Collection.by_protocol(self._db, self.protocol))
+        if not collections:
+            self.log.error("No collections specified.")
+            return
+
+        self.log.info(f"Reaping books from {len(collections)} collections.")
         for collection in collections:
             self.run_monitor(
                 collection,
