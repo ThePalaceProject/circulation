@@ -50,7 +50,7 @@ class PlaytimeEntriesPost(CustomBaseModel):
         None, description="An identifier of a book (currently ignored)."
     )
     library_id: str | None = Field(
-        None, description="And identifier for the library (currently ignored)."
+        None, description="An identifier for the library (currently ignored)."
     )
     time_entries: list[PlaytimeTimeEntry] = Field(description="A List of time entries")
 

@@ -78,7 +78,7 @@ def test_integration_settings_roundtrip(db: DatabaseTransactionFixture) -> None:
 
 def test_integration_settings_update_no_merge(base_fixture: BaseFixture) -> None:
     base_fixture.update({"test": "foo"}, merge=False)
-    base_fixture.mock_settings_cls.model_validate.assert_called_with(dict(test="foo"))
+    base_fixture.mock_settings_cls.model_validate.assert_called_with({"test": "foo"})
     base_fixture.mock_flag_modified.assert_called_once_with(
         base_fixture.mock_integration, "settings_dict"
     )
@@ -87,7 +87,7 @@ def test_integration_settings_update_no_merge(base_fixture: BaseFixture) -> None
 def test_integration_settings_update_merge(base_fixture: BaseFixture) -> None:
     base_fixture.update({"test": "foo"}, merge=True)
     base_fixture.mock_settings_cls.model_validate.assert_called_with(
-        dict(test="foo", number=123)
+        {"test": "foo", "number": 123}
     )
     base_fixture.mock_flag_modified.assert_called_once_with(
         base_fixture.mock_integration, "settings_dict"
@@ -101,7 +101,7 @@ def test_integration_settings_update_basesettings(base_fixture: BaseFixture) -> 
     base_fixture.update(mock_base, merge=True)
     mock_base.model_dump.assert_called_once_with()
     base_fixture.mock_settings_cls.model_validate.assert_called_with(
-        dict(test="foo", number=123, bool=True)
+        {"test": "foo", "number": 123, "bool": True}
     )
     base_fixture.mock_flag_modified.assert_called_once_with(
         base_fixture.mock_integration, "settings_dict"
