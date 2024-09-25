@@ -315,12 +315,14 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     STANDARD_DEFAULT_LOAN_PERIOD = 21
 
     def default_loan_period(
-        self, library: Library, medium: str = EditionConstants.BOOK_MEDIUM
+        self, library: Library | None, medium: str = EditionConstants.BOOK_MEDIUM
     ) -> int:
         """Until we hear otherwise from the license provider, we assume
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
         """
+        if library is None:
+            return self.STANDARD_DEFAULT_LOAN_PERIOD
         value = (
             self.default_loan_period_setting(library, medium)
             or self.STANDARD_DEFAULT_LOAN_PERIOD

@@ -32,8 +32,10 @@ from palace.manager.util.datetime_helpers import utc_now
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
     from palace.manager.sqlalchemy.model.datasource import DataSource
+    from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.identifier import Identifier
     from palace.manager.sqlalchemy.model.resource import Resource
+    from palace.manager.sqlalchemy.model.work import Work
 
 
 class PolicyException(BasePalaceException):
@@ -195,6 +197,7 @@ class LicensePool(Base):
     # A LicensePool may be associated with a Work. (If it's not, no one
     # can check it out.)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    work: Mapped[Work] = relationship("Work", back_populates="license_pools")
 
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
@@ -220,6 +223,9 @@ class LicensePool(Base):
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
+    presentation_edition: Mapped[Edition] = relationship(
+        "Edition", back_populates="is_presentation_for"
+    )
 
     # If the source provides information about individual licenses, the
     # LicensePool may have many Licenses.

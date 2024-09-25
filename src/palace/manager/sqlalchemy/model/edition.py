@@ -101,7 +101,7 @@ class Edition(Base, EditionConstants):
 
     # An Edition may be the presentation edition for many LicensePools.
     is_presentation_for: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", backref="presentation_edition"
+        "LicensePool", back_populates="presentation_edition"
     )
 
     title = Column(Unicode, index=True)

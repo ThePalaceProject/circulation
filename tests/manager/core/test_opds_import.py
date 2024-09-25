@@ -870,9 +870,11 @@ class TestOPDSImporter:
         classifier = Classifier.classifiers.get(seven.subject.type, None)
         classifier.classify(seven.subject)
 
-        [crow_pool, mouse_pool] = sorted(
-            pools, key=lambda x: x.presentation_edition.title
-        )
+        def sort_key(x: LicensePool) -> str:
+            assert x.presentation_edition.title is not None
+            return x.presentation_edition.title
+
+        [crow_pool, mouse_pool] = sorted(pools, key=sort_key)
 
         assert db.default_collection() == crow_pool.collection
         assert db.default_collection() == mouse_pool.collection
@@ -881,6 +883,7 @@ class TestOPDSImporter:
 
         work = mouse_pool.work
         work.calculate_presentation()
+        assert work.quality is not None
         assert 0.4142 == round(work.quality, 4)
         assert Classifier.AUDIENCE_CHILDREN == work.audience
         assert NumericRange(7, 7, "[]") == work.target_age

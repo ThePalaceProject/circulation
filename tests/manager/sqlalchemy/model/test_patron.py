@@ -570,8 +570,8 @@ class TestPatron:
         # If the patron has no root lane, age_appropriate_match is not
         # even called -- all works are age-appropriate.
         m = patron.work_is_age_appropriate
-        work_audience = object()
-        work_target_age = object()
+        work_audience = MagicMock()
+        work_target_age = MagicMock()
         assert True == m(work_audience, work_target_age)
         assert 0 == mock.call_count
 

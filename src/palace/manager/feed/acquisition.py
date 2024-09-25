@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable
 from typing import TYPE_CHECKING, Any
 
 from dependency_injector.wiring import Provide, inject
@@ -56,7 +56,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         self,
         title: str,
         url: str,
-        works: list[Work],
+        works: Iterable[Work],
         annotator: CirculationManagerAnnotator,
         facets: FacetsWithEntryPoint | None = None,
         pagination: Pagination | None = None,

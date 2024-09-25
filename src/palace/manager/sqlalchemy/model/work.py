@@ -140,7 +140,7 @@ class Work(Base, LoggerMixin):
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
-        "LicensePool", backref="work", lazy="joined", uselist=True
+        "LicensePool", back_populates="work", lazy="joined", uselist=True
     )
 
     # A Work takes its presentation metadata from a single Edition.

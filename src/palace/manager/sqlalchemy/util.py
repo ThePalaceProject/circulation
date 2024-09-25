@@ -137,7 +137,7 @@ def get_one_or_create(
             return db.query(model).filter_by(**kwargs).one(), False
 
 
-def numericrange_to_string(r):
+def numericrange_to_string(r: NumericRange | None) -> str:
     """Helper method to convert a NumericRange to a human-readable string."""
     if not r:
         return ""
@@ -145,9 +145,9 @@ def numericrange_to_string(r):
     upper = r.upper
     if upper is None and lower is None:
         return ""
-    if lower and upper is None:
+    if upper is None:
         return str(lower)
-    if upper and lower is None:
+    if lower is None:
         return str(upper)
     if not r.upper_inc:
         upper -= 1
@@ -158,7 +158,10 @@ def numericrange_to_string(r):
     return f"{lower}-{upper}"
 
 
-def numericrange_to_tuple(r):
+NumericRangeTuple = tuple[float | None, float | None]
+
+
+def numericrange_to_tuple(r: NumericRange | None) -> NumericRangeTuple:
     """Helper method to normalize NumericRange into a tuple."""
     if r is None:
         return (None, None)
@@ -171,7 +174,7 @@ def numericrange_to_tuple(r):
     return lower, upper
 
 
-def tuple_to_numericrange(t):
+def tuple_to_numericrange(t: NumericRangeTuple | None) -> NumericRange | None:
     """Helper method to convert a tuple to an inclusive NumericRange."""
     if not t:
         return None
