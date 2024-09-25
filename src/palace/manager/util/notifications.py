@@ -159,19 +159,16 @@ class PushNotifications(LoggerMixin):
         for hold in holds:
             try:
                 tokens = self.notifiable_tokens(hold.patron)
-                work = hold.work
-                # It shouldn't be possible to get here for a hold without a work, but for mypy
-                # and safety we will assert it anyway
-                assert work is not None
+                work_title = hold.work.title  # type: ignore[union-attr]
                 self.log.info(
                     f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for "
-                    f"hold: {work.title}. Patron has {len(tokens)} device tokens."
+                    f"hold: {work_title}. Patron has {len(tokens)} device tokens."
                 )
                 loans_api = f"{url}/{hold.patron.library.short_name}/loans"
                 identifier: Identifier = hold.license_pool.identifier
                 library_name = hold.patron.library.name
                 title = "Your hold is available!"
-                body = f'Your hold on "{work.title}" is available at {library_name}!'
+                body = f'Your hold on "{work_title}" is available at {library_name}!'
                 data = dict(
                     title=title,
                     body=body,
