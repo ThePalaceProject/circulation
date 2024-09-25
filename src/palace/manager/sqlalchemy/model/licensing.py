@@ -87,6 +87,10 @@ class LicenseFunctions:
         if self.is_inactive:
             return 0
         elif self.is_loan_limited:
+            if self.terms_concurrency is not None:
+                # We need a type ignore here because mypy doesn't understand that `is_loan_limited`
+                # implies `checkouts_left` is not None.
+                return min(self.checkouts_left, self.terms_concurrency)  # type: ignore[type-var]
             return self.checkouts_left
         else:
             return self.terms_concurrency

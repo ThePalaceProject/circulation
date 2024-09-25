@@ -144,7 +144,7 @@ class TestOPDS2WithODLImporter:
         assert moby_dick_license_pool.identifier.identifier == "978-3-16-148410-0"
         assert moby_dick_license_pool.identifier.type == "ISBN"
         assert not moby_dick_license_pool.open_access
-        assert 30 == moby_dick_license_pool.licenses_owned
+        assert 10 == moby_dick_license_pool.licenses_owned
         assert 10 == moby_dick_license_pool.licenses_available
 
         assert 2 == len(moby_dick_license_pool.delivery_mechanisms)
@@ -544,7 +544,7 @@ class TestOPDS2WithODLImporter:
 
         assert_moby_dick_pool(
             moby_dick_pool,
-            licenses_owned=30,
+            licenses_owned=10,
             licenses_available=10,
             available_for_borrowing=True,
             license_status=LicenseStatus.available,
@@ -560,7 +560,7 @@ class TestOPDS2WithODLImporter:
 
         assert_huck_finn_pool(
             huck_finn_pool,
-            licenses_owned=30,
+            licenses_owned=10,
             licenses_available=10,
             available_for_borrowing=True,
             license_status=LicenseStatus.available,
@@ -816,7 +816,7 @@ class TestOPDS2WithODLImporter:
         assert len(imported_pool.licenses) == 5
 
         # Make sure that the license statistics are correct and include only active licenses.
-        assert imported_pool.licenses_owned == 41
+        assert imported_pool.licenses_owned == 6
         assert imported_pool.licenses_available == 6
 
         # Correct number of active and inactive licenses
@@ -840,7 +840,7 @@ class TestOPDS2WithODLImporter:
             available=1,
         )
         left = LicenseInfoHelper(
-            license=LicenseHelper(concurrency=2), available=1, left=5
+            license=LicenseHelper(concurrency=2), available=1, left=1
         )
         perpetual = LicenseInfoHelper(license=LicenseHelper(concurrency=1), available=0)
         licenses = [date, left, perpetual]
@@ -862,7 +862,7 @@ class TestOPDS2WithODLImporter:
             [imported_pool] = imported_pools
             assert len(imported_pool.licenses) == 3
             assert imported_pool.licenses_available == 2
-            assert imported_pool.licenses_owned == 7
+            assert imported_pool.licenses_owned == 3
 
             # No licenses are expired
             assert sum(not l.is_inactive for l in imported_pool.licenses) == len(
