@@ -1,6 +1,5 @@
 import os
 from enum import Enum
-from typing import Literal
 from urllib.parse import urljoin
 
 from pydantic import AliasGenerator, Field
@@ -26,13 +25,15 @@ class AdminClientFeatureFlags(ServiceConfiguration):
         description="Show QuickSight dashboards only for sysadmins.",
     )
 
-    # The following fields CANNOT be overridden by environment variables, so
-    # their types are set to Literal[True] to prevent them from being overridden.
-    enable_auto_list: Literal[True] = Field(
+    # The following fields are currently not overridden anywhere in our config,
+    # since they have been fully rolled out and are not expected to change.
+    # TODO: Remove these fields here and in the admin client if we no longer
+    #   need to support them as feature flags.
+    enable_auto_list: bool = Field(
         True,
         description="Enable auto-list of items.",
     )
-    show_circ_events_download: Literal[True] = Field(
+    show_circ_events_download: bool = Field(
         True,
         description="Show download button for Circulation Events.",
     )
