@@ -760,7 +760,7 @@ class TestOverdriveAPI:
         patron = db.patron(library=library)
 
         # The site default for notification emails will never be used.
-        settings.default_notification_email_address = "notifications@example.com"  # type: ignore[assignment]
+        settings.default_notification_email_address = "notifications@example.com"
 
         # If the patron has used a particular email address to put
         # books on hold, use that email address, not the site default.

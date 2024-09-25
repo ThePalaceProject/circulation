@@ -88,10 +88,10 @@ class TestOPDSFeedController:
         # Set up configuration settings for links and entry points
         library = circulation_fixture.db.default_library()
         settings = library_fixture.settings(library)
-        settings.terms_of_service = "a"  # type: ignore[assignment]
-        settings.privacy_policy = "b"  # type: ignore[assignment]
-        settings.copyright = "c"  # type: ignore[assignment]
-        settings.about = "d"  # type: ignore[assignment]
+        settings.terms_of_service = "a"
+        settings.privacy_policy = "b"
+        settings.copyright = "c"
+        settings.about = "d"
 
         # Make a real OPDS feed and poke at it.
         with (
@@ -250,7 +250,7 @@ class TestOPDSFeedController:
         # case, page()) is called properly.
         library = circulation_fixture.db.default_library()
         settings = library_fixture.settings(library)
-        settings.minimum_featured_quality = 0.15  # type: ignore[assignment]
+        settings.minimum_featured_quality = 0.15
         settings.featured_lane_size = 2
 
         # Patron with root lane -> redirect to root lane

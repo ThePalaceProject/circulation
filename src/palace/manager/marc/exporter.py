@@ -5,7 +5,7 @@ from collections.abc import Generator, Iterable, Sequence
 from uuid import UUID, uuid4
 
 import pytz
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
@@ -41,9 +41,9 @@ from palace.manager.util.uuid import uuid_encode
 class LibraryInfo(BaseModel):
     library_id: int
     library_short_name: str
-    last_updated: datetime.datetime | None
+    last_updated: datetime.datetime | None = None
     needs_update: bool
-    organization_code: str | None
+    organization_code: str | None = None
     include_summary: bool
     include_genres: bool
     web_client_urls: tuple[str, ...]
@@ -53,9 +53,7 @@ class LibraryInfo(BaseModel):
 
     s3_key_delta_uuid: str
     s3_key_delta: str | None = None
-
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
 
 class MarcExporter(

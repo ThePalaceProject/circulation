@@ -16,5 +16,5 @@ def add_request_context(
     """
 
     if form is not None:
-        model.parse_obj(parse_multi_dict(form))
+        model.model_validate(parse_multi_dict(form))
         request.form = form

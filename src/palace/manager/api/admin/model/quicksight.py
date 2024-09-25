@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from palace.manager.util.flask_util import CustomBaseModel, str_comma_list_validator
 
@@ -10,7 +10,8 @@ class QuicksightGenerateUrlRequest(CustomBaseModel):
         description="The list of libraries to include in the dataset, an empty list is equivalent to all the libraries the user is allowed to access."
     )
 
-    @validator("library_uuids", pre=True)
+    @field_validator("library_uuids", mode="before")
+    @classmethod
     def parse_library_uuids(cls, value) -> list[str]:
         return str_comma_list_validator(value)
 

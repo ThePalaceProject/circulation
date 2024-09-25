@@ -1174,7 +1174,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
     def add_configuration_links(self, feed: FeedData) -> None:
         _db = Session.object_session(self.library)
 
-        def _add_link(l: dict[str, Any]) -> None:
+        def _add_link(l: dict[str, str]) -> None:
             feed.add_link(**l)
 
         library = self.library

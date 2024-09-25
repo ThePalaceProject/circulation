@@ -145,7 +145,9 @@ class ODLAuthenticatedGet(ABC):
     @staticmethod
     def _get_oauth_url_from_auth_document(auth_document_str: str) -> str:
         try:
-            auth_document = AuthenticationDocument.parse_raw(auth_document_str)
+            auth_document = AuthenticationDocument.model_validate_json(
+                auth_document_str
+            )
         except ValidationError as e:
             raise IntegrationException(
                 "Invalid OPDS authentication document",
@@ -180,7 +182,7 @@ class ODLAuthenticatedGet(ABC):
             allowed_response_codes=["2xx"],
         )
         try:
-            data = TokenGrant.parse_raw(resp.content)
+            data = TokenGrant.model_validate_json(resp.content)
         except ValidationError as e:
             raise IntegrationException(
                 "Invalid oauth authentication response",

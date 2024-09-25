@@ -4,10 +4,11 @@ from typing import Any
 
 import pytest
 from coverage.annotate import os
-from pydantic.env_settings import SettingsSourceCallable
+from pydantic_settings import PydanticBaseSettingsSource
 from pytest import MonkeyPatch
 
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.integration.settings import BaseSettings
 from palace.manager.service.sitewide import SitewideConfiguration
 
 
@@ -22,8 +23,8 @@ class SitewideConfigurationFixture:
 
         # Patch the customise_sources method to make sure we only use the mock env
         monkeypatch.setattr(
-            SitewideConfiguration.Config,
-            "customise_sources",
+            SitewideConfiguration,
+            "settings_customise_sources",
             self.customize_sources,
             raising=False,
         )
@@ -34,12 +35,15 @@ class SitewideConfigurationFixture:
             "PALACE_SECRET_KEY", "a very long and complicated secret key"
         )
 
+    @classmethod
     def customize_sources(
-        self,
-        init_settings: SettingsSourceCallable,
-        env_settings: SettingsSourceCallable,
-        file_secret_settings: SettingsSourceCallable,
-    ) -> tuple[SettingsSourceCallable, ...]:
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         return (env_settings,)
 
     def set(self, key: str, value: str | None) -> None:

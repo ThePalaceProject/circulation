@@ -39,7 +39,7 @@ def celery_pydantic_config() -> CeleryConfiguration:
 
     The config returned will then be used to configure the `celery_app` fixture.
     """
-    return CeleryConfiguration.construct(broker_url="memory://")  # type: ignore[arg-type]
+    return CeleryConfiguration.model_construct(broker_url="memory://")
 
 
 @pytest.fixture(scope="session")
@@ -48,7 +48,7 @@ def celery_config(celery_pydantic_config: CeleryConfiguration) -> Mapping[str, A
 
     The config returned will then be used to configure the `celery_app` fixture.
     """
-    return celery_pydantic_config.dict() | task_queue_config()
+    return celery_pydantic_config.model_dump() | task_queue_config()
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +87,7 @@ def celery_fixture(
 
     # Make sure our services container has the correct celery app setup
     container = services_fixture.celery_fixture.celery_container
-    container.config.from_dict(celery_pydantic_config.dict())
+    container.config.from_dict(celery_pydantic_config.model_dump())
     container.app.override(celery_app)
 
     # We mock out the session maker, so it doesn't try to create a new session,

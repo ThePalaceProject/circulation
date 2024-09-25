@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from opensearchpy import OpenSearch
-from pydantic import AnyHttpUrl
+from pydantic_settings import SettingsConfigDict
 
 from palace.manager.celery.tasks.search import get_work_search_documents
 from palace.manager.search.external_search import ExternalSearchIndex
@@ -17,6 +17,7 @@ from palace.manager.service.container import Services, wire_container
 from palace.manager.service.search.container import Search
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.log import LoggerMixin
+from palace.manager.util.pydantic import HttpUrl
 from tests.fixtures.config import FixtureTestUrlConfiguration
 from tests.fixtures.database import DatabaseTransactionFixture, TestIdFixture
 from tests.fixtures.services import ServicesFixture
@@ -24,12 +25,10 @@ from tests.mocks.search import SearchServiceFake
 
 
 class SearchTestConfiguration(FixtureTestUrlConfiguration):
-    url: AnyHttpUrl
+    url: HttpUrl
     timeout: int = 20
     maxsize: int = 25
-
-    class Config:
-        env_prefix = "PALACE_TEST_SEARCH_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_TEST_SEARCH_")
 
 
 class ExternalSearchFixture(LoggerMixin):
@@ -50,7 +49,7 @@ class ExternalSearchFixture(LoggerMixin):
 
         # Set up our testing search instance in the services container
         self.search_container = Search()
-        search_config_dict = self.search_config.dict()
+        search_config_dict = self.search_config.model_dump()
         search_config_dict["index_prefix"] = self.index_prefix
         self.search_container.config.from_dict(search_config_dict)
         self.services_container.search.override(self.search_container)

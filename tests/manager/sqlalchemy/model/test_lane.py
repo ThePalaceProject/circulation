@@ -1236,10 +1236,10 @@ class TestFeaturedFacets:
     ):
         # Check how FeaturedFacets gets its minimum_featured_quality value.
         library1_settings = library_fixture.mock_settings()
-        library1_settings.minimum_featured_quality = 0.22  # type: ignore[assignment]
+        library1_settings.minimum_featured_quality = 0.22
         library1 = library_fixture.library(settings=library1_settings)
         library2_settings = library_fixture.mock_settings()
-        library2_settings.minimum_featured_quality = 0.99  # type: ignore[assignment]
+        library2_settings.minimum_featured_quality = 0.99
         library2 = library_fixture.library(settings=library2_settings)
         lane = db.lane(library=library2)
 

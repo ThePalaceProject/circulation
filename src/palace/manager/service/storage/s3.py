@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, BinaryIO
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.util.log import LoggerMixin
@@ -26,10 +26,7 @@ if TYPE_CHECKING:
 class MultipartS3UploadPart(BaseModel):
     etag: str = Field(..., alias="ETag")
     part_number: int = Field(..., alias="PartNumber")
-
-    class Config:
-        allow_population_by_field_name = True
-        frozen = True
+    model_config = ConfigDict(populate_by_name=True, frozen=True)
 
 
 class MultipartS3ContextManager(LoggerMixin):
@@ -130,11 +127,11 @@ class S3Service(LoggerMixin):
         field_names = [field[1] for field in field_tuple]
         if "region" in field_names and self.region is None:
             raise CannotLoadConfiguration(
-                "URL template requires a region, but no region was provided."
+                f"URL template requires a region, but no region was provided ({self.url_template})."
             )
         if "key" not in field_names:
             raise CannotLoadConfiguration(
-                "URL template requires a key, but no key was provided."
+                f"URL template requires a key, but no key was provided ({self.url_template})."
             )
 
     @classmethod
@@ -237,7 +234,7 @@ class S3Service(LoggerMixin):
             Bucket=self.bucket,
             Key=key,
             UploadId=upload_id,
-            MultipartUpload=dict(Parts=[part.dict(by_alias=True) for part in parts]),  # type: ignore[misc]
+            MultipartUpload=dict(Parts=[part.model_dump(by_alias=True) for part in parts]),  # type: ignore[misc]
         )
 
     def multipart_abort(self, key: str, upload_id: str) -> None:

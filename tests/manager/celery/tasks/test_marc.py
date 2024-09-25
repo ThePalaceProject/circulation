@@ -160,7 +160,7 @@ class MarcExportCollectionFixture:
         service = self.services_fixture.services.integration_registry.catalog_services()
         assert collection.id is not None
         info = MarcExporter.enabled_libraries(self.db.session, service, collection.id)
-        libraries = [l.dict() for l in info]
+        libraries = [l.model_dump() for l in info]
         marc.marc_export_collection.delay(
             collection.id, batch_size=5, start_time=self.start_time, libraries=libraries
         ).wait()

@@ -126,7 +126,9 @@ class ServicesEmailFixture:
 def services_email_fixture() -> ServicesEmailFixture:
     email_container = Email()
     sender_email = "test@email.com"
-    email_container.config.from_dict(EmailConfiguration(sender=sender_email).dict())
+    email_container.config.from_dict(
+        EmailConfiguration(sender=sender_email).model_dump()
+    )
     mock_emailer = MagicMock()
     email_container.emailer.override(mock_emailer)
     return ServicesEmailFixture(email_container, mock_emailer, sender_email)
@@ -176,7 +178,9 @@ class ServicesFixture:
         self.services.celery.override(celery.celery_container)
 
         # setup basic configuration from default settings
-        self.services.config.from_dict({"sitewide": SitewideConfiguration().dict()})
+        self.services.config.from_dict(
+            {"sitewide": SitewideConfiguration().model_dump()}
+        )
 
     def build_config_mapping(self, path: list[str], value: Any) -> dict[str, Any]:
         path_segment = path.pop()

@@ -608,7 +608,7 @@ class TestPatronAuth:
             goal=Goals.PATRON_AUTH_GOAL,
         )
         assert auth_service is not None
-        assert auth_service.id == int(response.response[0])  # type: ignore[index]
+        assert auth_service.id == int(response.get_data(as_text=True))
         assert (
             controller_fixture.get_protocol(SimpleAuthenticationProvider)
             == auth_service.protocol

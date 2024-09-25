@@ -2054,7 +2054,7 @@ class TestOPDSImportMonitor:
         collection = db.collection(
             external_account_id="http://url/",
             data_source_name=data_source_name,
-            settings={"connection_max_retry_count": retry_count},
+            settings={"max_retry_count": retry_count},
         )
 
         # The importer takes its retry count from the collection settings.

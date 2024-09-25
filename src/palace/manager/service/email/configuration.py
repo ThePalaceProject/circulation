@@ -1,4 +1,5 @@
 from pydantic import EmailStr, PositiveInt
+from pydantic_settings import SettingsConfigDict
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
@@ -6,8 +7,7 @@ from palace.manager.service.configuration.service_configuration import (
 
 
 class EmailConfiguration(ServiceConfiguration):
-    class Config:
-        env_prefix = "PALACE_MAIL_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_MAIL_")
 
     server: str | None = None
     port: PositiveInt = 25

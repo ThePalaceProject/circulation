@@ -10,7 +10,10 @@ class TestPlaytimeEntriesModels:
             PlaytimeTimeEntry(
                 id="", during_minute="2000-01-01T12:00:00+01:00", seconds_played=12
             )
-        assert raised.value.errors()[0]["msg"] == "Timezone MUST be UTC always"
+        assert (
+            raised.value.errors()[0]["msg"]
+            == "Value error, Timezone MUST be UTC always"
+        )
 
         # Seconds played coercion
         entry2 = PlaytimeTimeEntry(

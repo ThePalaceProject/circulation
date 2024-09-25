@@ -380,7 +380,7 @@ class TestSirsiDynixAuthenticationProvider:
                 LibraryIdentifierRestriction.PREFIX,
                 "abc",
                 PATRON_OF_ANOTHER_LIBRARY.with_debug(
-                    "'patronType' does not match library restriction: 'testtype' does not start with 'abc'."
+                    "'patrontype' does not match library restriction: 'testtype' does not start with 'abc'."
                 ),
             ),
         ],
@@ -395,7 +395,7 @@ class TestSirsiDynixAuthenticationProvider:
     ):
         library = db.default_library()
         library_settings = sirsi_auth_fixture.library_settings(
-            library_identifier_field="patronType",
+            library_identifier_field="patrontype",
             library_identifier_restriction_type=restriction_type,
             library_identifier_restriction_criteria=restriction,
         )

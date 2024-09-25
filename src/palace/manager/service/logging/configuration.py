@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 import sys
 from enum import auto
-from typing import Any
 
 import boto3
-from pydantic import NonNegativeInt, PositiveInt, validator
+from pydantic import NonNegativeInt, PositiveInt, field_validator
+from pydantic_core.core_schema import ValidationInfo
+from pydantic_settings import SettingsConfigDict
 from watchtower import DEFAULT_LOG_STREAM_NAME
 
 from palace.manager.service.configuration.service_configuration import (
@@ -87,11 +88,12 @@ class LoggingConfiguration(ServiceConfiguration):
     cloudwatch_access_key: str | None = None
     cloudwatch_secret_key: str | None = None
 
-    @validator("cloudwatch_region")
+    @field_validator("cloudwatch_region")
+    @classmethod
     def validate_cloudwatch_region(
-        cls, v: str | None, values: dict[str, Any]
+        cls, v: str | None, info: ValidationInfo
     ) -> str | None:
-        if not values.get("cloudwatch_enabled"):
+        if not info.data.get("cloudwatch_enabled"):
             # If cloudwatch is not enabled, no validation is needed.
             return None
 
@@ -106,5 +108,4 @@ class LoggingConfiguration(ServiceConfiguration):
             )
         return v
 
-    class Config:
-        env_prefix = "PALACE_LOG_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_LOG_")

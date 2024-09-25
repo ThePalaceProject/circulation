@@ -85,7 +85,7 @@ class CatalogServicesController(
             impl_cls = self.registry[protocol]
             settings_class = impl_cls.settings_class()
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
-            catalog_service.settings_dict = validated_settings.dict()
+            catalog_service.settings_dict = validated_settings.model_dump()
 
             # Update library settings
             if libraries_data:

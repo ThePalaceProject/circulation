@@ -16,7 +16,7 @@ from unittest.mock import patch
 import pytest
 import sqlalchemy
 from Crypto.PublicKey.RSA import import_key
-from pydantic import PostgresDsn
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
@@ -79,6 +79,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.session import SessionManager
 from palace.manager.sqlalchemy.util import create, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.pydantic import PostgresDsn
 from tests.fixtures.config import FixtureTestUrlConfiguration, ToxPasswordUrlTuple
 from tests.fixtures.services import ServicesFixture
 
@@ -140,9 +141,7 @@ def function_test_id(worker_id: str) -> TestIdFixture:
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
     create_database: bool = True
-
-    class Config:
-        env_prefix = "PALACE_TEST_DATABASE_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_TEST_DATABASE_")
 
     @classmethod
     def url_cls(cls) -> type[ToxPasswordUrlTuple]:
@@ -511,7 +510,7 @@ class DatabaseTransactionFixture:
 
         name = name or self.fresh_str()
         short_name = short_name or self.fresh_str()
-        settings_dict = settings.dict() if settings else {}
+        settings_dict = settings.model_dump() if settings else {}
 
         # Make sure we have defaults for settings that are required
         if "website" not in settings_dict:

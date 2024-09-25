@@ -10,17 +10,15 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from pydantic import AnyHttpUrl
+from pydantic_settings import SettingsConfigDict
 
-from palace.manager.service.configuration.service_configuration import (
-    ServiceConfiguration,
-)
 from palace.manager.service.storage.container import Storage
 from palace.manager.service.storage.s3 import (
     MultipartS3ContextManager,
     MultipartS3UploadPart,
     S3Service,
 )
+from palace.manager.util.pydantic import HttpUrl
 from tests.fixtures.config import FixtureTestUrlConfiguration
 
 if sys.version_info >= (3, 11):
@@ -217,12 +215,11 @@ def s3_service_fixture() -> S3ServiceFixture:
 
 
 class S3UploaderIntegrationConfiguration(FixtureTestUrlConfiguration):
-    url: AnyHttpUrl
+    url: HttpUrl
     user: str
     password: str
 
-    class Config(ServiceConfiguration.Config):
-        env_prefix = "PALACE_TEST_MINIO_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_TEST_MINIO_")
 
 
 class S3ServiceIntegrationFixture:

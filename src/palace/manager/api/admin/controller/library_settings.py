@@ -137,7 +137,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
         library.name = name
         library.short_name = short_name
-        library.settings_dict = validated_settings.dict()
+        library.settings_dict = validated_settings.model_dump()
 
         # Validate and scale logo
         self.scale_and_store_logo(library, flask.request.files.get("logo"))

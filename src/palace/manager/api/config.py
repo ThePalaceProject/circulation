@@ -107,7 +107,7 @@ class Configuration(CoreConfiguration):
         """
         holdings = library.estimated_holdings_by_language()
         large, small, tiny = cls.classify_holdings(holdings)
-        settings = LibrarySettings.construct(
+        settings = LibrarySettings.model_construct(
             large_collection_languages=large,
             small_collection_languages=small,
             tiny_collection_languages=tiny,

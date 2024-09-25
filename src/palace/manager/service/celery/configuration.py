@@ -1,17 +1,10 @@
-import os
 from typing import Any
 
-from pydantic import AnyUrl, Extra
-from pydantic.env_settings import BaseSettings, SettingsSourceCallable
+from pydantic_settings import SettingsConfigDict
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
-
-
-class CeleryBrokerUrl(AnyUrl):
-    host_required: bool = False
-    allowed_schemes = {"redis", "sqs"}
 
 
 class CeleryConfiguration(ServiceConfiguration):
@@ -19,7 +12,13 @@ class CeleryConfiguration(ServiceConfiguration):
     # easily pass them into the Celery app. You can find more details about any of
     # these settings in the Celery documentation.
     # https://docs.celeryq.dev/en/stable/userguide/configuration.html
-    broker_url: CeleryBrokerUrl
+
+    # It would be nice to validate the broker_url via a Pydantic URL type, but for
+    # sqs:// urls, the host isn't required, but you can still supply a username and
+    # password. This isn't supported by Pydantic URL type. There is an open bug for
+    # this issue: https://github.com/pydantic/pydantic/issues/7267. If / when that
+    # is resolved we can switch to using the Pydantic URL type.
+    broker_url: str
     broker_connection_retry_on_startup: bool = True
 
     # Redis broker options
@@ -54,32 +53,12 @@ class CeleryConfiguration(ServiceConfiguration):
     cloudwatch_statistics_region: str = "us-west-2"
     cloudwatch_statistics_upload_size: int = 500
 
-    class Config:
-        env_prefix = "PALACE_CELERY_"
-        extra = Extra.allow
+    model_config = SettingsConfigDict(env_prefix="PALACE_CELERY_")
 
-        # See `pydantic` documentation on customizing sources.
-        # https://docs.pydantic.dev/1.10/usage/settings/#adding-sources
-        @classmethod
-        def customise_sources(
-            cls,
-            init_settings: SettingsSourceCallable,
-            env_settings: SettingsSourceCallable,
-            file_secret_settings: SettingsSourceCallable,
-        ) -> tuple[SettingsSourceCallable, ...]:
-            # We return an additional function that will parse the environment
-            # variables and extract any that are not part of the settings model,
-            # so that we can set additional configuration options for Celery at
-            # deployment time if needed.
-            return (
-                init_settings,
-                env_settings,
-                file_secret_settings,
-                additional_fields_from_env,
-            )
-
-    def dict(self, *, merge_options: bool = True, **kwargs: Any) -> dict[str, Any]:
-        results = super().dict(**kwargs)
+    def model_dump(
+        self, *, merge_options: bool = True, **kwargs: Any
+    ) -> dict[str, Any]:
+        results = super().model_dump(**kwargs)
         if merge_options:
             result_keys = results.copy().keys()
             broker_transport_options = {}
@@ -91,21 +70,3 @@ class CeleryConfiguration(ServiceConfiguration):
                     ] = value
             results["broker_transport_options"] = broker_transport_options
         return results
-
-
-def additional_fields_from_env(settings: BaseSettings) -> dict[str, Any]:
-    """
-    This function will extract any environment variables that start with
-    the settings model's env_prefix but are not part of the settings model.
-
-    This allows us to set additional configuration options via environment
-    variables at deployment time.
-    """
-    additional_fields = {}
-    env_prefix = settings.__config__.env_prefix or ""
-    for key, value in os.environ.items():
-        if key.startswith(env_prefix):
-            field_name = key.replace(env_prefix, "").lower()
-            if field_name not in settings.__fields__:
-                additional_fields[field_name] = value
-    return additional_fields

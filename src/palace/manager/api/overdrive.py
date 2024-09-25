@@ -2903,7 +2903,7 @@ class OverdriveAdvantageAccount:
             # The child doesn't exist yet. Create it.
             child, _ = Collection.by_name_and_protocol(_db, name, OverdriveAPI.label())
             child.parent = parent
-            child_settings = OverdriveChildSettings.construct(
+            child_settings = OverdriveChildSettings.model_construct(
                 external_account_id=self.library_id
             )
             integration_settings_update(

@@ -105,13 +105,13 @@ class TestLibraryAnnotator:
         # Set up configuration settings for links.
         library = annotator_fixture.db.default_library()
         settings = library_fixture.settings(library)
-        settings.terms_of_service = "http://terms/"  # type: ignore[assignment]
-        settings.privacy_policy = "http://privacy/"  # type: ignore[assignment]
-        settings.copyright = "http://copyright/"  # type: ignore[assignment]
-        settings.about = "http://about/"  # type: ignore[assignment]
-        settings.license = "http://license/"  # type: ignore[assignment]
-        settings.help_email = "help@me"  # type: ignore[assignment]
-        settings.help_web = "http://help/"  # type: ignore[assignment]
+        settings.terms_of_service = "http://terms/"
+        settings.privacy_policy = "http://privacy/"
+        settings.copyright = "http://copyright/"
+        settings.about = "http://about/"
+        settings.license = "http://license/"
+        settings.help_email = "help@me"
+        settings.help_web = "http://help/"
 
         # Set up settings for navigation links.
         settings.web_header_links = ["http://example.com/1", "http://example.com/2"]
@@ -342,7 +342,7 @@ class TestLibraryAnnotator:
         authdata = AuthdataUtility.from_config(library)
         assert authdata is not None
         decoded = authdata.decode_short_client_token(token_text)
-        expected_url = library.settings.website
+        expected_url = str(library.settings.website)
         assert (expected_url, patron_identifier) == decoded
 
         # If we call adobe_id_tags again we'll get a distinct tag

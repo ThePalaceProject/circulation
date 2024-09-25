@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import os
 
-from pydantic import AnyUrl, Extra
+from pydantic_settings import SettingsConfigDict
 from typing_extensions import Self
 
 from palace.manager.service.configuration.service_configuration import (
@@ -31,11 +31,12 @@ class ToxPasswordUrlTuple(ToxUrlTuple):
 
 
 class FixtureTestUrlConfiguration(ServiceConfiguration):
-    url: AnyUrl
+    url: str
 
-    class Config:
-        env_prefix = "PALACE_TEST_"
-        extra = Extra.ignore
+    model_config = SettingsConfigDict(
+        env_prefix="PALACE_TEST_",
+        extra="ignore",
+    )
 
     @classmethod
     def url_cls(cls) -> type[ToxUrlTuple]:
@@ -48,7 +49,9 @@ class FixtureTestUrlConfiguration(ServiceConfiguration):
         # if we are missing any part, we just load the configuration from the environment like
         # normal as a fallback. This fallback is the normal behavior that will be used when
         # we are running outside tox-docker.
-        prefix = cls.__config__.env_prefix
+        prefix = cls.model_config.get("env_prefix")
+        assert prefix is not None, "env_prefix must be set on the class"
+
         prefix += "URL"
 
         fields = [f.name for f in dataclasses.fields(cls.url_cls())]

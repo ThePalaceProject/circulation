@@ -96,15 +96,15 @@ def create_container() -> Services:
     container = Services()
     container.config.from_dict(
         {
-            "sitewide": SitewideConfiguration().dict(),
-            "storage": StorageConfiguration().dict(),
-            "logging": LoggingConfiguration().dict(),
-            "analytics": AnalyticsConfiguration().dict(),
-            "search": SearchConfiguration().dict(),
-            "email": EmailConfiguration().dict(),
-            "celery": CeleryConfiguration().dict(),
-            "fcm": FcmConfiguration().dict(),
-            "redis": RedisConfiguration().dict(),
+            "sitewide": SitewideConfiguration().model_dump(),
+            "storage": StorageConfiguration().model_dump(),
+            "logging": LoggingConfiguration().model_dump(),
+            "analytics": AnalyticsConfiguration().model_dump(),
+            "search": SearchConfiguration().model_dump(),
+            "email": EmailConfiguration().model_dump(),
+            "celery": CeleryConfiguration().model_dump(),
+            "fcm": FcmConfiguration().model_dump(),
+            "redis": RedisConfiguration().model_dump(),
         }
     )
     wire_container(container)

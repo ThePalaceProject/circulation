@@ -8,7 +8,8 @@ from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
 from lxml import etree
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 from werkzeug.datastructures import MultiDict
 
 from palace.manager.util import problem_detail
@@ -185,29 +186,22 @@ def boolean_value(value: str) -> bool:
     return True if value in ["true", "True", True, "1"] else False
 
 
-def _snake_to_camel_case(name: str) -> str:
-    """Convert from Python snake case to JavaScript lower camel case."""
-    new_name = "".join(word.title() for word in name.split("_") if word)
-    if not new_name:
-        raise ValueError("Name ('{name}') may not consist entirely of underscores.")
-    return f"{new_name[0].lower()}{new_name[1:]}"
-
-
 class CustomBaseModel(BaseModel):
-    class Config:
-        alias_generator = _snake_to_camel_case
-        allow_population_by_field_name = True
-        extra = Extra.forbid
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="forbid",
+        coerce_numbers_to_str=True,
+    )
 
-    def api_dict(
-        self, *args: Any, by_alias: bool = True, **kwargs: Any
-    ) -> dict[str, Any]:
+    def api_dict(self, **kwargs: Any) -> dict[str, Any]:
         """Return the instance in a form suitable for a web response.
 
         By default, the properties use their lower camel case aliases,
         rather than their Python class member names.
         """
-        return self.dict(*args, by_alias=by_alias, **kwargs)
+        kwargs.setdefault("by_alias", True)
+        return self.model_dump(**kwargs)
 
 
 def str_comma_list_validator(value):

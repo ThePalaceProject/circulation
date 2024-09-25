@@ -292,7 +292,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         metered_licenses_available=0,
     )
     # We can update individual properties on the object while copying.
-    new_metered_inventory = empty_inventory.copy(
+    new_metered_inventory = empty_inventory.model_copy(
         update={
             "titles": 2,
             "available_titles": 2,
@@ -334,14 +334,14 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
 
     # Now there is 1 open access title in the database,
     # created in CirculationControllerTest.setup.
-    expected_library_inventory = empty_inventory.copy(
+    expected_library_inventory = empty_inventory.model_copy(
         update={
             "titles": 1,
             "available_titles": 1,
             "open_access_titles": 1,
         }
     )
-    expected_summary_inventory = expected_library_inventory.copy()
+    expected_summary_inventory = expected_library_inventory.model_copy()
 
     response = session.get_statistics()
     library_stats_data = response.libraries_by_key.get(default_library.short_name)
@@ -420,7 +420,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
     pool.licenses_available = 5
 
     c1_previous_book_inventory = expected_library_inventory
-    c1_added_book_inventory = empty_inventory.copy(
+    c1_added_book_inventory = empty_inventory.model_copy(
         update={
             "titles": 1,
             "available_titles": 0,
@@ -431,7 +431,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         }
     )
 
-    c2_audio_inventory = empty_inventory.copy(
+    c2_audio_inventory = empty_inventory.model_copy(
         update={
             "titles": 1,
             "available_titles": 1,
@@ -441,7 +441,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
             "metered_licenses_available": 5,
         }
     )
-    c2_book_inventory = empty_inventory.copy(
+    c2_book_inventory = empty_inventory.model_copy(
         update={
             "titles": 1,
             "available_titles": 1,
@@ -451,7 +451,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
             "metered_licenses_available": 5,
         }
     )
-    c2_no_medium_inventory = empty_inventory.copy(
+    c2_no_medium_inventory = empty_inventory.model_copy(
         update={
             "titles": 1,
             "available_titles": 0,
@@ -462,7 +462,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
         }
     )
 
-    c3_book_inventory = empty_inventory.copy()
+    c3_book_inventory = empty_inventory.model_copy()
 
     # All collections are included in summaries, since our admin is a sysadmin.
     expected_library_inventory = (

@@ -2,10 +2,11 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import pytest
-from pydantic import RedisDsn
+from pydantic_settings import SettingsConfigDict
 from typing_extensions import Self
 
 from palace.manager.service.redis.redis import Redis
+from palace.manager.util.pydantic import RedisDsn
 from tests.fixtures.config import FixtureTestUrlConfiguration
 from tests.fixtures.database import TestIdFixture
 from tests.fixtures.services import ServicesFixture
@@ -13,9 +14,7 @@ from tests.fixtures.services import ServicesFixture
 
 class RedisTestConfiguration(FixtureTestUrlConfiguration):
     url: RedisDsn
-
-    class Config:
-        env_prefix = "PALACE_TEST_REDIS_"
+    model_config = SettingsConfigDict(env_prefix="PALACE_TEST_REDIS_")
 
 
 class RedisFixture:
