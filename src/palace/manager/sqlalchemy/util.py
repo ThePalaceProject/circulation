@@ -149,6 +149,10 @@ def numericrange_to_string(r: NumericRange | None) -> str:
         return str(lower)
     if lower is None:
         return str(upper)
+    # Currently this function only supports integer ranges, but NumericRange
+    # supports floats as well, so we assert that the values are integers, so
+    # this function fails if we ever start using floats.
+    assert isinstance(lower, int) and isinstance(upper, int)
     if not r.upper_inc:
         upper -= 1
     if not r.lower_inc:
