@@ -166,7 +166,9 @@ class TestAnnotationController:
             patron.synchronize_annotations = True
             # The patron doesn't have any annotations yet.
             annotations = (
-                annotation_fixture.db.session.query(Annotation).filter(Annotation.patron == patron).all()  # type: ignore
+                annotation_fixture.db.session.query(Annotation)
+                .filter(Annotation.patron == patron)
+                .all()
             )
             assert 0 == len(annotations)
 
@@ -175,7 +177,9 @@ class TestAnnotationController:
             # The patron doesn't have the pool on loan yet, so the request fails.
             assert 400 == response.status_code
             annotations = (
-                annotation_fixture.db.session.query(Annotation).filter(Annotation.patron == patron).all()  # type: ignore
+                annotation_fixture.db.session.query(Annotation)
+                .filter(Annotation.patron == patron)
+                .all()
             )
             assert 0 == len(annotations)
 
@@ -185,7 +189,9 @@ class TestAnnotationController:
             assert 200 == response.status_code
 
             annotations = (
-                annotation_fixture.db.session.query(Annotation).filter(Annotation.patron == patron).all()  # type: ignore
+                annotation_fixture.db.session.query(Annotation)
+                .filter(Annotation.patron == patron)
+                .all()
             )
             assert 1 == len(annotations)
             annotation = annotations[0]

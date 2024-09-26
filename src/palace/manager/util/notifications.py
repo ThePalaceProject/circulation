@@ -13,7 +13,6 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 
@@ -114,15 +113,19 @@ class PushNotifications(LoggerMixin):
         url = self.base_url
         edition = loan.license_pool.presentation_edition
         identifier = loan.license_pool.identifier
-        library_short_name = loan.library.short_name
-        library_name = loan.library.name
+        library = loan.library
+        # It shouldn't be possible to get here for a loan without a library, but for mypy
+        # and safety we will assert it anyway
+        assert library is not None
+        library_short_name = library.short_name
+        library_name = library.name
         title = f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!"
         body = f'Your loan for "{edition.title}" at {library_name} is expiring soon'
         data = dict(
             title=title,
             body=body,
             event_type=NotificationType.LOAN_EXPIRY,
-            loans_endpoint=f"{url}/{loan.library.short_name}/loans",
+            loans_endpoint=f"{url}/{library.short_name}/loans",
             type=identifier.type,
             identifier=identifier.identifier,
             library=library_short_name,
@@ -156,16 +159,16 @@ class PushNotifications(LoggerMixin):
         for hold in holds:
             try:
                 tokens = self.notifiable_tokens(hold.patron)
+                work_title = hold.work.title  # type: ignore[union-attr]
                 self.log.info(
                     f"Notifying patron {hold.patron.authorization_identifier or hold.patron.username} for "
-                    f"hold: {hold.work.title}. Patron has {len(tokens)} device tokens."
+                    f"hold: {work_title}. Patron has {len(tokens)} device tokens."
                 )
                 loans_api = f"{url}/{hold.patron.library.short_name}/loans"
-                work: Work = hold.work
                 identifier: Identifier = hold.license_pool.identifier
                 library_name = hold.patron.library.name
                 title = "Your hold is available!"
-                body = f'Your hold on "{work.title}" is available at {library_name}!'
+                body = f'Your hold on "{work_title}" is available at {library_name}!'
                 data = dict(
                     title=title,
                     body=body,

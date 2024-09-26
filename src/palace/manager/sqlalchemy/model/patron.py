@@ -4,7 +4,8 @@ from __future__ import annotations
 import datetime
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
@@ -29,22 +30,28 @@ from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.credential import Credential
-from palace.manager.sqlalchemy.util import get_one_or_create, numericrange_to_tuple
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.util import NumericRangeTuple, numericrange_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.devicetokens import DeviceToken
+    from palace.manager.sqlalchemy.model.lane import Lane
     from palace.manager.sqlalchemy.model.library import Library
     from palace.manager.sqlalchemy.model.licensing import (
         License,
         LicensePool,
         LicensePoolDeliveryMechanism,
     )
+    from palace.manager.sqlalchemy.model.work import Work
 
 
 class LoanAndHoldMixin:
+    license_pool: LicensePool
+    patron: Patron
+
     @property
-    def work(self):
+    def work(self) -> Work | None:
         """Try to find the corresponding work for this Loan/Hold."""
         license_pool = self.license_pool
         if not license_pool:
@@ -56,11 +63,11 @@ class LoanAndHoldMixin:
         return None
 
     @property
-    def library(self):
+    def library(self) -> Library | None:
         """Try to find the corresponding library for this Loan/Hold."""
         if self.patron:
             return self.patron.library
-        # If this Loan/Hold belongs to a external patron, there may be no library.
+        # If this Loan/Hold belongs to an external patron, there may be no library.
         return None
 
 
@@ -151,9 +158,10 @@ class Patron(Base, RedisKeyMixin):
     # is never _unintentionally_ written to the database.  It has to
     # be an explicit decision of the ILS integration code.
     cached_neighborhood = Column(Unicode, default=None, index=True)
+    neighborhood: str | None = None
 
     loans: Mapped[list[Loan]] = relationship(
-        "Loan", backref="patron", cascade="delete", uselist=True
+        "Loan", back_populates="patron", cascade="delete", uselist=True
     )
     holds: Mapped[list[Hold]] = relationship(
         "Hold",
@@ -165,7 +173,7 @@ class Patron(Base, RedisKeyMixin):
 
     annotations: Mapped[list[Annotation]] = relationship(
         "Annotation",
-        backref="patron",
+        back_populates="patron",
         order_by="desc(Annotation.timestamp)",
         cascade="delete",
     )
@@ -188,12 +196,8 @@ class Patron(Base, RedisKeyMixin):
     # than this time.
     MAX_SYNC_TIME = datetime.timedelta(hours=12)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.neighborhood: str | None = None
-
-    def __repr__(self):
-        def date(d):
+    def __repr__(self) -> str:
+        def date(d: datetime.datetime | datetime.date | None) -> datetime.date | None:
             """Format an object that might be a datetime as a date.
 
             This keeps a patron representation short.
@@ -210,7 +214,11 @@ class Patron(Base, RedisKeyMixin):
             date(self.last_external_sync),
         )
 
-    def identifier_to_remote_service(self, remote_data_source, generator=None):
+    def identifier_to_remote_service(
+        self,
+        remote_data_source: DataSource | str,
+        generator: Callable[[], str] | None = None,
+    ) -> str:
         """Find or randomly create an identifier to use when identifying
         this patron to a remote service.
         :param remote_data_source: A DataSource object (or name of a
@@ -218,7 +226,7 @@ class Patron(Base, RedisKeyMixin):
         """
         _db = Session.object_session(self)
 
-        def refresh(credential):
+        def refresh(credential: Credential) -> None:
             if generator and callable(generator):
                 identifier = generator()
             else:
@@ -233,26 +241,26 @@ class Patron(Base, RedisKeyMixin):
             refresh,
             allow_persistent_token=True,
         )
+        # Any way that we create a credential should result in a result that does not
+        # have credential.credential set to None. Mypy doesn't know that, so we assert
+        # it here.
+        assert credential.credential is not None
         return credential.credential
 
-    def works_on_loan(self):
-        db = Session.object_session(self)
-        loans = db.query(Loan).filter(Loan.patron == self)
+    def works_on_loan(self) -> list[Work]:
         return [loan.work for loan in self.loans if loan.work]
 
-    def works_on_loan_or_on_hold(self):
-        db = Session.object_session(self)
-        results = set()
+    def works_on_loan_or_on_hold(self) -> set[Work]:
         holds = [hold.work for hold in self.holds if hold.work]
         loans = self.works_on_loan()
         return set(holds + loans)
 
     @hybrid_property
-    def synchronize_annotations(self):
+    def synchronize_annotations(self) -> bool | None:
         return self._synchronize_annotations
 
     @synchronize_annotations.setter
-    def synchronize_annotations(self, value):
+    def synchronize_annotations(self, value: bool | None) -> None:
         """When a patron says they don't want their annotations to be stored
         on a library server, delete all their annotations.
         """
@@ -268,7 +276,7 @@ class Patron(Base, RedisKeyMixin):
         self._synchronize_annotations = value
 
     @property
-    def root_lane(self):
+    def root_lane(self) -> Lane | None:
         """Find the Lane, if any, to be used as the Patron's root lane.
 
         A patron with a root Lane can only access that Lane and the
@@ -293,7 +301,7 @@ class Patron(Base, RedisKeyMixin):
             .filter(Lane.root_for_patron_type.any(self.external_type))
             .order_by(Lane.id)
         )
-        lanes = qu.all()
+        lanes: list[Lane] = qu.all()
         if len(lanes) < 1:
             # The most common situation -- this patron has no special
             # root lane.
@@ -307,7 +315,9 @@ class Patron(Base, RedisKeyMixin):
             )
         return lanes[0]
 
-    def work_is_age_appropriate(self, work_audience, work_target_age):
+    def work_is_age_appropriate(
+        self, work_audience: str, work_target_age: int | tuple[int, int]
+    ) -> bool:
         """Is the given audience and target age an age-appropriate match for this Patron?
 
         NOTE: What "age-appropriate" means depends on some policy questions
@@ -347,8 +357,12 @@ class Patron(Base, RedisKeyMixin):
 
     @classmethod
     def age_appropriate_match(
-        cls, work_audience, work_target_age, reader_audience, reader_age
-    ):
+        cls,
+        work_audience: str,
+        work_target_age: NumericRange | NumericRangeTuple | float,
+        reader_audience: str | None,
+        reader_age: NumericRange | NumericRangeTuple | float,
+    ) -> bool:
         """Match the audience and target age of a work with that of a reader,
         and see whether they are an age-appropriate match.
 
@@ -390,7 +404,9 @@ class Patron(Base, RedisKeyMixin):
 
         # At this point we know that the patron is a juvenile.
 
-        def ensure_tuple(x):
+        def ensure_tuple(
+            x: NumericRange | NumericRangeTuple | float,
+        ) -> NumericRangeTuple | float:
             # Convert a potential NumericRange into a tuple.
             if isinstance(x, NumericRange):
                 x = numericrange_to_tuple(x)
@@ -400,22 +416,26 @@ class Patron(Base, RedisKeyMixin):
         if isinstance(reader_age, tuple):
             # A range was passed in rather than a specific age. Assume
             # the reader is at the top edge of the range.
-            ignore, reader_age = reader_age
+            _, reader_age_max = reader_age
+        else:
+            reader_age_max = reader_age
 
         work_target_age = ensure_tuple(work_target_age)
         if isinstance(work_target_age, tuple):
             # Pick the _bottom_ edge of a work's target age range --
             # the work is appropriate for anyone _at least_ that old.
-            work_target_age, ignore = work_target_age
+            work_target_age_min, _ = work_target_age
+        else:
+            work_target_age_min = work_target_age
 
         # A YA reader is treated as an adult (with no reading
         # restrictions) if they have no associated age range, or their
         # age range includes ADULT_AGE_CUTOFF.
         if reader_audience == Classifier.AUDIENCE_YOUNG_ADULT and (
-            reader_age is None
+            reader_age_max is None
             or (
-                isinstance(reader_age, int)
-                and reader_age >= Classifier.ADULT_AGE_CUTOFF
+                isinstance(reader_age_max, int)
+                and reader_age_max >= Classifier.ADULT_AGE_CUTOFF
             )
         ):
             log.debug("YA reader to be treated as an adult.")
@@ -447,13 +467,13 @@ class Patron(Base, RedisKeyMixin):
         # a child patron with a children's book. It comes down to a
         # question of the reader's age vs. the work's target age.
 
-        if work_target_age is None:
+        if work_target_age_min is None:
             # This is a generic children's or YA book with no
             # particular target age. Assume it's age appropriate.
             log.debug("Juvenile book with no target age is presumed age-appropriate.")
             return True
 
-        if reader_age is None:
+        if reader_age_max is None:
             # We have no idea how old the patron is, so any work with
             # the appropriate audience is considered age-appropriate.
             log.debug(
@@ -461,7 +481,7 @@ class Patron(Base, RedisKeyMixin):
             )
             return True
 
-        if reader_age < work_target_age:
+        if reader_age_max < work_target_age_min:
             # The audience for this book matches the patron's
             # audience, but the book has a target age that is too high
             # for the reader.
@@ -490,7 +510,7 @@ class Loan(Base, LoanAndHoldMixin):
     id = Column(Integer, primary_key=True)
 
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
-    patron: Patron  # typing
+    patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
     # A Loan is always associated with a LicensePool.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
@@ -516,10 +536,14 @@ class Loan(Base, LoanAndHoldMixin):
 
     __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
 
-    def __lt__(self, other):
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, Loan) or self.id is None or other.id is None:
+            return NotImplemented
         return self.id < other.id
 
-    def until(self, default_loan_period):
+    def until(
+        self, default_loan_period: datetime.timedelta | None
+    ) -> datetime.datetime | None:
         """Give or estimate the time at which the loan will end."""
         if self.end:
             return self.end
@@ -550,18 +574,19 @@ class Hold(Base, LoanAndHoldMixin):
         "Patron", back_populates="holds", lazy="joined"
     )
 
-    def __lt__(self, other):
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, Hold) or self.id is None or other.id is None:
+            return NotImplemented
         return self.id < other.id
 
-    @classmethod
+    @staticmethod
     def _calculate_until(
-        self,
-        start,
-        queue_position,
-        total_licenses,
-        default_loan_period,
-        default_reservation_period,
-    ):
+        start: datetime.datetime,
+        queue_position: int,
+        total_licenses: int,
+        default_loan_period: datetime.timedelta,
+        default_reservation_period: datetime.timedelta,
+    ) -> datetime.datetime | None:
         """Helper method for `Hold.until` that can be tested independently.
         We have to wait for the available licenses to cycle a
         certain number of times before we get a turn.
@@ -585,7 +610,7 @@ class Hold(Base, LoanAndHoldMixin):
             return None
 
         # If you are at the very front of the queue, the worst case
-        # time to get the book is is the time it takes for the person
+        # time to get the book is the time it takes for the person
         # in front of you to get a reservation notification, borrow
         # the book at the last minute, and keep the book for the
         # maximum allowable time.
@@ -607,7 +632,11 @@ class Hold(Base, LoanAndHoldMixin):
                 cycles -= 1
         return start + (cycle_period * cycles)
 
-    def until(self, default_loan_period, default_reservation_period):
+    def until(
+        self,
+        default_loan_period: datetime.timedelta | None,
+        default_reservation_period: datetime.timedelta | None,
+    ) -> datetime.datetime | None:
         """Give or estimate the time at which the book will be available
         to this patron.
         This is a *very* rough estimate that should be treated more or
@@ -641,7 +670,12 @@ class Hold(Base, LoanAndHoldMixin):
             default_reservation_period,
         )
 
-    def update(self, start, end, position):
+    def update(
+        self,
+        start: datetime.datetime | None,
+        end: datetime.datetime | None,
+        position: int | None,
+    ) -> None:
         """When the book becomes available, position will be 0 and end will be
         set to the time at which point the patron will lose their place in
         line.
@@ -676,6 +710,8 @@ class Annotation(Base):
     __tablename__ = "annotations"
     id = Column(Integer, primary_key=True)
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron: Mapped[Patron] = relationship("Patron", back_populates="annotations")
+
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     motivation = Column(Unicode, index=True)
     timestamp = Column(DateTime(timezone=True), index=True)
@@ -683,14 +719,7 @@ class Annotation(Base):
     content = Column(Unicode)
     target = Column(Unicode)
 
-    @classmethod
-    def get_one_or_create(self, _db, patron, *args, **kwargs):
-        """Find or create an Annotation, but only if the patron has
-        annotation sync turned on.
-        """
-        return get_one_or_create(_db, Annotation, patron=patron, *args, **kwargs)
-
-    def set_inactive(self):
+    def set_inactive(self) -> None:
         self.active = False
         self.content = None
         self.timestamp = utc_now()
@@ -701,7 +730,7 @@ class PatronProfileStorage(ProfileStorage):
     Protocol.
     """
 
-    def __init__(self, patron, url_for=None):
+    def __init__(self, patron: Patron, url_for: Callable[..., str]) -> None:
         """Set up a storage interface for a specific Patron.
         :param patron: We are accessing the profile for this patron.
         """
@@ -709,16 +738,16 @@ class PatronProfileStorage(ProfileStorage):
         self.url_for = url_for
 
     @property
-    def writable_setting_names(self):
+    def writable_setting_names(self) -> set[str]:
         """Return the subset of settings that are considered writable."""
         return {self.SYNCHRONIZE_ANNOTATIONS}
 
     @property
-    def profile_document(self):
+    def profile_document(self) -> dict[str, Any]:
         """Create a Profile document representing the patron's current
         status.
         """
-        doc = dict()
+        doc: dict[str, Any] = dict()
         patron = self.patron
         doc[self.AUTHORIZATION_IDENTIFIER] = patron.authorization_identifier
         if patron.authorization_expires:
@@ -740,7 +769,7 @@ class PatronProfileStorage(ProfileStorage):
         ]
         return doc
 
-    def update(self, settable, full):
+    def update(self, settable: dict[str, Any], full: dict[str, Any]) -> None:
         """Bring the Patron's status up-to-date with the given document.
         Right now this means making sure Patron.synchronize_annotations
         is up to date.

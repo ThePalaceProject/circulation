@@ -95,6 +95,9 @@ class TestPushNotifications:
                 loan, 1, [device_token]
             )
 
+            library = loan.library
+            assert library is not None
+
             assert messaging.Message.call_count == 1
             assert messaging.Message.call_args_list[0] == [
                 (),
@@ -106,14 +109,14 @@ class TestPushNotifications:
                     ),
                     "data": dict(
                         title="Only 1 day left on your loan!",
-                        body=f'Your loan for "{work.presentation_edition.title}" at {loan.library.name} is expiring soon',
+                        body=f'Your loan for "{work.presentation_edition.title}" at {library.name} is expiring soon',
                         event_type=NotificationType.LOAN_EXPIRY,
                         loans_endpoint="http://localhost/default/loans",
                         external_identifier=patron.external_identifier,
                         authorization_identifier=patron.authorization_identifier,
                         identifier=work.presentation_edition.primary_identifier.identifier,
                         type=work.presentation_edition.primary_identifier.type,
-                        library=loan.library.short_name,
+                        library=library.short_name,
                         days_to_expiry="1",
                     ),
                 },
@@ -223,6 +226,7 @@ class TestPushNotifications:
             hold: Hold,
             include_auth_id: bool = True,
         ) -> None:
+            assert hold.library is not None
             data = dict(
                 title="Your hold is available!",
                 body=f'Your hold on "{work.title}" is available at {hold.library.name}!',

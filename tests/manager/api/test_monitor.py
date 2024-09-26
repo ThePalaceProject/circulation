@@ -10,6 +10,7 @@ from palace.manager.api.monitor import (
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Annotation
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -199,8 +200,9 @@ class TestIdlingAnnotationReaper:
         def _annotation(
             patron, pool, content, motivation=Annotation.IDLING, timestamp=very_old
         ):
-            annotation, ignore = Annotation.get_one_or_create(
+            annotation, _ = get_one_or_create(
                 db.session,
+                Annotation,
                 patron=patron,
                 identifier=pool.identifier,
                 motivation=motivation,

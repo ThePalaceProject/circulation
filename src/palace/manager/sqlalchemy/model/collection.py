@@ -315,7 +315,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     STANDARD_DEFAULT_LOAN_PERIOD = 21
 
     def default_loan_period(
-        self, library: Library, medium: str = EditionConstants.BOOK_MEDIUM
+        self, library: Library | None, medium: str = EditionConstants.BOOK_MEDIUM
     ) -> int:
         """Until we hear otherwise from the license provider, we assume
         that someone who borrows a non-open-access item from this
@@ -336,7 +336,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     def default_loan_period_setting(
         self,
-        library: Library,
+        library: Library | None,
         medium: str = EditionConstants.BOOK_MEDIUM,
     ) -> int | None:
         """Until we hear otherwise from the license provider, we assume

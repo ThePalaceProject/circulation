@@ -1,7 +1,8 @@
 import datetime
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.constants import LinkRelations
@@ -15,7 +16,11 @@ from palace.manager.sqlalchemy.model.patron import (
     Patron,
     PatronProfileStorage,
 )
-from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
+from palace.manager.sqlalchemy.util import (
+    create,
+    get_one_or_create,
+    tuple_to_numericrange,
+)
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -118,6 +123,7 @@ class TestHold:
         hold, is_new = pool.on_hold_to(patron)
         assert work == hold.work
 
+    @freeze_time()
     def test_until(self, db: DatabaseTransactionFixture):
         one_day = datetime.timedelta(days=1)
         two_days = datetime.timedelta(days=2)
@@ -153,44 +159,27 @@ class TestHold:
         assert None == m(one_day, None)
 
         # Otherwise, the answer is determined by _calculate_until.
-        def _mock__calculate_until(self, *args):
-            """Track the arguments passed into _calculate_until."""
-            self.called_with = args
-            return "mock until"
+        with patch.object(Hold, "_calculate_until") as _mock_calculate_until:
+            _mock_calculate_until.return_value = "mock until"
 
-        old__calculate_until = hold._calculate_until
-        Hold._calculate_until = _mock__calculate_until
+            assert "mock until" == m(one_day, two_days)
+            _mock_calculate_until.assert_called_once_with(
+                now, hold.position, pool.licenses_available, one_day, two_days
+            )
 
-        assert "mock until" == m(one_day, two_days)
+            _mock_calculate_until.reset_mock()
 
-        (
-            calculate_from,
-            position,
-            licenses_available,
-            default_loan_period,
-            default_reservation_period,
-        ) = hold.called_with
-
-        assert (calculate_from - now).total_seconds() < 5
-        assert hold.position == position
-        assert pool.licenses_available == licenses_available
-        assert one_day == default_loan_period
-        assert two_days == default_reservation_period
-
-        # If we don't know the patron's position in the hold queue, we
-        # assume they're at the end.
-        hold.position = None
-        assert "mock until" == m(one_day, two_days)
-        (
-            calculate_from,
-            position,
-            licenses_available,
-            default_loan_period,
-            default_reservation_period,
-        ) = hold.called_with
-        assert pool.patrons_in_hold_queue == position
-
-        Hold._calculate_until = old__calculate_until
+            # If we don't know the patron's position in the hold queue, we
+            # assume they're at the end.
+            hold.position = None
+            assert "mock until" == m(one_day, two_days)
+            _mock_calculate_until.assert_called_once_with(
+                now,
+                pool.patrons_in_hold_queue,
+                pool.licenses_available,
+                one_day,
+                two_days,
+            )
 
     def test_calculate_until(self):
         start = datetime_utc(2010, 1, 1)
@@ -430,8 +419,9 @@ class TestPatron:
             patron.synchronize_annotations = True
 
             # Each patron gets one annotation.
-            annotation, ignore = Annotation.get_one_or_create(
+            annotation, ignore = get_one_or_create(
                 db.session,
+                Annotation,
                 patron=patron,
                 identifier=identifier,
                 motivation=Annotation.IDLING,
@@ -448,8 +438,9 @@ class TestPatron:
         assert 0 == len(p1.annotations)
 
         # But patron #2 can use Annotation.get_one_or_create.
-        i2, is_new = Annotation.get_one_or_create(
+        i2, is_new = get_one_or_create(
             db.session,
+            Annotation,
             patron=p2,
             identifier=db.identifier(),
             motivation=Annotation.IDLING,
@@ -570,8 +561,8 @@ class TestPatron:
         # If the patron has no root lane, age_appropriate_match is not
         # even called -- all works are age-appropriate.
         m = patron.work_is_age_appropriate
-        work_audience = object()
-        work_target_age = object()
+        work_audience = MagicMock()
+        work_target_age = MagicMock()
         assert True == m(work_audience, work_target_age)
         assert 0 == mock.call_count
 

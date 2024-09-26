@@ -550,6 +550,7 @@ class TestOPDSForDistributorsImporter:
             )
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_owned
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_available
+            assert pool.work.last_update_time is not None
             assert (pool.work.last_update_time - now).total_seconds() <= 2
             assert pool.should_track_playtime == False
 

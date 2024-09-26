@@ -11,6 +11,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.patron import Annotation
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -210,8 +211,9 @@ class AnnotationParser:
             # per target.
             extra_kwargs["target"] = target
 
-        annotation, ignore = Annotation.get_one_or_create(
+        annotation, ignore = get_one_or_create(
             _db,
+            Annotation,
             patron=patron,
             identifier=identifier,
             motivation=motivation,

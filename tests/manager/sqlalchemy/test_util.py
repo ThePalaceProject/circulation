@@ -6,6 +6,7 @@ from sqlalchemy.orm.exc import MultipleResultsFound
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.util import (
     get_one,
+    numericrange_to_string,
     numericrange_to_tuple,
     pg_advisory_lock,
     tuple_to_numericrange,
@@ -103,3 +104,9 @@ class TestAdvisoryLock:
     def test_no_lock_id(self, db: DatabaseTransactionFixture):
         with pg_advisory_lock(db.session, None):
             assert self._lock_exists(db.session, self.TEST_LOCK_ID) is False
+
+
+class TestNumericRangeToString:
+    def test_numericrange_to_string_float(self):
+        with pytest.raises(AssertionError):
+            numericrange_to_string(NumericRange(1.1, 1.8, "[]"))
