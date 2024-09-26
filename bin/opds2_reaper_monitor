@@ -4,6 +4,7 @@ import json
 from collections.abc import Generator
 from typing import Any, cast
 
+from sqlalchemy.orm import raiseload
 from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.core.coverage import CoverageFailure
@@ -109,47 +110,61 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
             f"{self.missing_id_count} missing identifiers."
         )
 
+        # Number of ORM objects to buffer at a time.
+        query_batch_size = 500
+
         # Convert feed identifiers to our identifiers, so we can find them.
         # Unlike the import case, we don't want to create identifiers, if
         # they don't already exist.
+        self.log.info(
+            f"Mapping {len(self.seen_identifiers)} feed identifiers to database identifiers."
+        )
         identifiers, failures = Identifier.parse_urns(
             self._db, self.seen_identifiers, autocreate=False
         )
-        identifier_ids = [x.id for x in list(identifiers.values())]
+        identifier_count = len(identifiers)
+        failure_count = len(failures)
         if failures:
             self.log.warning(
-                f"Unable to parse {len(failures)} of {len(self.seen_identifiers)} identifiers."
+                f"Unable to parse {failure_count} of {identifier_count} identifiers."
             )
 
         collection_license_pools_qu = self._db.query(LicensePool).filter(
             LicensePool.collection_id == self.collection.id
         )
-        collection_license_pools = collection_license_pools_qu.count()
+        collection_count = collection_license_pools_qu.count()
 
-        unlimited_access_license_pools_qu = collection_license_pools_qu.filter(
+        eligible_license_pools_qu = collection_license_pools_qu.filter(
             LicensePool.licenses_available == LicensePool.UNLIMITED_ACCESS
         )
-        unlimited_access_license_pools = unlimited_access_license_pools_qu.count()
+        eligible_count = eligible_license_pools_qu.count()
 
-        # At this point we've gone through the feed and collected all the identifiers.
-        # If there's anything we didn't see, we know it's no longer available.
-        to_be_reaped_qu = unlimited_access_license_pools_qu.join(Identifier).filter(
-            ~Identifier.id.in_(identifier_ids)
-        )
-        reap_count = to_be_reaped_qu.count()
         self.log.info(
-            f"Reaping {reap_count} of {unlimited_access_license_pools} unlimited (of {collection_license_pools} total) license pools from collection '{self.collection.name}'. "
+            f"{eligible_count} of collection's {collection_count} license pool(s) "
+            "are unlimited and eligible to be reaped, if missing from the feed."
         )
 
-        if self.dry_run:
-            # TODO: Need to prevent timestamp update for dry runs.
-            achievements = f"Dry run: {reap_count} license pools would have been removed. Failures parsing identifiers from feed: {len(failures)}."
-        else:
-            achievements = f"License pools removed: {reap_count}. Failures parsing identifiers from feed: {len(failures)}."
-            for pool in to_be_reaped_qu:
-                pool.unlimited_access = False
-        self.log.info(achievements)
+        reap_count = 0
+        pool: LicensePool
+        identifier_ids = {x.id for x in list(identifiers.values())}
 
+        # Note: We need to turn off eager loading, so that `yield_per` works safely.
+        # `raiseload` will let us know if we're accidentally accessing a joined table.
+        for pool in eligible_license_pools_qu.options(raiseload("*")).yield_per(
+            query_batch_size
+        ):
+            if pool.identifier_id not in identifier_ids:
+                reap_count += 1
+                # Don't actually reap, unless this is explicitly NOT a dry run.
+                if self.dry_run is False:
+                    pool.unlimited_access = False
+
+        achievements = (
+            f"Dry run: {reap_count} of {eligible_count} eligible license pool(s) would have been marked unavailable. {failure_count} failures parsing identifiers from feed."
+            if self.dry_run
+            else f"{reap_count} of {eligible_count} eligible license pool(s) marked unavailable. {failure_count} failures parsing identifiers from feed."
+        )
+        self.log.info(achievements)
         return TimestampData(achievements=achievements)
 
 
@@ -211,7 +226,9 @@ class OPDS2ReaperScript(CollectionInputScript):
             self.log.error("No collections specified.")
             return
 
-        self.log.info(f"Reaping books from {len(collections)} collections.")
+        self.log.info(
+            f"Reaping books from {len(collections)} collection{'s' if len(collections) != 1 else ''}."
+        )
         for collection in collections:
             self.run_monitor(
                 collection,
