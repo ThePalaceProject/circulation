@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
-from typing import Literal, TypeVar
+from collections.abc import Generator, Mapping
+from typing import Any, Literal, TypeVar
 
 from contextlib2 import contextmanager
 from psycopg2._range import NumericRange
@@ -44,7 +44,7 @@ def pg_advisory_lock(
             connection.execute(text(f"SELECT pg_advisory_unlock({lock_id});"))
 
 
-def flush(db):
+def flush(db: Session) -> None:
     """Flush the database connection unless it's known to already be flushing."""
     is_flushing = False
     if hasattr(db, "_flushing"):
@@ -63,7 +63,11 @@ T = TypeVar("T")
 
 
 def create(
-    db: Session, model: type[T], create_method="", create_method_kwargs=None, **kwargs
+    db: Session,
+    model: type[T],
+    create_method: str = "",
+    create_method_kwargs: Mapping[str, Any] | None = None,
+    **kwargs: Any,
 ) -> tuple[T, Literal[True]]:
     kwargs.update(create_method_kwargs or {})
     created = getattr(model, create_method, model)(**kwargs)
@@ -73,7 +77,11 @@ def create(
 
 
 def get_one(
-    db: Session, model: type[T], on_multiple="error", constraint=None, **kwargs
+    db: Session,
+    model: type[T],
+    on_multiple: Literal["interchangeable"] | Literal["error"] = "error",
+    constraint: Any = None,
+    **kwargs: Any,
 ) -> T | None:
     """Gets an object from the database based on its attributes.
 
@@ -81,17 +89,12 @@ def get_one(
         `sqlalchemy.Query.filter` to limit the object that is returned.
     :return: object or None
     """
-    constraint = constraint
-    if "constraint" in kwargs:
-        constraint = kwargs["constraint"]
-        del kwargs["constraint"]
-
     q = db.query(model).filter_by(**kwargs)
     if constraint is not None:
         q = q.filter(constraint)
 
     try:
-        return q.one()
+        return q.one()  # type: ignore[no-any-return]
     except MultipleResultsFound:
         if on_multiple == "error":
             raise
@@ -102,14 +105,17 @@ def get_one(
             # This may be a sign of a problem somewhere else. A
             # database-level constraint might be useful.
             q = q.limit(1)
-            return q.one()
+            return q.one()  # type: ignore[no-any-return]
     except NoResultFound:
         return None
-    return None
 
 
 def get_one_or_create(
-    db: Session, model: type[T], create_method="", create_method_kwargs=None, **kwargs
+    db: Session,
+    model: type[T],
+    create_method: str = "",
+    create_method_kwargs: Mapping[str, Any] | None = None,
+    **kwargs: Any,
 ) -> tuple[T, bool]:
     one = get_one(db, model, **kwargs)
     if one:
