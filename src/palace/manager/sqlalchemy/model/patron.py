@@ -31,11 +31,7 @@ from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.util import (
-    NumericRangeTuple,
-    get_one_or_create,
-    numericrange_to_tuple,
-)
+from palace.manager.sqlalchemy.util import NumericRangeTuple, numericrange_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
@@ -583,9 +579,8 @@ class Hold(Base, LoanAndHoldMixin):
             return NotImplemented
         return self.id < other.id
 
-    @classmethod
+    @staticmethod
     def _calculate_until(
-        self,
         start: datetime.datetime,
         queue_position: int,
         total_licenses: int,
@@ -723,15 +718,6 @@ class Annotation(Base):
     active = Column(Boolean, default=True)
     content = Column(Unicode)
     target = Column(Unicode)
-
-    @classmethod
-    def get_one_or_create(
-        self, _db: Session, patron: Patron, *args: Any, **kwargs: Any
-    ) -> tuple[Annotation, bool]:
-        """Find or create an Annotation, but only if the patron has
-        annotation sync turned on.
-        """
-        return get_one_or_create(_db, Annotation, patron=patron, *args, **kwargs)
 
     def set_inactive(self) -> None:
         self.active = False

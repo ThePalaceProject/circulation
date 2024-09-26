@@ -15,7 +15,11 @@ from palace.manager.sqlalchemy.model.patron import (
     Patron,
     PatronProfileStorage,
 )
-from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
+from palace.manager.sqlalchemy.util import (
+    create,
+    get_one_or_create,
+    tuple_to_numericrange,
+)
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -430,8 +434,9 @@ class TestPatron:
             patron.synchronize_annotations = True
 
             # Each patron gets one annotation.
-            annotation, ignore = Annotation.get_one_or_create(
+            annotation, ignore = get_one_or_create(
                 db.session,
+                Annotation,
                 patron=patron,
                 identifier=identifier,
                 motivation=Annotation.IDLING,
@@ -448,8 +453,9 @@ class TestPatron:
         assert 0 == len(p1.annotations)
 
         # But patron #2 can use Annotation.get_one_or_create.
-        i2, is_new = Annotation.get_one_or_create(
+        i2, is_new = get_one_or_create(
             db.session,
+            Annotation,
             patron=p2,
             identifier=db.identifier(),
             motivation=Annotation.IDLING,

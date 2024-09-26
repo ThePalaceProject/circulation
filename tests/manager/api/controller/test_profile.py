@@ -7,6 +7,7 @@ import pytest
 from palace.manager.api.authenticator import CirculationPatronProfileStorage
 from palace.manager.core.user_profile import ProfileController, ProfileStorage
 from palace.manager.sqlalchemy.model.patron import Annotation, Patron
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -94,8 +95,11 @@ class TestProfileController:
 
         # Now we can create an annotation for the patron who enabled
         # annotation sync.
-        Annotation.get_one_or_create(  # type: ignore[unreachable]
-            profile_fixture.db.session, patron=request_patron, identifier=identifier
+        get_one_or_create(  # type: ignore[unreachable]
+            profile_fixture.db.session,
+            Annotation,
+            patron=request_patron,
+            identifier=identifier,
         )
         assert 1 == len(request_patron.annotations)
 

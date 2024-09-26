@@ -343,9 +343,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         that someone who borrows a non-open-access item from this
         collection has it for this number of days.
         """
-        if library is None:
-            return None
-
         key = self.loan_period_key(medium)
 
         config = self.integration_configuration.for_library(library)
