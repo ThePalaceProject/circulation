@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """Remove availability of items no longer present in OPDS 2.0 import collections."""
+import itertools
 import json
 from collections.abc import Generator
 from typing import Any, cast
@@ -104,9 +105,10 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
         :param progress: A TimestampData, ignored.
         """
         super().run_once(progress)
+        feed_id_count = len(self.seen_identifiers)
         self.log.info(
             f"Feed contained {self.publication_count} publication entries, "
-            f"{len(self.seen_identifiers)} unique identifiers, "
+            f"{feed_id_count} unique identifiers, "
             f"{self.missing_id_count} missing identifiers."
         )
 
@@ -117,54 +119,74 @@ class OPDS2ReaperMonitor(OPDS2ImportMonitor):
         # Unlike the import case, we don't want to create identifiers, if
         # they don't already exist.
         self.log.info(
-            f"Mapping {len(self.seen_identifiers)} feed identifiers to database identifiers."
+            f"Mapping {feed_id_count} feed identifiers to database identifiers."
         )
-        identifiers, failures = Identifier.parse_urns(
-            self._db, self.seen_identifiers, autocreate=False
+        failure_total = 0
+        id_looked_up_count = 0
+        db_identifiers: dict[str, Identifier] = {}
+
+        feed_id_generator = (id_ for id_ in self.seen_identifiers)
+        while _feed_id_batch := list(
+            itertools.islice(feed_id_generator, query_batch_size)
+        ):
+            _batch_size = len(_feed_id_batch)
+            _batch_db_ids, _batch_failures = Identifier.parse_urns(
+                self._db, _feed_id_batch, autocreate=False
+            )
+            db_identifiers |= _batch_db_ids
+            id_looked_up_count += _batch_size
+            _success_count = len(_batch_db_ids)
+            _failure_count = len(_batch_failures)
+            failure_total += _failure_count
+            self.log.info(
+                f"Mapped batch of {_batch_size} feed identifier(s) to database identifier(s) "
+                f"(cumulative: {id_looked_up_count} of {feed_id_count} feed ids) "
+                f"with {_success_count} success(es) and {_failure_count} failure(s))."
+            )
+
+        self.log.info(
+            f"Successfully mapped {len(db_identifiers)} feed identifier(s) to database identifier(s)."
         )
-        identifier_count = len(identifiers)
-        failure_count = len(failures)
-        if failures:
+        if failure_total > 0:
             self.log.warning(
-                f"Unable to parse {failure_count} of {identifier_count} identifiers."
+                f"Unable to parse {failure_total} of {feed_id_count} identifiers."
             )
 
         collection_license_pools_qu = self._db.query(LicensePool).filter(
             LicensePool.collection_id == self.collection.id
         )
-        collection_count = collection_license_pools_qu.count()
+        collection_lp_count = collection_license_pools_qu.count()
 
         eligible_license_pools_qu = collection_license_pools_qu.filter(
             LicensePool.licenses_available == LicensePool.UNLIMITED_ACCESS
         )
-        eligible_count = eligible_license_pools_qu.count()
+        eligible_lp_count = eligible_license_pools_qu.count()
 
         self.log.info(
-            f"{eligible_count} of collection's {collection_count} license pool(s) "
+            f"{eligible_lp_count} of collection's {collection_lp_count} license pool(s) "
             "are unlimited and eligible to be reaped, if missing from the feed."
         )
 
         reap_count = 0
         pool: LicensePool
-        identifier_ids = {x.id for x in list(identifiers.values())}
+        db_identifier_ids = {x.id for x in list(db_identifiers.values())}
 
         # Note: We need to turn off eager loading, so that `yield_per` works safely.
         # `raiseload` will let us know if we're accidentally accessing a joined table.
         for pool in eligible_license_pools_qu.options(raiseload("*")).yield_per(
             query_batch_size
         ):
-            if pool.identifier_id not in identifier_ids:
+            if pool.identifier_id not in db_identifier_ids:
                 reap_count += 1
                 # Don't actually reap, unless this is explicitly NOT a dry run.
                 if self.dry_run is False:
                     pool.unlimited_access = False
 
         achievements = (
-            f"Dry run: {reap_count} of {eligible_count} eligible license pool(s) would have been marked unavailable. {failure_count} failures parsing identifiers from feed."
+            f"Dry run: {reap_count} of {eligible_lp_count} eligible license pool(s) would have been marked unavailable. {failure_total} failures parsing identifiers from feed."
             if self.dry_run
-            else f"{reap_count} of {eligible_count} eligible license pool(s) marked unavailable. {failure_count} failures parsing identifiers from feed."
+            else f"{reap_count} of {eligible_lp_count} eligible license pool(s) marked unavailable. {failure_total} failures parsing identifiers from feed."
         )
-        self.log.info(achievements)
         return TimestampData(achievements=achievements)
 
 
