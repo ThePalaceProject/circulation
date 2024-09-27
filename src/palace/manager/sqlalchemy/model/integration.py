@@ -70,14 +70,14 @@ class IntegrationConfiguration(Base):
     # Self test results, stored as json.
     self_test_results = Column(JSONB, nullable=False, default=dict)
 
-    library_configurations: Mapped[
-        list[IntegrationLibraryConfiguration]
-    ] = relationship(
-        "IntegrationLibraryConfiguration",
-        back_populates="parent",
-        uselist=True,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+    library_configurations: Mapped[list[IntegrationLibraryConfiguration]] = (
+        relationship(
+            "IntegrationLibraryConfiguration",
+            back_populates="parent",
+            uselist=True,
+            cascade="all, delete-orphan",
+            passive_deletes=True,
+        )
     )
 
     collection: Mapped[Collection] = relationship(

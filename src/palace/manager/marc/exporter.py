@@ -373,7 +373,7 @@ class MarcExporter(
     @staticmethod
     def files_for_cleanup(
         session: Session, registry: CatalogServicesRegistry
-    ) -> Generator[MarcFile, None, None]:
+    ) -> Generator[MarcFile]:
         # Files for collections or libraries that have had exports disabled.
         existing = {
             (row.collection_id, row.library_id)

@@ -519,7 +519,7 @@ T = TypeVar("T")
 
 def chunks(
     lst: Sequence[T], chunk_size: int, start_index: int = 0
-) -> Generator[Sequence[T], None, None]:
+) -> Generator[Sequence[T]]:
     """Yield successive n-sized chunks from lst."""
     length = len(lst)
 

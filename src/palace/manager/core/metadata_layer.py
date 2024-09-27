@@ -6,6 +6,7 @@ This acts as an intermediary between the third-party integrations
 model. Doing a third-party integration should be as simple as putting
 the information into this format.
 """
+
 import csv
 import datetime
 import logging
@@ -1079,7 +1080,6 @@ class CirculationData:
 
 
 class Metadata:
-
     """A (potentially partial) set of metadata for a published work."""
 
     log = logging.getLogger("Abstract metadata layer")
@@ -1876,7 +1876,6 @@ class CSVFormatError(csv.Error):
 
 
 class CSVMetadataImporter:
-
     """Turn a CSV file into a list of Metadata objects."""
 
     log = logging.getLogger("CSV metadata importer")

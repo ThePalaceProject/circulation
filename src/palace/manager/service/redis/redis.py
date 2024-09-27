@@ -127,8 +127,7 @@ class RedisPrefixCheckMixin(ABC):
 
     @property
     @abstractmethod
-    def _prefix(self) -> str:
-        ...
+    def _prefix(self) -> str: ...
 
 
 class Redis(RedisClient, RedisPrefixCheckMixin):

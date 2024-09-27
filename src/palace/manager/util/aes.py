@@ -8,12 +8,10 @@ from Crypto.Random import get_random_bytes
 
 class CryptBase:
     @abstractmethod
-    def encrypt(self, content: bytes) -> bytes:
-        ...
+    def encrypt(self, content: bytes) -> bytes: ...
 
     @abstractmethod
-    def decrypt(self, content: bytes) -> bytes:
-        ...
+    def decrypt(self, content: bytes) -> bytes: ...
 
 
 class CryptAESCBC(CryptBase):

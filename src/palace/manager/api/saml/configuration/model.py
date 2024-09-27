@@ -371,8 +371,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         return v
 
 
-class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
-    ...
+class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings): ...
 
 
 class SAMLOneLoginConfiguration:
@@ -408,9 +407,9 @@ class SAMLOneLoginConfiguration:
         self._configuration = configuration
         self._service_provider_loaded: SAMLServiceProviderMetadata | None = None
         self._service_provider_settings: dict[str, Any] | None = None
-        self._identity_providers_loaded: None | (
-            list[SAMLIdentityProviderMetadata]
-        ) = None
+        self._identity_providers_loaded: None | (list[SAMLIdentityProviderMetadata]) = (
+            None
+        )
         self._identity_providers_settings: dict[str, dict[str, Any]] = {}
         self._metadata_parser = SAMLMetadataParser()
 
@@ -552,9 +551,9 @@ class SAMLOneLoginConfiguration:
             and identity_provider.signing_certificates[0]
             == identity_provider.encryption_certificates[0]
         ):
-            onelogin_identity_provider[self.IDP][
-                self.X509_CERT
-            ] = identity_provider.signing_certificates[0]
+            onelogin_identity_provider[self.IDP][self.X509_CERT] = (
+                identity_provider.signing_certificates[0]
+            )
         else:
             if len(identity_provider.signing_certificates) > 0:
                 if self.X509_CERT_MULTI not in onelogin_identity_provider[self.IDP]:
@@ -590,12 +589,12 @@ class SAMLOneLoginConfiguration:
                     self.BINDING: service_provider.acs_service.binding.value,
                 },
                 self.NAME_ID_FORMAT: service_provider.name_id_format,
-                self.X509_CERT: service_provider.certificate
-                if service_provider.certificate
-                else "",
-                self.PRIVATE_KEY: service_provider.private_key
-                if service_provider.private_key
-                else "",
+                self.X509_CERT: (
+                    service_provider.certificate if service_provider.certificate else ""
+                ),
+                self.PRIVATE_KEY: (
+                    service_provider.private_key if service_provider.private_key else ""
+                ),
             },
             self.SECURITY: {
                 self.AUTHN_REQUESTS_SIGNED: service_provider.authn_requests_signed

@@ -127,8 +127,7 @@ class HasCollectionSelfTests(HasPatronSelfTests, ABC):
 
     @property
     @abstractmethod
-    def collection(self) -> Collection | None:
-        ...
+    def collection(self) -> Collection | None: ...
 
     def integration(self, _db: Session) -> IntegrationConfiguration | None:
         if not self.collection:
@@ -156,7 +155,7 @@ class HasCollectionSelfTests(HasPatronSelfTests, ABC):
         else:
             return "All titles in this collection have delivery mechanisms."
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         yield self.run_test(
             "Checking for titles that have no delivery mechanisms.",
             self._no_delivery_mechanisms_test,

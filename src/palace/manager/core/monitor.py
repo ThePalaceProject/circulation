@@ -804,7 +804,6 @@ class CoverageProvidersFailed(BasePalaceException):
 
 
 class CustomListEntryWorkUpdateMonitor(CustomListEntrySweepMonitor):
-
     """Set or reset the Work associated with each custom list entry."""
 
     SERVICE_NAME = "Update Works for custom list entries"

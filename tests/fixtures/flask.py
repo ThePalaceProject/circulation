@@ -40,7 +40,7 @@ class FlaskAppFixture:
         admin: Admin | None = None,
         library: Library | None = None,
         **kwargs: Any,
-    ) -> Generator[RequestContext, None, None]:
+    ) -> Generator[RequestContext]:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
             flask.request.library = library  # type: ignore[attr-defined]
@@ -59,7 +59,7 @@ class FlaskAppFixture:
     @contextmanager
     def test_request_context_system_admin(
         self, *args: Any, **kwargs: Any
-    ) -> Generator[RequestContext, None, None]:
+    ) -> Generator[RequestContext]:
         admin = self.admin_user()
         with self.test_request_context(*args, **kwargs, admin=admin) as c:
             yield c

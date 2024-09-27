@@ -124,5 +124,5 @@ class BasicTokenAuthenticationProvider(
     def label(cls) -> str:
         return "Library Barcode + Token"
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         raise NotImplementedError()

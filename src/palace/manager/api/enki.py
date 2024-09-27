@@ -170,7 +170,7 @@ class EnkiAPI(
             return None
         return settings.enki_library_id
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         now = utc_now()
 
         def count_recent_loans_and_holds() -> str:
@@ -290,7 +290,7 @@ class EnkiAPI(
 
     def recent_activity(
         self, start: datetime.datetime, end: datetime.datetime
-    ) -> Generator[CirculationData, None, None]:
+    ) -> Generator[CirculationData]:
         """Find circulation events from a certain timeframe that affected
         loans or holds.
 
@@ -318,9 +318,7 @@ class EnkiAPI(
             if data:
                 yield data
 
-    def updated_titles(
-        self, since: datetime.datetime
-    ) -> Generator[Metadata, None, None]:
+    def updated_titles(self, since: datetime.datetime) -> Generator[Metadata]:
         """Find recent changes to book metadata.
 
         NOTE: getUpdateTitles will return a maximum of 1000 items, so
@@ -372,9 +370,7 @@ class EnkiAPI(
             return BibliographicParser().extract_bibliographic(book)
         return None
 
-    def get_all_titles(
-        self, strt: int = 0, qty: int = 10
-    ) -> Generator[Metadata, None, None]:
+    def get_all_titles(self, strt: int = 0, qty: int = 10) -> Generator[Metadata]:
         """Retrieve a single page of items from the Enki collection.
 
         Iterating over the entire collection is very expensive and
@@ -531,7 +527,7 @@ class EnkiAPI(
 
     def patron_activity(
         self, patron: Patron, pin: str | None
-    ) -> Generator[LoanInfo | HoldInfo, None, None]:
+    ) -> Generator[LoanInfo | HoldInfo]:
         enki_library_id = self.enki_library_id(patron.library)
         response = self.patron_request(
             patron.authorization_identifier, pin, enki_library_id
@@ -627,7 +623,7 @@ class BibliographicParser(LoggerMixin):
 
     def process_all(
         self, json_data: bytes | str | Mapping[str, Any]
-    ) -> Generator[Metadata, None, None]:
+    ) -> Generator[Metadata]:
         data = (
             json.loads(json_data) if isinstance(json_data, (bytes, str)) else json_data
         )

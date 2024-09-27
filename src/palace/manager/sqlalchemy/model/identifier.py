@@ -578,8 +578,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str,
         must_support_license_pools: bool = False,
         autocreate=True,
-    ) -> tuple[Identifier, bool]:
-        ...
+    ) -> tuple[Identifier, bool]: ...
 
     @classmethod
     @overload
@@ -589,8 +588,7 @@ class Identifier(Base, IdentifierConstants):
         identifier_string: str | None,
         must_support_license_pools: bool = False,
         autocreate=True,
-    ) -> tuple[Identifier | None, bool | None]:
-        ...
+    ) -> tuple[Identifier | None, bool | None]: ...
 
     @classmethod
     def parse_urn(

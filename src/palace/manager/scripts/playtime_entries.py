@@ -29,8 +29,7 @@ if TYPE_CHECKING:
 class Writer(Protocol):
     """CSV Writer protocol."""
 
-    def writerow(self, row: Iterable[Any]) -> Any:
-        ...
+    def writerow(self, row: Iterable[Any]) -> Any: ...
 
 
 class PlaytimeEntriesSummationScript(Script):

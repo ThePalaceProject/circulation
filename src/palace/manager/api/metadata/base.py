@@ -11,8 +11,7 @@ from palace.manager.integration.base import (
 from palace.manager.integration.settings import BaseSettings
 
 
-class MetadataServiceSettings(BaseSettings):
-    ...
+class MetadataServiceSettings(BaseSettings): ...
 
 
 SettingsType = TypeVar("SettingsType", bound=MetadataServiceSettings, covariant=True)
@@ -45,8 +44,7 @@ class MetadataService(
 
     @classmethod
     @abstractmethod
-    def multiple_services_allowed(cls) -> bool:
-        ...
+    def multiple_services_allowed(cls) -> bool: ...
 
 
 MetadataServiceType = MetadataService[MetadataServiceSettings]

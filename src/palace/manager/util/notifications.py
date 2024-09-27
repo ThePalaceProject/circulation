@@ -181,9 +181,9 @@ class PushNotifications(LoggerMixin):
                 if hold.patron.external_identifier:
                     data["external_identifier"] = hold.patron.external_identifier
                 if hold.patron.authorization_identifier:
-                    data[
-                        "authorization_identifier"
-                    ] = hold.patron.authorization_identifier
+                    data["authorization_identifier"] = (
+                        hold.patron.authorization_identifier
+                    )
 
                 resp = self.send_messages(
                     tokens, messaging.Notification(title=title, body=body), data

@@ -185,20 +185,20 @@ def lane_from_genres(
 
     # Now that we have sublanes we don't care about subgenres anymore.
     genres = [
-        genre.get("name")
-        if isinstance(genre, dict)
-        else genre.name
-        if isinstance(genre, GenreData)
-        else genre
+        (
+            genre.get("name")
+            if isinstance(genre, dict)
+            else genre.name if isinstance(genre, GenreData) else genre
+        )
         for genre in genres
     ]
 
     exclude_genres = [
-        genre.get("name")
-        if isinstance(genre, dict)
-        else genre.name
-        if isinstance(genre, GenreData)
-        else genre
+        (
+            genre.get("name")
+            if isinstance(genre, dict)
+            else genre.name if isinstance(genre, GenreData) else genre
+        )
         for genre in exclude_genres or []
     ]
 

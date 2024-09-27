@@ -102,13 +102,13 @@ class TestSAMLSettingsValidator:
         if sp_xml_metadata is not None:
             submitted_settings["service_provider_xml_metadata"] = sp_xml_metadata
         if idp_xml_metadata is not None:
-            submitted_settings[
-                "non_federated_identity_provider_xml_metadata"
-            ] = idp_xml_metadata
+            submitted_settings["non_federated_identity_provider_xml_metadata"] = (
+                idp_xml_metadata
+            )
         if patron_id_regular_expression is not None:
-            submitted_settings[
-                "patron_id_regular_expression"
-            ] = patron_id_regular_expression
+            submitted_settings["patron_id_regular_expression"] = (
+                patron_id_regular_expression
+            )
 
         if expected_validation_result is not None:
             with pytest.raises(ProblemDetailException) as exception:

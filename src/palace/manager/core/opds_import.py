@@ -392,32 +392,26 @@ class BaseOPDSImporter(
 
     @classmethod
     @abstractmethod
-    def settings_class(cls) -> type[SettingsType]:
-        ...
+    def settings_class(cls) -> type[SettingsType]: ...
 
     @abstractmethod
     def extract_feed_data(
         self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
-        ...
+    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]: ...
 
     @abstractmethod
     def extract_last_update_dates(
         self, feed: str | bytes | FeedParserDict
-    ) -> list[tuple[str | None, datetime | None]]:
-        ...
+    ) -> list[tuple[str | None, datetime | None]]: ...
 
     @abstractmethod
-    def extract_next_links(self, feed: str | bytes) -> list[str]:
-        ...
+    def extract_next_links(self, feed: str | bytes) -> list[str]: ...
 
     @overload
-    def parse_identifier(self, identifier: str) -> Identifier:
-        ...
+    def parse_identifier(self, identifier: str) -> Identifier: ...
 
     @overload
-    def parse_identifier(self, identifier: str | None) -> Identifier | None:
-        ...
+    def parse_identifier(self, identifier: str | None) -> Identifier | None: ...
 
     def parse_identifier(self, identifier: str | None) -> Identifier | None:
         """Parse the identifier and return an Identifier object representing it.
@@ -538,9 +532,7 @@ class BaseOPDSImporter(
         # background, and that's good enough.
         return pool, work
 
-    def import_from_feed(
-        self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[
+    def import_from_feed(self, feed: str | bytes, feed_url: str | None = None) -> tuple[
         list[Edition],
         list[LicensePool],
         list[Work],
@@ -839,14 +831,12 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     @overload
     def handle_failure(
         self, urn: str, failure: Identifier
-    ) -> tuple[Identifier, Identifier]:
-        ...
+    ) -> tuple[Identifier, Identifier]: ...
 
     @overload
     def handle_failure(
         self, urn: str, failure: CoverageFailure
-    ) -> tuple[Identifier, CoverageFailure]:
-        ...
+    ) -> tuple[Identifier, CoverageFailure]: ...
 
     def handle_failure(
         self, urn: str, failure: Identifier | CoverageFailure
@@ -1184,7 +1174,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     @classmethod
     def extract_messages(
         cls, parser: OPDSXMLParser, feed_tag: str
-    ) -> Generator[OPDSMessage, None, None]:
+    ) -> Generator[OPDSMessage]:
         """Extract <simplified:message> tags from an OPDS feed and convert
         them into OPDSMessage objects.
         """
@@ -1220,7 +1210,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     @classmethod
     def coveragefailures_from_messages(
         cls, data_source: DataSource, parser: OPDSXMLParser, feed_tag: str
-    ) -> Generator[CoverageFailure, None, None]:
+    ) -> Generator[CoverageFailure]:
         """Extract CoverageFailure objects from a parsed OPDS document. This
         allows us to determine the fate of books which could not
         become <entry> tags.

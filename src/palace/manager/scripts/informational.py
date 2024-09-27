@@ -561,7 +561,6 @@ class LanguageListScript(LibraryInputScript):
 
 
 class DisappearingBookReportScript(Script):
-
     """Print a TSV-format report on books that used to be in the
     collection, or should be in the collection, but aren't.
     """

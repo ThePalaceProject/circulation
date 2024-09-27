@@ -30,7 +30,7 @@ from palace.manager.service.storage.s3 import S3Service
 @contextmanager
 def mock_services_container(
     services_container: Services,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     from palace.manager.service import container
 
     container._container_instance = services_container
@@ -201,7 +201,7 @@ class ServicesFixture:
         self.set_sitewide_config_option("base_url", base_url)
 
     @contextmanager
-    def wired(self) -> Generator[None, None, None]:
+    def wired(self) -> Generator[None]:
         wire_container(self.services)
         try:
             yield
@@ -217,7 +217,7 @@ def services_fixture(
     services_analytics_fixture: ServicesAnalyticsFixture,
     services_email_fixture: ServicesEmailFixture,
     services_celery_fixture: ServicesCeleryFixture,
-) -> Generator[ServicesFixture, None, None]:
+) -> Generator[ServicesFixture]:
     fixture = ServicesFixture(
         logging=services_logging_fixture,
         storage=services_storage_fixture,
@@ -233,6 +233,6 @@ def services_fixture(
 @pytest.fixture
 def services_fixture_wired(
     services_fixture: ServicesFixture,
-) -> Generator[ServicesFixture, None, None]:
+) -> Generator[ServicesFixture]:
     with services_fixture.wired():
         yield services_fixture

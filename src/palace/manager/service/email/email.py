@@ -62,5 +62,4 @@ class SendEmailCallable(Protocol):
         html: str | None = None,
         text: str | None = None,
         attachments: Mapping[str, str | os.PathLike[Any] | bytes] | None = None,
-    ) -> EmailMessage:
-        ...
+    ) -> EmailMessage: ...

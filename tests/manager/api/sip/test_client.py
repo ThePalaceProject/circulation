@@ -1,4 +1,5 @@
 """Standalone tests of the SIP2 client."""
+
 import socket
 import ssl
 import tempfile

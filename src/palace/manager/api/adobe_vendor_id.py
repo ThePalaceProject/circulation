@@ -36,7 +36,6 @@ else:
 
 
 class AuthdataUtility(LoggerMixin):
-
     """Generate authdata JWTs as per the Vendor ID Service spec:
     https://docs.google.com/document/d/1j8nWPVmy95pJ_iU4UTC-QgHK2QhDUSdQ0OQTFR2NE_0
 

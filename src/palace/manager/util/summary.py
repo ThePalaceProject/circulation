@@ -9,7 +9,6 @@ from palace.manager.util import Bigrams, english_bigrams
 
 
 class SummaryEvaluator:
-
     """Evaluate summaries of a book to find a usable summary.
 
     A usable summary will have good coverage of the popular noun

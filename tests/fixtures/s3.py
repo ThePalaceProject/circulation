@@ -70,8 +70,7 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
                 self.key, self.content, self.media_type
             )
 
-    def _upload_abort(self) -> None:
-        ...
+    def _upload_abort(self) -> None: ...
 
 
 @dataclass
@@ -178,8 +177,7 @@ class S3ServiceProtocol(Protocol):
         region: str | None = None,
         bucket: str | None = None,
         url_template: str | None = None,
-    ) -> S3Service:
-        ...
+    ) -> S3Service: ...
 
 
 class S3ServiceFixture:
@@ -297,9 +295,7 @@ class S3ServiceIntegrationFixture:
 
 
 @pytest.fixture
-def s3_service_integration_fixture() -> (
-    Generator[S3ServiceIntegrationFixture, None, None]
-):
+def s3_service_integration_fixture() -> Generator[S3ServiceIntegrationFixture]:
     fixture = S3ServiceIntegrationFixture()
     yield fixture
     fixture.close()

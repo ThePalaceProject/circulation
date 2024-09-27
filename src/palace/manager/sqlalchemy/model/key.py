@@ -45,8 +45,7 @@ class Key(Base):
         key_id: str | uuid.UUID | None = None,
         *,
         raise_exception: Literal[True] = True,
-    ) -> Self:
-        ...
+    ) -> Self: ...
 
     @classmethod
     @overload
@@ -57,8 +56,7 @@ class Key(Base):
         key_id: str | uuid.UUID | None = None,
         *,
         raise_exception: bool = False,
-    ) -> Self | None:
-        ...
+    ) -> Self | None: ...
 
     @classmethod
     def get_key(

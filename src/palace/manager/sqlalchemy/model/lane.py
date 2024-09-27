@@ -890,7 +890,6 @@ class DatabaseBackedFacets(Facets):
 
 
 class FeaturedFacets(FacetsWithEntryPoint):
-
     """A simple faceting object that configures a query so that the 'most
     featurable' items are at the front.
 

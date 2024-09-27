@@ -28,8 +28,7 @@ class OPDSAuthenticationFlow(ABC):
         return data
 
     @abstractmethod
-    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]:
-        ...
+    def _authentication_flow_document(self, _db: Session) -> dict[str, Any]: ...
 
 
 class AuthenticationForOPDSDocument:

@@ -246,11 +246,9 @@ class HTTP(LoggerMixin):
 
         # Make sure headers are encoded as utf-8
         kwargs["headers"] = {
-            k.encode()
-            if isinstance(k, str)
-            else k: v.encode()
-            if isinstance(v, str)
-            else v
+            k.encode() if isinstance(k, str) else k: (
+                v.encode() if isinstance(v, str) else v
+            )
             for k, v in headers.items()
         }
 

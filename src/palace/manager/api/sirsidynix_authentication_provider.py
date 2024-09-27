@@ -364,7 +364,7 @@ class SirsiDynixHorizonAuthenticationProvider(
             return False
         return response.json()
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Verify the credentials of the test patron for this integration,
         and update its metadata.
         """

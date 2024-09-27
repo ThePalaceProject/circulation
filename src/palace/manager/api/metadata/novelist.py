@@ -72,8 +72,7 @@ class NoveListApiSettings(MetadataServiceSettings):
     )
 
 
-class NoveListApiLibrarySettings(BaseSettings):
-    ...
+class NoveListApiLibrarySettings(BaseSettings): ...
 
 
 class NoveListAPI(
@@ -635,9 +634,9 @@ class NoveListAPI(
 
     def create_item_object(
         self,
-        object: Row
-        | tuple[str, str, str, str, str, datetime.date, str, str, str]
-        | None,
+        object: (
+            Row | tuple[str, str, str, str, str, datetime.date, str, str, str] | None
+        ),
         currentIdentifier: str | None,
         existingItem: dict[str, str] | None,
     ) -> tuple[str | None, dict[str, str] | None, dict[str, str] | None, bool]:

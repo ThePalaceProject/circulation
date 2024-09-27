@@ -14,7 +14,6 @@ T = TypeVar("T")
 
 
 class XMLParser:
-
     """Helper functions to process XML data."""
 
     NAMESPACES: dict[str, str] = {}
@@ -101,7 +100,7 @@ class XMLParser:
         xpath_expression: str,
         namespaces: dict[str, str],
         handler: Callable[[_Element, dict[str, str]], T | None],
-    ) -> Generator[T, None, None]:
+    ) -> Generator[T]:
         """
         Process all elements matching the given XPath expression. Calling
         the given handler function on each element and yielding the result
@@ -123,7 +122,7 @@ class XMLProcessor(XMLParser, Generic[T], ABC):
     def process_all(
         self,
         xml: str | bytes | _ElementTree,
-    ) -> Generator[T, None, None]:
+    ) -> Generator[T]:
         """
         Process all elements matching the given XPath expression. Calling
         process_one on each element and yielding the result if it is not None.

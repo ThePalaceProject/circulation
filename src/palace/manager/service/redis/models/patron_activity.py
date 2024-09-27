@@ -20,8 +20,7 @@ else:
     from backports.strenum import StrEnum
 
 
-class PatronActivityError(BasePalaceException, RuntimeError):
-    ...
+class PatronActivityError(BasePalaceException, RuntimeError): ...
 
 
 class PatronActivityStatus:

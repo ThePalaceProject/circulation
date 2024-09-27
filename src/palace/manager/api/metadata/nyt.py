@@ -138,7 +138,7 @@ class NYTBestSellerAPI(
     def multiple_services_allowed(cls) -> bool:
         return False
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         yield self.run_test("Getting list of best-seller lists", self.list_of_lists)
 
     def request(self, path: str, max_age: timedelta = LIST_MAX_AGE) -> dict[str, Any]:
@@ -251,7 +251,7 @@ class NYTBestSellerList(list["NYTBestSellerListTitle"], LoggerMixin):
         return Edition.BOOK_MEDIUM
 
     @property
-    def all_dates(self) -> Generator[datetime, None, None]:
+    def all_dates(self) -> Generator[datetime]:
         """Yield a list of estimated dates when new editions of this list were
         probably published.
         """

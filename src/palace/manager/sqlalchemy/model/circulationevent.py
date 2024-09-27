@@ -11,7 +11,6 @@ from palace.manager.util.datetime_helpers import utc_now
 
 
 class CirculationEvent(Base):
-
     """Changes to a license pool's circulation status.
     We log these so we can measure things like the velocity of
     individual books.

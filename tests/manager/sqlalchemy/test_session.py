@@ -100,8 +100,7 @@ def test_production_session(mock_database_url, mock_session):
     # production_session can also be called with a class that sets the application name
     mock_session.reset_mock()
 
-    class Mock:
-        ...
+    class Mock: ...
 
     production_session(Mock)
     mock_session.assert_called_once_with(

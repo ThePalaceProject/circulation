@@ -78,15 +78,15 @@ class SAMLMetadataParser:
         # Add missing namespaces to be able to parse mdui:UIInfoType
         OneLogin_Saml2_Constants.NS_PREFIX_MDUI = "mdui"
         OneLogin_Saml2_Constants.NS_MDUI = "urn:oasis:names:tc:SAML:metadata:ui"
-        OneLogin_Saml2_Constants.NSMAP[
-            OneLogin_Saml2_Constants.NS_PREFIX_MDUI
-        ] = OneLogin_Saml2_Constants.NS_MDUI
+        OneLogin_Saml2_Constants.NSMAP[OneLogin_Saml2_Constants.NS_PREFIX_MDUI] = (
+            OneLogin_Saml2_Constants.NS_MDUI
+        )
 
         OneLogin_Saml2_Constants.NS_PREFIX_ALG = "alg"
         OneLogin_Saml2_Constants.NS_ALG = "urn:oasis:names:tc:SAML:metadata:algsupport"
-        OneLogin_Saml2_Constants.NSMAP[
-            OneLogin_Saml2_Constants.NS_PREFIX_ALG
-        ] = OneLogin_Saml2_Constants.NS_ALG
+        OneLogin_Saml2_Constants.NSMAP[OneLogin_Saml2_Constants.NS_PREFIX_ALG] = (
+            OneLogin_Saml2_Constants.NS_ALG
+        )
 
     def _convert_xml_string_to_dom(
         self, xml_metadata: str | bytes

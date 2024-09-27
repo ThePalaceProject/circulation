@@ -1024,7 +1024,6 @@ class ErrorParser(BibliothecaParser[BaseProblemDetailException]):
 
 
 class PatronCirculationParser(XMLParser):
-
     """Parse Bibliotheca's patron circulation status document into a list of
     LoanInfo and HoldInfo objects.
     """
@@ -1117,7 +1116,6 @@ class DateResponseParser(BibliothecaParser[Optional[datetime]], ABC):
 
 
 class CheckoutResponseParser(DateResponseParser):
-
     """Extract due date from a checkout response."""
 
     @property
@@ -1126,7 +1124,6 @@ class CheckoutResponseParser(DateResponseParser):
 
 
 class HoldResponseParser(DateResponseParser):
-
     """Extract availability date from a hold response."""
 
     @property
@@ -1135,7 +1132,6 @@ class HoldResponseParser(DateResponseParser):
 
 
 class EventParser(BibliothecaParser):
-
     """Parse Bibliotheca's event file format into our native event objects."""
 
     EVENT_SOURCE = "Bibliotheca"
@@ -1158,9 +1154,7 @@ class EventParser(BibliothecaParser):
 
     def process_all(
         self, string: bytes | str, no_events_error=False
-    ) -> Generator[
-        tuple[str, str, str | None, datetime, datetime | None, str], None, None
-    ]:
+    ) -> Generator[tuple[str, str, str | None, datetime, datetime | None, str]]:
         has_events = False
         for i in super().process_all(string):
             yield i
@@ -1611,7 +1605,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
 
 
 class BibliothecaEventMonitor(BibliothecaTimelineMonitor):
-
     """Register CirculationEvents for Bibliotheca titles.
 
     When run, this monitor will look at recent events as a way of keeping
@@ -1765,7 +1758,6 @@ class RunBibliothecaPurchaseMonitorScript(RunCollectionMonitorScript):
 
 
 class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):
-
     """Fill in bibliographic metadata for Bibliotheca records.
 
     This will occasionally fill in some availability information for a

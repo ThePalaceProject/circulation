@@ -25,8 +25,7 @@ class Hasher(ABC):
         self._hashing_algorithm = hashing_algorithm
 
     @abstractmethod
-    def hash(self, value: str) -> str:
-        ...
+    def hash(self, value: str) -> str: ...
 
 
 class UniversalHasher(Hasher):

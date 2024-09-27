@@ -24,12 +24,10 @@ from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
 
-class AuthProviderSettings(BaseSettings):
-    ...
+class AuthProviderSettings(BaseSettings): ...
 
 
-class AuthProviderLibrarySettings(BaseSettings):
-    ...
+class AuthProviderLibrarySettings(BaseSettings): ...
 
 
 SettingsType = TypeVar("SettingsType", bound=AuthProviderSettings, covariant=True)

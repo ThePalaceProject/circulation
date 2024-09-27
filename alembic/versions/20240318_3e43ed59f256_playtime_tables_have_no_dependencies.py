@@ -5,6 +5,7 @@ Revises: 9d2dccb0d6ff
 Create Date: 2024-03-18 01:34:28.381129+00:00
 
 """
+
 from functools import cache
 
 import sqlalchemy as sa

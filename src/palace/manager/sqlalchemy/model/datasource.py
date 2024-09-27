@@ -34,7 +34,6 @@ if TYPE_CHECKING:
 
 
 class DataSource(Base, HasSessionCache, DataSourceConstants):
-
     """A source for information about books, and possibly the books themselves."""
 
     __tablename__ = "datasources"

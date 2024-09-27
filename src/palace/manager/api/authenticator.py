@@ -71,9 +71,9 @@ class CirculationPatronProfileStorage(PatronProfileStorage):
             adobe_drm = {}
             adobe_drm["drm:vendor"] = vendor_id
             adobe_drm["drm:clientToken"] = token
-            adobe_drm[
-                "drm:scheme"
-            ] = "http://librarysimplified.org/terms/drm/scheme/ACS"
+            adobe_drm["drm:scheme"] = (
+                "http://librarysimplified.org/terms/drm/scheme/ACS"
+            )
             drm.append(adobe_drm)
 
             annotations_link = dict(
@@ -143,9 +143,9 @@ class Authenticator(LoggerMixin):
                         f"Library {library.name} ({library.id}) has no short name."
                     )
                     continue
-                self.library_authenticators[
-                    library.short_name
-                ] = LibraryAuthenticator.from_config(_db, library, analytics)
+                self.library_authenticators[library.short_name] = (
+                    LibraryAuthenticator.from_config(_db, library, analytics)
+                )
 
     def invoke_authenticator_method(self, method_name, *args, **kwargs):
         short_name = self.current_library_short_name
@@ -197,11 +197,11 @@ class LibraryAuthenticator(LoggerMixin):
 
         # Find all of this library's integrations with
         # the goal of authenticating patrons.
-        integrations: list[
-            IntegrationLibraryConfiguration
-        ] = IntegrationLibraryConfiguration.for_library_and_goal(
-            _db, library, Goals.PATRON_AUTH_GOAL
-        ).all()
+        integrations: list[IntegrationLibraryConfiguration] = (
+            IntegrationLibraryConfiguration.for_library_and_goal(
+                _db, library, Goals.PATRON_AUTH_GOAL
+            ).all()
+        )
 
         # Turn each such integration into an AuthenticationProvider.
         for integration in integrations:
@@ -227,8 +227,9 @@ class LibraryAuthenticator(LoggerMixin):
         basic_auth_provider: BasicAuthenticationProvider | None = None,
         saml_providers: list[BaseSAMLAuthenticationProvider] | None = None,
         bearer_token_signing_secret: str | None = None,
-        integration_registry: None
-        | (IntegrationRegistry[AuthenticationProvider]) = None,
+        integration_registry: None | (
+            IntegrationRegistry[AuthenticationProvider]
+        ) = None,
     ):
         """Initialize a LibraryAuthenticator from a list of AuthenticationProviders.
 
@@ -269,9 +270,9 @@ class LibraryAuthenticator(LoggerMixin):
         ] = {}
 
         self.basic_auth_provider: BasicAuthenticationProvider | None = None
-        self.access_token_authentication_provider: BasicTokenAuthenticationProvider | None = (
-            None
-        )
+        self.access_token_authentication_provider: (
+            BasicTokenAuthenticationProvider | None
+        ) = None
         if basic_auth_provider:
             self.register_basic_auth_provider(basic_auth_provider)
 

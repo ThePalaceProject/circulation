@@ -66,12 +66,10 @@ class IntegrationRegistry(Generic[T]):
         return integration
 
     @overload
-    def get(self, protocol: str, default: None = ...) -> type[T] | None:
-        ...
+    def get(self, protocol: str, default: None = ...) -> type[T] | None: ...
 
     @overload
-    def get(self, protocol: str, default: V) -> type[T] | V:
-        ...
+    def get(self, protocol: str, default: V) -> type[T] | V: ...
 
     def get(self, protocol: str, default: V | None = None) -> type[T] | V | None:
         """Look up an integration class by protocol."""
@@ -80,16 +78,13 @@ class IntegrationRegistry(Generic[T]):
         return self[protocol]
 
     @overload
-    def get_protocol(self, integration: type[T], default: None = ...) -> str | None:
-        ...
+    def get_protocol(self, integration: type[T], default: None = ...) -> str | None: ...
 
     @overload
-    def get_protocol(self, integration: type[T], default: Literal[False]) -> str:
-        ...
+    def get_protocol(self, integration: type[T], default: Literal[False]) -> str: ...
 
     @overload
-    def get_protocol(self, integration: type[T], default: V) -> str | V:
-        ...
+    def get_protocol(self, integration: type[T], default: V) -> str | V: ...
 
     def get_protocol(
         self, integration: type[T], default: V | None | Literal[False] = None
@@ -106,16 +101,15 @@ class IntegrationRegistry(Generic[T]):
     @overload
     def get_protocols(
         self, integration: type[T], default: None = ...
-    ) -> list[str] | None:
-        ...
+    ) -> list[str] | None: ...
 
     @overload
-    def get_protocols(self, integration: type[T], default: Literal[False]) -> list[str]:
-        ...
+    def get_protocols(
+        self, integration: type[T], default: Literal[False]
+    ) -> list[str]: ...
 
     @overload
-    def get_protocols(self, integration: type[T], default: V) -> list[str] | V:
-        ...
+    def get_protocols(self, integration: type[T], default: V) -> list[str] | V: ...
 
     def get_protocols(
         self, integration: type[T], default: V | None | Literal[False] = None

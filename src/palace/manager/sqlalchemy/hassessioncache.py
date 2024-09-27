@@ -37,12 +37,10 @@ class HasSessionCache(LoggerMixin):
 
     @property
     @abstractmethod
-    def id(self) -> Mapped[int]:
-        ...
+    def id(self) -> Mapped[int]: ...
 
     @abstractmethod
-    def cache_key(self) -> Hashable:
-        ...
+    def cache_key(self) -> Hashable: ...
 
     @classmethod
     def cache_warm(

@@ -110,9 +110,9 @@ class TestIndexController:
             assert library_name == doc["title"]
 
         # Verify that the authentication document cache is working.
-        circulation_fixture.manager.authentication_for_opds_documents[
-            library_name
-        ] = "Cached value"
+        circulation_fixture.manager.authentication_for_opds_documents[library_name] = (
+            "Cached value"
+        )
         with circulation_fixture.request_context_with_library(
             "/", headers=dict(Authorization=circulation_fixture.invalid_auth)
         ):

@@ -67,6 +67,6 @@ class SimplifiedFictionClassifier(Classifier):
 
 
 Classifier.classifiers[Classifier.SIMPLIFIED_GENRE] = SimplifiedGenreClassifier
-Classifier.classifiers[
-    Classifier.SIMPLIFIED_FICTION_STATUS
-] = SimplifiedFictionClassifier
+Classifier.classifiers[Classifier.SIMPLIFIED_FICTION_STATUS] = (
+    SimplifiedFictionClassifier
+)

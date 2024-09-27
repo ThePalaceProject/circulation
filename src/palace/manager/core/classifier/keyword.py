@@ -41,7 +41,6 @@ class Eg:
 
 
 class KeywordBasedClassifier(AgeOrGradeClassifier):
-
     """Classify a book based on keywords."""
 
     # We have to handle these first because otherwise '\bfiction\b'

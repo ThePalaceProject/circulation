@@ -234,9 +234,11 @@ class DSLEvaluationVisitor(Visitor):
             value = self.BUILTIN_FUNCTIONS[node.value]
         else:
             value = self._get_attribute_value(
-                self._current_scope
-                if self._current_scope is not None
-                else self._context,
+                (
+                    self._current_scope
+                    if self._current_scope is not None
+                    else self._context
+                ),
                 node.value,
             )
 
