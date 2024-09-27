@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import typing
 from functools import cached_property
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ConfigDict, GetCoreSchemaHandler, PositiveInt
+from pydantic import BaseModel, ConfigDict, GetCoreSchemaHandler
 from pydantic_core import core_schema
 from uritemplate import URITemplate, variable
 
@@ -12,13 +13,15 @@ from palace.manager.core.exceptions import PalaceValueError
 T = TypeVar("T")
 
 
-def obj_or_set_to_set(value: T | set[T] | None) -> set[T]:
+def obj_or_set_to_set(value: T | set[T] | frozenset[T] | None) -> frozenset[T]:
     """Convert object or set of objects to a set of objects."""
     if value is None:
-        return set()
+        return frozenset()
     if isinstance(value, set):
+        return frozenset(value)
+    elif isinstance(value, frozenset):
         return value
-    return {value}
+    return frozenset({value})
 
 
 class BaseOpdsModel(BaseModel):
@@ -30,76 +33,21 @@ class BaseOpdsModel(BaseModel):
     )
 
 
-class SetOfLinks(set["Link"]):
-    """Property allowing to contain only unique links."""
-
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls, source_type: type[Any], handler: GetCoreSchemaHandler
-    ) -> core_schema.CoreSchema:
-        assert source_type is SetOfLinks
-        return core_schema.no_info_after_validator_function(
-            cls._validate,
-            core_schema.set_schema(),
-        )
-
-    @classmethod
-    def _validate(cls, value: set[Link]) -> SetOfLinks:
-        links = set()
-        for link in value:
-            if (link.rels, link.href, link.type) in links:
-                raise PalaceValueError(
-                    f"Duplicate link with relation '{link.rel}', type '{link.type}' and href '{link.href}'"
-                )
-            links.add((link.rels, link.href, link.type))
-        return cls(value)
-
-    def get(self, rel: str | None = None, type: str | None = None) -> Link | None:
-        """
-        Return the link with the specific relation and type. Raises an
-        exception if there are multiple links with the same relation and type.
-        """
-        links = self.get_set(rel, type)
-        if len(links) > 1:
-            raise PalaceValueError(
-                f"Multiple links with relation '{rel}' and type '{type}'"
-            )
-        return next(iter(links), None)
-
-    def get_set(self, rel: str | None = None, type: str | None = None) -> set[Link]:
-        """
-        Return links with the specific relation and type.
-        """
-        return {
-            link
-            for link in self
-            if (rel is None or rel in link.rels) and (type is None or type == link.type)
-        }
-
-
-class Link(BaseOpdsModel):
-    """Link to another resource."""
+class BaseLink(BaseOpdsModel):
+    """The various models all have links with this same basic structure, but
+    with additional fields, so we define this base class to avoid repeating
+    the same fields in each model, and so we can use the same basic validation
+    for them all.
+    """
 
     href: str
+    rel: set[str] | str
     templated: bool = False
     type: str | None = None
-    title: str | None = None
-    rel: set[str] | str | None = None
-    height: PositiveInt | None = None
-    width: PositiveInt | None = None
-    bitrate: PositiveInt | None = None
-    duration: PositiveInt | None = None
-    language: set[str] | str | None = None
-    alternate: SetOfLinks = SetOfLinks()
-    children: SetOfLinks = SetOfLinks()
 
     @cached_property
-    def rels(self) -> set[str]:
+    def rels(self) -> frozenset[str]:
         return obj_or_set_to_set(self.rel)
-
-    @cached_property
-    def languages(self) -> set[str]:
-        return obj_or_set_to_set(self.language)
 
     def href_templated(self, var_dict: variable.VariableValueDict | None = None) -> str:
         """
@@ -111,6 +59,64 @@ class Link(BaseOpdsModel):
         return template.expand(var_dict)
 
 
-class Price(BaseOpdsModel):
-    currency: str
-    value: float
+LinkT = TypeVar("LinkT", bound="BaseLink")
+
+
+class ListOfLinks(list[LinkT]):
+    """Set of links where each link can only appear once."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: type[Any], handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        origin_type = typing.get_origin(source_type)
+        assert origin_type is ListOfLinks
+        [container_type] = typing.get_args(source_type)
+        return core_schema.no_info_after_validator_function(
+            cls._validate,
+            core_schema.list_schema(handler(container_type)),
+        )
+
+    @classmethod
+    def _validate(cls, value: list[LinkT]) -> ListOfLinks[LinkT]:
+        link_set = set()
+        links: ListOfLinks[LinkT] = ListOfLinks()
+        for link in value:
+            if (link.rels, link.href, link.type) in link_set:
+                raise PalaceValueError(
+                    f"Duplicate link with relation '{link.rel}', type '{link.type}' and href '{link.href}'"
+                )
+            link_set.add((link.rels, link.href, link.type))
+            links.append(link)
+        return links
+
+    def get(
+        self, *, rel: str | None = None, type: str | None = None, raising: bool = False
+    ) -> LinkT | None:
+        """
+        Return the link with the specific relation and type. Raises an
+        exception if there are multiple links with the same relation and type.
+        """
+        links = self.get_list(rel=rel, type=type)
+        if len(links) > 1 and raising:
+            match (rel, type):
+                case (None, None):
+                    err = "Multiple links found"
+                case (_, None):
+                    err = f"Multiple links with rel='{rel}'"
+                case (None, _):
+                    err = f"Multiple links with type='{type}'"
+                case _:
+                    err = f"Multiple links with rel='{rel}' and type='{type}'"
+            raise PalaceValueError(err)
+        return next(iter(links), None)
+
+    def get_list(self, *, rel: str | None = None, type: str | None = None) -> list[LinkT]:
+        """
+        Return links with the specific relation and type.
+        """
+        return [
+            link
+            for link in self
+            if (rel is None or rel in link.rels) and (type is None or type == link.type)
+        ]
