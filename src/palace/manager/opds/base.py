@@ -111,7 +111,9 @@ class ListOfLinks(list[LinkT]):
             raise PalaceValueError(err)
         return next(iter(links), None)
 
-    def get_list(self, *, rel: str | None = None, type: str | None = None) -> list[LinkT]:
+    def get_list(
+        self, *, rel: str | None = None, type: str | None = None
+    ) -> list[LinkT]:
         """
         Return links with the specific relation and type.
         """
