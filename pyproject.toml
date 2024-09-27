@@ -99,6 +99,7 @@ module = [
     "palace.manager.core.selftest",
     "palace.manager.feed.*",
     "palace.manager.integration.*",
+    "palace.manager.opds.*",
     "palace.manager.scripts.initialization",
     "palace.manager.scripts.rotate_jwe_key",
     "palace.manager.scripts.search",
