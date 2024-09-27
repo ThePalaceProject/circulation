@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -111,6 +113,8 @@ class TestListOfLinks:
         validated = validator.validate_python(list_of_links_fixture.list)
         assert validated == list_of_links_fixture.links
         assert isinstance(validated, ListOfLinks)
+        for link in validated:
+            assert isinstance(link, BaseLink)
 
         # The list of links is invalid if there are multiple links with the same relation and type.
         invalid_list = list_of_links_fixture.list + [list_of_links_fixture.foo_link]
@@ -119,3 +123,32 @@ class TestListOfLinks:
             match="Duplicate link with relation 'foo', type 'application/xyz' and href 'http://example.com/foo'",
         ):
             validator.validate_python(invalid_list)
+
+        # Load the list of links from a JSON object.
+        json_obj = json.dumps(
+            [
+                {"href": "http://example.com/foo", "rel": "foo"},
+                {
+                    "href": "http://example.com/bar",
+                    "rel": "bar",
+                    "type": "application/xyz",
+                },
+            ],
+            separators=(",", ":"),
+        )
+        validated = validator.validate_json(json_obj)
+        assert len(validated) == 2
+        assert isinstance(validated, ListOfLinks)
+        for link in validated:
+            assert isinstance(link, BaseLink)
+
+        [first, second] = validated
+        assert first.href == "http://example.com/foo"
+        assert first.rel == "foo"
+        assert first.type is None
+
+        assert second.href == "http://example.com/bar"
+        assert second.rel == "bar"
+        assert second.type == "application/xyz"
+
+        assert validator.dump_json(validated, exclude_unset=True) == json_obj.encode()

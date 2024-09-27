@@ -66,5 +66,5 @@ class LicenseInfo(BaseOpdsModel):
         return obj_or_set_to_set(self.format)
 
     @cached_property
-    def available(self) -> bool:
+    def active(self) -> bool:
         return self.status == Status.AVAILABLE

@@ -1,4 +1,5 @@
 from enum import auto
+from functools import cached_property
 
 from backports.strenum import StrEnum
 from pydantic import AwareDatetime, Field, field_validator
@@ -69,7 +70,7 @@ class Event(BaseOpdsModel):
     timestamp: AwareDatetime
 
 
-class StatusDocument(BaseOpdsModel):
+class LcpStatus(BaseOpdsModel):
     """
     This document is defined as part of the Readium LCP Specifications.
 
@@ -105,3 +106,7 @@ class StatusDocument(BaseOpdsModel):
                 "type 'application/vnd.readium.lcp.license.v1.0+json'"
             )
         return value
+
+    @cached_property
+    def active(self) -> bool:
+        return self.status in [Status.READY, Status.ACTIVE]

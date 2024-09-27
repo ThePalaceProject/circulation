@@ -1,4 +1,11 @@
-from pydantic import AwareDatetime, Base64Bytes, Field, PositiveInt, field_validator
+from pydantic import (
+    AwareDatetime,
+    Base64Bytes,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    field_validator,
+)
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.opds.base import BaseLink, BaseOpdsModel, ListOfLinks
@@ -55,8 +62,8 @@ class Rights(BaseOpdsModel):
     # fields in the Protection model, they are not. The Protection model
     # defines these as booleans, while rights defines them as the integer
     # number of characters/pages allowed to be copied/printed.
-    allow_copy: PositiveInt | None = Field(None, alias="copy")
-    allow_print: PositiveInt | None = Field(None, alias="print")
+    allow_copy: NonNegativeInt | None = Field(None, alias="copy")
+    allow_print: NonNegativeInt | None = Field(None, alias="print")
     start: AwareDatetime | None = None
     end: AwareDatetime | None = None
 

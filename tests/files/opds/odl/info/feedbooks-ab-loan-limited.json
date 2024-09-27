@@ -1,0 +1,36 @@
+{
+ "identifier": "urn:uuid:123",
+ "status": "available",
+ "created": "2024-08-30T14:22:04Z",
+ "format": "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction",
+ "price": {
+  "value": 49.95,
+  "currency": "usd"
+ },
+ "terms": {
+  "checkouts": 40,
+  "concurrency": 1,
+  "length": 5097600
+ },
+ "protection": {
+  "format": [
+   "application/vnd.readium.lcp.license.v1.0+json"
+  ],
+  "devices": 6,
+  "copy": false,
+  "print": false,
+  "tts": false
+ },
+ "checkouts": {
+  "left": 37,
+  "available": 0,
+  "active": [
+   {
+    "id": "fb8c09ec-7b60-11ef-8495-0242ac130002",
+    "expires": "2024-10-16T17:09:54Z",
+    "href": "https://license.example.com/loan/status/123",
+    "patron": "fb8d46b8-7b60-11ef-8495-0242ac130002"
+   }
+  ]
+ }
+}

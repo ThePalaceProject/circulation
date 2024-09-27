@@ -1,0 +1,28 @@
+{
+ "identifier": "urn:uuid:123",
+ "status": "unavailable",
+ "created": "2021-12-21T19:25:00Z",
+ "format": "application/epub+zip",
+ "price": {
+  "value": 45,
+  "currency": "usd"
+ },
+ "terms": {
+  "expires": "2023-12-21T00:00:00Z",
+  "concurrency": 1,
+  "length": 5097600
+ },
+ "protection": {
+  "format": [
+   "application/vnd.adobe.adept+xml"
+  ],
+  "devices": 6,
+  "copy": false,
+  "print": false,
+  "tts": false
+ },
+ "expires": "2023-12-21T00:00:00Z",
+ "checkouts": {
+  "available": 1
+ }
+}
