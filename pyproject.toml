@@ -115,6 +115,7 @@ module = [
     "palace.manager.sqlalchemy.model.integration",
     "palace.manager.sqlalchemy.model.library",
     "palace.manager.sqlalchemy.model.patron",
+    "palace.manager.sqlalchemy.util",
     "palace.manager.util.authentication_for_opds",
     "palace.manager.util.base64",
     "palace.manager.util.cache",

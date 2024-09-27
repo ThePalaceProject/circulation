@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import (
     Boolean,
@@ -185,7 +185,9 @@ class PlaytimeSummary(Base):
             "library_name": None if library else library_name,
             "loan_identifier": loan_identifier,
         }
-        lookup_keys = {k: v for k, v in _potential_lookup_keys.items() if v is not None}
+        lookup_keys: dict[str, Any] = {
+            k: v for k, v in _potential_lookup_keys.items() if v is not None
+        }
         additional_columns = {
             k: v
             for k, v in {
