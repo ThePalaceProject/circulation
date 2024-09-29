@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator, Mapping
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from contextlib2 import contextmanager
 from psycopg2._range import NumericRange
@@ -94,7 +94,7 @@ def get_one(
         q = q.filter(constraint)
 
     try:
-        return q.one()  # type: ignore[no-any-return]
+        return cast(T, q.one())
     except MultipleResultsFound:
         if on_multiple == "error":
             raise
@@ -105,7 +105,7 @@ def get_one(
             # This may be a sign of a problem somewhere else. A
             # database-level constraint might be useful.
             q = q.limit(1)
-            return q.one()  # type: ignore[no-any-return]
+            return cast(T, q.one())
     except NoResultFound:
         return None
 
@@ -117,30 +117,29 @@ def get_one_or_create(
     create_method_kwargs: Mapping[str, Any] | None = None,
     **kwargs: Any,
 ) -> tuple[T, bool]:
-    one = get_one(db, model, **kwargs)
-    if one:
+    if one := get_one(db, model, **kwargs):
         return one, False
-    else:
-        __transaction = db.begin_nested()
-        try:
-            # These kwargs are supported by get_one() but not by create().
-            get_one_keys = ["on_multiple", "constraint"]
-            for key in get_one_keys:
-                if key in kwargs:
-                    del kwargs[key]
-            obj = create(db, model, create_method, create_method_kwargs, **kwargs)
-            __transaction.commit()
-            return obj
-        except IntegrityError as e:
-            logging.info(
-                "INTEGRITY ERROR on %r %r, %r: %r",
-                model,
-                create_method_kwargs,
-                kwargs,
-                e,
-            )
-            __transaction.rollback()
-            return db.query(model).filter_by(**kwargs).one(), False
+
+    __transaction = db.begin_nested()
+    try:
+        # These kwargs are supported by get_one() but not by create().
+        get_one_keys = ["on_multiple", "constraint"]
+        for key in get_one_keys:
+            if key in kwargs:
+                del kwargs[key]
+        obj = create(db, model, create_method, create_method_kwargs, **kwargs)
+        __transaction.commit()
+        return obj
+    except IntegrityError as e:
+        logging.info(
+            "INTEGRITY ERROR on %r %r, %r: %r",
+            model,
+            create_method_kwargs,
+            kwargs,
+            e,
+        )
+        __transaction.rollback()
+        return db.query(model).filter_by(**kwargs).one(), False
 
 
 def numericrange_to_string(r: NumericRange | None) -> str:
