@@ -1,4 +1,5 @@
 """Test circulation-specific extensions to the self-test infrastructure."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

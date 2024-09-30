@@ -76,7 +76,6 @@ def nyt_fixture(
 
 
 class TestNYTBestSellerAPI:
-
     """Test the API calls."""
 
     def test_from_config(self, nyt_fixture: NYTBestSellerAPIFixture):
@@ -150,7 +149,6 @@ class TestNYTBestSellerAPI:
 
 
 class TestNYTBestSellerList:
-
     """Test the NYTBestSellerList object and its ability to be turned
     into a CustomList.
     """

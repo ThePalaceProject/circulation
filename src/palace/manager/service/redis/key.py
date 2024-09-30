@@ -23,8 +23,7 @@ class RedisKeyMixin:
 
 @runtime_checkable
 class SupportsRedisKey(Protocol):
-    def redis_key(self) -> str:
-        ...
+    def redis_key(self) -> str: ...
 
 
 class RedisKeyGenerator:

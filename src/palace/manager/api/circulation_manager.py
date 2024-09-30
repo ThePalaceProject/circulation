@@ -126,7 +126,9 @@ class CirculationManager(LoggerMixin):
     admin_dashboard_controller: DashboardController
     admin_patron_controller: PatronController
     admin_discovery_services_controller: DiscoveryServicesController
-    admin_discovery_service_library_registrations_controller: DiscoveryServiceLibraryRegistrationsController
+    admin_discovery_service_library_registrations_controller: (
+        DiscoveryServiceLibraryRegistrationsController
+    )
     admin_metadata_services_controller: MetadataServicesController
     admin_patron_auth_services_controller: PatronAuthServicesController
     admin_collection_settings_controller: CollectionSettingsController

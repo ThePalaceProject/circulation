@@ -75,8 +75,9 @@ def FormField(
     validation_alias: str | AliasPath | AliasChoices | None = _Unset,
     serialization_alias: str | None = _Unset,
     title: str | None = _Unset,
-    field_title_generator: typing_extensions.Callable[[str, FieldInfo], str]
-    | None = _Unset,
+    field_title_generator: (
+        typing_extensions.Callable[[str, FieldInfo], str] | None
+    ) = _Unset,
     description: str | None = _Unset,
     examples: list[Any] | None = _Unset,
     exclude: bool | None = _Unset,
@@ -216,9 +217,11 @@ class ConfigurationFormItem:
     # When the type is SELECT, LIST, or MENU, the options are used to populate the
     # field in the admin interface. This can either be a callable that returns a
     # dictionary of options or a dictionary of options.
-    options: Callable[
-        [Session], ConfigurationFormOptionsType
-    ] | ConfigurationFormOptionsType | None = None
+    options: (
+        Callable[[Session], ConfigurationFormOptionsType]
+        | ConfigurationFormOptionsType
+        | None
+    ) = None
 
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is

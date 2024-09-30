@@ -1,4 +1,5 @@
 """Test language lookup capabilities."""
+
 import pytest
 
 from palace.manager.util.languages import LanguageCodes, LanguageNames, LookupTable

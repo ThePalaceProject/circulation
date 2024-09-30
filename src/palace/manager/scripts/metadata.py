@@ -6,7 +6,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 
 
 class MetadataCalculationScript(Script):
-
     """Force calculate_presentation() to be called on some set of Editions.
 
     This assumes that the metadata is in already in the database and

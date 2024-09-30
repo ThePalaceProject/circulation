@@ -52,7 +52,6 @@ def controller_fixture(
 
 
 class TestDiscoveryServices:
-
     """Test the controller functions that list and create new discovery
     services.
     """

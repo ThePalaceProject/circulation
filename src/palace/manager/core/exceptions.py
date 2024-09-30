@@ -10,8 +10,7 @@ class BasePalaceException(Exception):
         self.message = message
 
 
-class PalaceValueError(BasePalaceException, ValueError):
-    ...
+class PalaceValueError(BasePalaceException, ValueError): ...
 
 
 class IntegrationException(BasePalaceException):

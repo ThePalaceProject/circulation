@@ -86,11 +86,13 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "publisher": edition.publisher if edition else None,
             "imprint": edition.imprint if edition else None,
             "issued": edition.issued if edition else None,
-            "published": datetime.datetime.combine(
-                edition.published, datetime.datetime.min.time()
-            )
-            if edition and edition.published
-            else None,
+            "published": (
+                datetime.datetime.combine(
+                    edition.published, datetime.datetime.min.time()
+                )
+                if edition and edition.published
+                else None
+            ),
             "medium": edition.medium if edition else None,
             "collection": collection.name if collection else None,
             "identifier_type": identifier.type if identifier else None,
@@ -103,22 +105,22 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "quality": work.quality if work else None,
             "rating": work.rating if work else None,
             "popularity": work.popularity if work else None,
-            "genre": ", ".join(map(lambda genre: genre.name, work.genres))
-            if work
-            else None,
-            "availability_time": license_pool.availability_time
-            if license_pool
-            else None,
+            "genre": (
+                ", ".join(map(lambda genre: genre.name, work.genres)) if work else None
+            ),
+            "availability_time": (
+                license_pool.availability_time if license_pool else None
+            ),
             "licenses_owned": license_pool.licenses_owned if license_pool else None,
-            "licenses_available": license_pool.licenses_available
-            if license_pool
-            else None,
-            "licenses_reserved": license_pool.licenses_reserved
-            if license_pool
-            else None,
-            "patrons_in_hold_queue": license_pool.patrons_in_hold_queue
-            if license_pool
-            else None,
+            "licenses_available": (
+                license_pool.licenses_available if license_pool else None
+            ),
+            "licenses_reserved": (
+                license_pool.licenses_reserved if license_pool else None
+            ),
+            "patrons_in_hold_queue": (
+                license_pool.patrons_in_hold_queue if license_pool else None
+            ),
             # TODO: We no longer support self-hosted books, so this should always be False.
             #  this value is still included in the response for backwards compatibility,
             #  but should be removed in a future release.

@@ -14,7 +14,6 @@ from palace.manager.util.datetime_helpers import utc_now
 
 
 class TitleFromExternalList:
-
     """This class helps you convert data from external lists into Simplified
     Edition and CustomListEntry objects.
     """

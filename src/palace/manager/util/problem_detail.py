@@ -2,6 +2,7 @@
 
 As per http://datatracker.ietf.org/doc/draft-ietf-appsawg-http-problem/
 """
+
 from __future__ import annotations
 
 import json as j
@@ -40,7 +41,6 @@ class ProblemDetailModel(BaseModel):
 
 
 class ProblemDetail:
-
     """A common type of problem."""
 
     JSON_MEDIA_TYPE = JSON_MEDIA_TYPE

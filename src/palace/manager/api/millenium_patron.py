@@ -601,7 +601,6 @@ class MilleniumPatronAPI(
 
 
 class MockMilleniumPatronAPI(MilleniumPatronAPI):
-
     """This mocks the API on a higher level than the HTTP level.
 
     It is not used in the tests of the MilleniumPatronAPI class.  It

@@ -92,7 +92,6 @@ class CoverageFailure:
 
 
 class CoverageProviderProgress(TimestampData):
-
     """A TimestampData optimized for the special needs of
     CoverageProviders.
     """
@@ -130,7 +129,6 @@ class CoverageProviderProgress(TimestampData):
 
 
 class BaseCoverageProvider:
-
     """Run certain objects through an algorithm. If the algorithm returns
     success, add a coverage record for that object, so the object
     doesn't need to be processed again. If the algorithm returns a
@@ -597,7 +595,6 @@ class BaseCoverageProvider:
 
 
 class IdentifierCoverageProvider(BaseCoverageProvider):
-
     """Run Identifiers of certain types (ISBN, Overdrive, OCLC Number,
     etc.) through an algorithm associated with a certain DataSource.
 
@@ -1393,7 +1390,6 @@ class BibliographicCoverageProvider(CollectionCoverageProvider):
 
 
 class WorkCoverageProvider(BaseCoverageProvider):
-
     """Perform coverage operations on Works rather than Identifiers."""
 
     @classmethod

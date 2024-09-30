@@ -1,4 +1,5 @@
 """Utilities for Flask applications."""
+
 import datetime
 import json
 import time

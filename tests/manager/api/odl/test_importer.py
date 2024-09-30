@@ -423,9 +423,11 @@ class TestOPDS2WithODLImporter:
         ebook_delivery_mechanism = opds2_with_odl_importer_fixture.get_delivery_mechanism_by_drm_scheme_and_content_type(
             license_pool.delivery_mechanisms,
             MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-            DeliveryMechanism.BEARER_TOKEN
-            if auth_type == OPDS2AuthType.OAUTH
-            else None,
+            (
+                DeliveryMechanism.BEARER_TOKEN
+                if auth_type == OPDS2AuthType.OAUTH
+                else None
+            ),
         )
         assert ebook_delivery_mechanism is not None
 

@@ -1,5 +1,6 @@
 """Define the interfaces used by integration self-tests.
 """
+
 from __future__ import annotations
 
 import sys
@@ -299,7 +300,7 @@ class HasSelfTests(LoggerMixin, ABC):
         return integration.self_test_results
 
     @abstractmethod
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Run the self-tests.
 
         :return: A generator that yields SelfTestResult objects.
@@ -307,5 +308,4 @@ class HasSelfTests(LoggerMixin, ABC):
         ...
 
     @abstractmethod
-    def integration(self, _db: Session) -> IntegrationConfiguration | None:
-        ...
+    def integration(self, _db: Session) -> IntegrationConfiguration | None: ...

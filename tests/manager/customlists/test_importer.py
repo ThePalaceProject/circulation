@@ -63,9 +63,9 @@ class TestImports:
         """If the target library does not exist, importing fails."""
         sign_response = MockAPIServerResponse()
         sign_response.status_code = 200
-        sign_response.headers[
-            "Set-Cookie"
-        ] = "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        sign_response.headers["Set-Cookie"] = (
+            "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        )
         mock_web_server.enqueue_response(
             "POST", "/admin/sign_in_with_password", sign_response
         )
@@ -679,9 +679,9 @@ class TestImports:
         """Lists are correctly updated and requests include CSRF tokens."""
         sign_response = MockAPIServerResponse()
         sign_response.status_code = 200
-        sign_response.headers[
-            "Set-Cookie"
-        ] = "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        sign_response.headers["Set-Cookie"] = (
+            "csrf_token=DUZ8inJjpISkyCYjHx7PONZM8354pCu4; HttpOnly; Path=/"
+        )
         mock_web_server.enqueue_response(
             "POST", "/admin/sign_in_with_password", sign_response
         )

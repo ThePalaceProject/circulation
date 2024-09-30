@@ -1,4 +1,5 @@
 """OPDS feeds, they can be serialized to either OPDS 1 or OPDS 2"""
+
 from __future__ import annotations
 
 import logging
@@ -136,7 +137,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def facet_links(
         cls, annotator: CirculationManagerAnnotator, facets: FacetsWithEntryPoint
-    ) -> Generator[Link, None, None]:
+    ) -> Generator[Link]:
         """Create links for this feed's navigational facet groups.
 
         This does not create links for the entry point facet group,
@@ -499,9 +500,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         active_holds_by_work: dict[Work, Hold] = {}
         for work, list_of_holds in all_holds_by_work.items():
-            active_holds_by_work[
-                work
-            ] = LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(list_of_holds)
+            active_holds_by_work[work] = (
+                LibraryLoanAndHoldAnnotator.choose_best_hold_for_work(list_of_holds)
+            )
 
         if not annotator:
             annotator = LibraryLoanAndHoldAnnotator(

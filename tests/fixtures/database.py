@@ -194,7 +194,7 @@ class DatabaseCreationFixture:
         return str(self._config_url.set(database=self.database_name))
 
     @contextmanager
-    def _db_connection(self) -> Generator[Connection, None, None]:
+    def _db_connection(self) -> Generator[Connection]:
         """
         Databases need to be created and dropped outside a transaction. This method
         provides a connection to database URL provided in the configuration that is not
@@ -228,7 +228,7 @@ class DatabaseCreationFixture:
             connection.execute(text(f"DROP DATABASE {self.database_name}"))
 
     @contextmanager
-    def patch_database_url(self) -> Generator[None, None, None]:
+    def patch_database_url(self) -> Generator[None]:
         """
         This method patches the database URL, so any code that uses it will use the worker specific database.
         """
@@ -237,7 +237,7 @@ class DatabaseCreationFixture:
 
     @classmethod
     @contextmanager
-    def fixture(cls, test_id: TestIdFixture) -> Generator[Self, None, None]:
+    def fixture(cls, test_id: TestIdFixture) -> Generator[Self]:
         db_name_fixture = cls(test_id)
         db_name_fixture._create_db()
         try:
@@ -249,7 +249,7 @@ class DatabaseCreationFixture:
 @pytest.fixture(scope="session")
 def database_creation(
     session_test_id: TestIdFixture,
-) -> Generator[DatabaseCreationFixture, None, None]:
+) -> Generator[DatabaseCreationFixture]:
     """
     This is a session scoped fixture that provides a unique database for each worker in the test run.
     """
@@ -260,7 +260,7 @@ def database_creation(
 @pytest.fixture(scope="function")
 def function_database_creation(
     function_test_id: TestIdFixture,
-) -> Generator[DatabaseCreationFixture, None, None]:
+) -> Generator[DatabaseCreationFixture]:
     """
     This is a function scoped fixture that provides a unique database for each test function.
 
@@ -319,7 +319,7 @@ class DatabaseFixture:
         self.engine.dispose()
 
     @contextmanager
-    def patch_engine(self) -> Generator[None, None, None]:
+    def patch_engine(self) -> Generator[None]:
         """
         This method patches the SessionManager to use the engine provided by this fixture.
 
@@ -333,7 +333,7 @@ class DatabaseFixture:
             yield
 
     @contextmanager
-    def patch_engine_error(self) -> Generator[None, None, None]:
+    def patch_engine_error(self) -> Generator[None]:
         """
         This method patches the SessionManager to raise an exception when the engine is accessed.
         This is useful when the tests should not be accessing the engine directly.
@@ -349,9 +349,7 @@ class DatabaseFixture:
 
     @classmethod
     @contextmanager
-    def fixture(
-        cls, database_name: DatabaseCreationFixture
-    ) -> Generator[Self, None, None]:
+    def fixture(cls, database_name: DatabaseCreationFixture) -> Generator[Self]:
         db_fixture = cls(database_name)
         db_fixture.drop_existing_schema()
         db_fixture._load_model_classes()
@@ -365,7 +363,7 @@ class DatabaseFixture:
 @pytest.fixture(scope="session")
 def database(
     database_creation: DatabaseCreationFixture,
-) -> Generator[DatabaseFixture, None, None]:
+) -> Generator[DatabaseFixture]:
     """
     This is a session scoped fixture that provides a unique database engine and connection
     for each worker in the test run.
@@ -377,7 +375,7 @@ def database(
 @pytest.fixture(scope="function")
 def function_database(
     function_database_creation: DatabaseCreationFixture,
-) -> Generator[DatabaseFixture, None, None]:
+) -> Generator[DatabaseFixture]:
     """
     This is a function scoped fixture that provides a unique database engine and connection
     for each test. This is resource intensive, so it should only be used when necessary.
@@ -421,7 +419,7 @@ class DatabaseTransactionFixture:
     @contextmanager
     def fixture(
         cls, database: DatabaseFixture, services: ServicesFixture
-    ) -> Generator[Self, None, None]:
+    ) -> Generator[Self]:
         db = cls(database, services)
         try:
             yield db
@@ -1229,7 +1227,7 @@ def db(
     database: DatabaseFixture,
     services_fixture: ServicesFixture,
     work_queue_indexing: WorkQueueIndexingFixture,
-) -> Generator[DatabaseTransactionFixture, None, None]:
+) -> Generator[DatabaseTransactionFixture]:
     with DatabaseTransactionFixture.fixture(database, services_fixture) as db:
         with (
             database.patch_engine_error(),
@@ -1281,7 +1279,7 @@ class MockSessionMaker:
         return self._session
 
     @contextmanager
-    def begin(self) -> Generator[Session, None, None]:
+    def begin(self) -> Generator[Session]:
         with self._session.begin_nested():
             yield self._session
 

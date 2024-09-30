@@ -1,6 +1,7 @@
 """Test the base authentication framework: that is, the classes that
 don't interact with any particular source of truth.
 """
+
 from __future__ import annotations
 
 import datetime

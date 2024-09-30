@@ -75,13 +75,13 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
                 "settings": api.settings_class().configuration_form(self._db),
             }
             if issubclass(api, HasLibraryIntegrationConfiguration):
-                protocol[
-                    "library_settings"
-                ] = api.library_settings_class().configuration_form(self._db)
+                protocol["library_settings"] = (
+                    api.library_settings_class().configuration_form(self._db)
+                )
             if issubclass(api, HasChildIntegrationConfiguration):
-                protocol[
-                    "child_settings"
-                ] = api.child_settings_class().configuration_form(self._db)
+                protocol["child_settings"] = (
+                    api.child_settings_class().configuration_form(self._db)
+                )
             protocol.update(api.protocol_details(self._db))
             protocols.append((name, protocol))
         protocols.sort(key=lambda x: x[0])

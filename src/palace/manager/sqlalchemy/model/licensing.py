@@ -351,8 +351,7 @@ class LicensePool(Base):
         foreign_id,
         rights_status=None,
         collection=None,
-    ) -> tuple[LicensePool, bool]:
-        ...
+    ) -> tuple[LicensePool, bool]: ...
 
     @classmethod
     @overload
@@ -365,8 +364,7 @@ class LicensePool(Base):
         rights_status,
         collection,
         autocreate: Literal[False],
-    ) -> tuple[LicensePool | None, bool]:
-        ...
+    ) -> tuple[LicensePool | None, bool]: ...
 
     @classmethod
     def for_foreign_id(
@@ -1734,12 +1732,12 @@ class DeliveryMechanism(Base, HasSessionCache):
         if _media_type is not None and _drm == NO_DRM:
             default_client_can_fulfill_lookup.add((_media_type, BEARER_TOKEN))
 
-    license_pool_delivery_mechanisms: Mapped[
-        list[LicensePoolDeliveryMechanism]
-    ] = relationship(
-        "LicensePoolDeliveryMechanism",
-        back_populates="delivery_mechanism",
-        uselist=True,
+    license_pool_delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
+        relationship(
+            "LicensePoolDeliveryMechanism",
+            back_populates="delivery_mechanism",
+            uselist=True,
+        )
     )
 
     __table_args__ = (UniqueConstraint("content_type", "drm_scheme"),)
@@ -1988,9 +1986,9 @@ class RightsStatus(Base):
     name = Column(String, index=True)
 
     # One RightsStatus may apply to many LicensePoolDeliveryMechanisms.
-    licensepooldeliverymechanisms: Mapped[
-        list[LicensePoolDeliveryMechanism]
-    ] = relationship("LicensePoolDeliveryMechanism", backref="rights_status")
+    licensepooldeliverymechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
+        relationship("LicensePoolDeliveryMechanism", backref="rights_status")
+    )
 
     # One RightsStatus may apply to many Resources.
     resources: Mapped[list[Resource]] = relationship(

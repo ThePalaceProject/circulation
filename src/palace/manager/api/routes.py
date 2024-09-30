@@ -588,9 +588,9 @@ def application_version():
 @app.route("/heartbeat")
 def heartbeat():
     version_info = application_version()
-    version_info[
-        "WARNING"
-    ] = "The /heartbeat endpoint is deprecated. Please use /version.json instead."
+    version_info["WARNING"] = (
+        "The /heartbeat endpoint is deprecated. Please use /version.json instead."
+    )
     return version_info
 
 

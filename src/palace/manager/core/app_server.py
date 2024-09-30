@@ -1,4 +1,5 @@
 """Implement logic common to more than one of the Simplified applications."""
+
 from __future__ import annotations
 
 import gzip

@@ -63,23 +63,19 @@ class ODLAuthenticatedGet(ABC):
 
     @property
     @abstractmethod
-    def _username(self) -> str:
-        ...
+    def _username(self) -> str: ...
 
     @property
     @abstractmethod
-    def _password(self) -> str:
-        ...
+    def _password(self) -> str: ...
 
     @property
     @abstractmethod
-    def _auth_type(self) -> OPDS2AuthType:
-        ...
+    def _auth_type(self) -> OPDS2AuthType: ...
 
     @property
     @abstractmethod
-    def _feed_url(self) -> str:
-        ...
+    def _feed_url(self) -> str: ...
 
     @staticmethod
     def _no_auth_get(

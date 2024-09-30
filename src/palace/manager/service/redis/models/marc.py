@@ -123,9 +123,7 @@ class MarcFileUploadSession(RedisJsonLock, JsonPathEscapeMixin, LoggerMixin):
         return f"{upload_path}.parts"
 
     @contextmanager
-    def _pipeline(
-        self, begin_transaction: bool = True
-    ) -> Generator[Pipeline, None, None]:
+    def _pipeline(self, begin_transaction: bool = True) -> Generator[Pipeline]:
         with self._redis_client.pipeline() as pipe:
             pipe.watch(self.key)
             fetched_data = self._parse_multi(

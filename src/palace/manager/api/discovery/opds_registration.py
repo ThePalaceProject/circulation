@@ -105,15 +105,13 @@ class OpdsRegistrationService(
 
     @classmethod
     @overload
-    def for_integration(cls, _db: Session, integration: int) -> Self | None:
-        ...
+    def for_integration(cls, _db: Session, integration: int) -> Self | None: ...
 
     @classmethod
     @overload
     def for_integration(
         cls, _db: Session, integration: IntegrationConfiguration
-    ) -> Self:
-        ...
+    ) -> Self: ...
 
     @classmethod
     def for_integration(

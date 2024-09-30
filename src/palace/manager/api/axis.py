@@ -262,7 +262,7 @@ class Axis360API(
         )
         return dict(Authorization="Basic " + authorization_b64)
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         result = self.run_test("Refreshing bearer token", self.refresh_bearer_token)
         yield result
         if not result.success:
@@ -648,7 +648,7 @@ class Axis360API(
 
     def _fetch_remote_availability(
         self, identifiers: list[Identifier]
-    ) -> Generator[tuple[Metadata, CirculationData], None, None]:
+    ) -> Generator[tuple[Metadata, CirculationData]]:
         """Retrieve availability information for the specified identifiers.
 
         :yield: A stream of (Metadata, CirculationData) 2-tuples.
@@ -690,7 +690,7 @@ class Axis360API(
 
     def recent_activity(
         self, since: datetime.datetime
-    ) -> Generator[tuple[Metadata, CirculationData], None, None]:
+    ) -> Generator[tuple[Metadata, CirculationData]]:
         """Find books that have had recent activity.
 
         :yield: A sequence of (Metadata, CirculationData) 2-tuples
@@ -735,7 +735,6 @@ class Axis360API(
 
 
 class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
-
     """Maintain LicensePools for Axis 360 titles."""
 
     SERVICE_NAME = "Axis 360 Circulation Monitor"
@@ -1390,8 +1389,9 @@ class ResponseParser:
         cls,
         code: str | int,
         message: str,
-        custom_error_classes: None
-        | (Mapping[int | tuple[int, str], type[IntegrationException]]) = None,
+        custom_error_classes: None | (
+            Mapping[int | tuple[int, str], type[IntegrationException]]
+        ) = None,
         ignore_error_codes: list[int] | None = None,
     ) -> tuple[int, str]:
         try:
@@ -1435,8 +1435,9 @@ class XMLResponseParser(ResponseParser, Axis360Parser[T], ABC):
         self,
         e: _Element,
         ns: dict[str, str] | None,
-        custom_error_classes: None
-        | (Mapping[int | tuple[int, str], type[IntegrationException]]) = None,
+        custom_error_classes: None | (
+            Mapping[int | tuple[int, str], type[IntegrationException]]
+        ) = None,
         ignore_error_codes: list[int] | None = None,
     ) -> tuple[int, str]:
         """Raise an error if the given lxml node represents an Axis 360 error

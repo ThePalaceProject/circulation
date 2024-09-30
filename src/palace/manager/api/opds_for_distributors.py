@@ -123,7 +123,7 @@ class OPDSForDistributorsAPI(
         self.feed_url = settings.external_account_id
         self.auth_url: str | None = None
 
-    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult, None, None]:
+    def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         """Try to get a token."""
         yield self.run_test("Negotiate a fulfillment token", self._get_token, _db)
 

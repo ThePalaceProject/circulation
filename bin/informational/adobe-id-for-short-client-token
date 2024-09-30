@@ -23,8 +23,7 @@ REGISTRY_RESPONSE_RE = re.compile(
 )
 
 
-class InvalidTokenException(Exception):
-    ...
+class InvalidTokenException(Exception): ...
 
 
 def decompose_token(token):

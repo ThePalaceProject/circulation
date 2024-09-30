@@ -18,7 +18,7 @@ NO_SUCH_KEY = object()
 
 @dataclass
 class BaseModel:
-    def _vars(self) -> Generator[tuple[str, Any], None, None]:
+    def _vars(self) -> Generator[tuple[str, Any]]:
         """Yield attributes as a tuple"""
         _attrs = vars(self)
         for name, value in _attrs.items():
@@ -38,7 +38,7 @@ class BaseModel:
                 attrs[name] = value
         return attrs
 
-    def __iter__(self) -> Generator[tuple[str, Any], None, None]:
+    def __iter__(self) -> Generator[tuple[str, Any]]:
         """Allow attribute iteration"""
         yield from self._vars()
 
@@ -68,7 +68,7 @@ class FeedEntryType(BaseModel):
         for name, data in attrs.items():
             setattr(self, name, data)
 
-    def children(self) -> Generator[tuple[str, FeedEntryType], None, None]:
+    def children(self) -> Generator[tuple[str, FeedEntryType]]:
         """Yield all FeedEntryType attributes"""
         for name, value in self:
             if isinstance(value, self.__class__):

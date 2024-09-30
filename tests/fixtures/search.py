@@ -102,7 +102,7 @@ def external_search_fixture(
     db: DatabaseTransactionFixture,
     services_fixture: ServicesFixture,
     function_test_id: TestIdFixture,
-) -> Generator[ExternalSearchFixture, None, None]:
+) -> Generator[ExternalSearchFixture]:
     """Ask for an external search system."""
     """Note: You probably want EndToEndSearchFixture instead."""
     with ExternalSearchFixture.fixture(
@@ -257,7 +257,7 @@ class EndToEndSearchFixture:
 @pytest.fixture(scope="function")
 def end_to_end_search_fixture(
     external_search_fixture: ExternalSearchFixture,
-) -> Generator[EndToEndSearchFixture, None, None]:
+) -> Generator[EndToEndSearchFixture]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     with EndToEndSearchFixture.fixture(external_search_fixture) as fixture:
         yield fixture
@@ -293,7 +293,7 @@ class ExternalSearchFixtureFake:
 @pytest.fixture(scope="function")
 def external_search_fake_fixture(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-) -> Generator[ExternalSearchFixtureFake, None, None]:
+) -> Generator[ExternalSearchFixtureFake]:
     """Ask for an external search system that can be populated with data for end-to-end tests."""
     with ExternalSearchFixtureFake.fixture(db, services_fixture.services) as fixture:
         yield fixture
@@ -347,6 +347,6 @@ class WorkQueueIndexingFixture:
 
 
 @pytest.fixture(scope="function")
-def work_queue_indexing() -> Generator[WorkQueueIndexingFixture, None, None]:
+def work_queue_indexing() -> Generator[WorkQueueIndexingFixture]:
     with WorkQueueIndexingFixture.fixture() as fixture:
         yield fixture

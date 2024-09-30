@@ -17,7 +17,7 @@ class SessionMixin(ABC):
         """
 
     @contextmanager
-    def session(self) -> Generator[Session, None, None]:
+    def session(self) -> Generator[Session]:
         """
         Starts a session and yields it to the caller. The session is closed
         when the context manager exits.
@@ -28,7 +28,7 @@ class SessionMixin(ABC):
             yield session
 
     @contextmanager
-    def transaction(self) -> Generator[Session, None, None]:
+    def transaction(self) -> Generator[Session]:
         """
         Start a new transaction and yield a session to the caller. The transaction will be
         committed when the context manager exits. If an exception is raised, the transaction

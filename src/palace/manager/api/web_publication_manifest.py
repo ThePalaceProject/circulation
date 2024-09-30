@@ -1,5 +1,6 @@
 """Vendor-specific variants of the standard Web Publication Manifest classes.
 """
+
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.web_publication_manifest import AudiobookManifest

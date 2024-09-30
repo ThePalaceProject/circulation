@@ -413,8 +413,9 @@ class CirculationManagerAnnotator(Annotator):
         can_hold: bool = True,
         can_revoke_hold: bool = True,
         set_mechanism_at_borrow: bool = False,
-        direct_fulfillment_delivery_mechanisms: None
-        | (list[LicensePoolDeliveryMechanism]) = None,
+        direct_fulfillment_delivery_mechanisms: None | (
+            list[LicensePoolDeliveryMechanism]
+        ) = None,
         add_open_access_links: bool = True,
     ) -> list[Acquisition]:
         """Generate a number of <link> tags that enumerate all acquisition
@@ -1248,8 +1249,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         active_hold: Hold | None,
         active_fulfillment: Any | None,
         identifier: Identifier,
-        direct_fulfillment_delivery_mechanisms: None
-        | (list[LicensePoolDeliveryMechanism]) = None,
+        direct_fulfillment_delivery_mechanisms: None | (
+            list[LicensePoolDeliveryMechanism]
+        ) = None,
         mock_api: Any | None = None,
     ) -> list[Acquisition]:
         """Generate one or more <link> tags that can be used to borrow,
@@ -1569,9 +1571,9 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if self.patron.username:
             patron_details["username"] = self.patron.username
         if self.patron.authorization_identifier:
-            patron_details[
-                "authorizationIdentifier"
-            ] = self.patron.authorization_identifier
+            patron_details["authorizationIdentifier"] = (
+                self.patron.authorization_identifier
+            )
 
         patron_tag = FeedEntryType.create(**patron_details)
         feed.metadata.patron = patron_tag

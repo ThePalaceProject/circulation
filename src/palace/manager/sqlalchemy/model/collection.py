@@ -47,7 +47,6 @@ T = TypeVar("T")
 
 
 class Collection(Base, HasSessionCache, RedisKeyMixin):
-
     """A Collection is a set of LicensePools obtained through some mechanism."""
 
     __tablename__ = "collections"
@@ -448,7 +447,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             )
 
     @property
-    def parents(self) -> Generator[Collection, None, None]:
+    def parents(self) -> Generator[Collection]:
         if not self.parent_id:
             return None
 

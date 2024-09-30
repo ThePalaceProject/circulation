@@ -49,13 +49,11 @@ def utc_now() -> datetime.datetime:
 
 
 @overload
-def to_utc(dt: datetime.datetime) -> datetime.datetime:
-    ...
+def to_utc(dt: datetime.datetime) -> datetime.datetime: ...
 
 
 @overload
-def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
-    ...
+def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None: ...
 
 
 def to_utc(dt: datetime.datetime | None) -> datetime.datetime | None:

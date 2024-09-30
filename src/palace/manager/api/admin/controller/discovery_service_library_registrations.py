@@ -26,7 +26,6 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 
 class DiscoveryServiceLibraryRegistrationsController(AdminPermissionsControllerMixin):
-
     """List the libraries that have been registered with a specific
     OpdsRegistrationService, and allow the admin to register a library with
     a OpdsRegistrationService.

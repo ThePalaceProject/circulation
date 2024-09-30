@@ -57,8 +57,7 @@ def add_documents_to_index(
         raise task.retry(countdown=wait_time)
 
 
-class FailedToIndex(BasePalaceException):
-    ...
+class FailedToIndex(BasePalaceException): ...
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)

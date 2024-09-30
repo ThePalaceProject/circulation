@@ -119,11 +119,13 @@ class OPDS2WithODLImporter(OPDS2Importer):
             )
 
         new_formats = [
-            create_format_data(format)
-            if format.content_type in supported_media_types
-            and format.drm_scheme is None
-            and format.link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
-            else format
+            (
+                create_format_data(format)
+                if format.content_type in supported_media_types
+                and format.drm_scheme is None
+                and format.link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+                else format
+            )
             for format in circulation.formats
         ]
 

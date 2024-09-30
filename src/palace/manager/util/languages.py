@@ -1,6 +1,5 @@
 """Data and functions for dealing with language names and codes."""
 
-
 import re
 from collections import defaultdict
 from re import Pattern

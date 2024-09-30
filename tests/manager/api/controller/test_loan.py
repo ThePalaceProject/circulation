@@ -186,9 +186,9 @@ class TestLoanController:
 
         short_name = loan_fixture.db.default_library().short_name
         assert short_name is not None
-        loan_fixture.manager.auth.library_authenticators[
-            short_name
-        ] = MockLibraryAuthenticator()
+        loan_fixture.manager.auth.library_authenticators[short_name] = (
+            MockLibraryAuthenticator()
+        )
 
         def mock_can_fulfill_without_loan(patron, pool, lpdm):
             self.called_with = (patron, pool, lpdm)
@@ -986,9 +986,12 @@ class TestLoanController:
             authenticated = controller.authenticated_patron_from_request()
             assert isinstance(authenticated, Patron)
             loan_fixture.pool.loan_to(authenticated)
-            with patch(
-                "palace.manager.api.controller.opds_feed.OPDSAcquisitionFeed.single_entry_loans_feed"
-            ) as feed, patch.object(circulation, "fulfill") as fulfill:
+            with (
+                patch(
+                    "palace.manager.api.controller.opds_feed.OPDSAcquisitionFeed.single_entry_loans_feed"
+                ) as feed,
+                patch.object(circulation, "fulfill") as fulfill,
+            ):
                 fulfill.return_value = MagicMock(spec=RedirectFulfillment)
                 # The single_item_feed must return this error
                 feed.return_value = NOT_FOUND_ON_REMOTE

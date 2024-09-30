@@ -47,7 +47,7 @@ def alembic_runner(
     alembic_config: dict[str, Any] | alembic.config.Config | Config,
     alembic_engine: Engine,
     services_fixture: ServicesFixture,
-) -> Generator[MigrationContext, None, None]:
+) -> Generator[MigrationContext]:
     """
     Override this fixture to make sure that we stamp head. Since this is how out database
     is initialized. The normal fixtures assume you start from an empty database.
@@ -63,8 +63,7 @@ def alembic_runner(
 
 
 class RandomName(Protocol):
-    def __call__(self, length: int | None = None) -> str:
-        ...
+    def __call__(self, length: int | None = None) -> str: ...
 
 
 @pytest.fixture
@@ -83,8 +82,7 @@ class CreateLibrary(Protocol):
         connection: Connection,
         name: str | None = None,
         short_name: str | None = None,
-    ) -> int:
-        ...
+    ) -> int: ...
 
 
 @pytest.fixture
@@ -131,8 +129,7 @@ class CreateCollection(Protocol):
         self,
         connection: Connection,
         integration_configuration_id: int | None = None,
-    ) -> int:
-        ...
+    ) -> int: ...
 
 
 @pytest.fixture

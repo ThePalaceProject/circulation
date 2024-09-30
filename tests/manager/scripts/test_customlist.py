@@ -49,9 +49,9 @@ class TestCustomListUpdateEntriesScript:
             db.work(with_license_pool=True, title="Unpopular Book") for _ in range(3)
         ]
         # This is for back population only
-        result.populated_books[0].license_pools[
-            0
-        ].availability_time = datetime.datetime(1900, 1, 1)
+        result.populated_books[0].license_pools[0].availability_time = (
+            datetime.datetime(1900, 1, 1)
+        )
         db.session.commit()
         return result
 

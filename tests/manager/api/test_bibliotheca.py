@@ -1931,7 +1931,6 @@ class TestItemListParser:
 
 
 class TestBibliographicCoverageProvider(TestBibliothecaAPI):
-
     """Test the code that looks up bibliographic information from Bibliotheca."""
 
     def test_script_instantiation(self, bibliotheca_fixture: BibliothecaAPITestFixture):

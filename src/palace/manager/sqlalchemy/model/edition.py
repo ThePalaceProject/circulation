@@ -45,7 +45,6 @@ if TYPE_CHECKING:
 
 
 class Edition(Base, EditionConstants):
-
     """A lightly schematized collection of metadata for a work, or an
     edition of a work, or a book, or whatever. If someone thinks of it
     as a "book" with a "title" it can go in here.

@@ -81,12 +81,12 @@ class Resource(Base):
 
     # Many LicensePools (but probably one at most) may use this
     # resource in a delivery mechanism.
-    licensepooldeliverymechanisms: Mapped[
-        list[LicensePoolDeliveryMechanism]
-    ] = relationship(
-        "LicensePoolDeliveryMechanism",
-        back_populates="resource",
-        foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
+    licensepooldeliverymechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
+        relationship(
+            "LicensePoolDeliveryMechanism",
+            back_populates="resource",
+            foreign_keys=[LicensePoolDeliveryMechanism.resource_id],
+        )
     )
 
     links: Mapped[list[Hyperlink]] = relationship("Hyperlink", backref="resource")

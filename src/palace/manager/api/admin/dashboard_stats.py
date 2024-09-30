@@ -229,21 +229,25 @@ class Statistics:
 
         return {
             c.id: _CollectionStatisticsQueryResults(
-                metered_title_counts=metered_title_counts[c.id]
-                if c.id in metered_title_counts
-                else {},
-                unlimited_title_counts=unlimited_title_counts[c.id]
-                if c.id in unlimited_title_counts
-                else {},
-                open_access_title_counts=open_access_title_counts[c.id]
-                if c.id in open_access_title_counts
-                else {},
-                loanable_title_counts=loanable_title_counts[c.id]
-                if c.id in loanable_title_counts
-                else {},
-                metered_license_stats=metered_license_stats[c.id]
-                if c.id in metered_license_stats
-                else {},
+                metered_title_counts=(
+                    metered_title_counts[c.id] if c.id in metered_title_counts else {}
+                ),
+                unlimited_title_counts=(
+                    unlimited_title_counts[c.id]
+                    if c.id in unlimited_title_counts
+                    else {}
+                ),
+                open_access_title_counts=(
+                    open_access_title_counts[c.id]
+                    if c.id in open_access_title_counts
+                    else {}
+                ),
+                loanable_title_counts=(
+                    loanable_title_counts[c.id] if c.id in loanable_title_counts else {}
+                ),
+                metered_license_stats=(
+                    metered_license_stats[c.id] if c.id in metered_license_stats else {}
+                ),
             )
             for c in collections
         }
@@ -364,12 +368,14 @@ class Statistics:
         return {
             library.short_name: PatronStatistics(
                 total=patron_count[library.id] if library.id in patron_count else 0,
-                with_active_loan=active_loans[library.id]
-                if library.id in active_loans
-                else 0,
-                with_active_loan_or_hold=active_loan_or_hold[library.id]
-                if library.id in active_loan_or_hold
-                else 0,
+                with_active_loan=(
+                    active_loans[library.id] if library.id in active_loans else 0
+                ),
+                with_active_loan_or_hold=(
+                    active_loan_or_hold[library.id]
+                    if library.id in active_loan_or_hold
+                    else 0
+                ),
                 loans=loan_count[library.id] if library.id in loan_count else 0,
                 holds=hold_count[library.id] if library.id in hold_count else 0,
             )
