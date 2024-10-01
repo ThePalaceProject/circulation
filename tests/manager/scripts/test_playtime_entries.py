@@ -529,6 +529,7 @@ def playtime(
 
 
 class TestPlaytimeEntriesEmailReportsScript:
+    @freeze_time("2021-01-01")
     def test_do_run(
         self,
         db: DatabaseTransactionFixture,
