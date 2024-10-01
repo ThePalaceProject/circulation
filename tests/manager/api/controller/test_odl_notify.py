@@ -9,6 +9,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
@@ -87,6 +88,7 @@ class TestODLNotificationController:
             data=status_doc.model_dump_json(),
             library=odl_fixture.library,
         ):
+            assert loan.id is not None
             response = odl_fixture.controller.notify(loan.id)
             assert response.status_code == 200
 
@@ -103,6 +105,7 @@ class TestODLNotificationController:
             "/", method="POST", library=odl_fixture.library
         ):
             response = odl_fixture.controller.notify(-55)
+        assert isinstance(response, ProblemDetail)
         assert response.uri == NO_ACTIVE_LOAN.uri
 
         # Bad JSON.
@@ -124,4 +127,5 @@ class TestODLNotificationController:
             data=odl_fixture.loan_status_document("active").model_dump_json(),
         ):
             response = odl_fixture.controller.notify(loan.id)
+        assert isinstance(response, ProblemDetail)
         assert response == INVALID_LOAN_FOR_ODL_NOTIFICATION

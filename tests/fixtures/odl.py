@@ -58,6 +58,13 @@ class OPDS2WithODLApiFixture:
             issued=utc_now(),
             provider="Tests",
         )
+        self.api_checkout = partial(
+            self.api.checkout,
+            patron=self.patron,
+            pin="pin",
+            licensepool=self.pool,
+            delivery_mechanism=MagicMock(),
+        )
 
     def create_work(self, collection: Collection) -> Work:
         return self.db.work(with_license_pool=True, collection=collection)

@@ -107,9 +107,12 @@ class OdlAuthenticatedRequest(LoggerMixin, ABC):
     @abstractmethod
     def _feed_url(self) -> str: ...
 
-    @staticmethod
     def _no_auth_request(
-        method: str, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
         return HTTP.request_with_timeout(method, url, headers=headers, **kwargs)
 
