@@ -357,7 +357,11 @@ class CirculationManager(LoggerMixin):
         self.profiles = ProfileController(self)
         self.patron_devices = DeviceTokensController(self)
         self.version = ApplicationVersionController()
-        self.odl_notification_controller = ODLNotificationController(self)
+        self.odl_notification_controller = ODLNotificationController(
+            self._db,
+            self,
+            self.services.integration_registry.license_providers(),
+        )
         self.patron_auth_token = PatronAuthTokenController(self)
         self.playtime_entries = PlaytimeEntriesController(self)
 

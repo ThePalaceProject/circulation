@@ -1143,21 +1143,23 @@ class TestOPDS2WithODLImportMonitor:
     ):
         monitor = opds2_with_odl_import_monitor_fixture.monitor
 
-        with patch.object(HTTP, "get_with_timeout") as mock_get:
+        with patch.object(HTTP, "request_with_timeout") as mock_get:
             monitor._get("/absolute/path", {})
             assert mock_get.call_args.args == (
+                "GET",
                 "https://opds.import.com:9999/absolute/path",
             )
 
-        with patch.object(HTTP, "get_with_timeout") as mock_get:
+        with patch.object(HTTP, "request_with_timeout") as mock_get:
             monitor._get("relative/path", {})
             assert mock_get.call_args.args == (
+                "GET",
                 "https://opds.import.com:9999/relative/path",
             )
 
-        with patch.object(HTTP, "get_with_timeout") as mock_get:
+        with patch.object(HTTP, "request_with_timeout") as mock_get:
             monitor._get("http://example.com/full/url")
-            assert mock_get.call_args.args == ("http://example.com/full/url",)
+            assert mock_get.call_args.args == ("GET", "http://example.com/full/url")
             # assert that we set the expected extra args to the HTTP request
             kwargs = mock_get.call_args.kwargs
             assert kwargs.get("timeout") == 120

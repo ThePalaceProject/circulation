@@ -1,46 +1,41 @@
-import json
-import types
-from unittest.mock import create_autospec
+from unittest.mock import MagicMock
 
-import flask
 import pytest
 
+from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
     INVALID_LOAN_FOR_ODL_NOTIFICATION,
     NO_ACTIVE_LOAN,
 )
-from palace.manager.sqlalchemy.model.collection import Collection
-from tests.fixtures.api_controller import ControllerFixture
+from palace.manager.core.problem_details import INVALID_INPUT
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.odl import OPDS2WithODLApiFixture
+from tests.fixtures.services import ServicesFixture
+from tests.mocks.mock import MockHTTPClient
+from tests.mocks.odl import MockOPDS2WithODLApi
 
 
 class ODLFixture:
-    def __init__(self, db: DatabaseTransactionFixture):
+    def __init__(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ) -> None:
         self.db = db
         self.library = self.db.default_library()
-
-        """Create a mock ODL collection to use in tests."""
-        self.collection, _ = Collection.by_name_and_protocol(
-            self.db.session, "Test ODL Collection", OPDS2WithODLApi.label()
+        self.registry = (
+            services_fixture.services.integration_registry.license_providers()
         )
-        self.collection.integration_configuration.settings_dict = {
-            "username": "a",
-            "password": "b",
-            "url": "http://metadata",
-            "external_integration_id": "http://odl",
-            Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
-        }
-        self.collection.libraries.append(self.library)
+        self.collection = db.collection(
+            protocol=self.registry.get_protocol(OPDS2WithODLApi),
+            settings={
+                "username": "a",
+                "password": "b",
+                "external_account_id": "http://odl",
+                "data_source": "Feedbooks",
+            },
+        )
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
-
-        def setup(self, available, concurrency, left=None, expires=None):
-            self.checkouts_available = available
-            self.checkouts_left = left
-            self.terms_concurrency = concurrency
-            self.expires = expires
-            self.license_pool.update_availability_from_licenses()
-
         self.pool = self.work.license_pools[0]
         self.license = self.db.license(
             self.pool,
@@ -48,85 +43,85 @@ class ODLFixture:
             checkouts_available=1,
             terms_concurrency=1,
         )
-        types.MethodType(setup, self.license)
         self.pool.update_availability_from_licenses()
         self.patron = self.db.patron()
-
-    @staticmethod
-    def integration_protocol():
-        return OPDS2WithODLApi.label()
+        self.http_client = MockHTTPClient()
+        self.api = MockOPDS2WithODLApi(db.session, self.collection, self.http_client)
+        self.mock_circulation_manager = MagicMock()
+        self.mock_circulation_manager.circulation_apis[
+            self.library.id
+        ].api_for_license_pool.return_value = self.api
+        self.controller = ODLNotificationController(
+            db.session, self.mock_circulation_manager, self.registry
+        )
+        self.loan_status_document = OPDS2WithODLApiFixture.loan_status_document
 
 
 @pytest.fixture(scope="function")
-def odl_fixture(db: DatabaseTransactionFixture) -> ODLFixture:
-    return ODLFixture(db)
+def odl_fixture(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+) -> ODLFixture:
+    return ODLFixture(db, services_fixture)
 
 
 class TestODLNotificationController:
     """Test that an ODL distributor can notify the circulation manager
     when a loan's status changes."""
 
-    @pytest.mark.parametrize(
-        "api_cls",
-        [
-            pytest.param(OPDS2WithODLApi, id="ODL 2.x collection"),
-        ],
-    )
     def test_notify_success(
         self,
-        api_cls: type[OPDS2WithODLApi],
-        controller_fixture: ControllerFixture,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
-    ):
-        db = controller_fixture.db
-
-        odl_fixture.collection.integration_configuration.protocol = api_cls.label()
-        odl_fixture.pool.licenses_owned = 10
-        odl_fixture.pool.licenses_available = 5
-        loan, ignore = odl_fixture.pool.loan_to(odl_fixture.patron)
+    ) -> None:
+        odl_fixture.license.checkout()
+        loan, ignore = odl_fixture.license.loan_to(odl_fixture.patron)
         loan.external_identifier = db.fresh_str()
 
-        api = controller_fixture.manager.circulation_apis[
-            db.default_library().id
-        ].api_for_license_pool(loan.license_pool)
-        update_loan_mock = create_autospec(api_cls.update_loan)
-        api.update_loan = update_loan_mock
+        assert odl_fixture.license.checkouts_available == 0
 
-        with controller_fixture.request_context_with_library("/", method="POST"):
-            text = json.dumps(
-                {
-                    "id": loan.external_identifier,
-                    "status": "revoked",
-                }
-            )
-            data = bytes(text, "utf-8")
-            flask.request.data = data
-            response = controller_fixture.manager.odl_notification_controller.notify(
-                loan.id
-            )
-            assert 200 == response.status_code
+        status_doc = odl_fixture.loan_status_document("revoked")
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            data=status_doc.model_dump_json(),
+            library=odl_fixture.library,
+        ):
+            response = odl_fixture.controller.notify(loan.id)
+            assert response.status_code == 200
 
-            # Update loan was called with the expected arguments.
-            update_loan_mock.assert_called_once_with(loan, json.loads(text))
+        assert odl_fixture.license.checkouts_available == 1
 
-    def test_notify_errors(self, controller_fixture: ControllerFixture):
-        db = controller_fixture.db
-
+    def test_notify_errors(
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        odl_fixture: ODLFixture,
+    ):
         # No loan.
-        with controller_fixture.request_context_with_library("/", method="POST"):
-            response = controller_fixture.manager.odl_notification_controller.notify(
-                db.fresh_str()
-            )
-            assert NO_ACTIVE_LOAN.uri == response.uri
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", library=odl_fixture.library
+        ):
+            response = odl_fixture.controller.notify(-55)
+        assert response.uri == NO_ACTIVE_LOAN.uri
 
-        # Loan from a non-ODL collection.
+        # Bad JSON.
         patron = db.patron()
         pool = db.licensepool(None)
         loan, ignore = pool.loan_to(patron)
         loan.external_identifier = db.fresh_str()
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", library=odl_fixture.library
+        ):
+            response = odl_fixture.controller.notify(loan.id)
+        assert response == INVALID_INPUT
 
-        with controller_fixture.request_context_with_library("/", method="POST"):
-            response = controller_fixture.manager.odl_notification_controller.notify(
-                loan.id
-            )
-            assert INVALID_LOAN_FOR_ODL_NOTIFICATION == response
+        # Loan from a non-ODL collection.
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            library=odl_fixture.library,
+            data=odl_fixture.loan_status_document("active").model_dump_json(),
+        ):
+            response = odl_fixture.controller.notify(loan.id)
+        assert response == INVALID_LOAN_FOR_ODL_NOTIFICATION
