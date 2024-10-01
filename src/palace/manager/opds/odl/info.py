@@ -1,12 +1,18 @@
+import sys
 from enum import auto
 from functools import cached_property
 
-from backports.strenum import StrEnum
 from pydantic import AwareDatetime, Field, NonNegativeInt
 
 from palace.manager.opds.base import BaseOpdsModel, obj_or_set_to_set
 from palace.manager.opds.odl.odl import Protection, Terms
 from palace.manager.opds.opds import Price
+
+# TODO: Remove this when we drop support for Python 3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from backports.strenum import StrEnum
 
 
 class Status(StrEnum):

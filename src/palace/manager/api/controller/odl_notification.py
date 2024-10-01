@@ -44,7 +44,7 @@ class ODLNotificationController(LoggerMixin):
         self.registry = registry
 
     def get_api(self, library: Library, loan: Loan) -> OPDS2WithODLApi:
-        return self.manager.circulation_apis[library.id].api_for_license_pool(
+        return self.manager.circulation_apis[library.id].api_for_license_pool(  # type: ignore[no-any-return]
             loan.license_pool
         )
 
