@@ -584,9 +584,9 @@ class TestPlaytimeEntriesEmailReportsScript:
         playtime(
             db.session, identifier, collection, library, dt1m(4), 2, loan_identifier
         )
-        # one month + 32 days ago : in the future and therefore out of range.
+        # out of range: after end of default reporting period
         playtime(
-            db.session, identifier, collection, library, dt1m(32), 3, loan_identifier
+            db.session, identifier, collection, library, dt1m(31), 6, loan_identifier
         )
         playtime(
             db.session, identifier, collection, library, dt1m(-31), 60, loan_identifier

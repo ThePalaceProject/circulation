@@ -238,7 +238,12 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 sql_max(coalesce(PlaytimeSummary.title, "")).label("title2"),
                 count(distinct(PlaytimeSummary.loan_identifier)).label("loan_count"),
             )
-            .where(PlaytimeSummary.timestamp.between(start, until))
+            .where(
+                and_(
+                    PlaytimeSummary.timestamp >= start,
+                    PlaytimeSummary.timestamp < until,
+                )
+            )
             .group_by(
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
@@ -257,7 +262,12 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 coalesce(PlaytimeSummary.title, "").label("title"),
                 sum(PlaytimeSummary.total_seconds_played).label("total_seconds_played"),
             )
-            .where(PlaytimeSummary.timestamp.between(start, until))
+            .where(
+                and_(
+                    PlaytimeSummary.timestamp >= start,
+                    PlaytimeSummary.timestamp < until,
+                )
+            )
             .group_by(
                 PlaytimeSummary.identifier_str,
                 PlaytimeSummary.collection_name,
