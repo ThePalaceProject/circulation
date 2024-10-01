@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
@@ -700,6 +701,8 @@ class TestSweepMonitor:
                     raise StaleDataError("stale data")
                 elif self.process_item_invocation_count == 2:
                     raise ObjectDeletedError({}, "object deleted")
+                elif self.process_item_invocation_count == 3:
+                    raise InvalidRequestError("invalid request")
                 else:
                     super().process_item(item)
 
@@ -707,7 +710,7 @@ class TestSweepMonitor:
         timestamp = monitor.timestamp()
         monitor.run()
         # we expect that process should have been called 3 times total
-        assert monitor.process_item_invocation_count == 3
+        assert monitor.process_item_invocation_count == 4
         # there shouldn't be an exception saved since it ultimately succeeded.
         assert timestamp.exception is None
         assert "Records processed: 1." == timestamp.achievements

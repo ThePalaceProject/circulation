@@ -5,6 +5,7 @@ import logging
 import traceback
 from typing import TYPE_CHECKING
 
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import defer
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 from sqlalchemy.sql.expression import and_, or_
@@ -516,6 +517,7 @@ class SweepMonitor(CollectionMonitor):
         retry=(
             retry_if_exception_type(StaleDataError)
             | retry_if_exception_type(ObjectDeletedError)
+            | retry_if_exception_type(InvalidRequestError)
         ),
         stop=stop_after_attempt(MAXIMUM_BATCH_RETRIES),
         wait=wait_exponential(multiplier=1, min=1, max=60),
