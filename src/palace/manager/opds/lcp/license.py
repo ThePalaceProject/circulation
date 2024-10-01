@@ -97,7 +97,9 @@ class LicenseDocument(BaseOpdsModel):
     https://readium.org/lcp-specs/releases/lcp/latest#3-license-document
     """
 
-    _content_type: str = "application/vnd.readium.lcp.license.v1.0+json"
+    @staticmethod
+    def content_type() -> str:
+        return "application/vnd.readium.lcp.license.v1.0+json"
 
     id: str
     issued: AwareDatetime

@@ -1,6 +1,6 @@
 import pytest
 
-from palace.manager.opds.lcp.status import LcpStatus
+from palace.manager.opds.lcp.status import LoanStatus
 from tests.fixtures.files import OPDSFilesFixture
 
 
@@ -16,6 +16,6 @@ class TestLcpStatus:
     def test_lcp_status(
         self, filename: str, opds_files_fixture: OPDSFilesFixture
     ) -> None:
-        LcpStatus.model_validate_json(
+        LoanStatus.model_validate_json(
             opds_files_fixture.sample_data("lcp/status/" + filename)
         )

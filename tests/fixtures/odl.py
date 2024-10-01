@@ -3,7 +3,8 @@ from __future__ import annotations
 import datetime
 import json
 import uuid
-from typing import Any
+from functools import partial
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -14,6 +15,8 @@ from palace.manager.api.circulation import LoanInfo
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.importer import OPDS2WithODLImporter
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.opds.lcp.license import LicenseDocument
+from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.library import Library
@@ -25,6 +28,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
@@ -48,6 +52,12 @@ class OPDS2WithODLApiFixture:
         self.api = MockOPDS2WithODLApi(self.db.session, self.collection, self.mock_http)
         self.patron = db.patron()
         self.pool = self.license.license_pool
+        self.license_document = partial(
+            LicenseDocument,
+            id=str(uuid.uuid4()),
+            issued=utc_now(),
+            provider="Tests",
+        )
 
     def create_work(self, collection: Collection) -> Work:
         return self.db.work(with_license_pool=True, collection=collection)
@@ -88,31 +98,69 @@ class OPDS2WithODLApiFixture:
         pool.update_availability_from_licenses()
         return license_
 
+    @staticmethod
+    def loan_status_document(
+        status: str = "ready",
+        self_link: str | Literal[False] = "http://status",
+        return_link: str | Literal[False] = "http://return",
+        license_link_type: str = "foo/bar",
+        links: list[dict[str, str]] | None = None,
+    ) -> LoanStatus:
+        if links is None:
+            links = []
+
+        links.append(
+            {
+                "rel": "license",
+                "href": "http://license",
+                "type": license_link_type,
+            },
+        )
+
+        if self_link:
+            links.append(
+                {
+                    "rel": "self",
+                    "href": self_link,
+                    "type": LoanStatus.content_type(),
+                }
+            )
+
+        if return_link:
+            links.append(
+                {
+                    "rel": "return",
+                    "href": return_link,
+                    "type": LoanStatus.content_type(),
+                }
+            )
+
+        return LoanStatus.model_validate(
+            dict(
+                id=str(uuid.uuid4()),
+                status=status,
+                message="This is a message",
+                updated={
+                    "license": utc_now(),
+                    "status": utc_now(),
+                },
+                links=links,
+                potential_rights={"end": "3017-10-21T11:12:13Z"},
+            )
+        )
+
     def checkin(
         self, patron: Patron | None = None, pool: LicensePool | None = None
     ) -> None:
         patron = patron or self.patron
         pool = pool or self.pool
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "links": [
-                    {
-                        "rel": "return",
-                        "href": "http://return",
-                    }
-                ],
-            }
-        )
-        returned_lsd = json.dumps(
-            {
-                "status": "returned",
-            }
-        )
 
-        self.mock_http.queue_response(200, content=lsd)
-        self.mock_http.queue_response(200, content="")
-        self.mock_http.queue_response(200, content=returned_lsd)
+        self.mock_http.queue_response(
+            200, content=self.loan_status_document().model_dump_json()
+        )
+        self.mock_http.queue_response(
+            200, content=self.loan_status_document("returned").model_dump_json()
+        )
         self.api.checkin(patron, "pin", pool)
 
     def checkout(
@@ -125,19 +173,9 @@ class OPDS2WithODLApiFixture:
         pool = pool or self.pool
         loan_url = loan_url or self.db.fresh_url()
 
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "potential_rights": {"end": "3017-10-21T11:12:13Z"},
-                "links": [
-                    {
-                        "rel": "self",
-                        "href": loan_url,
-                    }
-                ],
-            }
+        self.mock_http.queue_response(
+            201, content=self.loan_status_document(self_link=loan_url).model_dump_json()
         )
-        self.mock_http.queue_response(200, content=lsd)
         loan = self.api.checkout(patron, "pin", pool, MagicMock())
         loan_db = (
             self.db.session.query(Loan)

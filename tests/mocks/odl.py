@@ -44,7 +44,29 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
             "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
         )
 
-    def _get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _basic_auth_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
-        return self.mock_http_client.do_get(url, headers=headers, **kwargs)
+        return self.mock_http_client.do_request(method, url, headers=headers, **kwargs)
+
+    def _oauth_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Response:
+        return self.mock_http_client.do_request(method, url, headers=headers, **kwargs)
+
+    def _no_auth_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Response:
+        return self.mock_http_client.do_request(method, url, headers=headers, **kwargs)

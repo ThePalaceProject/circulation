@@ -10,7 +10,7 @@ import pytest
 from freezegun import freeze_time
 from typing_extensions import Self
 
-from palace.manager.api.odl.auth import ODLAuthenticatedGet, TokenTuple
+from palace.manager.api.odl.auth import OdlAuthenticatedRequest, TokenTuple
 from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.util.datetime_helpers import utc_now
@@ -18,7 +18,7 @@ from palace.manager.util.http import HTTP, BearerAuth
 from tests.mocks.mock import MockRequestsResponse
 
 
-class MockODLAuthenticatedGet(ODLAuthenticatedGet):
+class MockOdlAuthenticatedRequest(OdlAuthenticatedRequest):
     def __init__(
         self, username: str, password: str, auth_type: OPDS2AuthType, feed_url: str
     ) -> None:
@@ -45,7 +45,7 @@ class MockODLAuthenticatedGet(ODLAuthenticatedGet):
         return self.feed_url
 
 
-class AuthenticatedGetFixture:
+class AuthenticatedRequestFixture:
     def __init__(self, request_with_timeout: MagicMock) -> None:
         self.username = "username"
         self.password = "password"
@@ -54,8 +54,8 @@ class AuthenticatedGetFixture:
         self.auth_url = "http://authenticate.example.com"
         self.request_url = "http://example.com/123"
         self.headers = {"header": "value"}
-        self.authenticated_get = partial(
-            MockODLAuthenticatedGet,
+        self.authenticated_request = partial(
+            MockOdlAuthenticatedRequest,
             username=self.username,
             password=self.password,
             feed_url=self.feed_url,
@@ -122,21 +122,21 @@ class AuthenticatedGetFixture:
             auth=BearerAuth(self.token),
         )
 
-    def initialize_authenticated_get(
+    def initialize_token(
         self,
-        authenticated_get: MockODLAuthenticatedGet | None = None,
+        authenticated_request: MockOdlAuthenticatedRequest | None = None,
         *,
         expired: bool = False
-    ) -> MockODLAuthenticatedGet:
-        # Set the token url and session token so that the authenticated_get can make requests
+    ) -> MockOdlAuthenticatedRequest:
+        # Set the token url and session token so that the authenticated_request can make requests
         # without first going through the refresh process
-        if authenticated_get is None:
-            authenticated_get = self.authenticated_get()
-        authenticated_get._token_url = self.auth_url
-        authenticated_get._session_token = (
+        if authenticated_request is None:
+            authenticated_request = self.authenticated_request()
+        authenticated_request._token_url = self.auth_url
+        authenticated_request._session_token = (
             self.valid_token if not expired else self.expired_token
         )
-        return authenticated_get
+        return authenticated_request
 
     @property
     def auth_document(self) -> dict[str, Any]:
@@ -172,59 +172,67 @@ class AuthenticatedGetFixture:
 
 
 @pytest.fixture
-def authenticated_get_fixture() -> Generator[AuthenticatedGetFixture, None, None]:
-    with AuthenticatedGetFixture.fixture() as fixture:
+def authenticated_request_fixture() -> (
+    Generator[AuthenticatedRequestFixture, None, None]
+):
+    with AuthenticatedRequestFixture.fixture() as fixture:
         yield fixture
 
 
-class TestODLAuthenticatedGet:
-    def test__basic_auth_get(
-        self, authenticated_get_fixture: AuthenticatedGetFixture
+class TestODLAuthenticatedRequest:
+    def test__basic_auth_request(
+        self, authenticated_request_fixture: AuthenticatedRequestFixture
     ) -> None:
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
-        authenticated_get = authenticated_get_fixture.authenticated_get(
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
+        authenticated_request = authenticated_request_fixture.authenticated_request(
             auth_type=OPDS2AuthType.BASIC
         )
-        response = authenticated_get._get(
-            authenticated_get_fixture.request_url, authenticated_get_fixture.headers
+        response = authenticated_request._request(
+            "GET",
+            authenticated_request_fixture.request_url,
+            authenticated_request_fixture.headers,
         )
         assert response == mock_request_with_timeout.return_value
         mock_request_with_timeout.assert_called_once_with(
             "GET",
-            authenticated_get_fixture.request_url,
-            headers=authenticated_get_fixture.headers,
+            authenticated_request_fixture.request_url,
+            headers=authenticated_request_fixture.headers,
             auth=(
-                authenticated_get_fixture.username,
-                authenticated_get_fixture.password,
+                authenticated_request_fixture.username,
+                authenticated_request_fixture.password,
             ),
         )
 
-    def test__no_auth_get(
-        self, authenticated_get_fixture: AuthenticatedGetFixture
+    def test__no_auth_request(
+        self, authenticated_request_fixture: AuthenticatedRequestFixture
     ) -> None:
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
-        authenticated_get = authenticated_get_fixture.authenticated_get(
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
+        authenticated_request = authenticated_request_fixture.authenticated_request(
             auth_type=OPDS2AuthType.NONE
         )
-        response = authenticated_get._get(
-            authenticated_get_fixture.request_url, authenticated_get_fixture.headers
+        response = authenticated_request._request(
+            "GET",
+            authenticated_request_fixture.request_url,
+            authenticated_request_fixture.headers,
         )
         assert response == mock_request_with_timeout.return_value
         mock_request_with_timeout.assert_called_once_with(
             "GET",
-            authenticated_get_fixture.request_url,
-            headers=authenticated_get_fixture.headers,
+            authenticated_request_fixture.request_url,
+            headers=authenticated_request_fixture.headers,
         )
 
     def test__unknown_auth_type(
-        self, authenticated_get_fixture: AuthenticatedGetFixture
+        self, authenticated_request_fixture: AuthenticatedRequestFixture
     ) -> None:
-        authenticated_get = authenticated_get_fixture.authenticated_get(
+        authenticated_request = authenticated_request_fixture.authenticated_request(
             auth_type="invalid"  # type: ignore[arg-type]
         )
         with pytest.raises(PalaceValueError) as exc_info:
-            authenticated_get._get(
-                authenticated_get_fixture.request_url, authenticated_get_fixture.headers
+            authenticated_request._request(
+                "GET",
+                authenticated_request_fixture.request_url,
+                authenticated_request_fixture.headers,
             )
         assert str(exc_info.value) == "Invalid OPDS2AuthType: 'invalid'"
 
@@ -337,11 +345,11 @@ class TestODLAuthenticatedGet:
     )
     def test__get_oauth_url_from_auth_document(
         self,
-        authenticated_get_fixture: AuthenticatedGetFixture,
+        authenticated_request_fixture: AuthenticatedRequestFixture,
         authentication: list[dict[str, Any]],
         expected: type[Exception] | str,
     ) -> None:
-        auth_document = authenticated_get_fixture.auth_document
+        auth_document = authenticated_request_fixture.auth_document
         auth_document["authentication"] = authentication
         context = (
             nullcontext() if isinstance(expected, str) else pytest.raises(expected)
@@ -349,7 +357,7 @@ class TestODLAuthenticatedGet:
 
         with context:
             assert (
-                MockODLAuthenticatedGet._get_oauth_url_from_auth_document(
+                MockOdlAuthenticatedRequest._get_oauth_url_from_auth_document(
                     json.dumps(auth_document)
                 )
                 == expected
@@ -383,11 +391,11 @@ class TestODLAuthenticatedGet:
     @freeze_time("2021-01-01")
     def test__oauth_session_token_refresh(
         self,
-        authenticated_get_fixture: AuthenticatedGetFixture,
+        authenticated_request_fixture: AuthenticatedRequestFixture,
         data: str,
         expected: TokenTuple | type[Exception],
     ) -> None:
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
         mock_request_with_timeout.return_value = MockRequestsResponse(200, {}, data)
         context = (
             nullcontext()
@@ -396,30 +404,32 @@ class TestODLAuthenticatedGet:
         )
 
         with context:
-            token = MockODLAuthenticatedGet._oauth_session_token_refresh(
-                authenticated_get_fixture.auth_url,
-                authenticated_get_fixture.username,
-                authenticated_get_fixture.password,
+            token = MockOdlAuthenticatedRequest._oauth_session_token_refresh(
+                authenticated_request_fixture.auth_url,
+                authenticated_request_fixture.username,
+                authenticated_request_fixture.password,
             )
             assert token == expected
         assert mock_request_with_timeout.call_count == 1
         mock_request_with_timeout.assert_has_calls(
-            [authenticated_get_fixture.request_with_timeout_calls["token_grant"]()]
+            [authenticated_request_fixture.request_with_timeout_calls["token_grant"]()]
         )
 
     def test__oauth_get_failed_auth_document_request(
-        self, authenticated_get_fixture: AuthenticatedGetFixture
+        self, authenticated_request_fixture: AuthenticatedRequestFixture
     ) -> None:
         """
         If the auth document request fails, an exception is raised.
         """
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
         mock_request_with_timeout.return_value = (
-            authenticated_get_fixture.responses.get("other_401")
+            authenticated_request_fixture.responses.get("other_401")
         )
         with pytest.raises(IntegrationException) as exc_info:
-            authenticated_get_fixture.authenticated_get()._get(
-                authenticated_get_fixture.request_url, authenticated_get_fixture.headers
+            authenticated_request_fixture.authenticated_request()._request(
+                "GET",
+                authenticated_request_fixture.request_url,
+                authenticated_request_fixture.headers,
             )
         assert "Unable to fetch OPDS authentication document" in str(exc_info.value)
 
@@ -477,54 +487,60 @@ class TestODLAuthenticatedGet:
             ),
         ],
     )
-    def test__oauth_get(
+    def test__oauth_request(
         self,
-        authenticated_get_fixture: AuthenticatedGetFixture,
+        authenticated_request_fixture: AuthenticatedRequestFixture,
         responses: list[str],
         calls: list[str],
         initialized: bool,
         expired: bool,
     ) -> None:
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
-        authenticated_get = authenticated_get_fixture.authenticated_get()
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
+        authenticated_request = authenticated_request_fixture.authenticated_request()
         if initialized:
-            authenticated_get = authenticated_get_fixture.initialize_authenticated_get(
-                authenticated_get, expired=expired
+            authenticated_request = authenticated_request_fixture.initialize_token(
+                authenticated_request, expired=expired
             )
-        responses_data = [authenticated_get_fixture.responses[r] for r in responses]
+        responses_data = [authenticated_request_fixture.responses[r] for r in responses]
         mock_request_with_timeout.side_effect = responses_data
         final_response = responses_data[-1]
         assert (
-            authenticated_get._get(
-                authenticated_get_fixture.request_url, authenticated_get_fixture.headers
+            authenticated_request._request(
+                "GET",
+                authenticated_request_fixture.request_url,
+                authenticated_request_fixture.headers,
             )
             == final_response
         )
         assert mock_request_with_timeout.call_count == len(calls)
         mock_request_with_timeout.assert_has_calls(
-            [authenticated_get_fixture.request_with_timeout_calls[c]() for c in calls]
+            [
+                authenticated_request_fixture.request_with_timeout_calls[c]()
+                for c in calls
+            ]
         )
 
-    def test__oauth_get_allowed_response_codes(
-        self, authenticated_get_fixture: AuthenticatedGetFixture
+    def test__oauth_request_allowed_response_codes(
+        self, authenticated_request_fixture: AuthenticatedRequestFixture
     ) -> None:
         """
         Calling with allowed_response_codes should still allow a token refresh, but if the refresh fails an
         exception will be raised.
         """
-        mock_request_with_timeout = authenticated_get_fixture.request_with_timeout
-        authenticated_get = authenticated_get_fixture.initialize_authenticated_get()
+        mock_request_with_timeout = authenticated_request_fixture.request_with_timeout
+        authenticated_request = authenticated_request_fixture.initialize_token()
 
         mock_request_with_timeout.side_effect = [
-            authenticated_get_fixture.responses.get("auth_document_401"),
-            authenticated_get_fixture.responses.get("token_grant"),
-            authenticated_get_fixture.responses.get("other_401"),
+            authenticated_request_fixture.responses.get("auth_document_401"),
+            authenticated_request_fixture.responses.get("token_grant"),
+            authenticated_request_fixture.responses.get("other_401"),
         ]
 
         with pytest.raises(IntegrationException) as exc_info:
-            authenticated_get._get(
-                authenticated_get_fixture.request_url,
-                authenticated_get_fixture.headers,
+            authenticated_request._request(
+                "GET",
+                authenticated_request_fixture.request_url,
+                authenticated_request_fixture.headers,
                 allowed_response_codes=["2xx"],
             )
         assert (
@@ -532,12 +548,14 @@ class TestODLAuthenticatedGet:
             in str(exc_info.value)
         )
         assert mock_request_with_timeout.call_count == 3
-        token_grant_call = authenticated_get_fixture.request_with_timeout_calls[
+        token_grant_call = authenticated_request_fixture.request_with_timeout_calls[
             "token_grant"
         ]()
-        request_with_token_call = authenticated_get_fixture.request_with_timeout_calls[
-            "request_with_token"
-        ](allowed_response_codes=["2xx", 401])
+        request_with_token_call = (
+            authenticated_request_fixture.request_with_timeout_calls[
+                "request_with_token"
+            ](allowed_response_codes=["2xx", 401])
+        )
 
         mock_request_with_timeout.assert_has_calls(
             [

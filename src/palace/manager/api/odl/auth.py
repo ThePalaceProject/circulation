@@ -3,13 +3,17 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, Literal, NamedTuple
 
-from pydantic import AnyUrl, BaseModel, PositiveInt, ValidationError
+from pydantic import BaseModel, PositiveInt, ValidationError
 from requests import Response
+from typing_extensions import Self
 
 from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError
+from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP, BearerAuth
+from palace.manager.util.http import HTTP, BadResponseException, BearerAuth
+from palace.manager.util.log import LoggerMixin
+from palace.manager.util.problem_detail import ProblemDetail
 
 
 class TokenTuple(NamedTuple):
@@ -23,39 +27,65 @@ class TokenGrant(BaseModel):
     expires_in: PositiveInt
 
 
-class AuthenticationLink(BaseModel):
-    rel: str
-    href: str
+class OpdsWithOdlException(BadResponseException):
+    """
+    ODL and Readium LCP specify that all errors should be returned as Problem
+    Detail documents. This isn't always the case, but we try to use this information
+    when we can.
+    """
+
+    def __init__(
+        self,
+        type: str,
+        title: str,
+        status: int,
+        detail: str | None,
+        response: Response,
+    ) -> None:
+        super().__init__(url_or_service=response.url, message=title, response=response)
+        self.type = type
+        self.title = title
+        self.status = status
+        self.detail = detail
+
+    @property
+    def problem_detail(self) -> ProblemDetail:
+        return ProblemDetail(
+            uri=self.type,
+            status_code=self.status,
+            title=self.title,
+            detail=self.detail,
+        )
+
+    @classmethod
+    def from_response(cls, response: Response) -> Self | None:
+        # Wrap the response in a OpdsWithOdlException if it is a problem detail document.
+        #
+        # DeMarque sends "application/api-problem+json", but the ODL spec says we should
+        # expect "application/problem+json", so we need to check for both.
+        if response.headers.get("Content-Type") not in [
+            "application/api-problem+json",
+            "application/problem+json",
+        ]:
+            return None
+
+        try:
+            json_response = response.json()
+        except ValueError:
+            json_response = {}
+
+        type = json_response.get("type")
+        title = json_response.get("title")
+        status = json_response.get("status") or response.status_code
+        detail = json_response.get("detail")
+
+        if type is None or title is None:
+            return None
+
+        return cls(type, title, status, detail, response)
 
 
-class Authentication(BaseModel):
-    type: str
-    links: list[AuthenticationLink]
-
-    def by_rel(self, rel: str) -> list[AuthenticationLink]:
-        return [link for link in self.links if link.rel == rel]
-
-
-class AuthenticationDocument(BaseModel):
-    id: AnyUrl
-    title: str
-    authentication: list[Authentication]
-
-    def by_type(self, auth_type: str) -> list[Authentication]:
-        return [auth for auth in self.authentication if auth.type == auth_type]
-
-    def link_href_by_type_and_rel(self, auth_type: str, rel: str) -> list[str]:
-        return [
-            link.href for auth in self.by_type(auth_type) for link in auth.by_rel(rel)
-        ]
-
-
-class ODLAuthenticatedGet(ABC):
-    AUTH_DOC_CONTENT_TYPES = [
-        "application/opds-authentication+json",
-        "application/vnd.opds.authentication.v1.0+json",
-    ]
-
+class OdlAuthenticatedRequest(LoggerMixin, ABC):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._session_token: TokenTuple | None = None
@@ -78,20 +108,32 @@ class ODLAuthenticatedGet(ABC):
     def _feed_url(self) -> str: ...
 
     @staticmethod
-    def _no_auth_get(
-        url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _no_auth_request(
+        method: str, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
     ) -> Response:
-        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
+        return HTTP.request_with_timeout(method, url, headers=headers, **kwargs)
 
-    def _basic_auth_get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _basic_auth_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
-        return HTTP.get_with_timeout(
-            url, headers=headers, auth=(self._username, self._password), **kwargs
+        return HTTP.request_with_timeout(
+            method,
+            url,
+            headers=headers,
+            auth=(self._username, self._password),
+            **kwargs,
         )
 
-    def _oauth_get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _oauth_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
         # If the request restricts allowed response codes, we need to add 401 to the allowed response codes
         # so that we can handle the 401 response and refresh the token, if necessary.
@@ -112,10 +154,10 @@ class ODLAuthenticatedGet(ABC):
             token_refreshed = True
 
         # Make a request, refreshing the token if we get a 401 response, and we haven't already refreshed the token.
-        resp = self._session_token_get(url, headers=headers, **kwargs)
+        resp = self._session_token_request(method, url, headers=headers, **kwargs)
         if resp.status_code == 401 and not token_refreshed:
             self._refresh_token()
-            resp = self._session_token_get(url, headers=headers, **kwargs)
+            resp = self._session_token_request(method, url, headers=headers, **kwargs)
 
         # If we got a 401 response and we modified the allowed response codes, we process the response
         # with the original allowed response codes, so the calling function can handle the 401 response.
@@ -125,18 +167,33 @@ class ODLAuthenticatedGet(ABC):
 
         return resp
 
-    def _get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
-        match self._auth_type:
-            case OPDS2AuthType.BASIC:
-                return self._basic_auth_get(url, headers, **kwargs)
-            case OPDS2AuthType.OAUTH:
-                return self._oauth_get(url, headers, **kwargs)
-            case OPDS2AuthType.NONE:
-                return self._no_auth_get(url, headers=headers, **kwargs)
-            case _:
-                raise PalaceValueError(f"Invalid OPDS2AuthType: '{self._auth_type}'")
+        try:
+            match self._auth_type:
+                case OPDS2AuthType.BASIC:
+                    return self._basic_auth_request(
+                        method, url, headers=headers, **kwargs
+                    )
+                case OPDS2AuthType.OAUTH:
+                    return self._oauth_request(method, url, headers=headers, **kwargs)
+                case OPDS2AuthType.NONE:
+                    return self._no_auth_request(method, url, headers=headers, **kwargs)
+                case _:
+                    raise PalaceValueError(
+                        f"Invalid OPDS2AuthType: '{self._auth_type}'"
+                    )
+        except BadResponseException as e:
+            response = e.response
+            # Create a OpdsWithOdlException if the response is a problem detail document.
+            if opds_exception := OpdsWithOdlException.from_response(response):
+                raise opds_exception from e
+            raise
 
     @staticmethod
     def _get_oauth_url_from_auth_document(auth_document_str: str) -> str:
@@ -150,17 +207,20 @@ class ODLAuthenticatedGet(ABC):
                 debug_message=f"Auth document: {auth_document_str}",
             ) from e
 
-        auth_links = auth_document.link_href_by_type_and_rel(
-            "http://opds-spec.org/auth/oauth/client_credentials", "authenticate"
-        )
-
-        if len(auth_links) != 1:
-            raise IntegrationException(
-                "Unable to find exactly one valid authentication link",
-                debug_message=f"Found {len(auth_links)} authentication links. Auth document: {auth_document_str}",
+        try:
+            return (
+                auth_document.by_type(
+                    "http://opds-spec.org/auth/oauth/client_credentials"
+                )
+                .links.get(rel="authenticate", raising=True)
+                .href
             )
-
-        return auth_links[0]
+        except PalaceValueError:
+            raise IntegrationException(
+                "Unable to find valid authentication link for "
+                "'http://opds-spec.org/auth/oauth/client_credentials' with rel 'authenticate'",
+                debug_message=f"Auth document: {auth_document_str}",
+            )
 
     @staticmethod
     def _oauth_session_token_refresh(
@@ -192,18 +252,27 @@ class ODLAuthenticatedGet(ABC):
     def _fetch_auth_document(self) -> str:
         resp = HTTP.get_with_timeout(self._feed_url)
         content_type = resp.headers.get("Content-Type")
-        if resp.status_code != 401 or content_type not in self.AUTH_DOC_CONTENT_TYPES:
+        if (
+            resp.status_code != 401
+            or content_type not in AuthenticationDocument.content_types()
+        ):
             raise IntegrationException(
                 "Unable to fetch OPDS authentication document. Incorrect status code or content type.",
                 debug_message=f"Status code: '{resp.status_code}' Content-type: '{content_type}' Response: {resp.text}",
             )
         return resp.text
 
-    def _session_token_get(
-        self, url: str, headers: Mapping[str, str] | None = None, **kwargs: Any
+    def _session_token_request(
+        self,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
     ) -> Response:
         auth = BearerAuth(self._session_token.token) if self._session_token else None
-        return HTTP.get_with_timeout(url, headers=headers, auth=auth, **kwargs)
+        return HTTP.request_with_timeout(
+            method, url, headers=headers, auth=auth, **kwargs
+        )
 
     def _refresh_token(self) -> None:
         if self._token_url is None:

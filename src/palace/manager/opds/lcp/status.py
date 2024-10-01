@@ -70,19 +70,21 @@ class Event(BaseOpdsModel):
     timestamp: AwareDatetime
 
 
-class LcpStatus(BaseOpdsModel):
+class LoanStatus(BaseOpdsModel):
     """
     This document is defined as part of the Readium LCP Specifications.
 
     Readium calls this the License Status Document (LSD), however, that
     name conflates the concept of License. In the context of ODL and library
-    lends, it's really the LCP status document, so we use that name here.
+    lends, it's really the loan status document, so we use that name here.
 
     The spec for it is located here:
     https://readium.org/lcp-specs/releases/lsd/latest.html
     """
 
-    _content_type: str = "application/vnd.readium.license.status.v1.0+json"
+    @staticmethod
+    def content_type() -> str:
+        return "application/vnd.readium.license.status.v1.0+json"
 
     id: str
     status: Status
@@ -95,16 +97,8 @@ class LcpStatus(BaseOpdsModel):
     @field_validator("links")
     @classmethod
     def _validate_links(cls, value: ListOfLinks[Link]) -> ListOfLinks[Link]:
-        if (
-            value.get(
-                rel="license", type="application/vnd.readium.lcp.license.v1.0+json"
-            )
-            is None
-        ):
-            raise PalaceValueError(
-                "links must contain a link with rel 'license' and "
-                "type 'application/vnd.readium.lcp.license.v1.0+json'"
-            )
+        if value.get(rel="license") is None:
+            raise PalaceValueError("links must contain a link with rel='license'")
         return value
 
     @cached_property

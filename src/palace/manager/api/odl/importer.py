@@ -12,7 +12,7 @@ from webpub_manifest_parser.odl import ODLFeedParserFactory
 from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.odl.auth import ODLAuthenticatedGet
+from palace.manager.api.odl.auth import OdlAuthenticatedRequest
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.metadata_layer import FormatData, LicenseData, Metadata
@@ -423,7 +423,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         return parsed_license
 
 
-class OPDS2WithODLImportMonitor(ODLAuthenticatedGet, OPDS2ImportMonitor):
+class OPDS2WithODLImportMonitor(OdlAuthenticatedRequest, OPDS2ImportMonitor):
     """Import information from an ODL feed."""
 
     PROTOCOL = OPDS2WithODLApi.label()
@@ -467,4 +467,4 @@ class OPDS2WithODLImportMonitor(ODLAuthenticatedGet, OPDS2ImportMonitor):
         kwargs["allowed_response_codes"] = ["2xx", "3xx"]
         if not url.startswith("http"):
             url = urljoin(self._feed_base_url, url)
-        return super()._get(url, headers, **kwargs)
+        return super()._request("GET", url, headers, **kwargs)

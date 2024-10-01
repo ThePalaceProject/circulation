@@ -90,6 +90,20 @@ class ListOfLinks(list[LinkT]):
             links.append(link)
         return links
 
+    @typing.overload
+    def get(
+        self,
+        *,
+        rel: str | None = ...,
+        type: str | None = ...,
+        raising: typing.Literal[True],
+    ) -> LinkT: ...
+
+    @typing.overload
+    def get(
+        self, *, rel: str | None = ..., type: str | None = ..., raising: bool = ...
+    ) -> LinkT | None: ...
+
     def get(
         self, *, rel: str | None = None, type: str | None = None, raising: bool = False
     ) -> LinkT | None:
@@ -98,16 +112,22 @@ class ListOfLinks(list[LinkT]):
         exception if there are multiple links with the same relation and type.
         """
         links = self.get_list(rel=rel, type=type)
-        if len(links) > 1 and raising:
+        if (num_links := len(links)) != 1 and raising:
+            if num_links == 0:
+                err = "No links found"
+            else:
+                err = "Multiple links found"
+
             match (rel, type):
                 case (None, None):
-                    err = "Multiple links found"
+                    # Nothing to add to the error message
+                    ...
                 case (_, None):
-                    err = f"Multiple links with rel='{rel}'"
+                    err += f" with rel='{rel}'"
                 case (None, _):
-                    err = f"Multiple links with type='{type}'"
+                    err += f" with type='{type}'"
                 case _:
-                    err = f"Multiple links with rel='{rel}' and type='{type}'"
+                    err += f" with rel='{rel}' and type='{type}'"
             raise PalaceValueError(err)
         return next(iter(links), None)
 

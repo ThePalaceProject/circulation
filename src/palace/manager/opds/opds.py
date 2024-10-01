@@ -1,4 +1,6 @@
-from palace.manager.opds.base import BaseOpdsModel
+from pydantic import PositiveInt
+
+from palace.manager.opds.base import BaseLink, BaseOpdsModel
 
 
 class Price(BaseOpdsModel):
@@ -8,3 +10,13 @@ class Price(BaseOpdsModel):
 
     currency: str
     value: float
+
+
+class Link(BaseLink):
+    """Link to another resource."""
+
+    title: str | None = None
+    height: PositiveInt | None = None
+    width: PositiveInt | None = None
+    bitrate: PositiveInt | None = None
+    duration: PositiveInt | None = None

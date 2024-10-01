@@ -92,17 +92,24 @@ class TestListOfLinks:
         assert links.get(type="nonexistent") is None
         assert links.get(rel="nonexistent", type="nonexistent") is None
 
+        with pytest.raises(
+            PalaceValueError, match="^No links found with rel='nonexistent'$"
+        ):
+            links.get(rel="nonexistent", raising=True)
+
         with pytest.raises(PalaceValueError, match="^Multiple links found$"):
             links.get(raising=True)
         with pytest.raises(
-            PalaceValueError, match="^Multiple links with type='application/xyz'$"
+            PalaceValueError, match="^Multiple links found with type='application/xyz'$"
         ):
             links.get(type="application/xyz", raising=True)
-        with pytest.raises(PalaceValueError, match="^Multiple links with rel='bar'$"):
+        with pytest.raises(
+            PalaceValueError, match="^Multiple links found with rel='bar'$"
+        ):
             links.get(rel="bar", raising=True)
         with pytest.raises(
             PalaceValueError,
-            match="^Multiple links with rel='foo' and type='application/xyz'$",
+            match="^Multiple links found with rel='foo' and type='application/xyz'$",
         ):
             links.get(rel="foo", type="application/xyz", raising=True)
 

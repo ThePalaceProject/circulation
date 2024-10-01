@@ -4,12 +4,13 @@ import binascii
 import datetime
 import json
 import uuid
-from functools import cached_property
+from collections.abc import Callable
+from functools import cached_property, partial
 from typing import Any, Literal
 
-import dateutil
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
+from pydantic import ValidationError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
@@ -23,6 +24,7 @@ from palace.manager.api.circulation import (
     LoanInfo,
     PatronActivityCirculationAPI,
     RedirectFulfillment,
+    UrlFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
@@ -41,18 +43,18 @@ from palace.manager.api.circulation_exceptions import (
     PatronLoanLimitReached,
 )
 from palace.manager.api.lcp.hash import Hasher, HasherFactory
-from palace.manager.api.odl.auth import ODLAuthenticatedGet
+from palace.manager.api.odl.auth import OdlAuthenticatedRequest, OpdsWithOdlException
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import (
     OPDS2AuthType,
     OPDS2WithODLLibrarySettings,
     OPDS2WithODLSettings,
 )
-from palace.manager.core.lcp.credential import (
-    LCPCredentialFactory,
-    LCPHashedPassphrase,
-    LCPUnhashedPassphrase,
-)
+from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.lcp.credential import LCPCredentialFactory
+from palace.manager.opds.base import BaseLink
+from palace.manager.opds.lcp.license import LicenseDocument
+from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -70,7 +72,7 @@ from palace.manager.util.http import BadResponseException, RemoteIntegrationExce
 
 
 class OPDS2WithODLApi(
-    ODLAuthenticatedGet,
+    OdlAuthenticatedRequest,
     PatronActivityCirculationAPI[OPDS2WithODLSettings, OPDS2WithODLLibrarySettings],
 ):
     """ODL (Open Distribution to Libraries) is a specification that allows
@@ -81,35 +83,6 @@ class OPDS2WithODLApi(
     """
 
     SET_DELIVERY_MECHANISM_AT = BaseCirculationAPI.FULFILL_STEP
-
-    # Possible status values in the License Status Document:
-
-    # The license is available but the user hasn't fulfilled it yet.
-    READY_STATUS = "ready"
-
-    # The license is available and has been fulfilled on at least one device.
-    ACTIVE_STATUS = "active"
-
-    # The license has been revoked by the distributor.
-    REVOKED_STATUS = "revoked"
-
-    # The license has been returned early by the user.
-    RETURNED_STATUS = "returned"
-
-    # The license was returned early and was never fulfilled.
-    CANCELLED_STATUS = "cancelled"
-
-    # The license has expired.
-    EXPIRED_STATUS = "expired"
-
-    STATUS_VALUES = [
-        READY_STATUS,
-        ACTIVE_STATUS,
-        REVOKED_STATUS,
-        RETURNED_STATUS,
-        CANCELLED_STATUS,
-        EXPIRED_STATUS,
-    ]
 
     @classmethod
     def settings_class(cls) -> type[OPDS2WithODLSettings]:
@@ -188,96 +161,44 @@ class OPDS2WithODLApi(
         """Wrapper around flask's url_for to be overridden for tests."""
         return url_for(*args, **kwargs)
 
-    def get_license_status_document(self, loan: Loan) -> dict[str, Any]:
-        """Get the License Status Document for a loan.
-
-        For a new loan, create a local loan with no external identifier and
-        pass it in to this method.
-
-        This will create the remote loan if one doesn't exist yet. The loan's
-        internal database id will be used to receive notifications from the
-        distributor when the loan's status changes.
-        """
-        _db = Session.object_session(loan)
-
-        if loan.external_identifier:
-            url = loan.external_identifier
-        else:
-            id = loan.license.identifier
-            checkout_id = str(uuid.uuid1())
-            if self.collection is None:
-                raise ValueError(f"Collection not found: {self.collection_id}")
-            default_loan_period = self.collection.default_loan_period(
-                loan.patron.library
-            )
-
-            expires = utc_now() + datetime.timedelta(days=default_loan_period)
-            # The patron UUID is generated randomly on each loan, so the distributor
-            # doesn't know when multiple loans come from the same patron.
-            patron_id = str(uuid.uuid1())
-
-            library_short_name = loan.patron.library.short_name
-
-            db = Session.object_session(loan)
-            patron = loan.patron
-            hasher = self._get_hasher()
-
-            unhashed_pass: LCPUnhashedPassphrase = (
-                self._credential_factory.get_patron_passphrase(db, patron)
-            )
-            hashed_pass: LCPHashedPassphrase = unhashed_pass.hash(hasher)
-            self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
-            encoded_pass: str = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
-
-            notification_url = self._url_for(
-                "odl_notify",
-                library_short_name=library_short_name,
-                loan_id=loan.id,
-                _external=True,
-            )
-
-            checkout_url = str(loan.license.checkout_url)
-            url_template = URITemplate(checkout_url)
-            url = url_template.expand(
-                id=str(id),
-                checkout_id=checkout_id,
-                patron_id=patron_id,
-                expires=expires.isoformat(),
-                notification_url=notification_url,
-                passphrase=encoded_pass,
-                hint=self.settings.passphrase_hint,
-                hint_url=self.settings.passphrase_hint_url,
-            )
-
+    def _request_loan_status(
+        self, method: str, url: str, ignored_problem_types: list[str] | None = None
+    ) -> LoanStatus:
         try:
-            response = self._get(url, allowed_response_codes=["2xx"])
+            response = self._request(method, url, allowed_response_codes=["2xx"])
+            status_doc = LoanStatus.model_validate_json(response.content)
+        except ValidationError as e:
+            self.log.exception(
+                f"Error validating Loan Status Document. '{url}' returned and invalid document. {e}"
+            )
+            raise RemoteIntegrationException(
+                url, "Loan Status Document not valid."
+            ) from e
         except BadResponseException as e:
             response = e.response
-            header_string = ", ".join(
-                {f"{k}: {v}" for k, v in response.headers.items()}
-            )
-            response_string = (
-                response.text
-                if len(response.text) < 100
-                else response.text[:100] + "..."
-            )
-            self.log.error(
-                f"Error getting License Status Document for loan ({loan.id}):  Url '{url}' returned "
-                f"status code {response.status_code}. Expected 2XX. Response headers: {header_string}. "
-                f"Response content: {response_string}."
-            )
+            error_message = f"Error requesting Loan Status Document. '{url}' returned status code {response.status_code}."
+            if isinstance(e, OpdsWithOdlException):
+                # It this problem type is explicitly ignored, we just raise the exception instead of proceeding with
+                # logging the information about it. The caller will handle the exception.
+                if ignored_problem_types and e.type in ignored_problem_types:
+                    raise
+                error_message += f" Problem Detail: '{e.type}' - {e.title}"
+                if e.detail:
+                    error_message += f" - {e.detail}"
+            else:
+                header_string = ", ".join(
+                    {f"{k}: {v}" for k, v in response.headers.items()}
+                )
+                response_string = (
+                    response.text
+                    if len(response.text) < 100
+                    else response.text[:100] + "..."
+                )
+                error_message += f" Response headers: {header_string}. Response content: {response_string}."
+            self.log.exception(error_message)
             raise
-        try:
-            status_doc = json.loads(response.content)
-        except ValueError as e:
-            raise RemoteIntegrationException(
-                url, "License Status Document was not valid JSON."
-            ) from e
-        if status_doc.get("status") not in self.STATUS_VALUES:
-            raise RemoteIntegrationException(
-                url, "License Status Document had an unknown status value."
-            )
-        return status_doc  # type: ignore[no-any-return]
+
+        return status_doc
 
     def checkin(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
         """Return a loan early."""
@@ -300,46 +221,42 @@ class OPDS2WithODLApi(
 
     def _checkin(self, loan: Loan) -> bool:
         _db = Session.object_session(loan)
-        doc = self.get_license_status_document(loan)
-        status = doc.get("status")
-        if status in [
-            self.REVOKED_STATUS,
-            self.RETURNED_STATUS,
-            self.CANCELLED_STATUS,
-            self.EXPIRED_STATUS,
-        ]:
-            # This loan was already returned early or revoked by the distributor, or it expired.
+        if loan.external_identifier is None:
+            # We can't return a loan that doesn't have an external identifier. This should never happen
+            # but if it does, we log an error and delete the loan, so it doesn't stay on the patrons
+            # bookshelf forever.
+            self.log.error(f"Loan {loan.id} has no external identifier.")
+            return False
+
+        doc = self._request_loan_status("GET", loan.external_identifier)
+        if not doc.active:
+            self.log.warning(
+                f"Loan {loan.id} was already returned early, revoked by the distributor, or it expired."
+            )
             self.update_loan(loan, doc)
-            raise NotCheckedOut()
+            return False
 
-        return_url = None
-        links = doc.get("links", [])
-        for link in links:
-            if link.get("rel") == "return":
-                return_url = link.get("href")
-                break
-
-        if not return_url:
+        return_link = doc.links.get(rel="return", type=LoanStatus.content_type())
+        if not return_link:
             # The distributor didn't provide a link to return this loan.
-            # This may be because the book has already been fulfilled and
-            # must be returned through the DRM system. If that's true, the
-            # app will already be doing that on its own, so we'll silently
-            # do nothing.
+            # This may be because:
+            # 1) The book has already been fulfilled and must be returned through the DRM system.
+            #   If that's true, the app will already be doing that on its own, so we'll silently
+            #   do nothing. The especially applies to adobe DRM books.
+            # 2) The distributor doesn't support returning books early.
+            # In either case, we can't do anything, and its worse to leave the loan on the users
+            # shelf when they want to return it, so we just ignore the problem.
             return False
 
-        # Hit the distributor's return link.
-        self._get(return_url)
-        # Get the status document again to make sure the return was successful,
-        # and if so update the pool availability and delete the local loan.
-        self.update_loan(loan)
+        # The parameters for this link (if its templated) are defined here:
+        # https://readium.org/lcp-specs/releases/lsd/latest.html#34-returning-a-publication
+        # None of them are required, and often the link is not templated.
+        return_url = return_link.href_templated({"name": "Palace Manager"})
 
-        # At this point, if the loan still exists, something went wrong.
-        # However, it might be because the loan has already been fulfilled
-        # and must be returned through the DRM system, which the app will
-        # do on its own, so we can ignore the problem.
-        new_loan = get_one(_db, Loan, id=loan.id)
-        if new_loan:
-            return False
+        # Hit the distributor's return link, and if it's successful, update the pool
+        # availability and delete the local loan.
+        doc = self._request_loan_status("PUT", return_url)
+        self.update_loan(loan, doc)
         return True
 
     def checkout(
@@ -422,26 +339,59 @@ class OPDS2WithODLApi(
             raise NoAvailableCopies()
         loan, ignore = license.loan_to(patron)
 
+        identifier = loan.license.identifier
+        checkout_id = str(uuid.uuid4())
+        if self.collection is None:
+            raise PalaceValueError(f"Collection not found: {self.collection_id}")
+        default_loan_period = self.collection.default_loan_period(loan.patron.library)
+
+        requested_expiry = utc_now() + datetime.timedelta(days=default_loan_period)
+        patron_id = patron.identifier_to_remote_service(licensepool.data_source)
+        library_short_name = loan.patron.library.short_name
+
+        db = Session.object_session(loan)
+        patron = loan.patron
+        hasher = self._get_hasher()
+
+        unhashed_pass = self._credential_factory.get_patron_passphrase(db, patron)
+        hashed_pass = unhashed_pass.hash(hasher)
+        self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
+        encoded_pass = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
+
+        notification_url = self._url_for(
+            "odl_notify",
+            library_short_name=library_short_name,
+            loan_id=loan.id,
+            _external=True,
+        )
+
+        # We should never be able to get here if the license doesn't have a checkout_url, but
+        # we assert it anyway, to be sure we fail fast if it happens.
+        assert license.checkout_url is not None
+        url_template = URITemplate(license.checkout_url)
+        checkout_url = url_template.expand(
+            id=str(identifier),
+            checkout_id=checkout_id,
+            patron_id=patron_id,
+            expires=requested_expiry.isoformat(),
+            notification_url=notification_url,
+            passphrase=encoded_pass,
+            hint=self.settings.passphrase_hint,
+            hint_url=self.settings.passphrase_hint_url,
+        )
+
         try:
-            doc = self.get_license_status_document(loan)
+            doc = self._request_loan_status(
+                "POST",
+                checkout_url,
+                ignored_problem_types=[
+                    "http://opds-spec.org/odl/error/checkout/unavailable"
+                ],
+            )
         except BadResponseException as e:
             _db.delete(loan)
-            response = e.response
-            # DeMarque sends "application/api-problem+json", but the ODL spec says we should
-            # expect "application/problem+json", so we need to check for both.
-            if response.headers.get("Content-Type") in [
-                "application/api-problem+json",
-                "application/problem+json",
-            ]:
-                try:
-                    json_response = response.json()
-                except ValueError:
-                    json_response = {}
-
-                if (
-                    json_response.get("type")
-                    == "http://opds-spec.org/odl/error/checkout/unavailable"
-                ):
+            if isinstance(e, OpdsWithOdlException):
+                if e.type == "http://opds-spec.org/odl/error/checkout/unavailable":
                     # TODO: This would be a good place to do an async availability update, since we know
                     #   the book is unavailable, when we thought it was available. For now, we know that
                     #   the license has no checkouts_available, so we do that update.
@@ -450,35 +400,48 @@ class OPDS2WithODLApi(
                     raise NoAvailableCopies()
             raise
 
-        status = doc.get("status")
-
-        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
+        if not doc.active:
             # Something went wrong with this loan and we don't actually
             # have the book checked out. This should never happen.
             # Remove the loan we created.
             _db.delete(loan)
             raise CannotLoan()
 
-        links = doc.get("links", [])
-        external_identifier = None
-        for link in links:
-            if link.get("rel") == "self":
-                external_identifier = link.get("href")
-                break
-        if not external_identifier:
+        # We save the link to the loan status document in the loan's external_identifier field, so
+        # we are able to retrieve it later.
+        loan_status_document_link: BaseLink | None = doc.links.get(
+            rel="self", type=LoanStatus.content_type()
+        )
+
+        # The ODL spec requires that a 'self' link be present in the links section of the response.
+        # See: https://drafts.opds.io/odl-1.0.html#54-interacting-with-a-checkout-link
+        # However, the open source LCP license status server does not provide this link, so we make
+        # an extra request to try to get the information we need from the 'status' link in the license
+        # document, which the LCP server does provide.
+        # TODO: Raise this issue with LCP server maintainers, and try to get a fix in place.
+        #   once that is done, we should be able to remove this fallback.
+        if not loan_status_document_link:
+            license_document_link = doc.links.get(
+                rel="license", type=LicenseDocument.content_type()
+            )
+            if license_document_link:
+                response = self._request(
+                    "GET", license_document_link.href, allowed_response_codes=["2xx"]
+                )
+                license_doc = LicenseDocument.model_validate_json(response.content)
+                loan_status_document_link = license_doc.links.get(
+                    rel="status", type=LoanStatus.content_type()
+                )
+
+        if not loan_status_document_link:
             _db.delete(loan)
             raise CannotLoan()
 
-        start = utc_now()
-        expires = doc.get("potential_rights", {}).get("end")
-        if expires:
-            expires = dateutil.parser.parse(expires)
-
         # We need to set the start and end dates on our local loan since
         # the code that calls this only sets them when a new loan is created.
-        loan.start = start
-        loan.end = expires
-        loan.external_identifier = external_identifier
+        loan.start = utc_now()
+        loan.end = doc.potential_rights.end
+        loan.external_identifier = loan_status_document_link.href
 
         # We also need to update the remaining checkouts for the license.
         loan.license.checkout()
@@ -508,52 +471,9 @@ class OPDS2WithODLApi(
         return self._fulfill(loan, delivery_mechanism)
 
     @staticmethod
-    def _find_content_link_and_type(
-        links: list[dict[str, str]],
-        drm_scheme: str | None,
-    ) -> tuple[str | None, str | None]:
-        """Find a content link with the type information corresponding to the selected delivery mechanism.
-
-        :param links: List of dict-like objects containing information about available links in the LCP license file
-        :param drm_scheme: Selected delivery mechanism DRM scheme
-
-        :return: Two-tuple containing a content link and content type
-        """
-        candidates = []
-        for link in links:
-            # Depending on the format being served, the crucial information
-            # may be in 'manifest' or in 'license'.
-            if link.get("rel") not in ("manifest", "license"):
-                continue
-            href = link.get("href")
-            type = link.get("type")
-            candidates.append((href, type))
-
-        if len(candidates) == 0:
-            # No candidates
-            return None, None
-
-        # For DeMarque audiobook content, we need to translate the type property
-        # to reflect what we have stored in our delivery mechanisms.
-        if drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
-            drm_scheme = FEEDBOOKS_AUDIO
-
-        return next(filter(lambda x: x[1] == drm_scheme, candidates), (None, None))
-
-    def _unlimited_access_fulfill(
-        self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
-    ) -> Fulfillment:
-        licensepool = loan.license_pool
-        fulfillment = self._find_matching_delivery_mechanism(
-            delivery_mechanism.delivery_mechanism, licensepool
-        )
-        content_link = fulfillment.resource.representation.public_url
-        content_type = fulfillment.resource.representation.media_type
-        return RedirectFulfillment(content_link, content_type)
-
-    def _find_matching_delivery_mechanism(
-        self, requested_delivery_mechanism: DeliveryMechanism, licensepool: LicensePool
-    ) -> LicensePoolDeliveryMechanism:
+    def _check_delivery_mechanism_available(
+        requested_delivery_mechanism: DeliveryMechanism, licensepool: LicensePool
+    ) -> None:
         fulfillment = next(
             (
                 lpdm
@@ -564,15 +484,30 @@ class OPDS2WithODLApi(
         )
         if fulfillment is None:
             raise FormatNotAvailable()
-        return fulfillment
 
-    def _lcp_fulfill(
+    def _unlimited_access_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
-        doc = self.get_license_status_document(loan)
-        status = doc.get("status")
+        licensepool = loan.license_pool
+        self._check_delivery_mechanism_available(
+            delivery_mechanism.delivery_mechanism, licensepool
+        )
+        content_link = delivery_mechanism.resource.representation.public_url
+        content_type = delivery_mechanism.resource.representation.media_type
+        return RedirectFulfillment(content_link, content_type)
 
-        if status not in [self.READY_STATUS, self.ACTIVE_STATUS]:
+    def _license_fulfill(
+        self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
+    ) -> Fulfillment:
+        # We are unable to fulfill a loan that doesn't have its external identifier set,
+        # since we use this to get to the checkout link. It shouldn't be possible to get
+        # into this state.
+        license_status_url = loan.external_identifier
+        assert license_status_url is not None
+
+        doc = self._request_loan_status("GET", license_status_url)
+
+        if not doc.active:
             # This loan isn't available for some reason. It's possible
             # the distributor revoked it or the patron already returned it
             # through the DRM system, and we didn't get a notification
@@ -580,27 +515,35 @@ class OPDS2WithODLApi(
             self.update_loan(loan, doc)
             raise CannotFulfill()
 
-        expires = doc.get("potential_rights", {}).get("end")
-        expires = dateutil.parser.parse(expires)
+        drm_scheme = delivery_mechanism.delivery_mechanism.drm_scheme
+        fulfill_cls: Callable[[str, str | None], UrlFulfillment]
+        if drm_scheme == DeliveryMechanism.NO_DRM:
+            # If we have no DRM, we can just redirect to the content link and let the patron download the book.
+            fulfill_link = doc.links.get(
+                rel="publication",
+                type=delivery_mechanism.delivery_mechanism.content_type,
+            )
+            fulfill_cls = RedirectFulfillment
+        elif drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
+            # For DeMarque audiobook content, the link we are looking is stored in the 'manifest' rel.
+            fulfill_link = doc.links.get(rel="manifest", type=FEEDBOOKS_AUDIO)
+            fulfill_cls = partial(FetchFulfillment, allowed_response_codes=["2xx"])
+        else:
+            # We are getting content via a license document, so we need to find the link
+            # that corresponds to the delivery mechanism we are using.
+            fulfill_link = doc.links.get(rel="license", type=drm_scheme)
+            fulfill_cls = partial(FetchFulfillment, allowed_response_codes=["2xx"])
 
-        links = doc.get("links", [])
-
-        content_link, content_type = self._find_content_link_and_type(
-            links, delivery_mechanism.delivery_mechanism.drm_scheme
-        )
-
-        if content_link is None or content_type is None:
+        if fulfill_link is None:
             raise CannotFulfill()
 
-        return FetchFulfillment(
-            content_link, content_type, allowed_response_codes=["2xx"]
-        )
+        return fulfill_cls(fulfill_link.href, fulfill_link.type)
 
     def _bearer_token_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
         licensepool = loan.license_pool
-        fulfillment_mechanism = self._find_matching_delivery_mechanism(
+        self._check_delivery_mechanism_available(
             delivery_mechanism.delivery_mechanism, licensepool
         )
 
@@ -621,7 +564,7 @@ class OPDS2WithODLApi(
             token_type="Bearer",
             access_token=self._session_token.token,
             expires_in=(int((self._session_token.expires - utc_now()).total_seconds())),
-            location=fulfillment_mechanism.resource.url,
+            location=delivery_mechanism.resource.url,
         )
 
         return DirectFulfillment(
@@ -644,7 +587,7 @@ class OPDS2WithODLApi(
             else:
                 return self._unlimited_access_fulfill(loan, delivery_mechanism)
         else:
-            return self._lcp_fulfill(loan, delivery_mechanism)
+            return self._license_fulfill(loan, delivery_mechanism)
 
     def _count_holds_before(self, holdinfo: HoldInfo, pool: LicensePool) -> int:
         # Count holds on the license pool that started before this hold and
@@ -958,30 +901,13 @@ class OPDS2WithODLApi(
             for hold in remaining_holds
         ]
 
-    def update_loan(self, loan: Loan, status_doc: dict[str, Any] | None = None) -> None:
+    def update_loan(self, loan: Loan, status_doc: LoanStatus) -> None:
         """Check a loan's status, and if it is no longer active, delete the loan
         and update its pool's availability.
         """
         _db = Session.object_session(loan)
 
-        if not status_doc:
-            status_doc = self.get_license_status_document(loan)
-
-        status = status_doc.get("status")
-        # We already check that the status is valid in get_license_status_document,
-        # but if the document came from a notification it hasn't been checked yet.
-        if status not in self.STATUS_VALUES:
-            raise RemoteIntegrationException(
-                str(loan.license.checkout_url),
-                "The License Status Document had an unknown status value.",
-            )
-
-        if status in [
-            self.REVOKED_STATUS,
-            self.RETURNED_STATUS,
-            self.CANCELLED_STATUS,
-            self.EXPIRED_STATUS,
-        ]:
+        if not status_doc.active:
             # This loan is no longer active. Update the pool's availability
             # and delete the loan.
 

@@ -236,6 +236,7 @@ class MockHTTPClient:
         self.responses: list[Response] = []
         self.requests: list[str] = []
         self.requests_args: list[Args] = []
+        self.requests_methods: list[str] = []
 
     def queue_response(
         self,
@@ -251,17 +252,21 @@ class MockHTTPClient:
 
         self.responses.append(MockRequestsResponse(response_code, headers, content))
 
-    def _get(self, *args: Any, **kwargs: Any) -> Response:
+    def _request(self, *args: Any, **kwargs: Any) -> Response:
         return self.responses.pop(0)
 
-    def do_get(self, url: str, *args: Any, **kwargs: Any) -> Response:
+    def do_request(self, method: str, url: str, *args: Any, **kwargs: Any) -> Response:
         self.requests.append(url)
+        self.requests_methods.append(method)
         self.requests_args.append(Args(args, kwargs))
-        return HTTP._request_with_timeout(url, self._get, *args, **kwargs)
+        return HTTP._request_with_timeout(url, self._request, *args, **kwargs)
+
+    def do_get(self, url: str, *args: Any, **kwargs: Any) -> Response:
+        return self.do_request("GET", url, *args, **kwargs)
 
     @contextmanager
     def patch(self) -> Generator[None, None, None]:
-        with patch.object(HTTP, "get_with_timeout", self.do_get):
+        with patch.object(HTTP, "request_with_timeout", self.do_request):
             yield
 
 

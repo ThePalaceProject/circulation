@@ -49,7 +49,9 @@ class LicenseInfo(BaseOpdsModel):
     https://drafts.opds.io/odl-1.0.html#4-license-info-document
     """
 
-    _content_type: str = "application/vnd.odl.info+json"
+    @staticmethod
+    def content_type() -> str:
+        return "application/vnd.odl.info+json"
 
     identifier: str
     status: Status
