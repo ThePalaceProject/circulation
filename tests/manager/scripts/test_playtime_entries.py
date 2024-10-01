@@ -576,13 +576,17 @@ class TestPlaytimeEntriesEmailReportsScript:
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
 
-        # one month + 3 days ago
+        # one month + 3 days ago : in scope
         playtime(
             db.session, identifier, collection, library, dt1m(3), 1, loan_identifier
         )
-        # one month + 4 days ago
+        # one month + 4 days ago : in scope  should be added
         playtime(
             db.session, identifier, collection, library, dt1m(4), 2, loan_identifier
+        )
+        # one month + 32 days ago : in the future and therefore out of range.
+        playtime(
+            db.session, identifier, collection, library, dt1m(32), 3, loan_identifier
         )
         playtime(
             db.session, identifier, collection, library, dt1m(-31), 60, loan_identifier
