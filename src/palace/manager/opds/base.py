@@ -63,7 +63,13 @@ LinkT = TypeVar("LinkT", bound="BaseLink")
 
 
 class ListOfLinks(list[LinkT]):
-    """Set of links where each link can only appear once."""
+    """
+    A generic list container for OPDS type links.
+
+    Provides helper methods for finding a link by relation and type, and
+    provides validation to ensure that each href, rel, and type combination
+    in the list is unique.
+    """
 
     @classmethod
     def __get_pydantic_core_schema__(
