@@ -110,19 +110,20 @@ class OPDS2WithODLApiFixture:
         status: str = "ready",
         self_link: str | Literal[False] = "http://status",
         return_link: str | Literal[False] = "http://return",
-        license_link_type: str = "foo/bar",
+        license_link: str | Literal[False] = "http://license",
         links: list[dict[str, str]] | None = None,
     ) -> LoanStatus:
         if links is None:
             links = []
 
-        links.append(
-            {
-                "rel": "license",
-                "href": "http://license",
-                "type": license_link_type,
-            },
-        )
+        if license_link:
+            links.append(
+                {
+                    "rel": "license",
+                    "href": license_link,
+                    "type": LicenseDocument.content_type(),
+                },
+            )
 
         if self_link:
             links.append(

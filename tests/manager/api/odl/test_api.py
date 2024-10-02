@@ -37,7 +37,6 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLLibrarySettings
-from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
@@ -596,7 +595,7 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture.mock_http.queue_response(
             201,
             content=opds2_with_odl_api_fixture.loan_status_document(
-                self_link=False, license_link_type=LicenseDocument.content_type()
+                self_link=False,
             ).model_dump_json(),
         )
         opds2_with_odl_api_fixture.mock_http.queue_response(
@@ -809,7 +808,7 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture.mock_http.queue_response(
             200,
             content=opds2_with_odl_api_fixture.loan_status_document(
-                self_link=False
+                self_link=False, license_link=False
             ).model_dump_json(),
         )
         with pytest.raises(CannotLoan):
