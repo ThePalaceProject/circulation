@@ -127,6 +127,7 @@ class EditionConstants:
         additional_type_to_medium[v] = k
 
     additional_type_to_medium["http://schema.org/Book"] = BOOK_MEDIUM
+    additional_type_to_medium["http://schema.org/Audiobook"] = AUDIO_MEDIUM
 
     # Map the medium constants to the strings used when generating
     # permanent work IDs.
