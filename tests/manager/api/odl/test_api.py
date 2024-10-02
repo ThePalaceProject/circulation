@@ -23,6 +23,7 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyOnHold,
     CannotFulfill,
     CannotLoan,
+    CannotReturn,
     CurrentlyAvailable,
     HoldOnUnlimitedAccess,
     HoldsNotPermitted,
@@ -337,33 +338,6 @@ class TestOPDS2WithODLApi:
         assert 0 == db.session.query(Loan).count()
         assert 0 == hold.position
 
-    def test_checkin_already_fulfilled(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        # The loan is already fulfilled.
-        opds2_with_odl_api_fixture.setup_license(concurrency=7, available=6)
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-        loan.external_identifier = db.fresh_str()
-        loan.end = utc_now() + datetime.timedelta(days=3)
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(
-            200,
-            content=opds2_with_odl_api_fixture.loan_status_document(
-                "active", return_link=False
-            ).model_dump_json(),
-        )
-        # Checking in the book silently does nothing.
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pinn", opds2_with_odl_api_fixture.pool
-        )
-        assert 1 == len(opds2_with_odl_api_fixture.mock_http.requests)
-        assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == db.session.query(Loan).count()
-
     def test_checkin_not_checked_out(
         self,
         db: DatabaseTransactionFixture,
@@ -416,22 +390,28 @@ class TestOPDS2WithODLApi:
                 "ready", return_link=False
             ).model_dump_json(),
         )
-        # Checking in silently does nothing.
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
+        # Checking in raises the CannotReturn exception, since the distributor
+        # does not support returning the book.
+        with pytest.raises(CannotReturn):
+            opds2_with_odl_api_fixture.api.checkin(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+            )
 
-        # If the return link doesn't change the status, it still
-        # silently ignores the problem.
+        # If the return link doesn't change the status, we raise the same exception.
         lsd = opds2_with_odl_api_fixture.loan_status_document(
             "ready", return_link="http://return"
         ).model_dump_json()
 
         opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
         opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
+        with pytest.raises(CannotReturn):
+            opds2_with_odl_api_fixture.api.checkin(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+            )
 
     def test_checkin_open_access(
         self,

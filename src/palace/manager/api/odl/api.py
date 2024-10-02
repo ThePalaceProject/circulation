@@ -31,6 +31,7 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyOnHold,
     CannotFulfill,
     CannotLoan,
+    CannotReturn,
     CurrentlyAvailable,
     FormatNotAvailable,
     HoldOnUnlimitedAccess,
@@ -238,24 +239,28 @@ class OPDS2WithODLApi(
 
         return_link = doc.links.get(rel="return", type=LoanStatus.content_type())
         if not return_link:
-            # The distributor didn't provide a link to return this loan.
-            # This may be because:
-            # 1) The book has already been fulfilled and must be returned through the DRM system.
-            #   If that's true, the app will already be doing that on its own, so we'll silently
-            #   do nothing. The especially applies to adobe DRM books.
-            # 2) The distributor doesn't support returning books early.
-            # In either case, we can't do anything, and its worse to leave the loan on the users
-            # shelf when they want to return it, so we just ignore the problem.
-            return False
+            # The distributor didn't provide a link to return this loan. This means that the distributor
+            # does not support early returns, and the patron will have to wait until the loan expires.
+            raise CannotReturn()
 
         # The parameters for this link (if its templated) are defined here:
         # https://readium.org/lcp-specs/releases/lsd/latest.html#34-returning-a-publication
-        # None of them are required, and often the link is not templated.
+        # None of them are required, and often the link is not templated. But in the case
+        # of the open source LCP server, the link is templated, so we need to process the
+        # template before we can make the request.
         return_url = return_link.href_templated({"name": "Palace Manager"})
 
         # Hit the distributor's return link, and if it's successful, update the pool
         # availability and delete the local loan.
         doc = self._request_loan_status("PUT", return_url)
+        if doc.active:
+            # If the distributor says the loan is still active, we didn't return it, and
+            # something went wrong. We log an error and don't delete the loan, so the patron
+            # can try again later.
+            self.log.error(
+                f"Loan {loan.id} was not returned. The distributor says it's still active. {doc.model_dump_json()}"
+            )
+            raise CannotReturn()
         self.update_loan(loan, doc)
         return True
 

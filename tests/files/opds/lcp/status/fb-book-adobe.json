@@ -1,0 +1,57 @@
+{
+ "id": "123",
+ "status": "active",
+ "message": "The license has been activated.",
+ "updated": {
+  "license": "2024-10-02T13:42:09Z",
+  "status": "2024-10-02T13:42:09Z"
+ },
+ "links": [
+  {
+   "href": "https://license.feedbooks.net/loan/status/?id=456&checkout_id=123",
+   "type": "application/vnd.readium.license.status.v1.0+json",
+   "rel": "self"
+  },
+  {
+   "href": "https://license.feedbooks.net/loan/webreader/?loan_uuid=123",
+   "type": "text/html",
+   "rel": "publication"
+  },
+  {
+   "href": "https://license.feedbooks.net/loan/webreader-token/{?token}",
+   "type": "text/html",
+   "rel": "publication",
+   "templated": true
+  },
+  {
+   "href": "https://license.feedbooks.net/loan/acs/?loan_uuid=123",
+   "type": "application/vnd.adobe.adept+xml",
+   "rel": "license"
+  },
+  {
+   "href": "https://license.feedbooks.net/loan/lcp/?loan_uuid=123",
+   "type": "application/vnd.readium.lcp.license.v1.0+json",
+   "rel": "license"
+  },
+  {
+   "href": "https://r.cantook.com/read/{token}",
+   "type": "text/html",
+   "rel": [
+    "publication",
+    "https://r.cantook.com"
+   ],
+   "templated": true,
+   "properties": {
+    "identifier": "789"
+   }
+  },
+  {
+   "href": "https://license.feedbooks.net/loan/do-return?uuid=123",
+   "type": "application/vnd.readium.license.status.v1.0+json",
+   "rel": "return"
+  }
+ ],
+ "potential_rights": {
+  "end": "2024-10-23T13:39:11Z"
+ }
+}

@@ -10,7 +10,10 @@ class TestLcpStatus:
         "filename",
         [
             "fb-active.json",
+            "fb-book-adobe.json",
+            "fb-early-return.json",
             "ul-active.json",
+            "ul-returned.json",
         ],
     )
     def test_lcp_status(

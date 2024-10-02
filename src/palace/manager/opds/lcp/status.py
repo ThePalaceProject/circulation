@@ -2,9 +2,8 @@ import sys
 from enum import auto
 from functools import cached_property
 
-from pydantic import AwareDatetime, Field, field_validator
+from pydantic import AwareDatetime, Field
 
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.opds.base import BaseLink, BaseOpdsModel, ListOfLinks
 
 # TODO: Remove this when we drop support for Python 3.10
@@ -72,8 +71,12 @@ class Event(BaseOpdsModel):
 
     type: EventType
     name: str
-    id: str
     timestamp: AwareDatetime
+
+    # The spec isn't clear if these fields are required, but DeMarque does not
+    # provide id in their event data.
+    id: str | None = None
+    device: str | None = None
 
 
 class LoanStatus(BaseOpdsModel):
@@ -86,6 +89,11 @@ class LoanStatus(BaseOpdsModel):
 
     The spec for it is located here:
     https://readium.org/lcp-specs/releases/lsd/latest.html
+
+    Technically the spec says that there must be at lease one link
+    with rel="license" but this is not always the case in practice,
+    especially when the license is returned or revoked. So we don't
+    enforce that here.
     """
 
     @staticmethod
@@ -99,13 +107,6 @@ class LoanStatus(BaseOpdsModel):
     links: ListOfLinks[Link]
     potential_rights: PotentialRights = Field(default_factory=PotentialRights)
     events: list[Event] = Field(default_factory=list)
-
-    @field_validator("links")
-    @classmethod
-    def _validate_links(cls, value: ListOfLinks[Link]) -> ListOfLinks[Link]:
-        if value.get(rel="license") is None:
-            raise PalaceValueError("links must contain a link with rel='license'")
-        return value
 
     @cached_property
     def active(self) -> bool:
