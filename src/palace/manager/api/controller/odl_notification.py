@@ -53,22 +53,29 @@ class ODLNotificationController(LoggerMixin):
         status_doc_json = flask.request.data
         loan = get_one(self.db, Loan, id=loan_id)
 
-        if not loan:
-            return NO_ACTIVE_LOAN.detailed(_("No loan was found for this identifier."))
-
         try:
             status_doc = LoanStatus.model_validate_json(status_doc_json)
         except ValidationError as e:
             self.log.exception(f"Unable to parse loan status document. {e}")
             return INVALID_INPUT
 
-        integration = loan.license_pool.collection.integration_configuration
-        if (
-            not integration.protocol
-            or self.registry.get(integration.protocol) != OPDS2WithODLApi
-        ):
-            return INVALID_LOAN_FOR_ODL_NOTIFICATION
+        # We don't have a record of this loan. This likely means that the loan has been returned
+        # and our local record has been deleted. This is expected, except in the case where the
+        # distributor thinks the loan is still active.
+        if loan is None and status_doc.active:
+            return NO_ACTIVE_LOAN.detailed(
+                _("No loan was found for this identifier."), status_code=404
+            )
 
-        api = self.get_api(library, loan)
-        api.update_loan(loan, status_doc)
-        return Response(_("Success"), 200)
+        if loan:
+            integration = loan.license_pool.collection.integration_configuration
+            if (
+                not integration.protocol
+                or self.registry.get(integration.protocol) != OPDS2WithODLApi
+            ):
+                return INVALID_LOAN_FOR_ODL_NOTIFICATION
+
+            api = self.get_api(library, loan)
+            api.update_loan(loan, status_doc)
+
+        return Response(status=204)

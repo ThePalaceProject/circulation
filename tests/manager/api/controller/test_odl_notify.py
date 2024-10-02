@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+from flask import Response
 
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -90,7 +91,7 @@ class TestODLNotificationController:
         ):
             assert loan.id is not None
             response = odl_fixture.controller.notify(loan.id)
-            assert response.status_code == 200
+            assert response.status_code == 204
 
         assert odl_fixture.license.checkouts_available == 1
 
@@ -100,14 +101,6 @@ class TestODLNotificationController:
         flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
     ):
-        # No loan.
-        with flask_app_fixture.test_request_context(
-            "/", method="POST", library=odl_fixture.library
-        ):
-            response = odl_fixture.controller.notify(-55)
-        assert isinstance(response, ProblemDetail)
-        assert response.uri == NO_ACTIVE_LOAN.uri
-
         # Bad JSON.
         patron = db.patron()
         pool = db.licensepool(None)
@@ -129,3 +122,26 @@ class TestODLNotificationController:
             response = odl_fixture.controller.notify(loan.id)
         assert isinstance(response, ProblemDetail)
         assert response == INVALID_LOAN_FOR_ODL_NOTIFICATION
+
+        # No loan, but distributor thinks it isn't active
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            library=odl_fixture.library,
+            data=odl_fixture.loan_status_document("returned").model_dump_json(),
+        ):
+            response = odl_fixture.controller.notify(-55)
+        assert isinstance(response, Response)
+        assert response.status_code == 204
+
+        # No loan, but distributor thinks it is active
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            library=odl_fixture.library,
+            data=odl_fixture.loan_status_document("active").model_dump_json(),
+        ):
+            response = odl_fixture.controller.notify(-55)
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 404
+        assert response.uri == NO_ACTIVE_LOAN.uri
