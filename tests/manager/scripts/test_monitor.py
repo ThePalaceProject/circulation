@@ -172,7 +172,7 @@ class TestRunCollectionMonitorScript:
         o3 = db.collection()
 
         # ...and a Bibliotheca collection.
-        b1 = db.collection(protocol=BibliothecaAPI.label())
+        b1 = db.collection(protocol=BibliothecaAPI)
 
         script = RunCollectionMonitorScript(
             OPDSCollectionMonitor, db.session, cmd_args=[]

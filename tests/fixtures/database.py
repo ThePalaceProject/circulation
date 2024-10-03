@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import importlib
 import logging
 import shutil
@@ -20,14 +21,23 @@ from pydantic_settings import SettingsConfigDict
 from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.engine import Connection, Engine, Transaction, make_url
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 from typing_extensions import Self
 
 from palace.manager.api.authentication.base import AuthenticationProvider
 from palace.manager.api.authentication.base import SettingsType as TAuthProviderSettings
+from palace.manager.api.circulation import (
+    BaseCirculationAPI,
+    BaseCirculationApiSettings,
+)
+from palace.manager.api.circulation import SettingsType as TCirculationSettings
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
 )
+from palace.manager.api.odl.api import OPDS2WithODLApi
+from palace.manager.api.odl.settings import OPDS2WithODLSettings
+from palace.manager.api.overdrive import OverdriveAPI, OverdriveSettings
 from palace.manager.api.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,
@@ -35,7 +45,8 @@ from palace.manager.api.simple_authentication import (
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration
 from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
-from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.core.opds2_import import OPDS2API
+from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
 from palace.manager.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
@@ -408,9 +419,8 @@ class DatabaseTransactionFixture:
         library = self.library("default", "default")
         collection = self.collection(
             "Default Collection",
-            protocol=OPDSAPI.label(),
-            data_source_name="OPDS",
-            external_account_id="http://opds.example.com/feed",
+            protocol=OPDSAPI,
+            settings=self.opds_settings(data_source="OPDS"),
         )
         collection.libraries.append(library)
         return library
@@ -530,34 +540,73 @@ class DatabaseTransactionFixture:
         )
         return library
 
+    opds_settings = functools.partial(
+        OPDSImporterSettings,
+        external_account_id="http://opds.example.com/feed",
+        data_source="OPDS",
+    )
+
+    overdrive_settings = functools.partial(
+        OverdriveSettings,
+        external_account_id="library_id",
+        overdrive_website_id="website_id",
+        overdrive_client_key="client_key",
+        overdrive_client_secret="client_secret",
+        overdrive_server_nickname="production",
+    )
+
+    opds2_odl_settings = functools.partial(
+        OPDS2WithODLSettings,
+        username="username",
+        password="password",
+        external_account_id="http://example.com/feed",
+        data_source=DataSource.FEEDBOOKS,
+    )
+
+    def collection_settings(
+        self, protocol: type[BaseCirculationAPI[TCirculationSettings, Any]]
+    ) -> TCirculationSettings | None:
+        if protocol in [OPDSAPI, OPDS2API]:
+            return self.opds_settings()  # type: ignore[return-value]
+        elif protocol == OverdriveAPI:
+            return self.overdrive_settings()  # type: ignore[return-value]
+        elif protocol == OPDS2WithODLApi:
+            return self.opds2_odl_settings()  # type: ignore[return-value]
+        return None
+
     def collection(
         self,
-        name=None,
-        protocol=OPDSAPI.label(),
-        external_account_id=None,
-        url=None,
-        username=None,
-        password=None,
-        data_source_name=None,
-        settings: dict[str, Any] | None = None,
+        name: str | None = None,
+        *,
+        protocol: type[BaseCirculationAPI[Any, Any]] | str = OPDSAPI,
+        settings: BaseCirculationApiSettings | dict[str, Any] | None = None,
         library: Library | None = None,
     ) -> Collection:
         name = name or self.fresh_str()
-        collection, _ = Collection.by_name_and_protocol(self.session, name, protocol)
-        settings = settings or {}
-        if url:
-            settings["url"] = url
-        if username:
-            settings["username"] = username
-        if password:
-            settings["password"] = password
-        if external_account_id:
-            settings["external_account_id"] = external_account_id
-        collection.integration_configuration.settings_dict = settings
+        protocol_str = (
+            protocol
+            if isinstance(protocol, str)
+            else self._goal_registry_mapping[Goals.LICENSE_GOAL].get_protocol(protocol)
+        )
+        assert protocol_str is not None
+        collection, _ = Collection.by_name_and_protocol(
+            self.session, name, protocol_str
+        )
 
-        if data_source_name:
-            collection.data_source = data_source_name
-        if library:
+        if settings is None and not isinstance(protocol, str):
+            settings = self.collection_settings(protocol)
+
+        if isinstance(settings, BaseCirculationApiSettings):
+            if isinstance(protocol, str):
+                raise PalaceValueError(
+                    "protocol must be a subclass of BaseCirculationAPI to set settings"
+                )
+            protocol.settings_update(collection.integration_configuration, settings)
+        elif isinstance(settings, dict):
+            collection.integration_configuration.settings_dict = settings
+            flag_modified(collection.integration_configuration, "settings_dict")
+
+        if library and library not in collection.libraries:
             collection.libraries.append(library)
         return collection
 
@@ -933,6 +982,11 @@ class DatabaseTransactionFixture:
             Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
         }
 
+    def protocol_string(
+        self, goal: Goals, protocol: type[BaseCirculationAPI[Any, Any]]
+    ) -> str:
+        return self._goal_registry_mapping[goal].get_protocol(protocol, False)
+
     def integration_configuration(
         self,
         protocol: type[HasIntegrationConfiguration[TIntegrationSettings]] | str,
@@ -1045,25 +1099,6 @@ class DatabaseTransactionFixture:
                 test_password=test_password,
             ),
         )
-
-    @classmethod
-    def set_settings(
-        cls,
-        config: IntegrationConfiguration | IntegrationLibraryConfiguration,
-        *keyvalues,
-        **kwargs,
-    ):
-        settings = config.settings_dict.copy()
-
-        # Alternating key: value in the args
-        for ix, item in enumerate(keyvalues):
-            if ix % 2 == 0:
-                key = item
-            else:
-                settings[key] = item
-
-        settings.update(kwargs)
-        config.settings_dict = settings
 
     def work_coverage_record(
         self, work, operation=None, status=CoverageRecord.SUCCESS

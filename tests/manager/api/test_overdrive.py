@@ -275,27 +275,31 @@ class TestOverdriveAPI:
 
     def test_hosts(self, overdrive_api_fixture: OverdriveAPIFixture):
         fixture = overdrive_api_fixture
-        session = overdrive_api_fixture.db.session
-        c = OverdriveAPI
-
+        db = fixture.db
         # By default, OverdriveAPI is initialized with the production
         # set of hostnames.
-        assert fixture.api.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
+        assert (
+            fixture.api.hosts()
+            == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
+        )
 
-        # You can instead initialize it to use the testing set of
-        # hostnames.
-        def api_with_setting(x):
-            config = fixture.collection.integration_configuration
-            DatabaseTransactionFixture.set_settings(config, overdrive_server_nickname=x)
-            return c(session, fixture.collection)
-
-        testing = api_with_setting(OverdriveConstants.TESTING_SERVERS)
-        assert testing.hosts() == c.HOSTS[OverdriveConstants.TESTING_SERVERS]
+        collection = db.collection(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(
+                overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS
+            ),
+        )
+        testing = OverdriveAPI(db.session, collection)
+        assert testing.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.TESTING_SERVERS]
 
         # If the setting doesn't make sense, we default to production
         # hostnames.
-        bad = api_with_setting("nonsensical")
-        assert bad.hosts() == c.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
+        collection = db.collection(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(overdrive_server_nickname="nonsensical"),
+        )
+        bad = OverdriveAPI(db.session, collection)
+        assert bad.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
     def test_endpoint(self, overdrive_api_fixture: OverdriveAPIFixture):
         fixture = overdrive_api_fixture
@@ -498,28 +502,22 @@ class TestOverdriveAPI:
             fixture.api._refresh_token()
 
     def test_advantage_differences(self, overdrive_api_fixture: OverdriveAPIFixture):
-        transaction = overdrive_api_fixture.db
-        session = transaction.session
+        db = overdrive_api_fixture.db
+        session = db.session
 
         # Test the differences between Advantage collections and
         # regular Overdrive collections.
 
         # Here's a regular Overdrive collection.
-        main = transaction.collection(
-            protocol=OverdriveAPI.label(),
-            external_account_id="1",
-        )
-        DatabaseTransactionFixture.set_settings(
-            main.integration_configuration, "overdrive_client_key", "user"
-        )
-        DatabaseTransactionFixture.set_settings(
-            main.integration_configuration, "overdrive_client_secret", "password"
-        )
-        DatabaseTransactionFixture.set_settings(
-            main.integration_configuration, "overdrive_website_id", "100"
-        )
-        DatabaseTransactionFixture.set_settings(
-            main.integration_configuration, "ils_name", "default"
+        main = db.collection(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(
+                external_account_id="1",
+                overdrive_client_key="user",
+                overdrive_client_secret="password",
+                overdrive_website_id="100",
+                ils_name="default",
+            ),
         )
 
         # Here's an Overdrive API client for that collection.
@@ -538,9 +536,9 @@ class TestOverdriveAPI:
 
         # Here's an Overdrive Advantage collection associated with the
         # main Overdrive collection.
-        child = transaction.collection(
-            protocol=OverdriveAPI.label(),
-            external_account_id="2",
+        child = db.collection(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(external_account_id="2"),
         )
         child.parent = main
         overdrive_child = MockOverdriveAPI(session, child)
@@ -3908,8 +3906,8 @@ class TestOverdriveAdvantageAccount:
         # So, create a Collection to be the parent.
         parent = transaction.collection(
             name="Parent",
-            protocol=OverdriveAPI.label(),
-            external_account_id="parent_id",
+            protocol=OverdriveAPI,
+            settings=transaction.overdrive_settings(external_account_id="parent_id"),
         )
 
         # Now it works.

@@ -11,14 +11,12 @@ from palace.manager.feed.annotator.circulation import CirculationManagerAnnotato
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.types import FeedEntryType, Link, WorkEntry
 from palace.manager.feed.util import strftime
-from palace.manager.integration.configuration.formats import FormatPriorities
 from palace.manager.search.external_search import WorkSearchResult
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.lane import WorkList
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -597,14 +595,22 @@ class TestCirculationManagerAnnotator:
         assert [] == list(no_epub.visible_delivery_mechanisms(pool))
 
     def test_visible_delivery_mechanisms_configured_0(
-        self, circulation_fixture: CirculationManagerAnnotatorFixture
+        self,
+        circulation_fixture: CirculationManagerAnnotatorFixture,
+        db: DatabaseTransactionFixture,
     ):
         """Test that configuration options do affect OPDS feeds.
         Exhaustive testing of different configuration values isn't necessary
         here: See the tests for FormatProperties to see the actual semantics
         of the configuration values."""
-        edition = circulation_fixture.db.edition()
-        pool: LicensePool = circulation_fixture.db.licensepool(edition)
+        collection = db.collection(
+            settings=db.opds_settings(
+                prioritized_drm_schemes=[DeliveryMechanism.LCP_DRM],
+                prioritized_content_types=[MediaTypes.PDF_MEDIA_TYPE],
+            )
+        )
+        edition = db.edition(collection=collection)
+        pool: LicensePool = db.licensepool(edition, collection=collection)
 
         pool.set_delivery_mechanism(
             MediaTypes.EPUB_MEDIA_TYPE,
@@ -624,20 +630,6 @@ class TestCirculationManagerAnnotator:
             RightsStatus.UNKNOWN,
             None,
         )
-
-        config: IntegrationConfiguration = pool.collection.integration_configuration
-        DatabaseTransactionFixture.set_settings(
-            config,
-            **{
-                FormatPriorities.PRIORITIZED_DRM_SCHEMES_KEY: [
-                    f"{DeliveryMechanism.LCP_DRM}",
-                ],
-                FormatPriorities.PRIORITIZED_CONTENT_TYPES_KEY: [
-                    f"{MediaTypes.PDF_MEDIA_TYPE}"
-                ],
-            },
-        )
-        circulation_fixture.db.session.commit()
 
         annotator = CirculationManagerAnnotator(
             circulation_fixture.lane,

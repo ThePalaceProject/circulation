@@ -3,8 +3,6 @@ from __future__ import annotations
 import datetime
 
 from palace.manager.api.odl.reaper import OPDS2WithODLHoldReaper
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -25,11 +23,6 @@ class TestOPDS2WithODLHoldReaper:
         api = opds2_with_odl_api_fixture.api
         pool = license.license_pool
 
-        data_source = DataSource.lookup(db.session, "Feedbooks", autocreate=True)
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name},
-        )
         reaper = OPDS2WithODLHoldReaper(db.session, collection, api=api)
 
         now = utc_now()

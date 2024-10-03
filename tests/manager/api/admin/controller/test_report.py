@@ -1,6 +1,7 @@
 import logging
 from http import HTTPStatus
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from palace.manager.api.admin.model.inventory_report import (
     InventoryReportInfo,
 )
 from palace.manager.api.admin.problem_details import ADMIN_NOT_AUTHORIZED
+from palace.manager.api.circulation import BaseCirculationAPI
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.core.opds_import import OPDSAPI
@@ -110,8 +112,7 @@ class TestReportController:
         )
 
         collection = db.collection(
-            protocol=OPDSAPI.label(),
-            settings={"data_source": "test", "external_account_id": "http://url"},
+            protocol=OPDSAPI,
         )
         collection.libraries = [library1, library2]
 
@@ -176,8 +177,7 @@ class TestReportController:
         )
 
         collection = db.collection(
-            protocol=OPDSAPI.label(),
-            settings={"data_source": "test", "external_account_id": "http://url"},
+            protocol=OPDSAPI,
         )
         collection.libraries = [library1, library2]
 
@@ -229,13 +229,13 @@ class TestReportController:
         "protocol, settings, parent_settings, expect_collection",
         (
             (
-                OPDSAPI.label(),
+                OPDSAPI,
                 {"data_source": "test", "external_account_id": "http://url"},
                 None,
                 True,
             ),
             (
-                OPDSAPI.label(),
+                OPDSAPI,
                 {
                     "include_in_inventory_report": False,
                     "data_source": "test",
@@ -245,7 +245,7 @@ class TestReportController:
                 False,
             ),
             (
-                OPDSAPI.label(),
+                OPDSAPI,
                 {
                     "include_in_inventory_report": True,
                     "data_source": "test",
@@ -255,7 +255,7 @@ class TestReportController:
                 True,
             ),
             (
-                OverdriveAPI.label(),
+                OverdriveAPI,
                 {
                     "overdrive_website_id": "test",
                     "overdrive_client_key": "test",
@@ -265,7 +265,7 @@ class TestReportController:
                 False,
             ),
             (
-                OverdriveAPI.label(),
+                OverdriveAPI,
                 {"external_account_id": "test"},
                 {
                     "overdrive_website_id": "test",
@@ -281,7 +281,7 @@ class TestReportController:
         report_fixture: ReportControllerFixture,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
-        protocol: str,
+        protocol: type[BaseCirculationAPI[Any, Any]],
         settings: dict,
         parent_settings: dict,
         expect_collection: bool,

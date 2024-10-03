@@ -37,9 +37,8 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
-from palace.manager.api.odl.settings import OPDS2AuthType
+from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLLibrarySettings
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -1197,20 +1196,13 @@ class TestOPDS2WithODLApi:
         library = hold.patron.library
 
         # Set the reservation period and loan period.
-        config = (
-            opds2_with_odl_api_fixture.collection.integration_configuration.for_library(
-                library.id
-            )
+        db.integration_library_configuration(
+            opds2_with_odl_api_fixture.collection.integration_configuration,
+            library=library,
+            settings=OPDS2WithODLLibrarySettings(
+                default_reservation_period=3, ebook_loan_duration=6
+            ),
         )
-        assert config is not None
-        DatabaseTransactionFixture.set_settings(
-            config,
-            **{
-                Collection.DEFAULT_RESERVATION_PERIOD_KEY: 3,
-                Collection.EBOOK_LOAN_DURATION_KEY: 6,
-            },
-        )
-        opds2_with_odl_api_fixture.db.session.commit()
 
         # A hold that's already reserved and has an end date doesn't change.
         info.end_date = tomorrow
@@ -1447,11 +1439,6 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
     ) -> None:
         licenses = [opds2_with_odl_api_fixture.license]
-
-        DatabaseTransactionFixture.set_settings(
-            opds2_with_odl_api_fixture.collection.integration_configuration,
-            **{Collection.DEFAULT_RESERVATION_PERIOD_KEY: 3},
-        )
 
         # If there's no holds queue when we try to update the queue, it
         # will remove a reserved license and make it available instead.

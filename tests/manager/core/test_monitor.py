@@ -290,8 +290,8 @@ class TestCollectionMonitor:
             PROTOCOL = OverdriveAPI.label()
 
         # Two collections.
-        c1 = db.collection(protocol=OverdriveAPI.label())
-        c2 = db.collection(protocol=BibliothecaAPI.label())
+        c1 = db.collection(protocol=OverdriveAPI)
+        c2 = db.collection(protocol=BibliothecaAPI)
 
         # The NoProtocolMonitor can be instantiated with either one,
         # or with no Collection at all.
@@ -323,7 +323,7 @@ class TestCollectionMonitor:
         o3 = db.collection("o3")
 
         # ...and a Bibliotheca collection.
-        b1 = db.collection(protocol=BibliothecaAPI.label())
+        b1 = db.collection(protocol=BibliothecaAPI)
 
         # o1 just had its Monitor run.
         Timestamp.stamp(

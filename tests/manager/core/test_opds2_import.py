@@ -99,9 +99,11 @@ class OPDS2ImporterFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.transaction = db
         self.collection = db.collection(
-            protocol=OPDS2API.label(),
-            data_source_name="OPDS 2.0 Data Source",
-            external_account_id="http://opds2.example.org/feed",
+            protocol=OPDS2API,
+            settings=db.opds_settings(
+                external_account_id="http://opds2.example.org/feed",
+                data_source="OPDS 2.0 Data Source",
+            ),
         )
         self.library = db.default_library()
         self.collection.libraries.append(self.library)
@@ -711,9 +713,11 @@ class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
         self.patron = db.patron()
         self.collection: Collection = db.collection(
-            protocol=OPDS2API.label(),
-            data_source_name="test",
-            external_account_id="http://opds2.example.org/feed",
+            protocol=OPDS2API,
+            settings=db.opds_settings(
+                external_account_id="http://opds2.example.org/feed",
+                data_source="test",
+            ),
         )
         self.collection.integration_configuration.context = {
             OPDS2API.TOKEN_AUTH_CONFIG_KEY: "http://example.org/token?userName={patron_id}"
@@ -911,9 +915,10 @@ class TestOPDS2ImportMonitor:
         self, db: DatabaseTransactionFixture, content_type: str, exception: bool
     ) -> None:
         collection = db.collection(
-            protocol=OPDS2API.label(),
-            data_source_name="test",
-            external_account_id="http://test.com",
+            protocol=OPDS2API,
+            settings=db.opds_settings(
+                external_account_id="http://opds2.example.org/feed",
+            ),
         )
         monitor = OPDS2ImportMonitor(
             db.session,

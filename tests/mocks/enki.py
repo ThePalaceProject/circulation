@@ -4,36 +4,14 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.enki import EnkiAPI
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.http import HTTP
-from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import MockRequestsResponse
 
 
 class MockEnkiAPI(EnkiAPI):
-    def __init__(
-        self, _db: Session, library: Library, collection: Collection | None = None
-    ) -> None:
+    def __init__(self, _db: Session, collection: Collection) -> None:
         self.responses: list[MockRequestsResponse] = []
         self.requests: list[list[Any]] = []
-
-        if not collection:
-            collection, ignore = Collection.by_name_and_protocol(
-                _db, name="Test Enki Collection", protocol=EnkiAPI.ENKI
-            )
-            assert collection is not None
-            collection.protocol = EnkiAPI.ENKI
-        if collection not in library.collections:
-            collection.libraries.append(library)
-
-        # Set the "Enki library ID" variable between the default library
-        # and this Enki collection.
-        library_config = collection.integration_configuration.for_library(library)
-        assert library_config is not None
-        DatabaseTransactionFixture.set_settings(
-            library_config, **{self.ENKI_LIBRARY_ID_KEY: "c"}
-        )
-        _db.commit()
 
         super().__init__(_db, collection)
 

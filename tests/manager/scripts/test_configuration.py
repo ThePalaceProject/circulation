@@ -197,7 +197,7 @@ class TestConfigureCollectionScript:
 
     def test_reconfigure_collection(self, db: DatabaseTransactionFixture):
         # The collection exists.
-        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI)
         script = ConfigureCollectionScript()
         output = StringIO()
 

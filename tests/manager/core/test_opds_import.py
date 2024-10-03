@@ -101,11 +101,6 @@ class OPDSImporterFixture:
         self.importer = partial(
             OPDSImporter, _db=self.db.session, collection=self.db.default_collection()
         )
-        db.set_settings(
-            db.default_collection().integration_configuration,
-            "data_source",
-            DataSource.OA_CONTENT_SERVER,
-        )
 
 
 @pytest.fixture()
@@ -236,11 +231,10 @@ class TestOPDSImporter:
         )
 
         collection_to_test = db.collection(
-            settings={
-                "primary_identifier_source": IdentifierSource.DCTERMS_IDENTIFIER,
-            },
-            data_source_name="OPDS",
-            external_account_id="http://root.uri",
+            settings=db.opds_settings(
+                external_account_id="http://root.uri",
+                primary_identifier_source=IdentifierSource.DCTERMS_IDENTIFIER,
+            )
         )
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
@@ -939,9 +933,8 @@ class TestOPDSImporter:
         # that the licensing authority is Project Gutenberg, so that's used
         # as the DataSource for the first LicensePool. The information used
         # to create the second LicensePool didn't include a data source,
-        # so the source of the OPDS feed (the open-access content server)
-        # was used.
-        assert {DataSource.GUTENBERG, DataSource.OA_CONTENT_SERVER} == {
+        # so the source of the OPDS feed "OPDS" was used.
+        assert {DataSource.GUTENBERG, "OPDS"} == {
             pool.data_source.name for pool in pools
         }
 
@@ -960,12 +953,11 @@ class TestOPDSImporter:
         book is imported and both DataSources are created.
         """
         feed = opds_files_fixture.sample_data("unrecognized_distributor.opds")
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            "data_source",
-            "some new source",
+
+        collection = db.collection(
+            protocol=OPDSAPI, settings=db.opds_settings(data_source="some new source")
         )
-        importer = opds_importer_fixture.importer()
+        importer = opds_importer_fixture.importer(collection=collection)
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
         assert {} == failures
 
@@ -1005,17 +997,16 @@ class TestOPDSImporter:
 
         feed = feed.replace("{OVERDRIVE ID}", edition.primary_identifier.identifier)
 
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            "data_source",
-            DataSource.OVERDRIVE,
+        collection = db.collection(
+            protocol=OPDSAPI,
+            settings=db.opds_settings(data_source=DataSource.OVERDRIVE),
         )
         (
             imported_editions,
             imported_pools,
             imported_works,
             failures,
-        ) = opds_importer_fixture.importer().import_from_feed(feed)
+        ) = opds_importer_fixture.importer(collection=collection).import_from_feed(feed)
 
         # The edition we created has had its metadata updated.
         [new_edition] = imported_editions
@@ -1062,12 +1053,8 @@ class TestOPDSImporter:
         assert DataSource.GUTENBERG == mouse_pool.data_source.name
 
         # But the license pool's presentation edition has a data
-        # source associated with the Library Simplified open-access
-        # content server, since that's where the metadata comes from.
-        assert (
-            DataSource.OA_CONTENT_SERVER
-            == mouse_pool.presentation_edition.data_source.name
-        )
+        # source associated with the collection.
+        assert "OPDS" == mouse_pool.presentation_edition.data_source.name
 
         # Since the 'mouse' book came with an open-access link, the license
         # pool delivery mechanism has been marked as open access.
@@ -1083,9 +1070,8 @@ class TestOPDSImporter:
         # The OPDS feed didn't actually say where the 'crow' book
         # comes from, but we did tell the importer to use the open access
         # content server as the data source, so both a Work and a LicensePool
-        # were created, and their data source is the open access content server,
-        # not Project Gutenberg.
-        assert DataSource.OA_CONTENT_SERVER == crow_pool.data_source.name
+        # were created, and their data source is the datasoruce of the collection
+        assert "OPDS" == crow_pool.data_source.name
 
     def test_import_from_feed_treats_message_as_failure(
         self,
@@ -1148,11 +1134,6 @@ class TestOPDSImporter:
         # imported edition generates a meaningful error message.
 
         feed = data.content_server_mini_feed
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            "data_source",
-            DataSource.OA_CONTENT_SERVER,
-        )
         importer = DoomedWorkOPDSImporter(session, collection=db.default_collection())
 
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
@@ -1441,17 +1422,13 @@ class TestOPDSImporter:
 
             collection = db.collection(
                 "OPDS collection with a WAYFless acquisition link",
-                OPDSAPI.label(),
-                data_source_name="test",
-                external_account_id="http://wayfless.example.com/feed",
+                protocol=OPDSAPI,
+                settings=db.opds_settings(
+                    external_account_id="http://wayfless.example.com/feed",
+                    saml_wayfless_url_template="https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}",
+                ),
             )
             collection.libraries.append(library)
-
-            DatabaseTransactionFixture.set_settings(
-                collection.integration_configuration,
-                "saml_wayfless_url_template",
-                "https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}",
-            )
 
             imported_editions, pools, works, failures = OPDSImporter(
                 session, collection=collection
@@ -1630,7 +1607,7 @@ class TestOPDSImportMonitor:
             "OPDSImportMonitor can only be run in the context of a Collection."
             in str(excinfo.value)
         )
-        c1 = db.collection(protocol=OverdriveAPI.label())
+        c1 = db.collection(protocol=OverdriveAPI)
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, c1, OPDSImporter)
         assert (
@@ -1638,7 +1615,8 @@ class TestOPDSImportMonitor:
             in str(excinfo.value)
         )
 
-        c2 = db.collection(protocol=OPDSAPI.label(), settings={"data_source": None})
+        c2 = db.collection(protocol=OPDSAPI)
+        c2.integration_configuration.settings_dict = {}
         with pytest.raises(ValueError) as excinfo:
             OPDSImportMonitor(session, c2, OPDSImporter)
         assert f"Collection {c2.name} has no associated data source." in str(
@@ -1646,11 +1624,10 @@ class TestOPDSImportMonitor:
         )
 
         c3 = db.collection(
-            protocol=OPDSAPI.label(),
-            settings={
-                "data_source": "OPDS",
-                "external_account_id": "https://opds.import.com/feed?size=100",
-            },
+            protocol=OPDSAPI,
+            settings=db.opds_settings(
+                external_account_id="https://opds.import.com/feed?size=100",
+            ),
         )
         monitor = OPDSImportMonitor(session, c3, OPDSImporter)
         assert monitor._feed_base_url == "https://opds.import.com/"
@@ -1663,8 +1640,9 @@ class TestOPDSImportMonitor:
 
         ## Test whether relative urls work
         collection = db.collection(
-            external_account_id="https://opds.import.com:9999/feed",
-            data_source_name="OPDS",
+            settings=db.opds_settings(
+                external_account_id="https://opds.import.com:9999/feed",
+            ),
         )
         monitor = OPDSImportMonitor(session, collection, OPDSImporter)
 
@@ -1684,9 +1662,7 @@ class TestOPDSImportMonitor:
         """By default, the OPDS URL and data source used by the importer
         come from the collection configuration.
         """
-        collection = db.collection(
-            external_account_id="http://url/", data_source_name="OPDS"
-        )
+        collection = db.collection()
         monitor = OPDSImportMonitor(
             db.session,
             collection,
@@ -1715,7 +1691,8 @@ class TestOPDSImportMonitor:
 
         data_source_name = "OPDS"
         collection = db.collection(
-            external_account_id="http://url/", data_source_name=data_source_name
+            protocol=OPDSAPI,
+            settings=db.opds_settings(data_source=data_source_name),
         )
         monitor = OPDSImportMonitor(
             session,
@@ -1802,7 +1779,8 @@ class TestOPDSImportMonitor:
         )
         data_source_name = "OPDS"
         collection = db.collection(
-            external_account_id="http://url/", data_source_name=data_source_name
+            protocol=OPDSAPI,
+            settings=db.opds_settings(data_source=data_source_name),
         )
         monitor = OPDSImportMonitor(
             session,
@@ -1877,8 +1855,10 @@ class TestOPDSImportMonitor:
         # Check coverage records are created.
         data_source_name = "OPDS"
         collection = db.collection(
-            external_account_id="http://root-url/index.xml",
-            data_source_name=data_source_name,
+            settings=db.opds_settings(
+                external_account_id="http://root-url/index.xml",
+                data_source=data_source_name,
+            ),
         )
         monitor = OPDSImportMonitor(
             session,
@@ -1968,10 +1948,7 @@ class TestOPDSImportMonitor:
                 self.imports.append(feed)
                 return [object(), object()], {"identifier": "Failure"}
 
-        data_source_name = "OPDS"
-        collection = db.collection(
-            external_account_id="http://url/", data_source_name=data_source_name
-        )
+        collection = db.collection()
 
         monitor = MockOPDSImportMonitor(
             db.session,
@@ -1997,10 +1974,7 @@ class TestOPDSImportMonitor:
         assert progress.finish is None
 
     def test_update_headers(self, db: DatabaseTransactionFixture):
-        data_source_name = "OPDS"
-        collection = db.collection(
-            external_account_id="http://url/", data_source_name=data_source_name
-        )
+        collection = db.collection()
 
         # Test the _update_headers helper method.
         monitor = OPDSImportMonitor(
@@ -2053,11 +2027,11 @@ class TestOPDSImportMonitor:
         feed = data.content_server_mini_feed
         feed_url = "https://example.com/feed.opds"
 
-        data_source_name = "OPDS"
         collection = db.collection(
-            external_account_id="http://url/",
-            data_source_name=data_source_name,
-            settings={"max_retry_count": retry_count},
+            settings=db.opds_settings(
+                external_account_id=feed_url,
+                max_retry_count=retry_count,
+            ),
         )
 
         # The importer takes its retry count from the collection settings.
@@ -2092,9 +2066,10 @@ class OPDSAPIFixture:
         self.db = db
         self.session = db.session
         self.collection = db.collection(
-            protocol=OPDSAPI.label(),
-            data_source_name="OPDS",
-            external_account_id="http://opds.example.com/feed",
+            protocol=OPDSAPI,
+            settings=db.opds_settings(
+                external_account_id="http://opds2.example.org/feed",
+            ),
         )
         self.api = OPDSAPI(self.session, self.collection)
 

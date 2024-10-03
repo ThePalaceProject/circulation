@@ -1,38 +1,9 @@
-from sqlalchemy.orm import Session
-
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.http import HTTP
 from tests.mocks.mock import MockRequestsResponse
 
 
 class MockOPDSForDistributorsAPI(OPDSForDistributorsAPI):
-    @classmethod
-    def mock_collection(
-        self,
-        _db: Session,
-        library: Library,
-        name: str = "Test OPDS For Distributors Collection",
-    ) -> Collection:
-        """Create a mock OPDS For Distributors collection to use in tests.
-
-        :param _db: Database session.
-        :param name: A name for the collection.
-        """
-        collection, _ = Collection.by_name_and_protocol(
-            _db, name=name, protocol=OPDSForDistributorsAPI.label()
-        )
-        collection.integration_configuration.settings_dict = dict(
-            username="a",
-            password="b",
-            data_source="data_source",
-            external_account_id="http://opds",
-        )
-        if library not in collection.libraries:
-            collection.libraries.append(library)
-        return collection
-
     def __init__(self, _db, collection, *args, **kwargs):
         self.responses = []
         self.requests = []

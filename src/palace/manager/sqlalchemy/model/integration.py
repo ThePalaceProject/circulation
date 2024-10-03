@@ -130,9 +130,12 @@ class IntegrationConfiguration(Base):
         def process_settings_dict(
             settings_dict: dict[str, Any], indent: int = 0
         ) -> None:
-            secret_keys = ["key", "password", "token"]
+            secret_keys = ["key", "password", "token", "secret"]
             for setting_key, setting_value in sorted(settings_dict.items()):
-                if setting_key in secret_keys and not include_secrets:
+                if (
+                    any(secret_key in setting_key for secret_key in secret_keys)
+                    and not include_secrets
+                ):
                     setting_value = "********"
                 lines.append(" " * indent + f"{setting_key}: {setting_value}")
 

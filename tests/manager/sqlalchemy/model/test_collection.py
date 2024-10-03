@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive import OverdriveAPI, OverdriveLibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -22,30 +22,18 @@ from tests.fixtures.services import ServicesFixture
 
 
 class ExampleCollectionFixture:
-    collection: Collection
-    database_fixture: DatabaseTransactionFixture
-
-    def __init__(
-        self, collection: Collection, database_transaction: DatabaseTransactionFixture
-    ):
-        self.collection = collection
-        self.database_fixture = database_transaction
-
-    def set_default_loan_period(self, medium, value, library=None):
-        config = self.collection.integration_configuration
-        if library is not None:
-            config = config.for_library(library.id)
-        DatabaseTransactionFixture.set_settings(
-            config, **{self.collection.loan_period_key(medium): value}
+    def __init__(self, database_transaction: DatabaseTransactionFixture):
+        self.collection = database_transaction.collection(
+            name="test collection", protocol=OverdriveAPI
         )
+        self.database_fixture = database_transaction
 
 
 @pytest.fixture()
 def example_collection_fixture(
     db: DatabaseTransactionFixture,
 ) -> ExampleCollectionFixture:
-    c = db.collection(name="test collection", protocol=OverdriveAPI.label())
-    return ExampleCollectionFixture(c, db)
+    return ExampleCollectionFixture(db)
 
 
 class TestCollection:
@@ -113,11 +101,11 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
-        overdrive = OverdriveAPI.label()
-        bibliotheca = BibliothecaAPI.label()
-        c1 = db.collection(db.fresh_str(), protocol=overdrive)
+        overdrive = db.protocol_string(Goals.LICENSE_GOAL, OverdriveAPI)
+        bibliotheca = db.protocol_string(Goals.LICENSE_GOAL, BibliothecaAPI)
+        c1 = db.collection(db.fresh_str(), protocol=OverdriveAPI)
         c1.parent = test_collection
-        c2 = db.collection(db.fresh_str(), protocol=bibliotheca)
+        c2 = db.collection(db.fresh_str(), protocol=BibliothecaAPI)
         assert {test_collection, c1} == set(
             Collection.by_protocol(db.session, overdrive).all()
         )
@@ -177,17 +165,16 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
-        overdrive = OverdriveAPI.label()
-        bibliotheca = BibliothecaAPI.label()
+        bibliotheca = db.protocol_string(Goals.LICENSE_GOAL, BibliothecaAPI)
 
         # Create a parent and a child collection, both with
         # protocol=Overdrive.
-        child = db.collection(db.fresh_str(), protocol=overdrive)
+        child = db.collection(db.fresh_str(), protocol=OverdriveAPI)
         child.parent = test_collection
 
         # We can't change the child's protocol to a value that contradicts
         # the parent's protocol.
-        child.protocol = overdrive
+        child.protocol = db.protocol_string(Goals.LICENSE_GOAL, OverdriveAPI)
 
         def set_child_protocol():
             child.protocol = bibliotheca
@@ -202,20 +189,21 @@ class TestCollection:
         # If we change the parent's protocol, the children are
         # automatically updated.
         test_collection.protocol = bibliotheca
-        assert bibliotheca == child.protocol
+        assert child.protocol == bibliotheca
 
     def test_data_source(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
 
-        opds = db.collection()
-        bibliotheca = db.collection(protocol=BibliothecaAPI.label())
+        opds = db.collection(settings=db.opds_settings(data_source="Foo"))
+        bibliotheca = db.collection(protocol=BibliothecaAPI)
 
         # The rote data_source is returned for the obvious collection.
         assert bibliotheca.data_source is not None
         assert DataSource.BIBLIOTHECA == bibliotheca.data_source.name
 
-        # The less obvious OPDS collection doesn't have a DataSource.
-        assert None == opds.data_source
+        # The OPDS collection has a data source derived from its settings.
+        assert opds.data_source is not None
+        assert "Foo" == opds.data_source.name
 
         # Trying to change the Bibliotheca collection's data_source does nothing.
         bibliotheca.data_source = DataSource.AXIS_360  # type: ignore[assignment]
@@ -237,11 +225,12 @@ class TestCollection:
         assert None == opds.data_source
 
     def test_default_loan_period(
-        self, example_collection_fixture: ExampleCollectionFixture
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        db: DatabaseTransactionFixture,
     ):
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
-
         library = db.default_library()
         test_collection.libraries.append(library)
 
@@ -260,14 +249,14 @@ class TestCollection:
         )
 
         # Set a value, and it's used.
-        example_collection_fixture.set_default_loan_period(ebook, 604, library=library)
-        assert 604 == test_collection.default_loan_period(library)
-        assert (
-            Collection.STANDARD_DEFAULT_LOAN_PERIOD
-            == test_collection.default_loan_period(library, audio)
+        db.integration_library_configuration(
+            test_collection.integration_configuration,
+            library=library,
+            settings=OverdriveLibrarySettings(
+                audio_loan_duration=606, ebook_loan_duration=604
+            ),
         )
-
-        example_collection_fixture.set_default_loan_period(audio, 606, library=library)
+        assert 604 == test_collection.default_loan_period(library)
         assert 606 == test_collection.default_loan_period(library, audio)
 
     def test_default_reservation_period(
@@ -287,11 +276,9 @@ class TestCollection:
         test_collection.default_reservation_period = 601
         assert 601 == test_collection.default_reservation_period
 
-        # The underlying value is controlled by a integration setting.
-        DatabaseTransactionFixture.set_settings(
-            test_collection.integration_configuration,
-            Collection.DEFAULT_RESERVATION_PERIOD_KEY,
-            954,
+        # The underlying value is controlled by an integration setting.
+        test_collection.integration_configuration.settings_dict.update(
+            {Collection.DEFAULT_RESERVATION_PERIOD_KEY: 954}
         )
         assert 954 == test_collection.default_reservation_period
 
@@ -337,38 +324,40 @@ class TestCollection:
         test_collection = example_collection_fixture.collection
         test_collection.libraries.append(library)
 
-        test_collection.integration_configuration.settings_dict = {
-            "url": "url",
-            "username": "username",
-            "password": "password",
-            "setting": "value",
-            "external_account_id": "id",
-        }
-
         data = test_collection.explain()
         assert [
             f"ID: {test_collection.integration_configuration.id}",
             "Name: test collection",
             "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
             "Settings:",
-            "  external_account_id: id",
-            "  password: ********",
-            "  setting: value",
-            "  url: url",
-            "  username: username",
+            "  external_account_id: library_id",
+            "  overdrive_client_key: ********",
+            "  overdrive_client_secret: ********",
+            "  overdrive_website_id: website_id",
             "Configured libraries:",
             "  only one - The only library",
         ] == data
 
         with_password = test_collection.explain(include_secrets=True)
-        assert "  password: password" in with_password
+        assert [
+            f"ID: {test_collection.integration_configuration.id}",
+            "Name: test collection",
+            "Protocol/Goal: Overdrive/Goals.LICENSE_GOAL",
+            "Settings:",
+            "  external_account_id: library_id",
+            "  overdrive_client_key: client_key",
+            "  overdrive_client_secret: client_secret",
+            "  overdrive_website_id: website_id",
+            "Configured libraries:",
+            "  only one - The only library",
+        ] == with_password
 
         # If the collection is the child of another collection,
         # its parent is mentioned.
         child = db.collection(
             name="Child",
-            external_account_id="id2",
-            protocol=OverdriveAPI.label(),
+            settings=dict(external_account_id="id2"),
+            protocol=OverdriveAPI,
         )
         child.parent = test_collection
         data = child.explain()

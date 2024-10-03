@@ -9,7 +9,7 @@ from unittest.mock import create_autospec
 from pytest import LogCaptureFixture
 from sqlalchemy.orm import sessionmaker
 
-from palace.manager.api.overdrive import OverdriveSettings
+from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     GenerateInventoryAndHoldsReportsJob,
     generate_inventory_and_hold_reports,
@@ -66,16 +66,9 @@ def test_job_run(
         "Another Test Collection", "AnotherOpdsDataSource", db, library, False
     )
 
-    od_settings = OverdriveSettings(
-        overdrive_website_id="overdrive_id",
-        overdrive_client_key="client_key",
-        overdrive_client_secret="secret",
-        external_account_id="http://www.overdrive/id",
-    )
     od_collection_not_to_include = db.collection(
+        protocol=OverdriveAPI,
         name="Overdrive Test Collection",
-        data_source_name="Overdrive",
-        settings=od_settings.model_dump(),
     )
 
     od_collection_not_to_include.libraries = [library]
@@ -287,7 +280,7 @@ def create_test_opds_collection(
         external_account_id="http://opds.com",
         data_source=data_source,
     )
-    collection = db.collection(name=collection_name, settings=settings.model_dump())
+    collection = db.collection(name=collection_name, settings=settings)
     collection.libraries = [library]
     return collection
 
