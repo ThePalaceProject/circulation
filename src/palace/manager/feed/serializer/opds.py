@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from lxml import etree
 
+from palace.manager.core.facets import FacetConstants
 from palace.manager.feed.serializer.base import SerializerInterface
 from palace.manager.feed.types import (
     Acquisition,
@@ -15,10 +16,11 @@ from palace.manager.feed.types import (
     FeedEntryType,
     FeedMetadata,
     IndirectAcquisition,
+    Link,
     WorkEntryData,
 )
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
+from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 
 TAG_MAPPING = {
     "indirectAcquisition": f"{{{OPDSFeed.OPDS_NS}}}indirectAcquisition",
@@ -42,6 +44,7 @@ ATTRIBUTE_MAPPING = {
     "facetGroupType": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
     "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
+    "activeSort": f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort",
 }
 
 AUTHOR_MAPPING = {
@@ -107,10 +110,21 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
             serialized.append(breadcrumbs)
 
         for link in feed.facet_links:
+            if self.is_sort_link(link):
+                serialized.append(self._serialize_sort_link(link))
             serialized.append(self._serialize_feed_entry("link", link))
 
         etree.indent(serialized)
         return self.to_string(serialized)
+
+    def is_sort_link(self, link) -> bool:
+        return (
+            hasattr(link, "facetGroup")
+            and link.facetGroup
+            == FacetConstants.GROUP_DISPLAY_TITLES[
+                FacetConstants.ORDER_FACET_GROUP_NAME
+            ]
+        )
 
     def _serialize_feed_metadata(self, metadata: FeedMetadata) -> list[etree._Element]:
         tags = []
@@ -390,3 +404,9 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
     def content_type(self) -> str:
         return OPDSFeed.ACQUISITION_FEED_TYPE
+
+    def _serialize_sort_link(self, link: Link) -> etree._Element:
+        sort_link = Link(href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS)
+        if link.get("activeFacet", False):
+            sort_link.add_attributes(dict(activeSort="true"))
+        return self._serialize_feed_entry("link", sort_link)
