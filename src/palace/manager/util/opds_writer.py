@@ -43,6 +43,11 @@ class AtomFeed:
 
     LCP_NS = "http://readium.org/lcp-specs/ns"
 
+    PALACE_REL_NS = "http://palaceproject.io/terms/rel/"
+    PALACE_PROPS_NS = "http://palaceproject.io/terms/properties/"
+
+    PALACE_REL_SORT = PALACE_REL_NS + "sort"
+
     nsmap = {
         None: ATOM_NS,
         "app": APP_NS,
@@ -56,6 +61,7 @@ class AtomFeed:
         "bib": BIB_SCHEMA_NS,
         "opensearch": OPENSEARCH_NS,
         "lcp": LCP_NS,
+        "palaceproperties": PALACE_PROPS_NS,
     }
 
     E = ElementMaker(nsmap=nsmap)
