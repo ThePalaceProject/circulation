@@ -42,8 +42,12 @@ class AtomFeed:
     BIB_SCHEMA_NS = "http://bib.schema.org/"
 
     LCP_NS = "http://readium.org/lcp-specs/ns"
+
     PALACE_REL_NS = "http://palaceproject.io/terms/rel/"
     PALACE_PROPS_NS = "http://palaceproject.io/terms/properties/"
+
+    PALACE_REL_SORT = PALACE_REL_NS + "sort"
+
     nsmap = {
         None: ATOM_NS,
         "app": APP_NS,

@@ -3,6 +3,7 @@ from collections import defaultdict
 from typing import Any
 
 from palace.manager.feed.serializer.base import SerializerInterface
+from palace.manager.feed.serializer.opds import is_sort_link
 from palace.manager.feed.types import (
     Acquisition,
     Author,
@@ -12,7 +13,7 @@ from palace.manager.feed.types import (
     WorkEntryData,
 )
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.util.opds_writer import OPDSMessage
+from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
 
 ALLOWED_ROLES = [
     "translator",
@@ -30,6 +31,9 @@ MARC_CODE_TO_ROLES = {
     for name, code in Contributor.MARC_ROLE_CODES.items()
     if name.lower() in ALLOWED_ROLES
 }
+
+PALACE_REL_SORT = AtomFeed.PALACE_REL_SORT
+PALACE_PROPERTIES_ACTIVE_SORT = AtomFeed.PALACE_PROPS_NS + "active-sort"
 
 
 class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
@@ -191,14 +195,23 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         facet_links: dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
         for link in feed.facet_links:
-            group = getattr(link, "facetGroup", None)
-            if group:
-                facet_links[group]["links"].append(self._serialize_link(link))
-                facet_links[group]["metadata"]["title"] = group
+            if is_sort_link(link):
+                link_data["links"].append(self._serialize_sort_link(link))
+            else:
+                group = getattr(link, "facetGroup", None)
+                if group:
+                    facet_links[group]["links"].append(self._serialize_link(link))
+                    facet_links[group]["metadata"]["title"] = group
         for _, facets in facet_links.items():
             link_data["facets"].append(facets)
 
         return link_data
+
+    def _serialize_sort_link(self, link: Link):
+        sort_link = {"href": link.href, "title": link.title, "rel": PALACE_REL_SORT}
+        if link.get("activeFacet", False):
+            sort_link["properties"] = {PALACE_PROPERTIES_ACTIVE_SORT: "true"}
+        return sort_link
 
     def _serialize_contributor(self, author: Author) -> dict[str, Any]:
         result: dict[str, Any] = {"name": author.name}
