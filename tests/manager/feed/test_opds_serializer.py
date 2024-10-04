@@ -3,7 +3,8 @@ import datetime
 import pytz
 from lxml import etree
 
-from palace.manager.feed.serializer.opds import OPDS1Serializer
+from palace.manager.feed.serializer.opds import OPDS1Serializer, is_sort_link
+from palace.manager.feed.serializer.opds2 import PALACE_REL_SORT
 from palace.manager.feed.types import (
     Acquisition,
     Author,
@@ -255,3 +256,17 @@ class TestOPDSSerializer:
         serializer = OPDS1Serializer()
         result = serializer.serialize_opds_message(message)
         assert serializer.to_string(result) == serializer.to_string(message.tag)
+
+    def test_serialize_sort_link(self):
+        link = Link(href="test", rel="test_rel", title="text1")
+        link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
+        serializer = OPDS1Serializer()
+        assert is_sort_link(link)
+        sort_link = serializer._serialize_sort_link(link)
+        assert sort_link.attrib["title"] == "text1"
+        assert sort_link.attrib["href"] == "test"
+        assert sort_link.attrib["rel"] == PALACE_REL_SORT
+        assert (
+            sort_link.attrib["{http://palaceproject.io/terms/properties/}active-sort"]
+            == "true"
+        )

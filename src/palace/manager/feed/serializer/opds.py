@@ -55,6 +55,15 @@ AUTHOR_MAPPING = {
 }
 
 
+def is_sort_link(link: Link) -> bool:
+    """A until method that determines if the specified link is a sort link"""
+    return (
+        hasattr(link, "facetGroup")
+        and link.facetGroup
+        == FacetConstants.GROUP_DISPLAY_TITLES[FacetConstants.ORDER_FACET_GROUP_NAME]
+    )
+
+
 class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
     """An OPDS 1.2 Atom feed serializer"""
 
@@ -110,21 +119,15 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
             serialized.append(breadcrumbs)
 
         for link in feed.facet_links:
-            if self.is_sort_link(link):
+            if is_sort_link(link):
                 serialized.append(self._serialize_sort_link(link))
+                # TODO once the clients are no longer relying on facet based sorting
+                # an "else" should be introduced here since we only need to provide one style of sorting links
             serialized.append(self._serialize_feed_entry("link", link))
+            # TODO end else here
 
         etree.indent(serialized)
         return self.to_string(serialized)
-
-    def is_sort_link(self, link) -> bool:
-        return (
-            hasattr(link, "facetGroup")
-            and link.facetGroup
-            == FacetConstants.GROUP_DISPLAY_TITLES[
-                FacetConstants.ORDER_FACET_GROUP_NAME
-            ]
-        )
 
     def _serialize_feed_metadata(self, metadata: FeedMetadata) -> list[etree._Element]:
         tags = []
@@ -406,7 +409,9 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         return OPDSFeed.ACQUISITION_FEED_TYPE
 
     def _serialize_sort_link(self, link: Link) -> etree._Element:
-        sort_link = Link(href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS)
+        sort_link = Link(
+            href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
+        )
         if link.get("activeFacet", False):
             sort_link.add_attributes(dict(activeSort="true"))
         return self._serialize_feed_entry("link", sort_link)
