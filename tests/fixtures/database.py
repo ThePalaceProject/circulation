@@ -1275,8 +1275,14 @@ class MockSessionMaker:
     def __init__(self, session: Session):
         self._session = session
 
+    @contextmanager
     def __call__(self) -> Session:
-        return self._session
+        subtransaction = self._session.begin_nested()
+        try:
+            yield self._session
+        finally:
+            if subtransaction.is_active:
+                subtransaction.rollback()
 
     @contextmanager
     def begin(self) -> Generator[Session]:
