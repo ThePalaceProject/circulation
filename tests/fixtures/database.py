@@ -1276,7 +1276,7 @@ class MockSessionMaker:
         self._session = session
 
     @contextmanager
-    def __call__(self) -> Session:
+    def __call__(self) -> Generator[Session]:
         subtransaction = self._session.begin_nested()
         try:
             yield self._session
