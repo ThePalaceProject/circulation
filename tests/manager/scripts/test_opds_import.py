@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from palace.manager.core.opds_import import OPDSImportMonitor
 from palace.manager.scripts.opds_import import OPDSImportScript
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -37,11 +35,8 @@ class MockOPDSImportScript(OPDSImportScript):
 
 class TestOPDSImportScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        DatabaseTransactionFixture.set_settings(
-            db.default_collection().integration_configuration,
-            Collection.DATA_SOURCE_NAME_SETTING,
-            DataSource.OA_CONTENT_SERVER,
-        )
+        # Create a collection to use as the default
+        db.default_collection()
 
         script = MockOPDSImportScript(db.session)
         script.do_run([])

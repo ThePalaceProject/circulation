@@ -13,6 +13,7 @@ from palace.manager.api.opds_for_distributors import (
     OPDSForDistributorsImporter,
     OPDSForDistributorsImportMonitor,
     OPDSForDistributorsReaperMonitor,
+    OPDSForDistributorsSettings,
 )
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.metadata_layer import CirculationData, LinkData
@@ -22,6 +23,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -90,11 +92,28 @@ class OPDSForDistributorsAPIFixture:
         self, db: DatabaseTransactionFixture, files: OPDSForDistributorsFilesFixture
     ):
         self.db = db
-        self.collection = MockOPDSForDistributorsAPI.mock_collection(
-            db.session, db.default_library()
-        )
+        self.collection = self.mock_collection(db.default_library())
         self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
+
+    def mock_collection(
+        self,
+        library: Library | None = None,
+        name: str = "Test OPDS For Distributors Collection",
+    ) -> Collection:
+        """Create a mock OPDS For Distributors collection to use in tests."""
+        library = library or self.db.default_library()
+        return self.db.collection(
+            name,
+            protocol=OPDSForDistributorsAPI,
+            settings=OPDSForDistributorsSettings(
+                username="a",
+                password="b",
+                data_source="data_source",
+                external_account_id="http://opds",
+            ),
+            library=library,
+        )
 
 
 @pytest.fixture(scope="function")
@@ -260,9 +279,7 @@ class TestOPDSForDistributorsAPI:
         feed = '<feed><link rel="http://opds-spec.org/auth/document" href="http://authdoc"/></feed>'
 
         # Getting a token for a collection should result in a cached credential.
-        collection1 = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session,
-            opds_dist_api_fixture.db.default_library(),
+        collection1 = opds_dist_api_fixture.mock_collection(
             name="Collection 1",
         )
         api1 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection1)
@@ -280,9 +297,7 @@ class TestOPDSForDistributorsAPI:
 
         # Getting a token for a second collection should result in an
         # additional cached credential.
-        collection2 = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session,
-            opds_dist_api_fixture.db.default_library(),
+        collection2 = opds_dist_api_fixture.mock_collection(
             name="Collection 2",
         )
         api2 = MockOPDSForDistributorsAPI(opds_dist_api_fixture.db.session, collection2)
@@ -370,9 +385,7 @@ class TestOPDSForDistributorsAPI:
         )
         pool.loan_to(patron)
 
-        other_collection = opds_dist_api_fixture.db.collection(
-            protocol=OverdriveAPI.label()
-        )
+        other_collection = opds_dist_api_fixture.db.collection(protocol=OverdriveAPI)
         other_edition, other_pool = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
@@ -496,16 +509,7 @@ class TestOPDSForDistributorsImporter:
     def test_import(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         feed = opds_dist_api_fixture.files.sample_data("biblioboard_mini_feed.opds")
 
-        data_source = DataSource.lookup(
-            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
-        )
-        collection = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session, opds_dist_api_fixture.db.default_library()
-        )
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
-        )
+        collection = opds_dist_api_fixture.mock_collection()
 
         importer = OPDSForDistributorsImporter(
             opds_dist_api_fixture.db.session,
@@ -638,32 +642,12 @@ class TestOPDSForDistributorsImporter:
     def test_update_work_for_edition_returns_correct_license_pool(
         self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture
     ):
-        # If there are two or more collections, `update_work_for_edition`
-        # should return the license pool for the right one.
-        data_source_name = "BiblioBoard"
-        data_source = DataSource.lookup(
-            opds_dist_api_fixture.db.session, data_source_name, autocreate=True
-        )
-
-        def setup_collection(*, name: str, datasource: DataSource) -> Collection:
-            collection = MockOPDSForDistributorsAPI.mock_collection(
-                opds_dist_api_fixture.db.session,
-                opds_dist_api_fixture.db.default_library(),
-                name=name,
-            )
-            DatabaseTransactionFixture.set_settings(
-                collection.integration_configuration,
-                **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
-            )
-            return collection
-
-        collection1 = setup_collection(name="Test Collection 1", datasource=data_source)
-        collection2 = setup_collection(name="Test Collection 2", datasource=data_source)
+        collection1 = opds_dist_api_fixture.mock_collection(name="Test Collection 1")
+        collection2 = opds_dist_api_fixture.mock_collection(name="Test Collection 2")
 
         work = opds_dist_api_fixture.db.work(
             with_license_pool=False,
             collection=collection1,
-            data_source_name=data_source_name,
         )
         edition = work.presentation_edition
 
@@ -717,17 +701,7 @@ class TestOPDSForDistributorsReaperMonitor:
                     200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, feed
                 )
 
-        data_source = DataSource.lookup(
-            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
-        )
-        collection = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session,
-            opds_dist_api_fixture.db.default_library(),
-        )
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
-        )
+        collection = opds_dist_api_fixture.mock_collection()
         monitor = MockOPDSForDistributorsReaperMonitor(
             opds_dist_api_fixture.db.session,
             collection,
@@ -737,7 +711,6 @@ class TestOPDSForDistributorsReaperMonitor:
         # There's a license pool in the database that isn't in the feed anymore.
         edition, now_gone = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
-            data_source_name=data_source.name,
             with_license_pool=True,
             collection=collection,
         )
@@ -747,7 +720,6 @@ class TestOPDSForDistributorsReaperMonitor:
         edition, still_there = opds_dist_api_fixture.db.edition(
             identifier_type=Identifier.URI,
             identifier_id="urn:uuid:04377e87-ab69-41c8-a2a4-812d55dc0952",
-            data_source_name=data_source.name,
             with_license_pool=True,
             collection=collection,
         )
@@ -788,17 +760,7 @@ class TestOPDSForDistributorsImportMonitor:
                 ts = create(self._db, Timestamp)
                 return (200, {"content-type": OPDSFeed.ACQUISITION_FEED_TYPE}, feed)
 
-        data_source = DataSource.lookup(
-            opds_dist_api_fixture.db.session, "Biblioboard", autocreate=True
-        )
-        collection = MockOPDSForDistributorsAPI.mock_collection(
-            opds_dist_api_fixture.db.session,
-            opds_dist_api_fixture.db.default_library(),
-        )
-        DatabaseTransactionFixture.set_settings(
-            collection.integration_configuration,
-            **{Collection.DATA_SOURCE_NAME_SETTING: data_source.name}
-        )
+        collection = opds_dist_api_fixture.mock_collection()
         monitor = MockOPDSForDistributorsImportMonitor(
             opds_dist_api_fixture.db.session,
             collection,

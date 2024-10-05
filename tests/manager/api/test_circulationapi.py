@@ -802,10 +802,7 @@ class TestCirculationAPI:
 
     def test_fulfill_errors(self, circulation_api: CirculationAPIFixture):
         # Here's an open-access title.
-        collection = circulation_api.db.collection(
-            data_source_name="OPDS",
-            external_account_id="http://url/",
-        )
+        collection = circulation_api.db.collection()
         circulation_api.pool.open_access = True
         circulation_api.pool.collection = collection
 

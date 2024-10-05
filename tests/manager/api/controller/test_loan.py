@@ -1,6 +1,7 @@
 import datetime
 from collections.abc import Generator
 from decimal import Decimal
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import quote
 
@@ -1565,7 +1566,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD,
-                OPDSAPI.label(),
+                OPDSAPI,
                 None,
                 None,
             ],  # DB and OPDS response loan duration mismatch
@@ -1574,7 +1575,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                OPDSAPI.label(),
+                OPDSAPI,
                 None,
                 None,
             ],
@@ -1583,7 +1584,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                OPDSAPI.label(),
+                OPDSAPI,
                 None,
                 None,
             ],
@@ -1592,7 +1593,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],  # DB and OPDS response loan duration mismatch
@@ -1601,7 +1602,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 3,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1610,7 +1611,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1619,7 +1620,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 2,
             ],
@@ -1628,7 +1629,7 @@ class TestLoanController:
                 None,
                 None,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],  # DB and OPDS response loan duration mismatch
@@ -1637,7 +1638,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD - 1,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
@@ -1646,7 +1647,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 1,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
@@ -1655,7 +1656,7 @@ class TestLoanController:
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 3,
-                BibliothecaAPI.label(),
+                BibliothecaAPI,
                 DataSource.BIBLIOTHECA,
                 Collection.STANDARD_DEFAULT_LOAN_PERIOD + 2,
             ],
@@ -1667,7 +1668,7 @@ class TestLoanController:
         target_loan_duration: int,
         db_loan_duration: int,
         opds_response_loan_duration: int,
-        collection_protocol: str,
+        collection_protocol: type[BaseCirculationAPI[Any, Any]],
         collection_data_source_name: str,
         collection_default_loan_period: int,
     ):
@@ -1684,19 +1685,16 @@ class TestLoanController:
 
             collection = loan_fixture.db.collection(
                 protocol=collection_protocol,
-                data_source_name=collection_data_source_name,
             )
 
             collection.libraries.append(loan_fixture.db.default_library())
             if collection_default_loan_period:
-                lib_config = collection.integration_configuration.for_library(
-                    loan_fixture.db.default_library()
-                )
-                assert lib_config is not None
-                DatabaseTransactionFixture.set_settings(
-                    lib_config,
-                    collection.loan_period_key(),
-                    collection_default_loan_period,
+                loan_fixture.db.integration_library_configuration(
+                    collection.integration_configuration,
+                    library=loan_fixture.db.default_library(),
+                    settings=collection_protocol.library_settings_class()(
+                        ebook_loan_duration=collection_default_loan_period
+                    ),
                 )
 
             def create_work_and_return_license_pool_and_loan_info(**kwargs):

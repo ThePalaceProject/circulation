@@ -112,7 +112,6 @@ class EnkiAPI(
     HasCollectionSelfTests,
     EnkiConstants,
 ):
-    ENKI_LIBRARY_ID_KEY = "enki_library_id"
     DESCRIPTION = _("Integrate an Enki collection.")
 
     list_endpoint = "ListAPI"

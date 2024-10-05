@@ -13,7 +13,6 @@ from palace.manager.core.opds_schema import (
     OPDS2SchemaValidation,
     OPDS2WithODLSchemaValidation,
 )
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture, OPDS2WithODLFilesFixture
 
@@ -36,11 +35,7 @@ class TestOPDS2Validation:
         opds2_files_fixture: OPDS2FilesFixture,
     ):
         collection = db.collection(
-            protocol=OPDS2API.label(),
-            data_source_name=DataSource.FEEDBOOKS,
-            settings={
-                "external_account_id": "http://example.com/feed",
-            },
+            protocol=OPDS2API,
         )
         validator = OPDS2SchemaValidation(
             db.session,
@@ -72,13 +67,7 @@ class TestOPDS2WithODLValidation:
         opds2_with_odl_files_fixture: OPDS2WithODLFilesFixture,
     ):
         collection = db.collection(
-            protocol=OPDS2WithODLApi.label(),
-            data_source_name=DataSource.FEEDBOOKS,
-            settings={
-                "username": "username",
-                "password": "password",
-                "external_account_id": "http://example.com/feed",
-            },
+            protocol=OPDS2WithODLApi,
         )
         validator = OPDS2WithODLSchemaValidation(
             db.session,

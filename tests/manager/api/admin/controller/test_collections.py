@@ -28,9 +28,10 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.axis import Axis360API
 from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive import OverdriveAPI, OverdriveLibrarySettings
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
+from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -117,28 +118,31 @@ class TestCollectionSettings:
 
         c2 = db.collection(
             name="Collection 2",
-            protocol=OverdriveAPI.label(),
-            external_account_id="1234",
-            settings=dict(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(
                 overdrive_client_secret="b",
                 overdrive_client_key="user",
                 overdrive_website_id="100",
+                external_account_id="1234",
             ),
         )
 
         c3 = db.collection(
             name="Collection 3",
-            protocol=OverdriveAPI.label(),
-            external_account_id="5678",
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(
+                external_account_id="5678",
+            ),
         )
         c3.parent = c2
 
         l1 = db.library(short_name="L1")
         c3.libraries += [l1, db.default_library()]
-        assert isinstance(l1.id, int)
-        l1_config = c3.integration_configuration.for_library(l1.id)
-        assert l1_config is not None
-        DatabaseTransactionFixture.set_settings(l1_config, ebook_loan_duration="14")
+        db.integration_library_configuration(
+            c3.integration_configuration,
+            l1,
+            OverdriveLibrarySettings(ebook_loan_duration=14),
+        )
 
         admin = flask_app_fixture.admin_user()
         l1_librarian = flask_app_fixture.admin_user(
@@ -187,7 +191,7 @@ class TestCollectionSettings:
             coll3_libraries, key=lambda x: x.get("short_name")
         )
         assert "L1" == coll3_l1.get("short_name")
-        assert "14" == coll3_l1.get("ebook_loan_duration")
+        assert 14 == coll3_l1.get("ebook_loan_duration")
         assert db.default_library().short_name == coll3_default.get("short_name")
 
         with flask_app_fixture.test_request_context("/", admin=l1_librarian):
@@ -203,7 +207,7 @@ class TestCollectionSettings:
         coll3_libraries = coll3.get("libraries")
         assert 1 == len(coll3_libraries)
         assert "L1" == coll3_libraries[0].get("short_name")
-        assert "14" == coll3_libraries[0].get("ebook_loan_duration")
+        assert 14 == coll3_libraries[0].get("ebook_loan_duration")
 
     @pytest.mark.parametrize(
         "post_data,expected,detailed",
@@ -323,7 +327,7 @@ class TestCollectionSettings:
         expected: ProblemDetail,
         detailed: bool,
     ):
-        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI)
 
         if "id" in post_data and post_data["id"] == "":
             post_data["id"] = str(collection.integration_configuration.id)
@@ -489,7 +493,7 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        collection = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
+        collection = db.collection(name="Collection 1", protocol=OverdriveAPI)
 
         l1 = db.library(
             name="Library 1",
@@ -501,7 +505,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", OverdriveAPI.label()),
+                    ("protocol", db.protocol_string(Goals.LICENSE_GOAL, OverdriveAPI)),
                     ("external_account_id", "1234"),
                     ("overdrive_client_key", "user2"),
                     ("overdrive_client_secret", "password"),
@@ -572,14 +576,14 @@ class TestCollectionSettings:
         # All settings for that library and collection have been deleted.
         assert collection.integration_configuration.library_configurations == []
 
-        parent = db.collection(name="Parent", protocol=OverdriveAPI.label())
+        parent = db.collection(name="Parent", protocol=OverdriveAPI)
 
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", OverdriveAPI.label()),
+                    ("protocol", db.protocol_string(Goals.LICENSE_GOAL, OverdriveAPI)),
                     ("parent_id", str(parent.integration_configuration.id)),
                     ("external_account_id", "1234"),
                     ("libraries", json.dumps([])),
@@ -595,15 +599,16 @@ class TestCollectionSettings:
         assert parent == collection.parent
 
         library = db.default_library()
-        collection2 = db.collection(
-            name="Collection 2", protocol=OPDS2WithODLApi.label()
-        )
+        collection2 = db.collection(name="Collection 2", protocol=OPDS2WithODLApi)
         with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection2.integration_configuration.id)),
                     ("name", "Collection 2"),
-                    ("protocol", OPDS2WithODLApi.label()),
+                    (
+                        "protocol",
+                        db.protocol_string(Goals.LICENSE_GOAL, OPDS2WithODLApi),
+                    ),
                     ("external_account_id", "http://test.com/feed"),
                     ("username", "user"),
                     ("password", "password"),
@@ -643,7 +648,7 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
     ):
         # The collection exists.
-        collection = db.collection(name="Collection 1", protocol=Axis360API.label())
+        collection = db.collection(name="Collection 1", protocol=Axis360API)
 
         l1 = db.library(
             name="Library 1",
@@ -655,7 +660,7 @@ class TestCollectionSettings:
                 [
                     ("id", str(collection.integration_configuration.id)),
                     ("name", "Collection 1"),
-                    ("protocol", Axis360API.label()),
+                    ("protocol", db.protocol_string(Goals.LICENSE_GOAL, Axis360API)),
                     ("external_account_id", "1234"),
                     ("username", "user2"),
                     ("password", "password"),
@@ -747,8 +752,8 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ):
-        parent = db.collection(protocol=OverdriveAPI.label())
-        child = db.collection(protocol=OverdriveAPI.label())
+        parent = db.collection(protocol=OverdriveAPI)
+        child = db.collection(protocol=OverdriveAPI)
         child.parent = parent
 
         with flask_app_fixture.test_request_context_system_admin("/", method="DELETE"):

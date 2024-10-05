@@ -2,6 +2,7 @@ import datetime
 
 import pytest
 
+from palace.manager.api.axis import Axis360API
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.coverage import (
     BaseCoverageProvider,
@@ -823,7 +824,7 @@ class TestIdentifierCoverageProvider:
     def test_bulk_register_with_collection(self, db: DatabaseTransactionFixture):
         identifier = db.identifier()
         provider = AlwaysSuccessfulCoverageProvider
-        collection = db.collection(data_source_name=DataSource.AXIS_360)
+        collection = db.collection(protocol=Axis360API)
 
         try:
             # If a DataSource or data source name is provided and
@@ -1352,7 +1353,7 @@ class TestCollectionCoverageProvider:
         """Verify that class variables become appropriate instance
         variables.
         """
-        collection = db.collection(protocol=OPDSAPI.label())
+        collection = db.collection(protocol=OPDSAPI)
         provider = AlwaysSuccessfulCollectionCoverageProvider(collection)
         assert provider.DATA_SOURCE_NAME == provider.data_source.name
 
@@ -1367,7 +1368,7 @@ class TestCollectionCoverageProvider:
     def test_collection_protocol_must_match_class_protocol(
         self, db: DatabaseTransactionFixture
     ):
-        collection = db.collection(protocol=OverdriveAPI.label())
+        collection = db.collection(protocol=OverdriveAPI)
         with pytest.raises(ValueError) as excinfo:
             AlwaysSuccessfulCollectionCoverageProvider(collection)
         assert (
@@ -1509,9 +1510,9 @@ class TestCollectionCoverageProvider:
         objects, one for each Collection that implements the
         appropriate protocol.
         """
-        opds1 = db.collection(protocol=OPDSAPI.label())
-        opds2 = db.collection(protocol=OPDSAPI.label())
-        overdrive = db.collection(protocol=OverdriveAPI.label())
+        opds1 = db.collection(protocol=OPDSAPI)
+        opds2 = db.collection(protocol=OPDSAPI)
+        overdrive = db.collection(protocol=OverdriveAPI)
         providers = list(
             AlwaysSuccessfulCollectionCoverageProvider.all(db.session, batch_size=34)
         )
@@ -1783,7 +1784,7 @@ class TestCollectionCoverageProvider:
             PROTOCOL = OverdriveAPI.label()
             IDENTIFIER_TYPES = Identifier.OVERDRIVE_ID
 
-        collection = db.collection(protocol=OverdriveAPI.label())
+        collection = db.collection(protocol=OverdriveAPI)
         provider = OverdriveProvider(collection)
 
         # We get a CoverageFailure if we don't pass in any data at all.

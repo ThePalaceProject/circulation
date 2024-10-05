@@ -19,7 +19,7 @@ from palace.manager.api.odl.importer import (
     OPDS2WithODLImporter,
     OPDS2WithODLImportMonitor,
 )
-from palace.manager.api.odl.settings import OPDS2AuthType
+from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import LicenseData
 from palace.manager.sqlalchemy.constants import (
@@ -71,14 +71,9 @@ class TestOPDS2WithODLImporter:
         )
 
         opds2_with_odl_importer_fixture.queue_response(moby_dick_license)
-
-        config = opds2_with_odl_importer_fixture.collection.integration_configuration
         opds2_with_odl_importer_fixture.importer.ignored_identifier_types = [
             IdentifierConstants.URI
         ]
-        DatabaseTransactionFixture.set_settings(
-            config, skipped_license_formats=["text/html"]
-        )
 
         # Act
         (
@@ -212,11 +207,6 @@ class TestOPDS2WithODLImporter:
         """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
         opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
 
-        db.set_settings(
-            opds2_with_odl_importer_fixture.collection.integration_configuration,
-            skipped_license_formats=["text/html"],
-        )
-
         (
             imported_editions,
             pools,
@@ -318,6 +308,7 @@ class TestOPDS2WithODLImporter:
     )
     def test_import_open_access(
         self,
+        db: DatabaseTransactionFixture,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
         auth_type: OPDS2AuthType,
     ) -> None:
@@ -326,8 +317,7 @@ class TestOPDS2WithODLImporter:
         open access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer.settings = importer.settings_class()(
-            **opds2_with_odl_importer_fixture.api_fixture.default_collection_settings(),
+        importer.settings = db.opds2_odl_settings(
             auth_type=auth_type,
         )
         (
@@ -377,6 +367,7 @@ class TestOPDS2WithODLImporter:
     )
     def test_import_unlimited_access(
         self,
+        db: DatabaseTransactionFixture,
         opds2_with_odl_importer_fixture: OPDS2WithODLImporterFixture,
         auth_type: OPDS2AuthType,
     ) -> None:
@@ -385,8 +376,7 @@ class TestOPDS2WithODLImporter:
         unlimited access book.
         """
         importer = opds2_with_odl_importer_fixture.importer
-        importer.settings = importer.settings_class()(
-            **opds2_with_odl_importer_fixture.api_fixture.default_collection_settings(),
+        importer.settings = db.opds2_odl_settings(
             auth_type=auth_type,
         )
         (
@@ -1126,11 +1116,13 @@ class OPDS2WithODLImportMonitorFixture:
         self.username = "username"
         self.password = "password"
         self.collection = db.collection(
-            external_account_id=self.feed_url,
-            username=self.username,
-            password=self.password,
-            data_source_name="OPDS",
-            protocol=OPDS2WithODLApi.label(),
+            protocol=OPDS2WithODLApi,
+            settings=OPDS2WithODLSettings(
+                external_account_id=self.feed_url,
+                username=self.username,
+                password=self.password,
+                data_source="OPDS",
+            ),
         )
         self.monitor = OPDS2WithODLImportMonitor(
             db.session, self.collection, OPDS2WithODLImporter

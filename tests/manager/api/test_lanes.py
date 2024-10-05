@@ -1172,8 +1172,7 @@ class TestJackpotWorkList:
         library = db.default_library()
         overdrive_collection = db.collection(
             "Test Overdrive Collection",
-            protocol=OverdriveAPI.label(),
-            data_source_name=DataSource.OVERDRIVE,
+            protocol=OverdriveAPI,
         )
         overdrive_collection.libraries.append(library)
 
@@ -1181,8 +1180,7 @@ class TestJackpotWorkList:
         # library. It will not be used at all.
         ignored_collection = db.collection(
             "Ignored Collection",
-            protocol=BibliothecaAPI.label(),
-            data_source_name=DataSource.BIBLIOTHECA,
+            protocol=BibliothecaAPI,
         )
 
         # Pass in a JackpotFacets object

@@ -22,7 +22,9 @@ from palace.manager.api.enki import (
     EnkiAPI,
     EnkiCollectionReaper,
     EnkiImport,
+    EnkiLibrarySettings,
 )
+from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.metadata_layer import CirculationData, Metadata, TimestampData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -58,10 +60,17 @@ class EnkiTestFixure:
     def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
         self.db = db
         self.files = files
-        self.api = MockEnkiAPI(db.session, db.default_library())
-        collection = self.api.collection
-        assert collection is not None
-        self.collection = collection
+        self.library = db.default_library()
+        self.collection = db.collection(
+            name="Test Enki Collection", protocol=EnkiAPI, library=self.library
+        )
+        self.api = MockEnkiAPI(db.session, self.collection)
+
+        db.integration_library_configuration(
+            self.collection.integration_configuration,
+            self.library,
+            EnkiLibrarySettings(enki_library_id="c"),
+        )
 
 
 @pytest.fixture(scope="function")
@@ -75,7 +84,7 @@ class TestEnkiAPI:
     def test_constructor(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
         # The constructor must be given an Enki collection.
-        collection = db.collection(protocol="Overdrive", url="http://test.enki.url")
+        collection = db.collection(protocol=OverdriveAPI)
         with pytest.raises(ValueError) as excinfo:
             EnkiAPI(db.session, collection)
         assert "Collection protocol is Overdrive, but passed into EnkiAPI!" in str(
@@ -95,18 +104,11 @@ class TestEnkiAPI:
         # Associate another library with the mock Enki collection
         # and set its Enki library ID.
         other_library = db.library()
-        assert other_library.id is not None
-        config = enki_test_fixture.api.integration_configuration()
-        assert config is not None
-
-        config.libraries.append(other_library)
-        lib_config = config.for_library(other_library)
-        assert lib_config is not None
-        DatabaseTransactionFixture.set_settings(
-            lib_config,
-            **{enki_test_fixture.api.ENKI_LIBRARY_ID_KEY: "other library id"},
+        db.integration_library_configuration(
+            enki_test_fixture.collection.integration_configuration,
+            other_library,
+            EnkiLibrarySettings(enki_library_id="other library id"),
         )
-        db.session.commit()
         assert "other library id" == m(other_library)
 
     def test_collection(self, enki_test_fixture: EnkiTestFixure):
@@ -137,7 +139,7 @@ class TestEnkiAPI:
                 self.patron_activity_called_with.append((patron, pin))
                 yield 1
 
-        api = Mock(db.session, db.default_library())
+        api = Mock(db.session, enki_test_fixture.collection)
 
         # Now let's make sure two Libraries have access to the
         # Collection used in the API -- one library with a default
@@ -917,7 +919,6 @@ class TestEnkiImport:
         three_hours_ago = now - datetime.timedelta(hours=3)
         mock_api = MockEnkiAPI(
             db.session,
-            enki_test_fixture.db.default_library(),
             enki_test_fixture.collection,
         )
         monitor = Mock(db.session, enki_test_fixture.collection, api_class=mock_api)
@@ -979,7 +980,7 @@ class TestEnkiImport:
             }
         }
 
-        api = MockEnkiAPI(db.session, db.default_library())
+        api = MockEnkiAPI(db.session, enki_test_fixture.collection)
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 

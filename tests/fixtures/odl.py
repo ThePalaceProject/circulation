@@ -52,26 +52,18 @@ class OPDS2WithODLApiFixture:
     def create_work(self, collection: Collection) -> Work:
         return self.db.work(with_license_pool=True, collection=collection)
 
-    @staticmethod
-    def default_collection_settings() -> dict[str, Any]:
-        return {
-            "username": "a",
-            "password": "b",
-            "external_account_id": "http://odl",
-            Collection.DATA_SOURCE_NAME_SETTING: "Feedbooks",
-        }
-
     def create_collection(self, library: Library) -> Collection:
-        collection, _ = Collection.by_name_and_protocol(
-            self.db.session,
+        return self.db.collection(
             f"Test {OPDS2WithODLApi.__name__} Collection",
-            OPDS2WithODLApi.label(),
+            protocol=OPDS2WithODLApi,
+            library=library,
+            settings=self.db.opds2_odl_settings(
+                username="a",
+                password="b",
+                external_account_id="http://odl",
+                data_source="Feedbooks",
+            ),
         )
-        collection.integration_configuration.settings_dict = (
-            self.default_collection_settings()
-        )
-        collection.libraries.append(library)
-        return collection
 
     def setup_license(
         self,

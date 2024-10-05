@@ -71,8 +71,8 @@ class TestShowCollectionsScript:
         assert "No collections found.\n" == output.getvalue()
 
     def test_with_multiple_collections(self, db: DatabaseTransactionFixture):
-        c1 = db.collection(name="Collection 1", protocol=OverdriveAPI.label())
-        c2 = db.collection(name="Collection 2", protocol=BibliothecaAPI.label())
+        c1 = db.collection(name="Collection 1", protocol=OverdriveAPI)
+        c2 = db.collection(name="Collection 2", protocol=BibliothecaAPI)
 
         # The output of this script is the result of running explain()
         # on both collections.
