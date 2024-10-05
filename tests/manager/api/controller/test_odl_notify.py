@@ -124,13 +124,14 @@ class TestODLNotificationController:
         assert response == INVALID_LOAN_FOR_ODL_NOTIFICATION
 
         # No loan, but distributor thinks it isn't active
+        NON_EXISTENT_LOAN_ID = -55
         with flask_app_fixture.test_request_context(
             "/",
             method="POST",
             library=odl_fixture.library,
             data=odl_fixture.loan_status_document("returned").model_dump_json(),
         ):
-            response = odl_fixture.controller.notify(-55)
+            response = odl_fixture.controller.notify(NON_EXISTENT_LOAN_ID)
         assert isinstance(response, Response)
         assert response.status_code == 204
 

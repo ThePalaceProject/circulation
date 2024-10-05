@@ -530,7 +530,8 @@ class OPDS2WithODLApi(
             )
             fulfill_cls = RedirectFulfillment
         elif drm_scheme == DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM:
-            # For DeMarque audiobook content, the link we are looking is stored in the 'manifest' rel.
+            # For DeMarque audiobook content using "FEEDBOOKS_AUDIOBOOK_DRM", the link
+            # we are looking for is stored in the 'manifest' rel.
             fulfill_link = doc.links.get(rel="manifest", type=FEEDBOOKS_AUDIO)
             fulfill_cls = partial(FetchFulfillment, allowed_response_codes=["2xx"])
         else:
