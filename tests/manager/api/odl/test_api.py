@@ -4,8 +4,6 @@ import datetime
 import json
 import urllib
 import uuid
-from functools import partial
-from typing import Any
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
 
@@ -25,6 +23,7 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyOnHold,
     CannotFulfill,
     CannotLoan,
+    CannotReturn,
     CurrentlyAvailable,
     HoldOnUnlimitedAccess,
     HoldsNotPermitted,
@@ -38,6 +37,7 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLLibrarySettings
+from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -46,12 +46,13 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
-from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OPDSFilesFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 
 
@@ -194,110 +195,87 @@ class TestOPDS2WithODLApi:
             .count()
         )
 
-    def test_get_license_status_document_success(
-        self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
+    @pytest.mark.parametrize(
+        "status_code",
+        [pytest.param(200, id="existing loan"), pytest.param(200, id="new loan")],
+    )
+    def test__request_loan_status_success(
+        self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture, status_code: int
     ) -> None:
-        # With a new loan. New loan returns a 201 status.
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-        opds2_with_odl_api_fixture.mock_http.queue_response(
-            201, content=json.dumps(dict(status="ready"))
-        )
-        opds2_with_odl_api_fixture.api.get_license_status_document(loan)
-        requested_url = opds2_with_odl_api_fixture.mock_http.requests.pop()
-
-        parsed = urlparse(requested_url)
-        assert "https" == parsed.scheme
-        assert "loan.feedbooks.net" == parsed.netloc
-        params = parse_qs(parsed.query)
-
-        assert (
-            opds2_with_odl_api_fixture.api.settings.passphrase_hint == params["hint"][0]
-        )
-        assert (
-            opds2_with_odl_api_fixture.api.settings.passphrase_hint_url
-            == params["hint_url"][0]
-        )
-
-        assert opds2_with_odl_api_fixture.license.identifier == params["id"][0]
-
-        # The checkout id and patron id are random UUIDs.
-        checkout_id = params["checkout_id"][0]
-        assert uuid.UUID(checkout_id)
-        patron_id = params["patron_id"][0]
-        assert uuid.UUID(patron_id)
-
-        # Loans expire in 21 days by default.
-        now = utc_now()
-        after_expiration = now + datetime.timedelta(days=23)
-        expires = urllib.parse.unquote(params["expires"][0])
-
-        # The expiration time passed to the server is associated with
-        # the UTC time zone.
-        assert expires.endswith("+00:00")
-        expires_t = dateutil.parser.parse(expires)
-        assert expires_t.tzinfo == dateutil.tz.tz.tzutc()
-
-        # It's a time in the future, but not _too far_ in the future.
-        assert expires_t > now
-        assert expires_t < after_expiration
-
-        notification_url = urllib.parse.unquote_plus(params["notification_url"][0])
-        assert (
-            "http://odl_notify?library_short_name=%s&loan_id=%s"
-            % (opds2_with_odl_api_fixture.library.short_name, loan.id)
-            == notification_url
-        )
-
-        # With an existing loan. Existing loan returns a 200 status.
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-        loan.external_identifier = opds2_with_odl_api_fixture.db.fresh_str()
+        expected_document = opds2_with_odl_api_fixture.loan_status_document("active")
 
         opds2_with_odl_api_fixture.mock_http.queue_response(
-            200, content=json.dumps(dict(status="active"))
+            status_code, content=expected_document.model_dump_json()
         )
-        opds2_with_odl_api_fixture.api.get_license_status_document(loan)
-        requested_url = opds2_with_odl_api_fixture.mock_http.requests.pop()
-        assert loan.external_identifier == requested_url
+        requested_document = opds2_with_odl_api_fixture.api._request_loan_status(
+            "GET", "http://loan"
+        )
+        assert "GET" == opds2_with_odl_api_fixture.mock_http.requests_methods.pop()
+        assert "http://loan" == opds2_with_odl_api_fixture.mock_http.requests.pop()
+        assert requested_document == expected_document
 
-    def test_get_license_status_document_errors(
+    @pytest.mark.parametrize(
+        "status, headers, content, exception, expected_log_message",
+        [
+            pytest.param(
+                200,
+                {},
+                "not json",
+                RemoteIntegrationException,
+                "Error validating Loan Status Document. 'http://loan' returned and invalid document.",
+                id="invalid json",
+            ),
+            pytest.param(
+                200,
+                {},
+                json.dumps(dict(status="unknown")),
+                RemoteIntegrationException,
+                "Error validating Loan Status Document. 'http://loan' returned and invalid document.",
+                id="invalid document",
+            ),
+            pytest.param(
+                403,
+                {"header": "value"},
+                "server error",
+                RemoteIntegrationException,
+                "Error requesting Loan Status Document. 'http://loan' returned status code 403. "
+                "Response headers: header: value. Response content: server error.",
+                id="bad status code",
+            ),
+            pytest.param(
+                403,
+                {"Content-Type": "application/api-problem+json"},
+                json.dumps(
+                    dict(
+                        type="http://problem-detail-uri",
+                        title="server error",
+                        detail="broken",
+                    )
+                ),
+                RemoteIntegrationException,
+                "Error requesting Loan Status Document. 'http://loan' returned status code 403. "
+                "Problem Detail: 'http://problem-detail-uri' - server error - broken",
+                id="problem detail response",
+            ),
+        ],
+    )
+    def test__request_loan_status_errors(
         self,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
         caplog: pytest.LogCaptureFixture,
+        status: int,
+        headers: dict[str, str],
+        content: str,
+        exception: type[Exception],
+        expected_log_message: str,
     ) -> None:
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content="not json")
-        pytest.raises(
-            RemoteIntegrationException,
-            opds2_with_odl_api_fixture.api.get_license_status_document,
-            loan,
-        )
-
+        # The response can't be parsed as JSON.
         opds2_with_odl_api_fixture.mock_http.queue_response(
-            200, content=json.dumps(dict(status="unknown"))
+            status, other_headers=headers, content=content
         )
-        pytest.raises(
-            RemoteIntegrationException,
-            opds2_with_odl_api_fixture.api.get_license_status_document,
-            loan,
-        )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(
-            403, content="just junk " * 100
-        )
-        pytest.raises(
-            RemoteIntegrationException,
-            opds2_with_odl_api_fixture.api.get_license_status_document,
-            loan,
-        )
-        assert "returned status code 403. Expected 2XX." in caplog.text
-        assert "just junk ..." in caplog.text
+        with pytest.raises(exception):
+            opds2_with_odl_api_fixture.api._request_loan_status("GET", "http://loan")
+        assert expected_log_message in caplog.text
 
     def test_checkin_success(
         self,
@@ -315,13 +293,11 @@ class TestOPDS2WithODLApi:
 
         # The patron returns the book successfully.
         opds2_with_odl_api_fixture.checkin()
-        assert 3 == len(opds2_with_odl_api_fixture.mock_http.requests)
+        assert 2 == len(opds2_with_odl_api_fixture.mock_http.requests)
         assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[0]
         assert "http://return" == opds2_with_odl_api_fixture.mock_http.requests[1]
-        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[2]
 
-        # The pool's availability has increased, and the local loan has
-        # been deleted.
+        # The pool's availability has increased
         assert 7 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 0 == db.session.query(Loan).count()
 
@@ -350,10 +326,9 @@ class TestOPDS2WithODLApi:
 
         # The first patron returns the book successfully.
         opds2_with_odl_api_fixture.checkin()
-        assert 3 == len(opds2_with_odl_api_fixture.mock_http.requests)
+        assert 2 == len(opds2_with_odl_api_fixture.mock_http.requests)
         assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[0]
         assert "http://return" == opds2_with_odl_api_fixture.mock_http.requests[1]
-        assert "http://loan" in opds2_with_odl_api_fixture.mock_http.requests[2]
 
         # Now the license is reserved for the next patron.
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
@@ -361,34 +336,6 @@ class TestOPDS2WithODLApi:
         assert 1 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
         assert 0 == db.session.query(Loan).count()
         assert 0 == hold.position
-
-    def test_checkin_already_fulfilled(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        # The loan is already fulfilled.
-        opds2_with_odl_api_fixture.setup_license(concurrency=7, available=6)
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-        loan.external_identifier = db.fresh_str()
-        loan.end = utc_now() + datetime.timedelta(days=3)
-
-        lsd = json.dumps(
-            {
-                "status": "active",
-            }
-        )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        # Checking in the book silently does nothing.
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pinn", opds2_with_odl_api_fixture.pool
-        )
-        assert 1 == len(opds2_with_odl_api_fixture.mock_http.requests)
-        assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == db.session.query(Loan).count()
 
     def test_checkin_not_checked_out(
         self,
@@ -411,16 +358,14 @@ class TestOPDS2WithODLApi:
         loan.external_identifier = db.fresh_str()
         loan.end = utc_now() + datetime.timedelta(days=3)
 
-        lsd = json.dumps(
-            {
-                "status": "revoked",
-            }
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200,
+            content=opds2_with_odl_api_fixture.loan_status_document(
+                "revoked"
+            ).model_dump_json(),
         )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        pytest.raises(
-            NotCheckedOut,
-            opds2_with_odl_api_fixture.api.checkin,
+        # Checking in silently does nothing.
+        opds2_with_odl_api_fixture.api.checkin(
             opds2_with_odl_api_fixture.patron,
             "pin",
             opds2_with_odl_api_fixture.pool,
@@ -438,38 +383,34 @@ class TestOPDS2WithODLApi:
         loan.external_identifier = db.fresh_str()
         loan.end = utc_now() + datetime.timedelta(days=3)
 
-        lsd = json.dumps(
-            {
-                "status": "ready",
-            }
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200,
+            content=opds2_with_odl_api_fixture.loan_status_document(
+                "ready", return_link=False
+            ).model_dump_json(),
         )
+        # Checking in raises the CannotReturn exception, since the distributor
+        # does not support returning the book.
+        with pytest.raises(CannotReturn):
+            opds2_with_odl_api_fixture.api.checkin(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+            )
+
+        # If the return link doesn't change the status, we raise the same exception.
+        lsd = opds2_with_odl_api_fixture.loan_status_document(
+            "ready", return_link="http://return"
+        ).model_dump_json()
 
         opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        # Checking in silently does nothing.
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
-
-        # If the return link doesn't change the status, it still
-        # silently ignores the problem.
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "links": [
-                    {
-                        "rel": "return",
-                        "href": "http://return",
-                    }
-                ],
-            }
-        )
-
         opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content="Deleted")
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        opds2_with_odl_api_fixture.api.checkin(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
+        with pytest.raises(CannotReturn):
+            opds2_with_odl_api_fixture.api.checkin(
+                opds2_with_odl_api_fixture.patron,
+                "pin",
+                opds2_with_odl_api_fixture.pool,
+            )
 
     def test_checkin_open_access(
         self,
@@ -528,6 +469,52 @@ class TestOPDS2WithODLApi:
         assert 5 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 29 == opds2_with_odl_api_fixture.license.checkouts_left
 
+        # The parameters that we templated into the checkout URL are correct.
+        requested_url = opds2_with_odl_api_fixture.mock_http.requests.pop()
+
+        parsed = urlparse(requested_url)
+        assert "https" == parsed.scheme
+        assert "loan.feedbooks.net" == parsed.netloc
+        params = parse_qs(parsed.query)
+
+        assert (
+            opds2_with_odl_api_fixture.api.settings.passphrase_hint == params["hint"][0]
+        )
+        assert (
+            opds2_with_odl_api_fixture.api.settings.passphrase_hint_url
+            == params["hint_url"][0]
+        )
+
+        assert opds2_with_odl_api_fixture.license.identifier == params["id"][0]
+
+        # The checkout id and patron id are random UUIDs.
+        checkout_id = params["checkout_id"][0]
+        assert uuid.UUID(checkout_id)
+        patron_id = params["patron_id"][0]
+        assert uuid.UUID(patron_id)
+
+        # Loans expire in 21 days by default.
+        now = utc_now()
+        after_expiration = now + datetime.timedelta(days=23)
+        expires = urllib.parse.unquote(params["expires"][0])
+
+        # The expiration time passed to the server is associated with
+        # the UTC time zone.
+        assert expires.endswith("+00:00")
+        expires_t = dateutil.parser.parse(expires)
+        assert expires_t.tzinfo == dateutil.tz.tz.tzutc()
+
+        # It's a time in the future, but not _too far_ in the future.
+        assert expires_t > now
+        assert expires_t < after_expiration
+
+        notification_url = urllib.parse.unquote_plus(params["notification_url"][0])
+        assert (
+            "http://odl_notify?library_short_name=%s&loan_id=%s"
+            % (opds2_with_odl_api_fixture.library.short_name, db_loan.id)
+            == notification_url
+        )
+
     def test_checkout_open_access(
         self,
         db: DatabaseTransactionFixture,
@@ -538,11 +525,8 @@ class TestOPDS2WithODLApi:
             with_open_access_download=True,
             collection=opds2_with_odl_api_fixture.collection,
         )
-        loan = opds2_with_odl_api_fixture.api.checkout(
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            oa_work.license_pools[0],
-            MagicMock(),
+        loan = opds2_with_odl_api_fixture.api_checkout(
+            licensepool=oa_work.license_pools[0],
         )
 
         assert loan.collection(db.session) == opds2_with_odl_api_fixture.collection
@@ -596,6 +580,34 @@ class TestOPDS2WithODLApi:
         assert 0 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
         assert 0 == db.session.query(Hold).count()
 
+    def test_checkout_success_external_identifier_fallback(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+        opds_files_fixture: OPDSFilesFixture,
+    ) -> None:
+        # This book is available to check out.
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+
+        # The server returns a loan status document with no self link, but the license document
+        # has a link to the loan status document, so we make the extra request to get the external identifier
+        # from the license document.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            201,
+            content=opds2_with_odl_api_fixture.loan_status_document(
+                self_link=False,
+            ).model_dump_json(),
+        )
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            201, content=opds_files_fixture.sample_text("lcp/license/ul.json")
+        )
+        loan = opds2_with_odl_api_fixture.api_checkout()
+        assert (
+            loan.external_identifier
+            == "https://license.example.com/licenses/123-456/status"
+        )
+        assert len(opds2_with_odl_api_fixture.mock_http.requests) == 2
+
     def test_checkout_already_checked_out(
         self,
         db: DatabaseTransactionFixture,
@@ -629,14 +641,8 @@ class TestOPDS2WithODLApi:
         )
         opds2_with_odl_api_fixture.setup_license(concurrency=2, available=1)
 
-        pytest.raises(
-            NoAvailableCopies,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
 
     def test_checkout_no_available_copies(
         self,
@@ -647,14 +653,8 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=0)
         existing_loan, _ = opds2_with_odl_api_fixture.license.loan_to(db.patron())
 
-        pytest.raises(
-            NoAvailableCopies,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert 1 == db.session.query(Loan).count()
 
@@ -670,14 +670,8 @@ class TestOPDS2WithODLApi:
         )
         opds2_with_odl_api_fixture.pool.update_availability_from_licenses()
 
-        pytest.raises(
-            NoAvailableCopies,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert 0 == db.session.query(Loan).count()
 
@@ -687,14 +681,8 @@ class TestOPDS2WithODLApi:
         )
         opds2_with_odl_api_fixture.pool.update_availability_from_licenses()
 
-        pytest.raises(
-            NoAvailableCopies,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert 0 == db.session.query(Loan).count()
 
@@ -703,14 +691,8 @@ class TestOPDS2WithODLApi:
         hold.end = yesterday
         opds2_with_odl_api_fixture.pool.update_availability_from_licenses()
 
-        pytest.raises(
-            NoAvailableCopies,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert 0 == db.session.query(Loan).count()
 
@@ -728,14 +710,6 @@ class TestOPDS2WithODLApi:
         The title has no available copies, but we are out of sync with the distributor, so we think there
         are copies available.
         """
-        checkout = partial(
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            MagicMock(),
-        )
-
         # We think there are copies available.
         license = opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
 
@@ -747,7 +721,7 @@ class TestOPDS2WithODLApi:
         )
 
         with pytest.raises(NoAvailableCopies):
-            checkout()
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert db.session.query(Loan).count() == 0
         assert license.license_pool.licenses_available == 0
@@ -758,14 +732,6 @@ class TestOPDS2WithODLApi:
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
     ) -> None:
-        checkout = partial(
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            MagicMock(),
-        )
-
         # We think there are copies available.
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
 
@@ -777,14 +743,14 @@ class TestOPDS2WithODLApi:
         )
 
         with pytest.raises(BadResponseException):
-            checkout()
+            opds2_with_odl_api_fixture.api_checkout()
 
         # Test the case where we just get an unknown bad response.
         opds2_with_odl_api_fixture.mock_http.queue_response(
             500, "text/plain", content="halt and catch fire 🔥"
         )
         with pytest.raises(BadResponseException):
-            checkout()
+            opds2_with_odl_api_fixture.api_checkout()
 
     def test_checkout_no_licenses(
         self,
@@ -793,14 +759,8 @@ class TestOPDS2WithODLApi:
     ) -> None:
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1, left=0)
 
-        pytest.raises(
-            NoLicenses,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoLicenses):
+            opds2_with_odl_api_fixture.api_checkout()
 
         assert 0 == db.session.query(Loan).count()
 
@@ -815,14 +775,8 @@ class TestOPDS2WithODLApi:
             expires=utc_now() - datetime.timedelta(weeks=1),
         )
 
-        pytest.raises(
-            NoLicenses,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoLicenses):
+            opds2_with_odl_api_fixture.api_checkout()
 
         # license expired by no remaining checkouts
         opds2_with_odl_api_fixture.setup_license(
@@ -832,62 +786,39 @@ class TestOPDS2WithODLApi:
             expires=utc_now() + datetime.timedelta(weeks=1),
         )
 
-        pytest.raises(
-            NoLicenses,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
+        with pytest.raises(NoLicenses):
+            opds2_with_odl_api_fixture.api_checkout()
 
     def test_checkout_cannot_loan(
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
     ) -> None:
-        lsd = json.dumps(
-            {
-                "status": "revoked",
-            }
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200,
+            content=opds2_with_odl_api_fixture.loan_status_document(
+                "revoked"
+            ).model_dump_json(),
         )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        pytest.raises(
-            CannotLoan,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
-
+        with pytest.raises(CannotLoan):
+            opds2_with_odl_api_fixture.api_checkout()
         assert 0 == db.session.query(Loan).count()
 
         # No external identifier.
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-            }
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200,
+            content=opds2_with_odl_api_fixture.loan_status_document(
+                self_link=False, license_link=False
+            ).model_dump_json(),
         )
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
-        pytest.raises(
-            CannotLoan,
-            opds2_with_odl_api_fixture.api.checkout,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            opds2_with_odl_api_fixture.pool,
-            Representation.EPUB_MEDIA_TYPE,
-        )
-
+        with pytest.raises(CannotLoan):
+            opds2_with_odl_api_fixture.api_checkout()
         assert 0 == db.session.query(Loan).count()
 
     @pytest.mark.parametrize(
-        "delivery_mechanism, correct_type, correct_link, links",
+        "drm_scheme, correct_type, correct_link, links",
         [
-            (
+            pytest.param(
                 DeliveryMechanism.ADOBE_DRM,
                 DeliveryMechanism.ADOBE_DRM,
                 "http://acsm",
@@ -898,20 +829,35 @@ class TestOPDS2WithODLApi:
                         "type": DeliveryMechanism.ADOBE_DRM,
                     }
                 ],
+                id="adobe drm",
             ),
-            (
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                "http://manifest",
+            pytest.param(
+                DeliveryMechanism.LCP_DRM,
+                DeliveryMechanism.LCP_DRM,
+                "http://lcp",
                 [
                     {
-                        "rel": "manifest",
-                        "href": "http://manifest",
-                        "type": MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                        "rel": "license",
+                        "href": "http://lcp",
+                        "type": DeliveryMechanism.LCP_DRM,
                     }
                 ],
+                id="lcp drm",
             ),
-            (
+            pytest.param(
+                DeliveryMechanism.NO_DRM,
+                "application/epub+zip",
+                "http://publication",
+                [
+                    {
+                        "rel": "publication",
+                        "href": "http://publication",
+                        "type": "application/epub+zip",
+                    }
+                ],
+                id="no drm",
+            ),
+            pytest.param(
                 DeliveryMechanism.FEEDBOOKS_AUDIOBOOK_DRM,
                 FEEDBOOKS_AUDIO,
                 "http://correct",
@@ -927,6 +873,7 @@ class TestOPDS2WithODLApi:
                         "type": FEEDBOOKS_AUDIO,
                     },
                 ],
+                id="feedbooks audio",
             ),
         ],
     )
@@ -934,10 +881,10 @@ class TestOPDS2WithODLApi:
         self,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
         db: DatabaseTransactionFixture,
-        delivery_mechanism: str,
+        drm_scheme: str,
         correct_type: str,
         correct_link: str,
-        links: dict[str, Any],
+        links: list[dict[str, str]],
     ) -> None:
         # Fulfill a loan in a way that gives access to a license file.
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
@@ -945,28 +892,30 @@ class TestOPDS2WithODLApi:
 
         lpdm = MagicMock(spec=LicensePoolDeliveryMechanism)
         lpdm.delivery_mechanism = MagicMock(spec=DeliveryMechanism)
-        lpdm.delivery_mechanism.content_type = "ignored/format"
-        lpdm.delivery_mechanism.drm_scheme = delivery_mechanism
-
-        lsd = json.dumps(
-            {
-                "status": "ready",
-                "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                "links": links,
-            }
+        lpdm.delivery_mechanism.content_type = (
+            "ignored/format" if drm_scheme != DeliveryMechanism.NO_DRM else correct_type
         )
+        lpdm.delivery_mechanism.drm_scheme = drm_scheme
 
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
+        lsd = opds2_with_odl_api_fixture.loan_status_document("active", links=links)
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200, content=lsd.model_dump_json()
+        )
         fulfillment = opds2_with_odl_api_fixture.api.fulfill(
             opds2_with_odl_api_fixture.patron,
             "pin",
             opds2_with_odl_api_fixture.pool,
             lpdm,
         )
-        assert isinstance(fulfillment, FetchFulfillment)
-        assert correct_link == fulfillment.content_link
-        assert correct_type == fulfillment.content_type
-        assert ["2xx"] == fulfillment.allowed_response_codes
+        assert (
+            isinstance(fulfillment, FetchFulfillment)
+            if drm_scheme != DeliveryMechanism.NO_DRM
+            else isinstance(fulfillment, RedirectFulfillment)
+        )
+        assert correct_link == fulfillment.content_link  # type: ignore[attr-defined]
+        assert correct_type == fulfillment.content_type  # type: ignore[attr-defined]
+        if isinstance(fulfillment, FetchFulfillment):
+            assert fulfillment.allowed_response_codes == ["2xx"]
 
     def test_fulfill_open_access(
         self,
@@ -985,14 +934,10 @@ class TestOPDS2WithODLApi:
             spec=LicensePoolDeliveryMechanism,
             delivery_mechanism=MagicMock(drm_scheme=None),
         )
-        pytest.raises(
-            CannotFulfill,
-            opds2_with_odl_api_fixture.api.fulfill,
-            opds2_with_odl_api_fixture.patron,
-            "pin",
-            pool,
-            mock_lpdm,
-        )
+        with pytest.raises(CannotFulfill):
+            opds2_with_odl_api_fixture.api.fulfill(
+                opds2_with_odl_api_fixture.patron, "pin", pool, mock_lpdm
+            )
 
         lpdm = pool.delivery_mechanisms[0]
         fulfillment = opds2_with_odl_api_fixture.api.fulfill(
@@ -1066,15 +1011,20 @@ class TestOPDS2WithODLApi:
     @pytest.mark.parametrize(
         "status_document, updated_availability",
         [
-            ({"status": "revoked"}, True),
-            ({"status": "cancelled"}, True),
-            (
-                {
-                    "status": "active",
-                    "potential_rights": {"end": "2017-10-21T11:12:13Z"},
-                    "links": [],
-                },
+            pytest.param(
+                OPDS2WithODLApiFixture.loan_status_document("revoked"),
+                True,
+                id="revoked",
+            ),
+            pytest.param(
+                OPDS2WithODLApiFixture.loan_status_document("cancelled"),
+                True,
+                id="cancelled",
+            ),
+            pytest.param(
+                OPDS2WithODLApiFixture.loan_status_document("active"),
                 False,
+                id="missing link",
             ),
         ],
     )
@@ -1082,7 +1032,7 @@ class TestOPDS2WithODLApi:
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-        status_document: dict[str, Any],
+        status_document: LoanStatus,
         updated_availability: bool,
     ) -> None:
         opds2_with_odl_api_fixture.setup_license(concurrency=7, available=7)
@@ -1091,9 +1041,9 @@ class TestOPDS2WithODLApi:
         assert 1 == db.session.query(Loan).count()
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
 
-        lsd = json.dumps(status_document)
-
-        opds2_with_odl_api_fixture.mock_http.queue_response(200, content=lsd)
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            200, content=status_document.model_dump_json()
+        )
         with pytest.raises(CannotFulfill):
             opds2_with_odl_api_fixture.api.fulfill(
                 opds2_with_odl_api_fixture.patron,
@@ -1847,26 +1797,12 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.patron
         )
         loan.external_identifier = db.fresh_str()
-        status_doc = {
-            "status": "active",
-        }
+        status_doc = opds2_with_odl_api_fixture.loan_status_document("active")
 
         opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
         # Availability hasn't changed, and the loan still exists.
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 1 == db.session.query(Loan).count()
-
-    def test_update_loan_bad_status(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        status_doc = {
-            "status": "foo",
-        }
-
-        with pytest.raises(RemoteIntegrationException, match="unknown status value"):
-            opds2_with_odl_api_fixture.api.update_loan(MagicMock(), status_doc)
 
     def test_update_loan_removes_loan(
         self,
@@ -1879,9 +1815,7 @@ class TestOPDS2WithODLApi:
         assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 1 == db.session.query(Loan).count()
 
-        status_doc = {
-            "status": "cancelled",
-        }
+        status_doc = opds2_with_odl_api_fixture.loan_status_document("cancelled")
 
         opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
 
@@ -1903,9 +1837,7 @@ class TestOPDS2WithODLApi:
         assert opds2_with_odl_api_fixture.pool.licenses_reserved == 0
         assert opds2_with_odl_api_fixture.pool.patrons_in_hold_queue == 1
 
-        status_doc = {
-            "status": "cancelled",
-        }
+        status_doc = opds2_with_odl_api_fixture.loan_status_document("cancelled")
 
         opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
 

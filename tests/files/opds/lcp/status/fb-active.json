@@ -1,0 +1,39 @@
+{
+ "id": "123-456-789",
+ "status": "active",
+ "message": "The license has been activated.",
+ "updated": {
+  "license": "2024-09-25T17:15:19Z",
+  "status": "2024-09-25T17:15:19Z"
+ },
+ "links": [
+  {
+   "href": "https://example.com/loan/status/?id=123&checkout_id=123-456-789",
+   "type": "application/vnd.readium.license.status.v1.0+json",
+   "rel": "self"
+  },
+  {
+   "href": "https://example.com/loan/audiobook/manifest/?loan_uuid=123-456-789",
+   "type": "application/audiobook+json; protection=http://www.feedbooks.com/audiobooks/access-restriction",
+   "rel": "manifest"
+  },
+  {
+   "href": "https://example.com/loan/audiobook/player/?loan_uuid=123-456-789",
+   "type": "text/html",
+   "rel": "publication"
+  },
+  {
+   "href": "https://example.com/loan/lcp/?loan_uuid=123-456-789",
+   "type": "application/vnd.readium.lcp.license.v1.0+json",
+   "rel": "license"
+  },
+  {
+   "href": "https://example.com/loan/do-return?uuid=123-456-789",
+   "type": "application/vnd.readium.license.status.v1.0+json",
+   "rel": "return"
+  }
+ ],
+ "potential_rights": {
+  "end": "2024-10-16T17:09:54Z"
+ }
+}

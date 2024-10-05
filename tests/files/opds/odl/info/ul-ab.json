@@ -1,0 +1,1 @@
+{"identifier":"urn:uuid:123","status":"available","created":"2024-09-13T07:00:00Z","format":"application\/audiobook+lcp","terms":{"concurrency":2},"protection":{"format":"application\/vnd.readium.lcp.license.v1.0+json","copy":true,"print":true},"checkouts":{"available":2}}
