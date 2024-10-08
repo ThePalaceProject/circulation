@@ -288,7 +288,7 @@ Werkzeug = "^3.0.0"
 
 [tool.poetry.group.ci.dependencies]
 dunamai = "^1.16"
-pre-commit = "^3.2"
+pre-commit = "^4.0"
 tox = "^4.4"
 tox-docker = "^5.0"
 tox-gh-actions = "^3.0"
