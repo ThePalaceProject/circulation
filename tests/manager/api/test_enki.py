@@ -403,7 +403,6 @@ class TestEnkiAPI:
         loan = enki_test_fixture.api.parse_patron_loans(
             result["result"]["checkedOutItems"][0]
         )
-        assert loan.data_source_name == DataSource.ENKI
         assert loan.identifier_type == Identifier.ENKI_ID
         assert loan.identifier == "2"
         assert loan.start_date == datetime_utc(2017, 8, 23, 19, 31, 58, 0)
@@ -416,7 +415,6 @@ class TestEnkiAPI:
         loan = enki_test_fixture.api.parse_patron_loans(
             result["result"]["checkedOutItems"][0]
         )
-        assert loan.data_source_name == DataSource.ENKI
         assert loan.identifier_type == Identifier.ENKI_ID
         assert loan.identifier == "3334"
         assert loan.start_date == datetime_utc(2017, 8, 23, 19, 42, 35, 0)
@@ -603,7 +601,6 @@ class TestEnkiAPI:
         # The result is a single LoanInfo.
         assert isinstance(loan, LoanInfo)
         assert Identifier.ENKI_ID == loan.identifier_type
-        assert DataSource.ENKI == loan.data_source_name
         assert "231" == loan.identifier
         assert enki_test_fixture.collection == loan.collection(db.session)
         assert datetime_utc(2017, 8, 15, 14, 56, 51) == loan.start_date

@@ -421,7 +421,6 @@ class TestOPDSForDistributorsAPI:
             patron, "1234", pool, MagicMock()
         )
         assert opds_dist_api_fixture.collection.id == loan_info.collection_id
-        assert data_source.name == loan_info.data_source_name
         assert Identifier.URI == loan_info.identifier_type
         assert pool.identifier.identifier == loan_info.identifier
 

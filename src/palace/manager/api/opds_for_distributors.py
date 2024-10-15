@@ -275,11 +275,8 @@ class OPDSForDistributorsAPI(
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
         now = utc_now()
-        return LoanInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
+        return LoanInfo.from_license_pool(
+            licensepool,
             start_date=now,
             end_date=None,
         )

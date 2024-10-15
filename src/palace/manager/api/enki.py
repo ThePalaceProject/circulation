@@ -428,14 +428,9 @@ class EnkiAPI(
         expires = self._epoch_to_struct(due_date)
 
         # Create the loan info.
-        loan = LoanInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            None,
-            expires,
-            None,
+        loan = LoanInfo.from_license_pool(
+            licensepool,
+            end_date=expires,
         )
         return loan
 
@@ -572,16 +567,14 @@ class EnkiAPI(
         enki_id = checkout_data["id"]
         start_date = self._epoch_to_struct(checkout_data["checkoutdate"])
         end_date = self._epoch_to_struct(checkout_data["duedate"])
-        if self.collection is None:
-            raise ValueError("Collection is None")
+        if self.collection_id is None:
+            raise ValueError("Collection_id is None")
         return LoanInfo(
-            self.collection,
-            DataSource.ENKI,
-            Identifier.ENKI_ID,
-            enki_id,
+            collection_id=self.collection_id,
+            identifier_type=Identifier.ENKI_ID,
+            identifier=enki_id,
             start_date=start_date,
             end_date=end_date,
-            fulfillment=None,
         )
 
     def parse_patron_holds(self, hold_data: Mapping[str, Any]) -> HoldInfo | None:

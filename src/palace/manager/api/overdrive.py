@@ -1017,14 +1017,9 @@ class OverdriveAPI(
             expires = self.extract_expiration_date(data)
 
         # Create the loan info.
-        loan = LoanInfo(
-            licensepool.collection,
-            licensepool.data_source.name,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            None,
-            expires,
-            None,
+        loan = LoanInfo.from_license_pool(
+            licensepool,
+            end_date=expires,
         )
         return loan
 
@@ -1057,14 +1052,9 @@ class OverdriveAPI(
             # then immediately borrows the same book through SimplyE.
             loan = self.get_loan(patron, pin, identifier.identifier)
             expires = self.extract_expiration_date(loan)
-            return LoanInfo(
-                licensepool.collection,
-                licensepool.data_source.name,
-                identifier.type,
-                identifier.identifier,
-                None,
-                expires,
-                None,
+            return LoanInfo.from_license_pool(
+                licensepool,
+                end_date=expires,
             )
 
         if code in self.ERROR_MESSAGE_TO_EXCEPTION:
@@ -1441,7 +1431,7 @@ class OverdriveAPI(
         self, patron: Patron, pin: str | None
     ) -> Iterable[LoanInfo | HoldInfo]:
         collection = self.collection
-        if collection is None:
+        if collection is None or collection.id is None:
             raise BasePalaceException(
                 "No collection available for Overdrive patron activity."
             )
@@ -1465,7 +1455,7 @@ class OverdriveAPI(
             holds = {}
 
         for checkout in loans.get("checkouts", []):
-            loan_info = self.process_checkout_data(checkout, collection)
+            loan_info = self.process_checkout_data(checkout, collection.id)
             if loan_info is not None:
                 yield loan_info
 
@@ -1482,10 +1472,9 @@ class OverdriveAPI(
                 # 0, not whatever position Overdrive had for them.
                 position = 0
             yield HoldInfo(
-                collection,
-                DataSource.OVERDRIVE,
-                Identifier.OVERDRIVE_ID,
-                overdrive_identifier,
+                collection_id=collection.id,
+                identifier_type=Identifier.OVERDRIVE_ID,
+                identifier=overdrive_identifier,
                 start_date=start,
                 end_date=end,
                 hold_position=position,
@@ -1493,7 +1482,7 @@ class OverdriveAPI(
 
     @classmethod
     def process_checkout_data(
-        cls, checkout: dict[str, Any], collection: Collection
+        cls, checkout: dict[str, Any], collection_id: int
     ) -> LoanInfo | None:
         """Convert one checkout from Overdrive's list of checkouts
         into a LoanInfo object.
@@ -1555,10 +1544,9 @@ class OverdriveAPI(
                 )
 
         return LoanInfo(
-            collection,
-            DataSource.OVERDRIVE,
-            Identifier.OVERDRIVE_ID,
-            overdrive_identifier,
+            collection_id=collection_id,
+            identifier_type=Identifier.OVERDRIVE_ID,
+            identifier=overdrive_identifier,
             start_date=start,
             end_date=end,
             locked_to=locked_to,
@@ -1642,11 +1630,8 @@ class OverdriveAPI(
             # (either creating a new hold or fetching an existing
             # one).
             position, start_date = self.extract_data_from_hold_response(hold_response)
-            return HoldInfo(
-                licensepool.collection,
-                licensepool.data_source.name,
-                licensepool.identifier.type,
-                licensepool.identifier.identifier,
+            return HoldInfo.from_license_pool(
+                licensepool,
                 start_date=start_date,
                 end_date=None,
                 hold_position=position,

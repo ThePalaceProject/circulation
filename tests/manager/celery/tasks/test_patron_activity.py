@@ -166,25 +166,26 @@ class TestSyncPatronActivity:
     def test_success(
         self, sync_task_fixture: SyncTaskFixture, db: DatabaseTransactionFixture
     ):
-        loan_pool = db.licensepool(None, collection=sync_task_fixture.collection)
-        hold_pool = db.licensepool(None, collection=sync_task_fixture.collection)
+        collection = sync_task_fixture.collection
+        assert collection.data_source is not None
+        data_source_name = collection.data_source.name
+        loan_pool = db.licensepool(
+            None, collection=collection, data_source_name=data_source_name
+        )
+        hold_pool = db.licensepool(
+            None, collection=collection, data_source_name=data_source_name
+        )
 
         sync_task_fixture.mock_collection_api.add_remote_loan(
-            LoanInfo(
-                collection=sync_task_fixture.collection,
-                data_source_name=loan_pool.data_source,
-                identifier_type=loan_pool.identifier.type,
-                identifier=loan_pool.identifier.identifier,
+            LoanInfo.from_license_pool(
+                loan_pool,
                 start_date=None,
                 end_date=None,
             )
         )
         sync_task_fixture.mock_collection_api.add_remote_hold(
-            HoldInfo(
-                collection=sync_task_fixture.collection,
-                data_source_name=hold_pool.data_source,
-                identifier_type=hold_pool.identifier.type,
-                identifier=hold_pool.identifier.identifier,
+            HoldInfo.from_license_pool(
+                hold_pool,
                 hold_position=1,
                 start_date=None,
                 end_date=None,

@@ -567,7 +567,6 @@ class Hold(Base, LoanAndHoldMixin):
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
-    external_identifier = Column(Unicode, unique=True, nullable=True)
     patron_last_notified = Column(DateTime, nullable=True)
 
     patron: Mapped[Patron] = relationship(

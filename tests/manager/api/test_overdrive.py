@@ -866,7 +866,6 @@ class TestOverdriveAPI:
         # The return value is a LoanInfo object with all relevant info.
         assert isinstance(loan, LoanInfo)
         assert pool.collection.id == loan.collection_id
-        assert pool.data_source.name == loan.data_source_name
         assert identifier.type == loan.identifier_type
         assert identifier.identifier == loan.identifier
         assert None == loan.start_date
@@ -995,7 +994,6 @@ class TestOverdriveAPI:
         # And a LoanInfo was created with all relevant information.
         assert isinstance(loan, LoanInfo)
         assert pool.collection.id == loan.collection_id
-        assert pool.data_source.name == loan.data_source_name
         assert identifier.type == loan.identifier_type
         assert identifier.identifier == loan.identifier
         assert None == loan.start_date
@@ -1177,7 +1175,6 @@ class TestOverdriveAPI:
         def assert_correct_holdinfo(x):
             assert isinstance(x, HoldInfo)
             assert licensepool.collection == x.collection(db.session)
-            assert licensepool.data_source.name == x.data_source_name
             assert identifier.identifier == x.identifier
             assert identifier.type == x.identifier_type
             assert datetime_utc(2015, 3, 26, 11, 30, 29) == x.start_date

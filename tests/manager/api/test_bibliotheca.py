@@ -820,7 +820,6 @@ class TestPatronCirculationParser:
 
         # This is the book on reserve.
         assert collection.id == h1.collection_id
-        assert DataSource.BIBLIOTHECA == h1.data_source_name
         assert "9wd8" == h1.identifier
         expect_hold_start = datetime_utc(2015, 5, 25, 17, 5, 34)
         expect_hold_end = datetime_utc(2015, 5, 27, 17, 5, 34)
@@ -831,7 +830,6 @@ class TestPatronCirculationParser:
         # This is the book on hold.
         assert "d4o8r9" == h2.identifier
         assert collection.id == h2.collection_id
-        assert DataSource.BIBLIOTHECA == h2.data_source_name
         expect_hold_start = datetime_utc(2015, 3, 24, 15, 6, 56)
         expect_hold_end = datetime_utc(2015, 3, 24, 15, 7, 51)
         assert expect_hold_start == h2.start_date

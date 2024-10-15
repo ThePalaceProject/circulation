@@ -1053,6 +1053,10 @@ class LicensePool(Base):
             loan.fulfillment = fulfillment
         if external_identifier:
             loan.external_identifier = external_identifier
+        if start:
+            loan.start = start
+        if end:
+            loan.end = end
         return loan, is_new
 
     def on_hold_to(
@@ -1061,7 +1065,6 @@ class LicensePool(Base):
         start=None,
         end=None,
         position=None,
-        external_identifier=None,
     ):
         _db = Session.object_session(patron)
         if not patron.library.settings.allow_holds:
@@ -1069,8 +1072,6 @@ class LicensePool(Base):
         start = start or utc_now()
         hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
         hold.update(start, end, position)
-        if external_identifier:
-            hold.external_identifier = external_identifier
         return hold, new
 
     def best_available_license(self) -> License | None:

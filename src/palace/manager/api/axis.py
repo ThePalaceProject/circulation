@@ -45,7 +45,6 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotFulfill,
-    CannotHold,
     CannotLoan,
     CurrentlyAvailable,
     InvalidInputException,
@@ -415,9 +414,7 @@ class Axis360API(
         patron_id = patron.authorization_identifier
         response = self._checkin(title_id, patron_id)
         try:
-            CheckinResponseParser(licensepool.collection).process_first(
-                response.content
-            )
+            CheckinResponseParser().process_first(response.content)
         except etree.XMLSyntaxError:
             raise RemoteInitiatedServerError(response.text, self.label())
 
@@ -454,12 +451,8 @@ class Axis360API(
             title_id, patron_id, self.internal_format(delivery_mechanism)
         )
         try:
-            loan_info = CheckoutResponseParser(licensepool.collection).process_first(
-                response.content
-            )
-            if loan_info is None:
-                raise CannotLoan()
-            return loan_info
+            expiration_date = CheckoutResponseParser().process_first(response.content)
+            return LoanInfo.from_license_pool(licensepool, end_date=expiration_date)
         except etree.XMLSyntaxError:
             raise RemoteInitiatedServerError(response.text, self.label())
 
@@ -525,17 +518,13 @@ class Axis360API(
             titleId=title_id, patronId=patron_id, email=hold_notification_email
         )
         response = self.request(url, params=params)
-        hold_info = HoldResponseParser(licensepool.collection).process_first(
-            response.content
+        hold_position = HoldResponseParser().process_first(response.content)
+        hold_info = HoldInfo.from_license_pool(
+            licensepool,
+            start_date=utc_now(),
+            end_date=None,
+            hold_position=hold_position,
         )
-        if not hold_info:
-            raise CannotHold()
-        if not hold_info.identifier:
-            # The Axis 360 API doesn't return the identifier of the
-            # item that was placed on hold, so we have to fill it in
-            # based on our own knowledge.
-            hold_info.identifier_type = identifier.type
-            hold_info.identifier = identifier.identifier
         return hold_info
 
     def release_hold(self, patron: Patron, pin: str, licensepool: LicensePool) -> None:
@@ -546,9 +535,7 @@ class Axis360API(
         params = dict(titleId=title_id, patronId=patron_id)
         response = self.request(url, params=params)
         try:
-            HoldReleaseResponseParser(licensepool.collection).process_first(
-                response.content
-            )
+            HoldReleaseResponseParser().process_first(response.content)
         except NotOnHold:
             # Fine, it wasn't on hold and now it's still not on hold.
             pass
@@ -1423,14 +1410,6 @@ class ResponseParser:
 
 
 class XMLResponseParser(ResponseParser, Axis360Parser[T], ABC):
-    def __init__(self, collection: Collection):
-        """Constructor.
-
-        :param collection: A Collection, in case parsing this document
-        results in the creation of LoanInfo or HoldInfo objects.
-        """
-        self.collection = collection
-
     def raise_exception_on_error(
         self,
         e: _Element,
@@ -1477,12 +1456,14 @@ class CheckinResponseParser(XMLResponseParser[Literal[True]]):
         return True
 
 
-class CheckoutResponseParser(XMLResponseParser[LoanInfo]):
+class CheckoutResponseParser(XMLResponseParser[datetime.datetime | None]):
     @property
     def xpath_expression(self) -> str:
         return "//axis:checkoutResult"
 
-    def process_one(self, e: _Element, namespaces: dict[str, str] | None) -> LoanInfo:
+    def process_one(
+        self, e: _Element, namespaces: dict[str, str] | None
+    ) -> datetime.datetime | None:
         """Either turn the given document into a LoanInfo
         object, or raise an appropriate exception.
         """
@@ -1490,34 +1471,22 @@ class CheckoutResponseParser(XMLResponseParser[LoanInfo]):
 
         # If we get to this point it's because the checkout succeeded.
         expiration_date = self._xpath1(e, "//axis:expirationDate", namespaces)
-        fulfillment_url = self._xpath1(e, "//axis:url", namespaces)
-        if fulfillment_url is not None:
-            fulfillment_url = fulfillment_url.text
 
         if expiration_date is not None:
             expiration_date = expiration_date.text
             expiration_date = self._pd(expiration_date)
 
-        loan_start = utc_now()
-        loan = LoanInfo(
-            collection=self.collection,
-            data_source_name=DataSource.AXIS_360,
-            identifier_type=self.id_type,
-            identifier=None,
-            start_date=loan_start,
-            end_date=expiration_date,
-        )
-        return loan
+        return expiration_date  # type: ignore[no-any-return]
 
 
-class HoldResponseParser(XMLResponseParser[HoldInfo]):
+class HoldResponseParser(XMLResponseParser[int | None], LoggerMixin):
     @property
     def xpath_expression(self) -> str:
         return "//axis:addtoholdResult"
 
-    def process_one(self, e: _Element, namespaces: dict[str, str] | None) -> HoldInfo:
-        """Either turn the given document into a HoldInfo
-        object, or raise an appropriate exception.
+    def process_one(self, e: _Element, namespaces: dict[str, str] | None) -> int | None:
+        """Either turn the given document into an int representing the hold position,
+        or raise an appropriate exception.
         """
         self.raise_exception_on_error(e, namespaces, {3109: AlreadyOnHold})
 
@@ -1529,22 +1498,10 @@ class HoldResponseParser(XMLResponseParser[HoldInfo]):
             try:
                 queue_position = int(queue_position.text)
             except ValueError:
-                print("Invalid queue position: %s" % queue_position)
+                self.log.warning("Invalid queue position: %s" % queue_position)
                 queue_position = None
 
-        hold_start = utc_now()
-        # NOTE: The caller needs to fill in Collection -- we have no idea
-        # what collection this is.
-        hold = HoldInfo(
-            collection=self.collection,
-            data_source_name=DataSource.AXIS_360,
-            identifier_type=self.id_type,
-            identifier=None,
-            start_date=hold_start,
-            end_date=None,
-            hold_position=queue_position,
-        )
-        return hold
+        return queue_position
 
 
 class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
@@ -1575,11 +1532,12 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
         """
         self.api = api
         self.internal_format = internal_format
-        if api.collection is None:
+        if api.collection_id is None:
             raise ValueError(
-                "Cannot use an Axis360AvailabilityResponseParser without a Collection."
+                "Cannot use an Axis360AvailabilityResponseParser without a collection_id."
             )
-        super().__init__(api.collection)
+        self.collection_id = api.collection_id
+        super().__init__()
 
     @property
     def xpath_expression(self) -> str:
@@ -1643,8 +1601,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 # We're out of luck -- we can't fulfill this loan.
                 fulfillment = None
             info = LoanInfo(
-                collection=self.collection,
-                data_source_name=DataSource.AXIS_360,
+                collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
                 start_date=start_date,
@@ -1655,8 +1612,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
         elif reserved:
             end_date = self._xpath1_date(availability, "axis:reservedEndDate", ns)
             info = HoldInfo(
-                collection=self.collection,
-                data_source_name=DataSource.AXIS_360,
+                collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
                 start_date=None,
@@ -1668,8 +1624,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 availability, "axis:holdsQueuePosition", ns
             )
             info = HoldInfo(
-                collection=self.collection,
-                data_source_name=DataSource.AXIS_360,
+                collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
                 start_date=None,
