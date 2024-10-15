@@ -338,7 +338,7 @@ class LoanAndHoldInfoMixin:
         return pool
 
 
-@dataclasses.dataclass(frozen=True, kw_only=True)
+@dataclasses.dataclass(kw_only=True)
 class LoanInfo(LoanAndHoldInfoMixin):
     """A record of a loan."""
 
