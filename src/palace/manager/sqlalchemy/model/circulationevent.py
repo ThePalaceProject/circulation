@@ -99,6 +99,11 @@ class CirculationEvent(Base):
     CM_CHECKIN = "circulation_manager_check_in"
     CM_HOLD_PLACE = "circulation_manager_hold_place"
     CM_HOLD_RELEASE = "circulation_manager_hold_release"
+    CM_HOLD_EXPIRED = "circulation_manager_hold_expired"
+    CM_HOLD_READY_FOR_CHECKOUT = "circulation_manager_hold_ready"
+    CM_LOAN_EXPIRED = "circulation_manager_loan_expired"
+    CM_HOLD_CONVERTED_TO_LOAN = "circulation_manager_hold_converted_to_loan"
+    CM_LOAN_REVOKED = "circulation_manager_loan_revoked"
     CM_FULFILL = "circulation_manager_fulfill"
 
     # Events that we hear about from a distributor.

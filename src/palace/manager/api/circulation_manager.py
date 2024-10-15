@@ -197,9 +197,9 @@ class CirculationManager(LoggerMixin):
         CirculationManager's configuration from the database.
         """
         last_update = Configuration.site_configuration_last_update(self._db)
-        if last_update > self.site_configuration_last_update:
-            self.load_settings()
-            self.site_configuration_last_update = last_update
+        # if last_update > self.site_configuration_last_update:
+        self.load_settings()
+        self.site_configuration_last_update = last_update
 
     def get_patron_web_domains(self) -> set[str]:
         """Return the set of patron web client domains."""

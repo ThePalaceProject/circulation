@@ -1143,6 +1143,14 @@ class CirculationAPI(LoggerMixin):
             )
             if existing_hold:
                 # The book was on hold, and now we have a loan.
+                # collect cm event to commemorate the conversion:
+                self._collect_event(
+                    patron=patron,
+                    licensepool=licensepool,
+                    name=CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN,
+                    include_neighborhood=True,
+                )
+
                 # Delete the record of the hold.
                 self._db.delete(existing_hold)
             __transaction.commit()
@@ -1197,6 +1205,7 @@ class CirculationAPI(LoggerMixin):
             self._collect_event(patron, licensepool, CirculationEvent.CM_HOLD_PLACE)
 
         if existing_loan:
+            self._collect_event(patron, licensepool, CirculationEvent.CM_LOAN_REVOKED)
             self._db.delete(existing_loan)
         __transaction.commit()
         return None, hold, is_new

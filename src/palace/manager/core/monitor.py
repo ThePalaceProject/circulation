@@ -880,11 +880,15 @@ class ReaperMonitor(Monitor):
         count = qu.count()
         self.log.info("Deleting %d row(s)", count)
         while count > 0:
+            post_delete_ops = []
             for i in qu.limit(self.BATCH_SIZE):
                 self.log.info("Deleting %r", i)
+                post_delete_ops = self.post_delete_op(i)
                 self.delete(i)
                 rows_deleted += 1
             self._db.commit()
+            for op in post_delete_ops:
+                op()
             count = qu.count()
         return TimestampData(achievements="Items deleted: %d" % rows_deleted)
 
@@ -896,6 +900,9 @@ class ReaperMonitor(Monitor):
         infinite loop.
         """
         self._db.delete(row)
+
+    def post_delete_op(self, row: MODEL_CLASS):
+        pass
 
     def query(self):
         return self._db.query(self.MODEL_CLASS).filter(self.where_clause)

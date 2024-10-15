@@ -7,19 +7,41 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.celery.task import Task
+from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.util.datetime_helpers import utc_now
 
 
-def remove_expired_holds_for_collection(db: Session, collection_id: int) -> int:
+def remove_expired_holds_for_collection(
+    db: Session, collection_id: int, analytics: Analytics
+) -> int:
     """
     Remove expired holds from the database for this collection.
     """
+
+    # generate expiration events for expired holds before deleting them
+    select_query = select(Hold).where(
+        Hold.position == 0,
+        Hold.end < utc_now(),
+        Hold.license_pool_id == LicensePool.id,
+        LicensePool.collection_id == collection_id,
+    )
+
+    expired_holds = db.scalars(select_query).all()
+    for hold in expired_holds:
+        analytics.collect_event(
+            library=hold.library,
+            license_pool=hold.license_pool,
+            event_type=CirculationEvent.CM_HOLD_EXPIRED,
+            patron=hold.patron,
+        )
+    # delete the holds
     query = (
         delete(Hold)
         .where(
@@ -74,6 +96,7 @@ def lock_licenses(license_pool: LicensePool) -> None:
 def recalculate_holds_for_licensepool(
     license_pool: LicensePool,
     reservation_period: datetime.timedelta,
+    analytics: Analytics,
 ) -> int:
     # We take out row level locks on all the licenses and holds for this license pool, so that
     # everything is in a consistent state while we update the hold queue. This means we should be
@@ -96,6 +119,12 @@ def recalculate_holds_for_licensepool(
             hold.position = 0
             hold.end = utc_now() + reservation_period
             updated += 1
+            analytics.collect_event(
+                library=hold.library,
+                license_pool=hold.license_pool,
+                event_type=CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT,
+                patron=hold.patron,
+            )
 
     # Update the position for the remaining holds.
     for idx, hold in enumerate(waiting):
@@ -115,6 +144,7 @@ def remove_expired_holds(task: Task) -> None:
     """
     registry = task.services.integration_registry.license_providers()
     protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
+    analytics = task.services.analytics.analytics()
     with task.session() as session:
         collections = [
             (collection.id, collection.name)
@@ -123,7 +153,9 @@ def remove_expired_holds(task: Task) -> None:
         ]
     for collection_id, collection_name in collections:
         with task.transaction() as session:
-            removed = remove_expired_holds_for_collection(session, collection_id)
+            removed = remove_expired_holds_for_collection(
+                session, collection_id, analytics
+            )
             task.log.info(
                 f"Removed {removed} expired holds for collection {collection_name} ({collection_id})."
             )
@@ -200,8 +232,12 @@ def recalculate_hold_queue_collection(
                         f"Skipping license pool {license_pool_id} because it no longer exists."
                     )
                     continue
+
+                analytics = task.services.analytics.analytics()
                 updated = recalculate_holds_for_licensepool(
-                    license_pool, reservation_period
+                    license_pool,
+                    reservation_period,
+                    analytics,
                 )
                 edition = license_pool.presentation_edition
                 title = edition.title if edition else None
