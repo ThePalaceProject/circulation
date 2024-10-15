@@ -207,8 +207,12 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
 
         return link_data
 
-    def _serialize_sort_link(self, link: Link):
-        sort_link = {"href": link.href, "title": link.title, "rel": PALACE_REL_SORT}
+    def _serialize_sort_link(self, link: Link) -> dict[str, Any]:
+        sort_link: dict[str, Any] = {
+            "href": link.href,
+            "title": link.title,
+            "rel": PALACE_REL_SORT,
+        }
         if link.get("activeFacet", False):
             sort_link["properties"] = {PALACE_PROPERTIES_ACTIVE_SORT: "true"}
         return sort_link
