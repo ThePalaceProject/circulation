@@ -141,10 +141,11 @@ class TestS3AnalyticsProvider:
         assert key == s3_analytics_fixture.analytics_provider._get_file_key.return_value
 
         event = json.loads(content)
-        data_source = license_pool.data_source if license_pool else None
-        identifier = license_pool.identifier if license_pool else None
-        collection = license_pool.collection if license_pool else None
-        work = license_pool.work if license_pool else None
+        assert license_pool is not None
+        data_source = license_pool.data_source
+        identifier = license_pool.identifier
+        collection = license_pool.collection
+        work = license_pool.work
 
         assert event["type"] == event_type
         assert event["start"] == event_time_formatted
