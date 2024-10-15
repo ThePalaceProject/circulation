@@ -1,11 +1,19 @@
+from collections.abc import Callable
+
 from sqlalchemy import and_, or_
 
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.core.monitor import ReaperMonitor
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan
+from palace.manager.sqlalchemy.model.patron import (
+    Annotation,
+    Hold,
+    Loan,
+    LoanAndHoldMixin,
+)
 from palace.manager.util.datetime_helpers import utc_now
 
 
@@ -43,6 +51,24 @@ class LoanlikeReaperMonitor(ReaperMonitor):
             .filter(source_of_truth)
         )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
+
+    def post_delete_op(self, row) -> Callable:
+        loan_like: LoanAndHoldMixin = row
+
+        def post_delete():
+            ce = CirculationEvent
+            event_type = (
+                ce.CM_HOLD_EXPIRED
+                if isinstance(loan_like, Hold)
+                else ce.CM_LOAN_EXPIRED
+            )
+            self.analytics.collect_event(
+                library=loan_like.library,
+                license_pool=loan_like.license_pool,
+                event_type=event_type,
+            )
+
+        return post_delete
 
 
 class LoanReaper(LoanlikeReaperMonitor):
