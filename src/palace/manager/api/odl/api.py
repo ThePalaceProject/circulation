@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import Callable
 from functools import cached_property, partial
-from typing import Any, Literal
+from typing import Any
 
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
@@ -217,22 +217,23 @@ class OPDS2WithODLApi(
 
         self._checkin(loan_result)
 
-    def _checkin(self, loan: Loan) -> bool:
+    def _checkin(self, loan: Loan) -> None:
         _db = Session.object_session(loan)
         if loan.external_identifier is None:
             # We can't return a loan that doesn't have an external identifier. This should never happen
-            # but if it does, we log an error and delete the loan, so it doesn't stay on the patrons
+            # but if it does, we log an error and continue on, so it doesn't stay on the patrons
             # bookshelf forever.
             self.log.error(f"Loan {loan.id} has no external identifier.")
-            return False
+            return
 
         doc = self._request_loan_status("GET", loan.external_identifier)
         if not doc.active:
             self.log.warning(
                 f"Loan {loan.id} was already returned early, revoked by the distributor, or it expired."
             )
-            self.update_loan(loan, doc)
-            return False
+            loan.license.checkin()
+            loan.license_pool.update_availability_from_licenses()
+            return
 
         return_link = doc.links.get(rel="return", type=LoanStatus.content_type())
         if not return_link:
@@ -248,7 +249,7 @@ class OPDS2WithODLApi(
         return_url = return_link.href_templated({"name": "Palace Manager"})
 
         # Hit the distributor's return link, and if it's successful, update the pool
-        # availability and delete the local loan.
+        # availability.
         doc = self._request_loan_status("PUT", return_url)
         if doc.active:
             # If the distributor says the loan is still active, we didn't return it, and
@@ -258,8 +259,8 @@ class OPDS2WithODLApi(
                 f"Loan {loan.id} was not returned. The distributor says it's still active. {doc.model_dump_json()}"
             )
             raise CannotReturn()
-        self.update_loan(loan, doc)
-        return True
+        loan.license.checkin()
+        loan.license_pool.update_availability_from_licenses()
 
     def checkout(
         self,
@@ -343,9 +344,10 @@ class OPDS2WithODLApi(
         encoded_pass = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
 
         notification_url = self._url_for(
-            "odl_notify",
+            "opds2_with_odl_notification",
             library_short_name=library_short_name,
-            loan_id=checkout_id,
+            patron_id=patron_id,
+            license_id=license.identifier,
             _external=True,
         )
 
@@ -396,7 +398,7 @@ class OPDS2WithODLApi(
             # Remove the loan we created.
             raise CannotLoan()
 
-        # We save the link to the loan status document in the loan's status_url field, so
+        # We save the link to the loan status document in the loan's external_identifier field, so
         # we are able to retrieve it later.
         loan_status_document_link: BaseLink | None = doc.links.get(
             rel="self", type=LoanStatus.content_type()
@@ -429,18 +431,14 @@ class OPDS2WithODLApi(
             licensepool,
             end_date=doc.potential_rights.end,
             external_identifier=loan_status_document_link.href,
+            license_identifier=license.identifier,
         )
 
         # We also need to update the remaining checkouts for the license.
         license.checkout()
 
-        # We have successfully borrowed this book.
-        if hold:
-            db.delete(hold)
-            # log circulation event:  hold converted to loan
-
         # Update the pool to reflect the new loan.
-        licensepool.update_availability_from_licenses()
+        licensepool.update_availability_from_licenses(holds_adjustment=1 if hold else 0)
         return loan
 
     def fulfill(
@@ -490,6 +488,7 @@ class OPDS2WithODLApi(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
         # We are unable to fulfill a loan that doesn't have its external identifier set,
+        # We are unable to fulfill a loan that doesn't have its external identifier set,
         # since we use this to get to the checkout link. It shouldn't be possible to get
         # into this state.
         license_status_url = loan.external_identifier
@@ -502,7 +501,6 @@ class OPDS2WithODLApi(
             # the distributor revoked it or the patron already returned it
             # through the DRM system, and we didn't get a notification
             # from the distributor yet.
-            self.update_loan(loan, doc)
             db = Session.object_session(loan)
             db.delete(loan)
             raise CannotFulfill()
@@ -653,38 +651,9 @@ class OPDS2WithODLApi(
         )
         if not hold:
             raise NotOnHold()
-        self._release_hold(hold)
 
-    def _release_hold(self, hold: Hold) -> Literal[True]:
-        # If the book was ready and the patron revoked the hold instead
-        # of checking it out, but no one else had the book on hold, the
-        # book is now available for anyone to check out. If someone else
-        # had a hold, the license is now reserved for the next patron.
-        _db = Session.object_session(hold)
-        licensepool = hold.license_pool
-        _db.delete(hold)
-
-        # log a circulation event : hold_released
-        # Update the pool and the next holds in the queue when a license is reserved.
-        licensepool.update_availability_from_licenses()
-        return True
-
-    def update_loan(self, loan: Loan, status_doc: LoanStatus) -> None:
-        """
-        Check a loan's status, and if it is no longer active, update its pool's availability.
-        """
-        _db = Session.object_session(loan)
-
-        if not status_doc.active:
-            # This loan is no longer active. Update the pool's availability
-            # and delete the loan.
-
-            # Update the license
-            loan.license.checkin()
-
-            # If there are holds, the license is reserved for the next patron.
-            # Update the pool and the next holds in the queue when a license is reserved.
-            loan.license_pool.update_availability_from_licenses()
+        # Update the license pool to reflect the released hold.
+        hold.license_pool.update_availability_from_licenses(holds_adjustment=1)
 
     def update_availability(self, licensepool: LicensePool) -> None:
         pass

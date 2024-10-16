@@ -5,7 +5,11 @@ from flask import Response, make_response, request
 from flask_cors.core import get_cors_options, set_cors_headers
 
 from palace.manager.api.app import app
-from palace.manager.core.app_server import compressible, returns_problem_detail
+from palace.manager.core.app_server import (
+    compressible,
+    raises_problem_detail,
+    returns_problem_detail,
+)
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -568,12 +572,26 @@ def saml_callback():
     )
 
 
-# Loan notifications for ODL distributors, eg. Feedbooks
+# TODO: This is a deprecated route that will be removed in a future release of the code,
+#       its left here for now to provide a dummy endpoint for existing ODL loans. All
+#       new loans will use the new endpoint.
 @library_route("/odl_notify/<loan_id>", methods=["GET", "POST"])
 @has_library
-@returns_problem_detail
-def odl_notify(loan_id):
-    return app.manager.odl_notification_controller.notify(loan_id)
+@raises_problem_detail
+def odl_notify(loan_id) -> Response:
+    return app.manager.odl_notification_controller.notify_deprecated(loan_id)
+
+
+# Loan notifications for OPDS + ODL distributors
+@library_route("/odl/notify/<patron_identifier>/<license_identifier>", methods=["POST"])
+@has_library
+@raises_problem_detail
+def opds2_with_odl_notification(
+    patron_identifier: str, license_identifier: str
+) -> Response:
+    return app.manager.odl_notification_controller.notify(
+        patron_identifier, license_identifier
+    )
 
 
 # Controllers used for operations purposes

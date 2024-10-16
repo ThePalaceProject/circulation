@@ -9,11 +9,13 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.sqlalchemy.model.licensing import License
+from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
+from tests.fixtures.problem_detail import raises_problem_detail
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.mock import MockHTTPClient
 
@@ -28,13 +30,7 @@ class ODLFixture:
             services_fixture.services.integration_registry.license_providers()
         )
         self.collection = db.collection(
-            protocol=self.registry.get_protocol(OPDS2WithODLApi),
-            settings={
-                "username": "a",
-                "password": "b",
-                "external_account_id": "http://odl",
-                "data_source": "Feedbooks",
-            },
+            protocol=OPDS2WithODLApi,
         )
         self.work = self.db.work(with_license_pool=True, collection=self.collection)
         self.pool = self.work.license_pools[0]
@@ -46,9 +42,24 @@ class ODLFixture:
         )
         self.pool.update_availability_from_licenses()
         self.patron = self.db.patron()
+        self.patron_identifier = self.patron.identifier_to_remote_service(
+            self.pool.data_source
+        )
         self.http_client = MockHTTPClient()
         self.controller = ODLNotificationController(db.session, self.registry)
         self.loan_status_document = OPDS2WithODLApiFixture.loan_status_document
+
+    def loan(
+        self, license: License | None = None, patron: Patron | None = None
+    ) -> Loan:
+        if license is None:
+            license = self.license
+        if patron is None:
+            patron = self.patron
+        license.checkout()
+        loan, _ = license.loan_to(patron)
+        loan.external_identifier = self.db.fresh_str()
+        return loan
 
 
 @pytest.fixture(scope="function")
@@ -69,10 +80,7 @@ class TestODLNotificationController:
         flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
     ) -> None:
-        odl_fixture.license.checkout()
-        loan, ignore = odl_fixture.license.loan_to(odl_fixture.patron)
-        loan.external_identifier = db.fresh_str()
-
+        loan = odl_fixture.loan()
         assert odl_fixture.license.checkouts_available == 0
 
         status_doc = odl_fixture.loan_status_document("active")
@@ -82,8 +90,10 @@ class TestODLNotificationController:
             data=status_doc.model_dump_json(),
             library=odl_fixture.library,
         ):
-            assert loan.id is not None
-            response = odl_fixture.controller.notify(loan.id)
+            assert odl_fixture.license.identifier is not None
+            response = odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, odl_fixture.license.identifier
+            )
             assert response.status_code == 204
 
         assert loan.end != utc_now()
@@ -95,8 +105,31 @@ class TestODLNotificationController:
             data=status_doc.model_dump_json(),
             library=odl_fixture.library,
         ):
+            response = odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, odl_fixture.license.identifier
+            )
+            assert response.status_code == 204
+
+        assert loan.end == utc_now()
+
+    @freeze_time()
+    def test_notify_deprecated(
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        odl_fixture: ODLFixture,
+    ) -> None:
+        loan = odl_fixture.loan()
+        assert loan.end != utc_now()
+        status_doc = odl_fixture.loan_status_document("revoked")
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            data=status_doc.model_dump_json(),
+            library=odl_fixture.library,
+        ):
             assert loan.id is not None
-            response = odl_fixture.controller.notify(loan.id)
+            response = odl_fixture.controller.notify_deprecated(loan.id)
             assert response.status_code == 204
 
         assert loan.end == utc_now()
@@ -106,49 +139,63 @@ class TestODLNotificationController:
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
-    ):
+    ) -> None:
         # Bad JSON.
-        patron = db.patron()
         pool = db.licensepool(None)
-        loan, ignore = pool.loan_to(patron)
-        loan.external_identifier = db.fresh_str()
-        with flask_app_fixture.test_request_context(
-            "/", method="POST", library=odl_fixture.library
+        license = db.license(pool)
+        odl_fixture.loan(license=license)
+
+        with (
+            flask_app_fixture.test_request_context(
+                "/", method="POST", library=odl_fixture.library
+            ),
+            raises_problem_detail(pd=INVALID_INPUT),
         ):
-            response = odl_fixture.controller.notify(loan.id)
-        assert response == INVALID_INPUT
+            assert license.identifier is not None
+            odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, license.identifier
+            )
 
         # Loan from a non-ODL collection.
-        with flask_app_fixture.test_request_context(
-            "/",
-            method="POST",
-            library=odl_fixture.library,
-            data=odl_fixture.loan_status_document("active").model_dump_json(),
+        with (
+            flask_app_fixture.test_request_context(
+                "/",
+                method="POST",
+                library=odl_fixture.library,
+                data=odl_fixture.loan_status_document("active").model_dump_json(),
+            ),
+            raises_problem_detail(pd=INVALID_LOAN_FOR_ODL_NOTIFICATION),
         ):
-            response = odl_fixture.controller.notify(loan.id)
-        assert isinstance(response, ProblemDetail)
-        assert response == INVALID_LOAN_FOR_ODL_NOTIFICATION
+            odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, license.identifier
+            )
 
         # No loan, but distributor thinks it isn't active
-        NON_EXISTENT_LOAN_ID = -55
+        NON_EXISTENT_LICENSE_IDENTIFIER = "Foo"
         with flask_app_fixture.test_request_context(
             "/",
             method="POST",
             library=odl_fixture.library,
             data=odl_fixture.loan_status_document("returned").model_dump_json(),
         ):
-            response = odl_fixture.controller.notify(NON_EXISTENT_LOAN_ID)
+            response = odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, NON_EXISTENT_LICENSE_IDENTIFIER
+            )
         assert isinstance(response, Response)
         assert response.status_code == 204
 
         # No loan, but distributor thinks it is active
-        with flask_app_fixture.test_request_context(
-            "/",
-            method="POST",
-            library=odl_fixture.library,
-            data=odl_fixture.loan_status_document("active").model_dump_json(),
+        with (
+            flask_app_fixture.test_request_context(
+                "/",
+                method="POST",
+                library=odl_fixture.library,
+                data=odl_fixture.loan_status_document("active").model_dump_json(),
+            ),
+            raises_problem_detail(
+                pd=NO_ACTIVE_LOAN.detailed("No loan was found.", 404)
+            ),
         ):
-            response = odl_fixture.controller.notify(-55)
-        assert isinstance(response, ProblemDetail)
-        assert response.status_code == 404
-        assert response.uri == NO_ACTIVE_LOAN.uri
+            response = odl_fixture.controller.notify(
+                odl_fixture.patron_identifier, NON_EXISTENT_LICENSE_IDENTIFIER
+            )

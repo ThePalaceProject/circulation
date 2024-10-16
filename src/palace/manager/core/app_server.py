@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import gzip
+from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import flask
 from flask import Response, make_response, url_for
@@ -87,6 +88,21 @@ def returns_problem_detail(f):
         if isinstance(v, ProblemDetail):
             return v.response
         return v
+
+    return decorated
+
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def raises_problem_detail(f: Callable[P, T]) -> Callable[P, T | Response]:
+    @wraps(f)
+    def decorated(*args: P.args, **kwargs: P.kwargs) -> T | Response:
+        try:
+            return f(*args, **kwargs)
+        except BaseProblemDetailException as e:
+            return make_response(e.problem_detail.response)
 
     return decorated
 

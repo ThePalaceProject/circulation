@@ -697,6 +697,7 @@ class LicensePool(Base):
     def update_availability_from_licenses(
         self,
         as_of: datetime.datetime | None = None,
+        holds_adjustment: int = 0,
     ):
         """
         Update the LicensePool with new availability information, based on the
@@ -715,14 +716,12 @@ class LicensePool(Base):
             if l.currently_available_loans is not None
         )
 
-        holds = self.get_active_holds()
-
-        patrons_in_hold_queue = len(holds)
-        if len(holds) > licenses_available:
+        patrons_in_hold_queue = max(len(self.get_active_holds()) - holds_adjustment, 0)
+        if patrons_in_hold_queue > licenses_available:
             licenses_reserved = licenses_available
             licenses_available = 0
         else:
-            licenses_reserved = len(holds)
+            licenses_reserved = patrons_in_hold_queue
             licenses_available -= licenses_reserved
 
         return self.update_availability(

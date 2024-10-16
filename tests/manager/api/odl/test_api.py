@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import dateutil
 import pytest
 from freezegun import freeze_time
+from sqlalchemy import delete
 
 from palace.manager.api.circulation import (
     DirectFulfillment,
@@ -460,11 +461,19 @@ class TestOPDS2WithODLApi:
 
         assert opds2_with_odl_api_fixture.license.identifier == params["id"][0]
 
-        # The checkout id and patron id are random UUIDs.
+        # The checkout id is a random UUID.
         checkout_id = params["checkout_id"][0]
         assert uuid.UUID(checkout_id)
+
+        # The patron id is the UUID of the patron, for this distributor.
+        expected_patron_id = (
+            opds2_with_odl_api_fixture.patron.identifier_to_remote_service(
+                opds2_with_odl_api_fixture.pool.data_source
+            )
+        )
         patron_id = params["patron_id"][0]
         assert uuid.UUID(patron_id)
+        assert patron_id == expected_patron_id
 
         # Loans expire in 21 days by default.
         now = utc_now()
@@ -483,8 +492,12 @@ class TestOPDS2WithODLApi:
 
         notification_url = urllib.parse.unquote_plus(params["notification_url"][0])
         assert (
-            "http://odl_notify?library_short_name=%s&loan_id=%s"
-            % (opds2_with_odl_api_fixture.library.short_name, db_loan.id)
+            f"http://opds2_with_odl_notification?library_short_name=%s&patron_id=%s&license_id=%s"
+            % (
+                opds2_with_odl_api_fixture.library.short_name,
+                expected_patron_id,
+                opds2_with_odl_api_fixture.license.identifier,
+            )
             == notification_url
         )
 
@@ -538,11 +551,10 @@ class TestOPDS2WithODLApi:
         assert datetime_utc(3017, 10, 21, 11, 12, 13) == loan.end_date
         assert loan_url == loan.external_identifier
 
-        # The book is no longer reserved for the patron, and the hold has been deleted.
+        # The book is no longer reserved for the patron.
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_reserved
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 0 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
-        assert 0 == db.session.query(Hold).count()
 
     def test_checkout_success_external_identifier_fallback(
         self,
@@ -974,21 +986,18 @@ class TestOPDS2WithODLApi:
         assert opds2_with_odl_api_fixture.api.refresh_token_calls == 1
 
     @pytest.mark.parametrize(
-        "status_document, updated_availability",
+        "status_document",
         [
             pytest.param(
                 OPDS2WithODLApiFixture.loan_status_document("revoked"),
-                True,
                 id="revoked",
             ),
             pytest.param(
                 OPDS2WithODLApiFixture.loan_status_document("cancelled"),
-                True,
                 id="cancelled",
             ),
             pytest.param(
                 OPDS2WithODLApiFixture.loan_status_document("active"),
-                False,
                 id="missing link",
             ),
         ],
@@ -998,7 +1007,6 @@ class TestOPDS2WithODLApi:
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
         status_document: LoanStatus,
-        updated_availability: bool,
     ) -> None:
         opds2_with_odl_api_fixture.setup_license(concurrency=7, available=7)
         opds2_with_odl_api_fixture.checkout(create_loan=True)
@@ -1016,13 +1024,6 @@ class TestOPDS2WithODLApi:
                 opds2_with_odl_api_fixture.pool,
                 MagicMock(),
             )
-
-        if updated_availability:
-            # The pool's availability has been updated and the local
-            # loan has been deleted, since we found out the loan is
-            # no longer active.
-            assert 7 == opds2_with_odl_api_fixture.pool.licenses_available
-            assert 0 == db.session.query(Loan).count()
 
     @freeze_time()
     def test_place_hold_success(
@@ -1061,47 +1062,36 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
     ) -> None:
         loan_patron = db.patron()
-        opds2_with_odl_api_fixture.checkout(patron=loan_patron)
-        opds2_with_odl_api_fixture.pool.on_hold_to(
-            opds2_with_odl_api_fixture.patron, position=1
-        )
+        hold1_patron = db.patron()
+        hold2_patron = db.patron()
 
-        opds2_with_odl_api_fixture.api.release_hold(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
+        opds2_with_odl_api_fixture.checkout(patron=loan_patron, create_loan=True)
+        opds2_with_odl_api_fixture.place_hold(patron=hold1_patron, create_hold=True)
+        opds2_with_odl_api_fixture.place_hold(patron=hold2_patron, create_hold=True)
+
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_reserved
-        assert 0 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
-        assert 0 == db.session.query(Hold).count()
-
-        opds2_with_odl_api_fixture.pool.on_hold_to(
-            opds2_with_odl_api_fixture.patron, position=0
-        )
-        opds2_with_odl_api_fixture.checkin(patron=loan_patron)
+        assert 2 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
 
         opds2_with_odl_api_fixture.api.release_hold(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
+            hold1_patron, "pin", opds2_with_odl_api_fixture.pool
+        )
+        db.session.execute(delete(Hold).where(Hold.patron == hold1_patron))
+        assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
+        assert 0 == opds2_with_odl_api_fixture.pool.licenses_reserved
+        assert 1 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
+
+        opds2_with_odl_api_fixture.checkin(patron=loan_patron)
+        assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
+        assert 1 == opds2_with_odl_api_fixture.pool.licenses_reserved
+        assert 1 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
+
+        opds2_with_odl_api_fixture.api.release_hold(
+            hold2_patron, "pin", opds2_with_odl_api_fixture.pool
         )
         assert 1 == opds2_with_odl_api_fixture.pool.licenses_available
         assert 0 == opds2_with_odl_api_fixture.pool.licenses_reserved
         assert 0 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
-        assert 0 == db.session.query(Hold).count()
-
-        opds2_with_odl_api_fixture.pool.on_hold_to(
-            opds2_with_odl_api_fixture.patron, position=0
-        )
-        other_hold, ignore = opds2_with_odl_api_fixture.pool.on_hold_to(
-            db.patron(), position=2
-        )
-
-        opds2_with_odl_api_fixture.api.release_hold(
-            opds2_with_odl_api_fixture.patron, "pin", opds2_with_odl_api_fixture.pool
-        )
-        assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == opds2_with_odl_api_fixture.pool.licenses_reserved
-        assert 1 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
-        assert 1 == db.session.query(Hold).count()
-        assert 0 == other_hold.position
 
     def test_release_hold_not_on_hold(
         self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
@@ -1113,66 +1103,6 @@ class TestOPDS2WithODLApi:
             "pin",
             opds2_with_odl_api_fixture.pool,
         )
-
-    def test_update_loan_still_active(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        opds2_with_odl_api_fixture.setup_license(concurrency=6, available=6)
-        loan, _ = opds2_with_odl_api_fixture.license.loan_to(
-            opds2_with_odl_api_fixture.patron
-        )
-        loan.external_identifier = db.fresh_str()
-        status_doc = opds2_with_odl_api_fixture.loan_status_document("active")
-
-        opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
-        # Availability hasn't changed, and the loan still exists.
-        assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == db.session.query(Loan).count()
-
-    def test_update_loan_removes_loan(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        opds2_with_odl_api_fixture.setup_license(concurrency=7, available=7)
-        loan = opds2_with_odl_api_fixture.checkout()
-
-        assert 6 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == db.session.query(Loan).count()
-
-        status_doc = opds2_with_odl_api_fixture.loan_status_document("cancelled")
-
-        opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
-
-        # Availability has increased, and the loan is gone.
-        assert 7 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 0 == db.session.query(Loan).count()
-
-    def test_update_loan_removes_loan_with_hold_queue(
-        self,
-        db: DatabaseTransactionFixture,
-        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    ) -> None:
-        loan = opds2_with_odl_api_fixture.checkout()
-        hold, _ = opds2_with_odl_api_fixture.pool.on_hold_to(db.patron(), position=1)
-        opds2_with_odl_api_fixture.pool.update_availability_from_licenses()
-
-        assert opds2_with_odl_api_fixture.pool.licenses_owned == 1
-        assert opds2_with_odl_api_fixture.pool.licenses_available == 0
-        assert opds2_with_odl_api_fixture.pool.licenses_reserved == 0
-        assert opds2_with_odl_api_fixture.pool.patrons_in_hold_queue == 1
-
-        status_doc = opds2_with_odl_api_fixture.loan_status_document("cancelled")
-
-        opds2_with_odl_api_fixture.api.update_loan(loan, status_doc)
-
-        # The license is reserved for the next patron, and the loan is gone.
-        assert 0 == opds2_with_odl_api_fixture.pool.licenses_available
-        assert 1 == opds2_with_odl_api_fixture.pool.licenses_reserved
-        assert 0 == hold.position
-        assert 0 == db.session.query(Loan).count()
 
     def test_settings_properties(
         self, opds2_with_odl_api_fixture: OPDS2WithODLApiFixture
