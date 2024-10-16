@@ -179,7 +179,6 @@ class TestSyncPatronActivity:
         sync_task_fixture.mock_collection_api.add_remote_loan(
             LoanInfo.from_license_pool(
                 loan_pool,
-                start_date=None,
                 end_date=None,
             )
         )
