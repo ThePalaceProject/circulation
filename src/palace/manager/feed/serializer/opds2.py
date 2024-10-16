@@ -196,6 +196,9 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         facet_links: dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
         for link in feed.facet_links:
             if is_sort_link(link):
+                # TODO: When we remove the facet-based sort links [PP-1814],
+                # this code path will be removed and we'll want to pull the sort
+                # link data from the feed.sort_links once that is in place.
                 link_data["links"].append(self._serialize_sort_link(link))
             else:
                 group = getattr(link, "facetGroup", None)
