@@ -78,7 +78,6 @@ HOME=/var/www/circulation
 # OPDS 2.x + ODL import
 #
 45 * * * * root bin/run opds2_odl_import_monitor >> /var/log/cron.log 2>&1
-0 */8 * * * root bin/run opds2_odl_hold_reaper >> /var/log/cron.log 2>&1
 
 # SAML
 #

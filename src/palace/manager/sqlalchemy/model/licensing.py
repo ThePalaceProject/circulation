@@ -5,14 +5,23 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
+from operator import and_
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import Boolean, Column, DateTime
 from sqlalchemy import Enum as AlchemyEnum
-from sqlalchemy import ForeignKey, Index, Integer, String, Unicode, UniqueConstraint
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy import (
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Unicode,
+    UniqueConstraint,
+    or_,
+    select,
+)
+from sqlalchemy.orm import Mapped, lazyload, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import or_
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import (
@@ -724,21 +733,25 @@ class LicensePool(Base):
             as_of=as_of,
         )
 
-    def get_active_holds(self):
+    def get_active_holds(self, for_update: bool = False) -> list[Hold]:
         _db = Session.object_session(self)
-        return (
-            _db.query(Hold)
-            .filter(Hold.license_pool_id == self.id)
-            .filter(
+        query = (
+            select(Hold)
+            .where(Hold.license_pool_id == self.id)
+            .where(
                 or_(
-                    Hold.end == None,
-                    Hold.end > utc_now(),
-                    Hold.position > 0,
+                    Hold.position != 0,
+                    Hold.position == None,
+                    and_(Hold.end > utc_now(), Hold.position == 0),
                 )
             )
             .order_by(Hold.start)
-            .all()
         )
+
+        if for_update:
+            query = query.options(lazyload(Hold.patron)).with_for_update()
+
+        return _db.execute(query).scalars().all()
 
     def update_availability(
         self,

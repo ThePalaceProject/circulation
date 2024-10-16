@@ -1,7 +1,6 @@
-from unittest.mock import MagicMock
-
 import pytest
 from flask import Response
+from freezegun import freeze_time
 
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -10,13 +9,13 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.mock import MockHTTPClient
-from tests.mocks.odl import MockOPDS2WithODLApi
 
 
 class ODLFixture:
@@ -48,14 +47,7 @@ class ODLFixture:
         self.pool.update_availability_from_licenses()
         self.patron = self.db.patron()
         self.http_client = MockHTTPClient()
-        self.api = MockOPDS2WithODLApi(db.session, self.collection, self.http_client)
-        self.mock_circulation_manager = MagicMock()
-        self.mock_circulation_manager.circulation_apis[
-            self.library.id
-        ].api_for_license_pool.return_value = self.api
-        self.controller = ODLNotificationController(
-            db.session, self.mock_circulation_manager, self.registry
-        )
+        self.controller = ODLNotificationController(db.session, self.registry)
         self.loan_status_document = OPDS2WithODLApiFixture.loan_status_document
 
 
@@ -70,6 +62,7 @@ class TestODLNotificationController:
     """Test that an ODL distributor can notify the circulation manager
     when a loan's status changes."""
 
+    @freeze_time()
     def test_notify_success(
         self,
         db: DatabaseTransactionFixture,
@@ -82,6 +75,19 @@ class TestODLNotificationController:
 
         assert odl_fixture.license.checkouts_available == 0
 
+        status_doc = odl_fixture.loan_status_document("active")
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            data=status_doc.model_dump_json(),
+            library=odl_fixture.library,
+        ):
+            assert loan.id is not None
+            response = odl_fixture.controller.notify(loan.id)
+            assert response.status_code == 204
+
+        assert loan.end != utc_now()
+
         status_doc = odl_fixture.loan_status_document("revoked")
         with flask_app_fixture.test_request_context(
             "/",
@@ -93,7 +99,7 @@ class TestODLNotificationController:
             response = odl_fixture.controller.notify(loan.id)
             assert response.status_code == 204
 
-        assert odl_fixture.license.checkouts_available == 1
+        assert loan.end == utc_now()
 
     def test_notify_errors(
         self,

@@ -243,7 +243,9 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         ).scalar_one_or_none()
 
     @classmethod
-    def by_protocol(cls, _db: Session, protocol: str | None) -> Query[Collection]:
+    def by_protocol(
+        cls, _db: Session, protocol: list[str] | str | None
+    ) -> Query[Collection]:
         """Query collections that get their licenses through the given protocol.
 
         Collections marked for deletion are not included.
@@ -260,9 +262,12 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
                     == Collection.integration_configuration_id,
                 )
                 .filter(IntegrationConfiguration.goal == Goals.LICENSE_GOAL)
-                .filter(IntegrationConfiguration.protocol == protocol)
                 .filter(Collection.marked_for_deletion == False)
             )
+            if isinstance(protocol, str):
+                qu = qu.filter(IntegrationConfiguration.protocol == protocol)
+            else:
+                qu = qu.filter(IntegrationConfiguration.protocol.in_(protocol))
 
         return qu
 

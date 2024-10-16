@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
@@ -18,14 +16,11 @@ from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
-
-if TYPE_CHECKING:
-    from palace.manager.api.circulation_manager import CirculationManager
 
 
 class ODLNotificationController(LoggerMixin):
@@ -36,20 +31,12 @@ class ODLNotificationController(LoggerMixin):
     def __init__(
         self,
         db: Session,
-        manager: CirculationManager,
         registry: LicenseProvidersRegistry,
     ) -> None:
         self.db = db
-        self.manager = manager
         self.registry = registry
 
-    def get_api(self, library: Library, loan: Loan) -> OPDS2WithODLApi:
-        return self.manager.circulation_apis[library.id].api_for_license_pool(  # type: ignore[no-any-return]
-            loan.license_pool
-        )
-
     def notify(self, loan_id: int) -> Response | ProblemDetail:
-        library = flask.request.library  # type: ignore[attr-defined]
         status_doc_json = flask.request.data
         loan = get_one(self.db, Loan, id=loan_id)
 
@@ -75,7 +62,11 @@ class ODLNotificationController(LoggerMixin):
             ):
                 return INVALID_LOAN_FOR_ODL_NOTIFICATION
 
-            api = self.get_api(library, loan)
-            api.update_loan(loan, status_doc)
+            # TODO: This should really just trigger a celery task to do an availabilty sync on the
+            #   license, since this is flagging that we might be out of sync with the distributor.
+            #   Once we move the OPDS2WithODL scripts to celery this should be possible.
+            #   For now we just mark the loan as expired.
+            if not status_doc.active:
+                loan.end = utc_now()
 
         return Response(status=204)
