@@ -802,7 +802,6 @@ class OPDS2WithODLApi(
         holdinfo = HoldInfo.from_license_pool(
             licensepool,
             start_date=utc_now(),
-            end_date=None,
             hold_position=0,
         )
         library = patron.library

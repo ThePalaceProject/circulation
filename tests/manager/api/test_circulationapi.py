@@ -264,8 +264,6 @@ class TestCirculationAPI:
         circulation_api.remote.queue_checkout(NoAvailableCopies())
         holdinfo = HoldInfo.from_license_pool(
             circulation_api.pool,
-            start_date=None,
-            end_date=None,
             hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
@@ -286,8 +284,6 @@ class TestCirculationAPI:
         # an error.
         holdinfo = HoldInfo.from_license_pool(
             circulation_api.pool,
-            start_date=None,
-            end_date=None,
             hold_position=10,
         )
         circulation_api.remote.queue_checkout(holdinfo)
@@ -311,8 +307,6 @@ class TestCirculationAPI:
         # Attempting to place a hold will succeed.
         holdinfo = HoldInfo.from_license_pool(
             circulation_api.pool,
-            start_date=None,
-            end_date=None,
             hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
@@ -355,8 +349,6 @@ class TestCirculationAPI:
         circulation_api.remote.queue_checkout(NoAvailableCopies())
         holdinfo = HoldInfo.from_license_pool(
             circulation_api.pool,
-            start_date=None,
-            end_date=None,
             hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)

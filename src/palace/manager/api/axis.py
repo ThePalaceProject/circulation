@@ -522,7 +522,6 @@ class Axis360API(
         hold_info = HoldInfo.from_license_pool(
             licensepool,
             start_date=utc_now(),
-            end_date=None,
             hold_position=hold_position,
         )
         return hold_info
@@ -1464,8 +1463,8 @@ class CheckoutResponseParser(XMLResponseParser[datetime.datetime | None]):
     def process_one(
         self, e: _Element, namespaces: dict[str, str] | None
     ) -> datetime.datetime | None:
-        """Either turn the given document into a LoanInfo
-        object, or raise an appropriate exception.
+        """Either turn the given document into a datetime representing the
+        loan's expiration date, or raise an appropriate exception.
         """
         self.raise_exception_on_error(e, namespaces)
 
@@ -1615,7 +1614,6 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
-                start_date=None,
                 end_date=end_date,
                 hold_position=0,
             )
@@ -1627,8 +1625,6 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
                 collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
-                start_date=None,
-                end_date=None,
                 hold_position=position,
             )
         return info

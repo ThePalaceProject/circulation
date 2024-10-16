@@ -1633,7 +1633,6 @@ class OverdriveAPI(
             return HoldInfo.from_license_pool(
                 licensepool,
                 start_date=start_date,
-                end_date=None,
                 hold_position=position,
             )
 

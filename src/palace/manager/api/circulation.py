@@ -430,8 +430,8 @@ class HoldInfo(LoanAndHoldInfoMixin):
     collection_id: int
     identifier_type: str
     identifier: str
-    start_date: datetime.datetime | None
-    end_date: datetime.datetime | None
+    start_date: datetime.datetime | None = None
+    end_date: datetime.datetime | None = None
     hold_position: int | None
 
     @classmethod
@@ -439,8 +439,8 @@ class HoldInfo(LoanAndHoldInfoMixin):
         cls,
         license_pool: LicensePool,
         *,
-        start_date: datetime.datetime | None,
-        end_date: datetime.datetime | None,
+        start_date: datetime.datetime | None = None,
+        end_date: datetime.datetime | None = None,
         hold_position: int | None,
     ) -> Self:
         collection_id = license_pool.collection_id
@@ -1085,8 +1085,6 @@ class CirculationAPI(LoggerMixin):
             # We're trying to check out a book that we already have on hold.
             hold_info = HoldInfo.from_license_pool(
                 licensepool,
-                start_date=None,
-                end_date=None,
                 hold_position=None,
             )
         except NoAvailableCopies:
@@ -1160,8 +1158,6 @@ class CirculationAPI(LoggerMixin):
             except AlreadyOnHold as e:
                 hold_info = HoldInfo.from_license_pool(
                     licensepool,
-                    start_date=None,
-                    end_date=None,
                     hold_position=None,
                 )
             except CurrentlyAvailable:

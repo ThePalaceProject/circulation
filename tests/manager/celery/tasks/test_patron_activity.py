@@ -187,8 +187,6 @@ class TestSyncPatronActivity:
             HoldInfo.from_license_pool(
                 hold_pool,
                 hold_position=1,
-                start_date=None,
-                end_date=None,
             )
         )
 
