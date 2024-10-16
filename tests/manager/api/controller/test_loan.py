@@ -271,13 +271,10 @@ class TestLoanController:
         pool = work.license_pools[0]
         loan_fixture.manager.d_circulation.queue_checkout(
             pool,
-            LoanInfo(
-                pool.collection,
-                pool.data_source.name,
-                pool.identifier.type,
-                pool.identifier.identifier,
-                utc_now(),
-                utc_now() + datetime.timedelta(seconds=3600),
+            LoanInfo.from_license_pool(
+                pool,
+                start_date=utc_now(),
+                end_date=utc_now() + datetime.timedelta(seconds=3600),
             ),
         )
 
@@ -494,13 +491,10 @@ class TestLoanController:
             loan_fixture.manager.loans.authenticated_patron_from_request()
             loan_fixture.manager.d_circulation.queue_checkout(
                 pool,
-                LoanInfo(
-                    pool.collection,
-                    pool.data_source.name,
-                    pool.identifier.type,
-                    pool.identifier.identifier,
-                    utc_now(),
-                    utc_now() + datetime.timedelta(seconds=3600),
+                LoanInfo.from_license_pool(
+                    pool,
+                    start_date=utc_now(),
+                    end_date=utc_now() + datetime.timedelta(seconds=3600),
                 ),
             )
             with patch(
@@ -673,14 +667,11 @@ class TestLoanController:
             loan_fixture.manager.d_circulation.queue_checkout(pool, NoAvailableCopies())
             loan_fixture.manager.d_circulation.queue_hold(
                 pool,
-                HoldInfo(
-                    pool.collection,
-                    pool.data_source.name,
-                    pool.identifier.type,
-                    pool.identifier.identifier,
-                    utc_now(),
-                    utc_now() + datetime.timedelta(seconds=3600),
-                    1,
+                HoldInfo.from_license_pool(
+                    pool,
+                    start_date=utc_now(),
+                    end_date=utc_now() + datetime.timedelta(seconds=3600),
+                    hold_position=1,
                 ),
             )
             response = loan_fixture.manager.loans.borrow(
@@ -739,14 +730,11 @@ class TestLoanController:
             loan_fixture.manager.d_circulation.queue_checkout(pool, AlreadyOnHold())
             loan_fixture.manager.d_circulation.queue_hold(
                 pool,
-                HoldInfo(
-                    pool.collection,
-                    pool.data_source.name,
-                    pool.identifier.type,
-                    pool.identifier.identifier,
-                    utc_now(),
-                    utc_now() + datetime.timedelta(seconds=3600),
-                    1,
+                HoldInfo.from_license_pool(
+                    pool,
+                    start_date=utc_now(),
+                    end_date=utc_now() + datetime.timedelta(seconds=3600),
+                    hold_position=1,
                 ),
             )
             response = loan_fixture.manager.loans.borrow(
@@ -1347,13 +1335,10 @@ class TestLoanController:
             patron.fines = Decimal("0.49")
             loan_fixture.manager.d_circulation.queue_checkout(
                 pool,
-                LoanInfo(
-                    pool.collection,
-                    pool.data_source.name,
-                    pool.identifier.type,
-                    pool.identifier.identifier,
-                    utc_now(),
-                    utc_now() + datetime.timedelta(seconds=3600),
+                LoanInfo.from_license_pool(
+                    pool,
+                    start_date=utc_now(),
+                    end_date=utc_now() + datetime.timedelta(seconds=3600),
                 ),
             )
             response = loan_fixture.manager.loans.borrow(
@@ -1706,13 +1691,10 @@ class TestLoanController:
                 )
                 license_pool = work.license_pools[0]
 
-                loan_info = LoanInfo(
-                    license_pool.collection,
-                    license_pool.data_source.name,
-                    license_pool.identifier.type,
-                    license_pool.identifier.identifier,
-                    loan_start,
-                    loan_end,
+                loan_info = LoanInfo.from_license_pool(
+                    license_pool,
+                    start_date=loan_start,
+                    end_date=loan_end,
                 )
 
                 return license_pool, loan_info

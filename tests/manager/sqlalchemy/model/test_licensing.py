@@ -1174,13 +1174,11 @@ class TestLicensePool:
 
         fulfillment = pool.delivery_mechanisms[0]
         position = 99
-        external_identifier = db.fresh_str()
         hold, is_new = pool.on_hold_to(
             patron,
             start=yesterday,
             end=tomorrow,
             position=position,
-            external_identifier=external_identifier,
         )
 
         assert is_new is True
@@ -1190,7 +1188,6 @@ class TestLicensePool:
         assert yesterday == hold.start
         assert tomorrow == hold.end
         assert position == hold.position
-        assert external_identifier == hold.external_identifier
 
         # 'Creating' a hold that already exists returns the existing hold.
         hold2, is_new = pool.on_hold_to(
@@ -1198,7 +1195,6 @@ class TestLicensePool:
             start=yesterday,
             end=tomorrow,
             position=position,
-            external_identifier=external_identifier,
         )
         assert is_new is False
         assert hold == hold2

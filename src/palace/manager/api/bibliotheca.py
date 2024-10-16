@@ -472,12 +472,8 @@ class BibliothecaAPI(
 
         # At this point we know we have a loan.
         loan_expires = CheckoutResponseParser().process_first(response.content)
-        loan = LoanInfo(
-            licensepool.collection,
-            DataSource.BIBLIOTHECA,
-            licensepool.identifier.type,
-            licensepool.identifier.identifier,
-            start_date=None,
+        loan = LoanInfo.from_license_pool(
+            licensepool,
             end_date=loan_expires,
         )
         return loan
@@ -561,11 +557,8 @@ class BibliothecaAPI(
         if response.status_code in (200, 201):
             start_date = utc_now()
             end_date = HoldResponseParser().process_first(response_content)
-            return HoldInfo(
-                licensepool.collection,
-                DataSource.BIBLIOTHECA,
-                licensepool.identifier.type,
-                licensepool.identifier.identifier,
+            return HoldInfo.from_license_pool(
+                licensepool,
                 start_date=start_date,
                 end_date=end_date,
                 hold_position=None,
@@ -1079,21 +1072,16 @@ class PatronCirculationParser(XMLParser):
         identifier = self.text_of_subtag(tag, "ItemId")
         start_date = datevalue("EventStartDateInUTC")
         end_date = datevalue("EventEndDateInUTC")
-        a = [
-            self.collection,
-            DataSource.BIBLIOTHECA,
-            self.id_type,
-            identifier,
-            start_date,
-            end_date,
-        ]
+        kwargs = {
+            "collection_id": self.collection.id,
+            "identifier_type": self.id_type,
+            "identifier": identifier,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
         if source_class is HoldInfo:
-            hold_position = self.int_of_subtag(tag, "Position")
-            a.append(hold_position)
-        else:
-            # Fulfillment info -- not available from this API
-            a.append(None)
-        return source_class(*a)
+            kwargs["hold_position"] = self.int_of_subtag(tag, "Position")
+        return source_class(**kwargs)
 
 
 class DateResponseParser(BibliothecaParser[Optional[datetime]], ABC):

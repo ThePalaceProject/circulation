@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from functools import partial
 from io import StringIO
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests_mock
@@ -2123,10 +2123,6 @@ class TestOPDSAPI:
     def test_checkout(self, opds_api_fixture: OPDSAPIFixture) -> None:
         # Make sure checkout returns a LoanInfo object with the correct
         # collection id.
-        mock_collection_property = PropertyMock(
-            return_value=opds_api_fixture.collection
-        )
-        type(opds_api_fixture.mock_licensepool).collection = mock_collection_property
         delivery_mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
         loan = opds_api_fixture.api.checkout(
             opds_api_fixture.mock_patron,
@@ -2135,8 +2131,7 @@ class TestOPDSAPI:
             delivery_mechanism,
         )
         assert isinstance(loan, LoanInfo)
-        assert mock_collection_property.call_count == 1
-        assert loan.collection_id == opds_api_fixture.collection.id
+        assert loan.collection_id == opds_api_fixture.mock_licensepool.collection_id
 
     def test_can_fulfill_without_loan(self, opds_api_fixture: OPDSAPIFixture) -> None:
         # This should always return True.

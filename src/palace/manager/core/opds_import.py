@@ -344,7 +344,7 @@ class BaseOPDSAPI(
         licensepool: LicensePool,
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> LoanInfo:
-        return LoanInfo(licensepool.collection, None, None, None, None, None)
+        return LoanInfo.from_license_pool(licensepool, end_date=None)
 
     def can_fulfill_without_loan(
         self,

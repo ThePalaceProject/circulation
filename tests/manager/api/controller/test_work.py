@@ -423,13 +423,10 @@ class TestWorkController:
             pool = work.license_pools[0]
             [delivery_mechanism] = pool.delivery_mechanisms
 
-            loan_info = LoanInfo(
-                pool.collection,
-                pool.data_source.name,
-                pool.identifier.type,
-                pool.identifier.identifier,
-                utc_now(),
-                utc_now() + datetime.timedelta(seconds=3600),
+            loan_info = LoanInfo.from_license_pool(
+                pool,
+                start_date=utc_now(),
+                end_date=utc_now() + datetime.timedelta(seconds=3600),
             )
             work_fixture.manager.d_circulation.queue_checkout(pool, loan_info)
 

@@ -447,7 +447,6 @@ class TestOPDS2WithODLApi:
         loan, _ = opds2_with_odl_api_fixture.checkout(loan_url=loan_url)
 
         assert opds2_with_odl_api_fixture.collection == loan.collection(db.session)
-        assert opds2_with_odl_api_fixture.pool.data_source.name == loan.data_source_name
         assert opds2_with_odl_api_fixture.pool.identifier.type == loan.identifier_type
         assert opds2_with_odl_api_fixture.pool.identifier.identifier == loan.identifier
         assert loan.start_date is not None
@@ -559,7 +558,6 @@ class TestOPDS2WithODLApi:
 
         # The patron gets a loan successfully.
         assert opds2_with_odl_api_fixture.collection == loan.collection(db.session)
-        assert opds2_with_odl_api_fixture.pool.data_source.name == loan.data_source_name
         assert opds2_with_odl_api_fixture.pool.identifier.type == loan.identifier_type
         assert opds2_with_odl_api_fixture.pool.identifier.identifier == loan.identifier
         assert loan.start_date is not None
@@ -1061,14 +1059,11 @@ class TestOPDS2WithODLApi:
 
     def _holdinfo_from_hold(self, hold: Hold) -> HoldInfo:
         pool: LicensePool = hold.license_pool
-        return HoldInfo(
-            pool.collection,
-            pool.data_source.name,
-            pool.identifier.type,
-            pool.identifier.identifier,
-            hold.start,
-            hold.end,
-            hold.position,
+        return HoldInfo.from_license_pool(
+            pool,
+            start_date=hold.start,
+            end_date=hold.end,
+            hold_position=hold.position,
         )
 
     def test_count_holds_before(
@@ -1542,7 +1537,6 @@ class TestOPDS2WithODLApi:
 
         assert 1 == opds2_with_odl_api_fixture.pool.patrons_in_hold_queue
         assert opds2_with_odl_api_fixture.collection == hold.collection(db.session)
-        assert opds2_with_odl_api_fixture.pool.data_source.name == hold.data_source_name
         assert opds2_with_odl_api_fixture.pool.identifier.type == hold.identifier_type
         assert opds2_with_odl_api_fixture.pool.identifier.identifier == hold.identifier
         assert hold.start_date is not None
@@ -1649,28 +1643,16 @@ class TestOPDS2WithODLApi:
         # One loan.
         _, loan = opds2_with_odl_api_fixture.checkout()
 
-        activity = opds2_with_odl_api_fixture.api.patron_activity(
+        [l1] = opds2_with_odl_api_fixture.api.patron_activity(
             opds2_with_odl_api_fixture.patron, "pin"
         )
-        assert 1 == len(activity)
-        assert opds2_with_odl_api_fixture.collection == activity[0].collection(
-            db.session
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.data_source.name
-            == activity[0].data_source_name
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.identifier.type
-            == activity[0].identifier_type
-        )
-        assert (
-            opds2_with_odl_api_fixture.pool.identifier.identifier
-            == activity[0].identifier
-        )
-        assert loan.start == activity[0].start_date
-        assert loan.end == activity[0].end_date
-        assert loan.external_identifier == activity[0].external_identifier
+        assert isinstance(l1, LoanInfo)
+        assert opds2_with_odl_api_fixture.collection == l1.collection(db.session)
+        assert opds2_with_odl_api_fixture.pool.identifier.type == l1.identifier_type
+        assert opds2_with_odl_api_fixture.pool.identifier.identifier == l1.identifier
+        assert loan.start == l1.start_date
+        assert loan.end == l1.end_date
+        assert loan.external_identifier == l1.external_identifier
 
         # Two loans.
         pool2 = db.licensepool(None, collection=opds2_with_odl_api_fixture.collection)
@@ -1687,9 +1669,10 @@ class TestOPDS2WithODLApi:
         )
         assert 2 == len(activity)
         [l1, l2] = sorted(activity, key=activity_sort_key)
+        assert isinstance(l1, LoanInfo)
+        assert isinstance(l2, LoanInfo)
 
         assert opds2_with_odl_api_fixture.collection == l1.collection(db.session)
-        assert opds2_with_odl_api_fixture.pool.data_source.name == l1.data_source_name
         assert opds2_with_odl_api_fixture.pool.identifier.type == l1.identifier_type
         assert opds2_with_odl_api_fixture.pool.identifier.identifier == l1.identifier
         assert loan.start == l1.start_date
@@ -1697,7 +1680,6 @@ class TestOPDS2WithODLApi:
         assert loan.external_identifier == l1.external_identifier
 
         assert opds2_with_odl_api_fixture.collection == l2.collection(db.session)
-        assert pool2.data_source.name == l2.data_source_name
         assert pool2.identifier.type == l2.identifier_type
         assert pool2.identifier.identifier == l2.identifier
         assert loan2.start == l2.start_date
@@ -1706,14 +1688,11 @@ class TestOPDS2WithODLApi:
 
         # If a loan is expired already, it's left out.
         loan2.end = utc_now() - datetime.timedelta(days=2)
-        activity = opds2_with_odl_api_fixture.api.patron_activity(
+        [l1] = opds2_with_odl_api_fixture.api.patron_activity(
             opds2_with_odl_api_fixture.patron, "pin"
         )
-        assert 1 == len(activity)
-        assert (
-            opds2_with_odl_api_fixture.pool.identifier.identifier
-            == activity[0].identifier
-        )
+        assert isinstance(l1, LoanInfo)
+        assert opds2_with_odl_api_fixture.pool.identifier.identifier == l1.identifier
         opds2_with_odl_api_fixture.checkin(pool=pool2)
 
         # Open access loans are included.
@@ -1729,9 +1708,10 @@ class TestOPDS2WithODLApi:
         )
         assert 2 == len(activity)
         [l1, l2] = sorted(activity, key=activity_sort_key)
+        assert isinstance(l1, LoanInfo)
+        assert isinstance(l2, LoanInfo)
 
         assert opds2_with_odl_api_fixture.collection == l1.collection(db.session)
-        assert opds2_with_odl_api_fixture.pool.data_source.name == l1.data_source_name
         assert opds2_with_odl_api_fixture.pool.identifier.type == l1.identifier_type
         assert opds2_with_odl_api_fixture.pool.identifier.identifier == l1.identifier
         assert loan.start == l1.start_date
@@ -1739,7 +1719,6 @@ class TestOPDS2WithODLApi:
         assert loan.external_identifier == l1.external_identifier
 
         assert opds2_with_odl_api_fixture.collection == l2.collection(db.session)
-        assert pool3.data_source.name == l2.data_source_name
         assert pool3.identifier.type == l2.identifier_type
         assert pool3.identifier.identifier == l2.identifier
         assert loan3.start == l2.start_date
@@ -1765,7 +1744,6 @@ class TestOPDS2WithODLApi:
         assert isinstance(h1, HoldInfo)
 
         assert opds2_with_odl_api_fixture.collection == h1.collection(db.session)
-        assert pool2.data_source.name == h1.data_source_name
         assert pool2.identifier.type == h1.identifier_type
         assert pool2.identifier.identifier == h1.identifier
         assert hold.start == h1.start_date

@@ -1397,7 +1397,7 @@ def axis360parsers(
 class TestRaiseExceptionOnError:
     def test_internal_server_error(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("internal_server_error.xml")
-        parser = HoldReleaseResponseParser(MagicMock())
+        parser = HoldReleaseResponseParser()
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_first(data)
         assert "Internal Server Error" in str(excinfo.value)
@@ -1416,19 +1416,19 @@ class TestRaiseExceptionOnError:
         # Unlike in test_internal_server_error, no exception is
         # raised, because we told the parser to ignore this particular
         # error code.
-        parser = IgnoreISE(MagicMock())
+        parser = IgnoreISE()
         assert retval == parser.process_first(data)
 
     def test_internal_server_error2(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("invalid_error_code.xml")
-        parser = HoldReleaseResponseParser(MagicMock())
+        parser = HoldReleaseResponseParser()
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_first(data)
         assert "Invalid response code from Axis 360: abcd" in str(excinfo.value)
 
     def test_missing_error_code(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("missing_error_code.xml")
-        parser = HoldReleaseResponseParser(MagicMock())
+        parser = HoldReleaseResponseParser()
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             parser.process_first(data)
         assert "No status code!" in str(excinfo.value)
@@ -1442,70 +1442,56 @@ class TestCheckinResponseParser:
         # "Book is not on loan" is not treated as a problem.
         for filename in ("checkin_success.xml", "checkin_not_checked_out.xml"):
             data = axis360parsers.sample_data(filename)
-            parser = CheckinResponseParser(axis360parsers.default_collection)
+            parser = CheckinResponseParser()
             parsed = parser.process_first(data)
             assert parsed is True
 
     def test_parse_checkin_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("checkin_failure.xml")
-        parser = CheckinResponseParser(axis360parsers.default_collection)
+        parser = CheckinResponseParser()
         pytest.raises(NotFoundOnRemote, parser.process_first, data)
 
 
 class TestCheckoutResponseParser:
     def test_parse_checkout_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("checkout_success.xml")
-        parser = CheckoutResponseParser(axis360parsers.default_collection)
+        parser = CheckoutResponseParser()
         parsed = parser.process_first(data)
-        assert isinstance(parsed, LoanInfo)
-        assert axis360parsers.default_collection.id == parsed.collection_id
-        assert DataSource.AXIS_360 == parsed.data_source_name
-        assert Identifier.AXIS_360_ID == parsed.identifier_type
-        assert datetime_utc(2015, 8, 11, 18, 57, 42) == parsed.end_date
-
-        # There is no Fulfillment associated with the LoanInfo,
-        # because we don't need it (checkout and fulfillment are
-        # separate steps).
-        assert parsed.fulfillment == None
+        assert datetime_utc(2015, 8, 11, 18, 57, 42) == parsed
 
     def test_parse_already_checked_out(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_checked_out.xml")
-        parser = CheckoutResponseParser(MagicMock())
+        parser = CheckoutResponseParser()
         pytest.raises(AlreadyCheckedOut, parser.process_first, data)
 
     def test_parse_not_found_on_remote(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("not_found_on_remote.xml")
-        parser = CheckoutResponseParser(MagicMock())
+        parser = CheckoutResponseParser()
         pytest.raises(NotFoundOnRemote, parser.process_first, data)
 
 
 class TestHoldResponseParser:
     def test_parse_hold_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("place_hold_success.xml")
-        parser = HoldResponseParser(axis360parsers.default_collection)
+        parser = HoldResponseParser()
         parsed = parser.process_first(data)
-        assert isinstance(parsed, HoldInfo)
-        assert 1 == parsed.hold_position
-
-        # The HoldInfo is given the Collection object we passed into
-        # the HoldResponseParser.
-        assert axis360parsers.default_collection.id == parsed.collection_id
+        assert 1 == parsed
 
     def test_parse_already_on_hold(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("already_on_hold.xml")
-        parser = HoldResponseParser(MagicMock())
+        parser = HoldResponseParser()
         pytest.raises(AlreadyOnHold, parser.process_first, data)
 
 
 class TestHoldReleaseResponseParser:
     def test_success(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("release_hold_success.xml")
-        parser = HoldReleaseResponseParser(MagicMock())
+        parser = HoldReleaseResponseParser()
         assert True == parser.process_first(data)
 
     def test_failure(self, axis360parsers: Axis360FixturePlusParsers):
         data = axis360parsers.sample_data("release_hold_failure.xml")
-        parser = HoldReleaseResponseParser(MagicMock())
+        parser = HoldReleaseResponseParser()
         pytest.raises(NotOnHold, parser.process_first, data)
 
 

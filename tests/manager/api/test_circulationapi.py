@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, create_autospec
 import flask
 import pytest
 from flask import Flask
+from freezegun import freeze_time
 
+from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
@@ -114,13 +116,10 @@ class TestCirculationAPI:
 
     def test_borrow_sends_analytics_event(self, circulation_api: CirculationAPIFixture):
         now = utc_now()
-        loaninfo = LoanInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.pool.identifier.type,
-            circulation_api.pool.identifier.identifier,
-            now,
-            now + timedelta(seconds=3600),
+        loaninfo = LoanInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
             external_identifier=circulation_api.db.fresh_str(),
         )
         circulation_api.remote.queue_checkout(loaninfo)
@@ -165,6 +164,7 @@ class TestCirculationAPI:
         loan, hold, is_new = self.borrow(circulation_api)
         assert 3 == circulation_api.analytics.count
 
+    @freeze_time()
     def test_attempt_borrow_with_existing_remote_loan(
         self, circulation_api: CirculationAPIFixture
     ):
@@ -187,8 +187,8 @@ class TestCirculationAPI:
         # but didn't give us any useful information on when that loan
         # was created. We've faked it with values that should be okay
         # until the next sync.
-        assert abs((loan.start - now).seconds) < 2
-        assert 3600 == (loan.end - loan.start).seconds
+        assert (loan.start - now).seconds == 0
+        assert (loan.end - loan.start).seconds == 3600
 
     def test_attempt_borrow_with_existing_remote_hold(
         self, circulation_api: CirculationAPIFixture
@@ -262,14 +262,9 @@ class TestCirculationAPI:
     ):
         # We want to borrow this book but there are no copies.
         circulation_api.remote.queue_checkout(NoAvailableCopies())
-        holdinfo = HoldInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            None,
-            None,
-            10,
+        holdinfo = HoldInfo.from_license_pool(
+            circulation_api.pool,
+            hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
 
@@ -287,14 +282,9 @@ class TestCirculationAPI:
         # There are no available copies, but the remote API
         # places a hold for us right away instead of raising
         # an error.
-        holdinfo = HoldInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            None,
-            None,
-            10,
+        holdinfo = HoldInfo.from_license_pool(
+            circulation_api.pool,
+            hold_position=10,
         )
         circulation_api.remote.queue_checkout(holdinfo)
 
@@ -315,14 +305,9 @@ class TestCirculationAPI:
 
         # But the point is moot because the book isn't even available.
         # Attempting to place a hold will succeed.
-        holdinfo = HoldInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            None,
-            None,
-            10,
+        holdinfo = HoldInfo.from_license_pool(
+            circulation_api.pool,
+            hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
 
@@ -362,14 +347,9 @@ class TestCirculationAPI:
 
     def test_hold_sends_analytics_event(self, circulation_api: CirculationAPIFixture):
         circulation_api.remote.queue_checkout(NoAvailableCopies())
-        holdinfo = HoldInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.identifier.type,
-            circulation_api.identifier.identifier,
-            None,
-            None,
-            10,
+        holdinfo = HoldInfo.from_license_pool(
+            circulation_api.pool,
+            hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
 
@@ -401,13 +381,10 @@ class TestCirculationAPI:
         # We use local time here, rather than UTC time, because we use
         # local time when checking for expired cards in authorization_is_active.
         now = datetime.datetime.now()
-        loaninfo = LoanInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.pool.identifier.type,
-            circulation_api.pool.identifier.identifier,
-            now,
-            now + timedelta(seconds=3600),
+        loaninfo = LoanInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
         )
         circulation_api.remote.queue_checkout(loaninfo)
 
@@ -424,13 +401,10 @@ class TestCirculationAPI:
     ):
         # This checkout would succeed...
         now = utc_now()
-        loaninfo = LoanInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.pool.identifier.type,
-            circulation_api.pool.identifier.identifier,
-            now,
-            now + timedelta(seconds=3600),
+        loaninfo = LoanInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
         )
         circulation_api.remote.queue_checkout(loaninfo)
 
@@ -457,13 +431,10 @@ class TestCirculationAPI:
     def test_borrow_with_block_fails(self, circulation_api: CirculationAPIFixture):
         # This checkout would succeed...
         now = utc_now()
-        loaninfo = LoanInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.pool.identifier.type,
-            circulation_api.pool.identifier.identifier,
-            now,
-            now + timedelta(seconds=3600),
+        loaninfo = LoanInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
         )
         circulation_api.remote.queue_checkout(loaninfo)
 
@@ -787,14 +758,11 @@ class TestCirculationAPI:
         library_fixture.settings(circulation_api.patron.library).hold_limit = 2
         circulation_api.remote.queue_checkout(NoAvailableCopies())
         now = utc_now()
-        holdinfo = HoldInfo(
-            circulation_api.pool.collection,
-            circulation_api.pool.data_source,
-            circulation_api.pool.identifier.type,
-            circulation_api.pool.identifier.identifier,
-            now,
-            now + timedelta(seconds=3600),
-            10,
+        holdinfo = HoldInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
+            hold_position=10,
         )
         circulation_api.remote.queue_hold(holdinfo)
         loan, hold, is_new = self.borrow(circulation_api)
@@ -1060,7 +1028,7 @@ class PatronActivityCirculationAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
         self.patron = db.patron()
-        self.collection = db.collection()
+        self.collection = db.collection(protocol=BibliothecaAPI)
         edition, self.pool = db.edition(
             data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.BIBLIOTHECA_ID,
@@ -1191,13 +1159,10 @@ class TestPatronActivityCirculationAPI:
         # But the remote thinks the loan runs from today until two
         # weeks from today.
         patron_activity_circulation_api.api.add_remote_loan(
-            LoanInfo(
-                patron_activity_circulation_api.pool.collection,
-                patron_activity_circulation_api.pool.data_source,
-                patron_activity_circulation_api.identifier.type,
-                patron_activity_circulation_api.identifier.identifier,
-                patron_activity_circulation_api.now,
-                patron_activity_circulation_api.in_two_weeks,
+            LoanInfo.from_license_pool(
+                patron_activity_circulation_api.pool,
+                start_date=patron_activity_circulation_api.now,
+                end_date=patron_activity_circulation_api.in_two_weeks,
             )
         )
 
@@ -1215,14 +1180,11 @@ class TestPatronActivityCirculationAPI:
         hold.position = 10
 
         patron_activity_circulation_api.api.add_remote_hold(
-            HoldInfo(
-                pool2.collection,
-                pool2.data_source,
-                pool2.identifier.type,
-                pool2.identifier.identifier,
-                patron_activity_circulation_api.now,
-                patron_activity_circulation_api.in_two_weeks,
-                0,
+            HoldInfo.from_license_pool(
+                pool2,
+                start_date=patron_activity_circulation_api.now,
+                end_date=patron_activity_circulation_api.in_two_weeks,
+                hold_position=0,
             )
         )
         patron_activity_circulation_api.sync_patron_activity()
@@ -1246,15 +1208,14 @@ class TestPatronActivityCirculationAPI:
         mechanism = DeliveryMechanismInfo(
             Representation.TEXT_HTML_MEDIA_TYPE, DeliveryMechanism.NO_DRM
         )
-        pool = db.licensepool(None)
+        data_source = db.default_collection().data_source
+        assert data_source is not None
+        pool = db.licensepool(None, data_source_name=data_source.name)
         patron_activity_circulation_api.api.add_remote_loan(
-            LoanInfo(
-                pool.collection,
-                pool.data_source.name,
-                pool.identifier.type,
-                pool.identifier.identifier,
-                utc_now(),
-                None,
+            LoanInfo.from_license_pool(
+                pool,
+                start_date=utc_now(),
+                end_date=None,
                 locked_to=mechanism,
             )
         )
