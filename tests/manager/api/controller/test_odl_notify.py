@@ -9,6 +9,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
 from palace.manager.util.datetime_helpers import utc_now
@@ -17,7 +18,6 @@ from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 from tests.fixtures.problem_detail import raises_problem_detail
 from tests.fixtures.services import ServicesFixture
-from tests.mocks.mock import MockHTTPClient
 
 
 class ODLFixture:
@@ -32,24 +32,33 @@ class ODLFixture:
         self.collection = db.collection(
             protocol=OPDS2WithODLApi,
         )
-        self.work = self.db.work(with_license_pool=True, collection=self.collection)
-        self.pool = self.work.license_pools[0]
-        self.license = self.db.license(
-            self.pool,
-            checkout_url="https://loan.feedbooks.net/loan/get/{?id,checkout_id,expires,patron_id,notification_url,hint,hint_url}",
-            checkouts_available=1,
-            terms_concurrency=1,
-        )
-        self.pool.update_availability_from_licenses()
-        self.patron = self.db.patron()
-        self.patron_identifier = self.patron.identifier_to_remote_service(
-            self.pool.data_source
-        )
-        self.http_client = MockHTTPClient()
+        self.license = self.create_license()
+        self.patron, self.patron_identifier = self.create_patron()
         self.controller = ODLNotificationController(db.session, self.registry)
         self.loan_status_document = OPDS2WithODLApiFixture.loan_status_document
 
-    def loan(
+    def create_license(self, collection: Collection | None = None) -> License:
+        collection = collection or self.collection
+        pool = self.db.licensepool(
+            None, collection=collection, data_source_name=collection.data_source.name
+        )
+        license = self.db.license(
+            pool,
+            checkout_url="https://provider.net/loan",
+            checkouts_available=1,
+            terms_concurrency=1,
+        )
+        pool.update_availability_from_licenses()
+        return license
+
+    def create_patron(self) -> tuple[Patron, str]:
+        patron = self.db.patron()
+        patron_identifier = patron.identifier_to_remote_service(
+            self.collection.data_source
+        )
+        return patron, patron_identifier
+
+    def create_loan(
         self, license: License | None = None, patron: Patron | None = None
     ) -> Loan:
         if license is None:
@@ -73,14 +82,50 @@ class TestODLNotificationController:
     """Test that an ODL distributor can notify the circulation manager
     when a loan's status changes."""
 
+    def test__get_loan(
+        self, db: DatabaseTransactionFixture, odl_fixture: ODLFixture
+    ) -> None:
+        patron1, patron_id_1 = odl_fixture.create_patron()
+        patron2, patron_id_2 = odl_fixture.create_patron()
+        patron3, patron_id_3 = odl_fixture.create_patron()
+
+        license1 = odl_fixture.create_license()
+        license2 = odl_fixture.create_license()
+        license3 = odl_fixture.create_license()
+
+        loan1 = odl_fixture.create_loan(license=license1, patron=patron1)
+        loan2 = odl_fixture.create_loan(license=license2, patron=patron1)
+        loan3 = odl_fixture.create_loan(license=license3, patron=patron2)
+
+        # We get the correct loan for each patron and license.
+        assert (
+            odl_fixture.controller._get_loan(patron_id_1, license1.identifier) == loan1
+        )
+        assert (
+            odl_fixture.controller._get_loan(patron_id_1, license2.identifier) == loan2
+        )
+        assert (
+            odl_fixture.controller._get_loan(patron_id_2, license3.identifier) == loan3
+        )
+
+        # We get None if the patron doesn't have a loan for the license.
+        assert (
+            odl_fixture.controller._get_loan(patron_id_1, license3.identifier) is None
+        )
+        assert (
+            odl_fixture.controller._get_loan(patron_id_2, license1.identifier) is None
+        )
+        assert (
+            odl_fixture.controller._get_loan(patron_id_3, license1.identifier) is None
+        )
+
     @freeze_time()
     def test_notify_success(
         self,
-        db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
     ) -> None:
-        loan = odl_fixture.loan()
+        loan = odl_fixture.create_loan()
         assert odl_fixture.license.checkouts_available == 0
 
         status_doc = odl_fixture.loan_status_document("active")
@@ -115,11 +160,10 @@ class TestODLNotificationController:
     @freeze_time()
     def test_notify_deprecated(
         self,
-        db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
         odl_fixture: ODLFixture,
     ) -> None:
-        loan = odl_fixture.loan()
+        loan = odl_fixture.create_loan()
         assert loan.end != utc_now()
         status_doc = odl_fixture.loan_status_document("revoked")
         with flask_app_fixture.test_request_context(
@@ -141,9 +185,9 @@ class TestODLNotificationController:
         odl_fixture: ODLFixture,
     ) -> None:
         # Bad JSON.
-        pool = db.licensepool(None)
-        license = db.license(pool)
-        odl_fixture.loan(license=license)
+        non_odl_collection = db.collection()
+        license = odl_fixture.create_license(collection=non_odl_collection)
+        odl_fixture.create_loan(license=license)
 
         with (
             flask_app_fixture.test_request_context(
@@ -196,6 +240,6 @@ class TestODLNotificationController:
                 pd=NO_ACTIVE_LOAN.detailed("No loan was found.", 404)
             ),
         ):
-            response = odl_fixture.controller.notify(
+            odl_fixture.controller.notify(
                 odl_fixture.patron_identifier, NON_EXISTENT_LICENSE_IDENTIFIER
             )
