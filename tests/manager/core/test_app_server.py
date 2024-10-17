@@ -24,6 +24,7 @@ from palace.manager.core.app_server import (
     compressible,
     load_facets_from_request,
     load_pagination_from_request,
+    raises_problem_detail,
 )
 from palace.manager.core.entrypoint import AudiobooksEntryPoint, EbooksEntryPoint
 from palace.manager.core.problem_details import (
@@ -47,6 +48,7 @@ from palace.manager.util.problem_detail import (
     ProblemDetailException,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
 
 
@@ -681,3 +683,13 @@ class TestCompressibleAnnotator:
         response = ask_for_compression("gzip", "Accept-Transfer-Encoding")
         assert value == response.data
         assert "Content-Encoding" not in response.headers
+
+
+def test_raises_problem_detail(flask_app_fixture: FlaskAppFixture) -> None:
+    @raises_problem_detail
+    def func():
+        raise ProblemDetailException(problem_detail=INVALID_INPUT)
+
+    with flask_app_fixture.test_request_context():
+        result = func()
+    assert isinstance(result, Response)
