@@ -704,6 +704,50 @@ class TestOPDS2WithODLApi:
         assert license.license_pool.licenses_available == 0
         assert license.checkouts_available == 0
 
+    def test_checkout_ready_hold_no_available_copies(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ) -> None:
+        """
+        We think there is a hold ready for us, but we are out of sync with the distributor,
+        so there actually isn't a copy ready for our hold.
+        """
+        # We think there is a copy available for this hold.
+        hold, _ = opds2_with_odl_api_fixture.pool.on_hold_to(
+            opds2_with_odl_api_fixture.patron,
+            start=utc_now() - datetime.timedelta(days=1),
+            end=utc_now() + datetime.timedelta(days=1),
+            position=0,
+        )
+        opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+
+        assert opds2_with_odl_api_fixture.pool.licenses_available == 0
+        assert opds2_with_odl_api_fixture.pool.licenses_reserved == 1
+        assert opds2_with_odl_api_fixture.pool.patrons_in_hold_queue == 1
+
+        # But the distributor says there are no available copies.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            "application/api-problem+json",
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
+
+        with pytest.raises(NoAvailableCopies):
+            opds2_with_odl_api_fixture.api_checkout()
+
+        assert db.session.query(Loan).count() == 0
+        assert db.session.query(Hold).count() == 1
+
+        # The availability has been updated.
+        assert opds2_with_odl_api_fixture.pool.licenses_available == 0
+        assert opds2_with_odl_api_fixture.pool.licenses_reserved == 0
+        assert opds2_with_odl_api_fixture.pool.patrons_in_hold_queue == 1
+
+        # The hold has been updated to reflect the new availability.
+        assert hold.position == 1
+        assert hold.end is None
+
     def test_checkout_failures(
         self,
         db: DatabaseTransactionFixture,

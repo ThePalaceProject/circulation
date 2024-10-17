@@ -387,6 +387,7 @@ class OPDS2WithODLApi(
                     # patrons in position 1 in the hold queue, but this will be resolved next time
                     # the hold queue is recalculated.
                     hold.position = 1
+                    hold.end = None
                 # Update the pool and the next holds in the queue when a license is reserved.
                 licensepool.update_availability_from_licenses()
                 raise NoAvailableCopies()
@@ -437,8 +438,12 @@ class OPDS2WithODLApi(
         # We also need to update the remaining checkouts for the license.
         license.checkout()
 
-        # Update the pool to reflect the new loan.
-        licensepool.update_availability_from_licenses(holds_adjustment=1 if hold else 0)
+        # If there was a hold CirculationAPI will take care of deleting it. So we just need to
+        # update the license pool to reflect the loan. Since update_availability_from_licenses
+        # takes into account holds, we need to tell it to ignore the hold about to be deleted.
+        licensepool.update_availability_from_licenses(
+            ignored_holds={hold} if hold else None
+        )
         return loan
 
     def fulfill(
@@ -652,8 +657,11 @@ class OPDS2WithODLApi(
         if not hold:
             raise NotOnHold()
 
-        # Update the license pool to reflect the released hold.
-        hold.license_pool.update_availability_from_licenses(holds_adjustment=1)
+        # The hold itself will be deleted by the caller (usually CirculationAPI),
+        # so we just need to update the license pool to reflect the released hold.
+        # Since we are calling this before the hold is deleted, we need to pass the
+        # hold as an ignored hold to get the correct count.
+        hold.license_pool.update_availability_from_licenses(ignored_holds={hold})
 
     def update_availability(self, licensepool: LicensePool) -> None:
         pass
