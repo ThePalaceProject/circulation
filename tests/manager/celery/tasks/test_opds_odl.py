@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from freezegun import freeze_time
@@ -8,8 +8,10 @@ from sqlalchemy import func, select
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.overdrive import OverdriveAPI
-from palace.manager.celery.tasks.opds import (
+from palace.manager.celery.tasks import opds_odl
+from palace.manager.celery.tasks.opds_odl import (
     licensepool_ids_with_holds,
+    recalculate_hold_queue,
     recalculate_hold_queue_collection,
     recalculate_holds_for_licensepool,
     remove_expired_holds,
@@ -281,6 +283,27 @@ def test_remove_expired_holds(
     assert decoy_expired_holds.issubset(current_holds)
     assert non_expired_holds1.issubset(current_holds)
     assert non_expired_holds2.issubset(current_holds)
+
+
+def test_recalculate_hold_queue(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    db: DatabaseTransactionFixture,
+    opds_task_fixture: OpdsTaskFixture,
+):
+    collection1 = db.collection(protocol=OPDS2WithODLApi)
+    collection2 = db.collection(protocol=OPDS2WithODLApi)
+    decoy_collection = db.collection(protocol=OverdriveAPI)
+
+    with patch.object(
+        opds_odl, "recalculate_hold_queue_collection"
+    ) as mock_recalculate:
+        recalculate_hold_queue.delay().wait()
+
+    assert mock_recalculate.delay.call_count == 2
+    mock_recalculate.delay.assert_has_calls(
+        [call(collection1.id), call(collection2.id)], any_order=True
+    )
 
 
 def test_recalculate_hold_queue_collection(

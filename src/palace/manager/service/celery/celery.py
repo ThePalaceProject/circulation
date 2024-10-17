@@ -51,13 +51,13 @@ def beat_schedule() -> dict[str, Any]:
             ),  # Run every day at 1:00 AM
         },
         "opds2_odl_remove_expired_holds": {
-            "task": "opds.remove_expired_holds",
+            "task": "opds_odl.remove_expired_holds",
             "schedule": crontab(
                 minute="16",
             ),  # Run every hour at 16 minutes past the hour
         },
         "opds2_odl_recalculate_hold_queue": {
-            "task": "opds.recalculate_hold_queue",
+            "task": "opds_odl.recalculate_hold_queue",
             "schedule": crontab(
                 minute="31",
             ),  # Run every hour at 31 minutes past the hour
