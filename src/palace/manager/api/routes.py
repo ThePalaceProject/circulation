@@ -572,16 +572,6 @@ def saml_callback():
     )
 
 
-# TODO: This is a deprecated route that will be removed in a future release of the code,
-#       its left here for now to provide a dummy endpoint for existing ODL loans. All
-#       new loans will use the new endpoint.
-@library_route("/odl_notify/<loan_id>", methods=["GET", "POST"])
-@has_library
-@raises_problem_detail
-def odl_notify(loan_id) -> Response:
-    return app.manager.odl_notification_controller.notify_deprecated(loan_id)
-
-
 # Loan notifications for OPDS + ODL distributors
 @library_route("/odl/notify/<patron_identifier>/<license_identifier>", methods=["POST"])
 @has_library
