@@ -1,8 +1,8 @@
 import datetime
-from logging import Logger
 
 from celery import shared_task
 from sqlalchemy import delete, select
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -55,7 +55,7 @@ def licensepool_ids_with_holds(
     return db.scalars(query).all()
 
 
-def lock_licenses(session: Session, license_pool_id: int) -> None:
+def lock_licenses(license_pool: LicensePool) -> None:
     """
     Acquire a row level lock on all the licenses for a license pool.
 
@@ -64,42 +64,24 @@ def lock_licenses(session: Session, license_pool_id: int) -> None:
     licenses for the license pool to be locked, it could cause
     contention or deadlocks if it is held for a long time.
     """
+    session = Session.object_session(license_pool)
     session.execute(
-        select(License.id)
-        .where(License.license_pool_id == license_pool_id)
-        .with_for_update()
+        select(License.id).where(License.license_pool == license_pool).with_for_update()
     ).all()
 
 
 def recalculate_holds_for_licensepool(
-    session: Session,
-    log: Logger,
-    license_pool_id: int,
+    license_pool: LicensePool,
     reservation_period: datetime.timedelta,
-) -> None:
-    pool = (
-        session.scalars(select(LicensePool).where(LicensePool.id == license_pool_id))
-        .unique()
-        .one()
-    )
-    if pool is None:
-        log.info(
-            f"Skipping license pool {license_pool_id} because it no longer exists."
-        )
-        return
-    edition_title = (
-        pool.presentation_edition.title if pool.presentation_edition else None
-    )
-    author = pool.presentation_edition.author if pool.presentation_edition else None
-
+) -> int:
     # We take out row level locks on all the licenses and holds for this license pool, so that
     # everything is in a consistent state while we update the hold queue. This means we should be
     # quickly committing the transaction, to avoid contention or deadlocks.
-    lock_licenses(session, license_pool_id)
-    holds = pool.get_active_holds(for_update=True)
+    lock_licenses(license_pool)
+    holds = license_pool.get_active_holds(for_update=True)
 
-    pool.update_availability_from_licenses()
-    reserved = pool.licenses_reserved
+    license_pool.update_availability_from_licenses()
+    reserved = license_pool.licenses_reserved
 
     ready = holds[:reserved]
     waiting = holds[reserved:]
@@ -122,10 +104,7 @@ def recalculate_holds_for_licensepool(
             hold.end = None
             updated += 1
 
-    log.debug(
-        f"Updated hold queue for license pool {license_pool_id} ({edition_title} by {author}). "
-        f"{updated} holds out of date."
-    )
+    return updated
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -203,8 +182,35 @@ def recalculate_hold_queue_collection(
 
         for license_pool_id in license_pool_ids:
             with task.transaction() as session:
-                recalculate_holds_for_licensepool(
-                    session, task.log, license_pool_id, reservation_period
+                try:
+                    license_pool = (
+                        session.scalars(
+                            select(LicensePool).where(LicensePool.id == license_pool_id)
+                        )
+                        .unique()
+                        .one()
+                    )
+                except NoResultFound:
+                    task.log.info(
+                        f"Skipping license pool {license_pool_id} because it no longer exists."
+                    )
+                    continue
+                updated = recalculate_holds_for_licensepool(
+                    license_pool, reservation_period
+                )
+                edition_title = (
+                    license_pool.presentation_edition.title
+                    if license_pool.presentation_edition
+                    else None
+                )
+                author = (
+                    license_pool.presentation_edition.author
+                    if license_pool.presentation_edition
+                    else None
+                )
+                task.log.debug(
+                    f"Updated hold queue for license pool {license_pool_id} ({edition_title} by {author}). "
+                    f"{updated} holds out of date."
                 )
 
     if len(license_pool_ids) == batch_size:

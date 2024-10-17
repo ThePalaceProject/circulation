@@ -39,7 +39,11 @@ class ODLNotificationController(LoggerMixin):
         self.db = db
         self.registry = registry
 
-    def _get_loan(self, patron_identifier: str, license_identifier: str) -> Loan | None:
+    def _get_loan(
+        self, patron_identifier: str | None, license_identifier: str | None
+    ) -> Loan | None:
+        if patron_identifier is None or license_identifier is None:
+            return None
         return self.db.execute(
             select(Loan)
             .join(License)
@@ -52,7 +56,9 @@ class ODLNotificationController(LoggerMixin):
             )
         ).scalar_one_or_none()
 
-    def notify(self, patron_identifier: str, license_identifier: str) -> Response:
+    def notify(
+        self, patron_identifier: str | None, license_identifier: str | None
+    ) -> Response:
         loan = self._get_loan(patron_identifier, license_identifier)
         return self._process_notification(loan)
 

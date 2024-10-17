@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 import pytest
 from freezegun import freeze_time
@@ -211,10 +211,7 @@ def test_recalculate_holds_for_licensepool(
     pool, [license1, license2] = opds_task_fixture.pool_with_licenses(collection)
 
     # Recalculate the hold queue
-    assert pool.id is not None
-    recalculate_holds_for_licensepool(
-        db.session, MagicMock(), pool.id, timedelta(days=5)
-    )
+    recalculate_holds_for_licensepool(pool, timedelta(days=5))
 
     current_holds = pool.get_active_holds()
     assert len(current_holds) == 20
@@ -225,9 +222,7 @@ def test_recalculate_holds_for_licensepool(
     license1.checkouts_available = 1
     license2.checkouts_available = 2
     reservation_time = timedelta(days=5)
-    recalculate_holds_for_licensepool(
-        db.session, MagicMock(), pool.id, reservation_time
-    )
+    recalculate_holds_for_licensepool(pool, reservation_time)
 
     assert pool.licenses_reserved == 3
     assert pool.licenses_available == 0
