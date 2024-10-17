@@ -9,6 +9,7 @@ from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
+from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold
@@ -140,6 +141,16 @@ def recalculate_hold_queue(task: Task) -> None:
             recalculate_hold_queue_collection.delay(collection.id)
 
 
+def _redis_lock_recalculate_holds(client: Redis, collection_id: int) -> RedisLock:
+    return RedisLock(
+        client,
+        lock_name=[
+            "RecalculateHolds",
+            Collection.redis_key_from_id(collection_id),
+        ],
+    )
+
+
 @shared_task(queue=QueueNames.default, bind=True)
 def recalculate_hold_queue_collection(
     task: Task, collection_id: int, batch_size: int = 100, after_id: int | None = None
@@ -147,13 +158,7 @@ def recalculate_hold_queue_collection(
     """
     Recalculate the hold queue for a collection.
     """
-    lock = RedisLock(
-        task.services.redis.client(),
-        lock_name=[
-            "RecalculateHolds",
-            Collection.redis_key_from_id(collection_id),
-        ],
-    )
+    lock = _redis_lock_recalculate_holds(task.services.redis.client(), collection_id)
     with lock.lock() as locked:
         if not locked:
             task.log.info(
@@ -198,18 +203,11 @@ def recalculate_hold_queue_collection(
                 updated = recalculate_holds_for_licensepool(
                     license_pool, reservation_period
                 )
-                edition_title = (
-                    license_pool.presentation_edition.title
-                    if license_pool.presentation_edition
-                    else None
-                )
-                author = (
-                    license_pool.presentation_edition.author
-                    if license_pool.presentation_edition
-                    else None
-                )
+                edition = license_pool.presentation_edition
+                title = edition.title if edition else None
+                author = edition.author if edition else None
                 task.log.debug(
-                    f"Updated hold queue for license pool {license_pool_id} ({edition_title} by {author}). "
+                    f"Updated hold queue for license pool {license_pool_id} ({title} by {author}). "
                     f"{updated} holds out of date."
                 )
 

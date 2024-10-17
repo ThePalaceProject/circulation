@@ -10,6 +10,7 @@ from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.celery.tasks import opds_odl
 from palace.manager.celery.tasks.opds_odl import (
+    _redis_lock_recalculate_holds,
     licensepool_ids_with_holds,
     recalculate_hold_queue,
     recalculate_hold_queue_collection,
@@ -17,6 +18,7 @@ from palace.manager.celery.tasks.opds_odl import (
     remove_expired_holds,
     remove_expired_holds_for_collection,
 )
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
@@ -301,41 +303,116 @@ def test_recalculate_hold_queue(
     )
 
 
-def test_recalculate_hold_queue_collection(
-    celery_fixture: CeleryFixture,
-    redis_fixture: RedisFixture,
-    db: DatabaseTransactionFixture,
-    opds_task_fixture: OpdsTaskFixture,
-):
-    collection = db.collection(protocol=OPDS2WithODLApi)
-    pools = [
-        opds_task_fixture.pool_with_licenses(collection, num_licenses=1, available=True)
-        for idx in range(15)
-    ]
-
-    # Do recalculation
-    recalculate_hold_queue_collection.delay(collection.id, batch_size=2).wait()
-
-    for pool, [license] in pools:
-        current_holds = pool.get_active_holds()
-        assert len(current_holds) == 20
-        [reserved_hold] = [h for h in current_holds if h.position == 0]
-        waiting_holds = [h for h in current_holds if h.position and h.position > 0]
-
-        assert len(waiting_holds) == 19
-
-        assert reserved_hold.end is not None
-        assert reserved_hold.start is not None
-        assert waiting_holds[0].start is not None
-        assert reserved_hold.start < waiting_holds[0].start
-
-        waiting_holds.sort(key=_hold_sort_key)
-        for idx, hold in enumerate(waiting_holds):
-            assert hold.position == idx + 1
-            assert hold.end is None
-            assert hold.start is not None
-            expected_start = (
-                waiting_holds[idx - 1].start if idx else reserved_hold.start
+class TestRecalculateHoldQueueCollection:
+    def test_success(
+        self,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        db: DatabaseTransactionFixture,
+        opds_task_fixture: OpdsTaskFixture,
+    ):
+        collection = db.collection(protocol=OPDS2WithODLApi)
+        pools = [
+            opds_task_fixture.pool_with_licenses(
+                collection, num_licenses=1, available=True
             )
-            assert expected_start is not None
-            assert hold.start >= expected_start
+            for idx in range(15)
+        ]
+
+        # Do recalculation
+        recalculate_hold_queue_collection.delay(collection.id, batch_size=2).wait()
+
+        for pool, [license] in pools:
+            current_holds = pool.get_active_holds()
+            assert len(current_holds) == 20
+            [reserved_hold] = [h for h in current_holds if h.position == 0]
+            waiting_holds = [h for h in current_holds if h.position and h.position > 0]
+
+            assert len(waiting_holds) == 19
+
+            assert reserved_hold.end is not None
+            assert reserved_hold.start is not None
+            assert waiting_holds[0].start is not None
+            assert reserved_hold.start < waiting_holds[0].start
+
+            waiting_holds.sort(key=_hold_sort_key)
+            for idx, hold in enumerate(waiting_holds):
+                assert hold.position == idx + 1
+                assert hold.end is None
+                assert hold.start is not None
+                expected_start = (
+                    waiting_holds[idx - 1].start if idx else reserved_hold.start
+                )
+                assert expected_start is not None
+                assert hold.start >= expected_start
+
+    def test_already_running(
+        self,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.info)
+
+        collection = db.collection(protocol=OPDS2WithODLApi)
+        assert collection.id is not None
+        lock = _redis_lock_recalculate_holds(redis_fixture.client, collection.id)
+
+        # Acquire the lock, to simulate another task already running
+        lock.acquire()
+        recalculate_hold_queue_collection.delay(collection.id).wait()
+
+        assert "another task holds its lock" in caplog.text
+
+    def test_collection_deleted(
+        self,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OPDS2WithODLApi)
+        collection_id = collection.id
+        db.session.delete(collection)
+
+        recalculate_hold_queue_collection.delay(collection_id).wait()
+
+        assert "because it no longer exists" in caplog.text
+
+    def test_pool_deleted(
+        self,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+        db: DatabaseTransactionFixture,
+        opds_task_fixture: OpdsTaskFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OPDS2WithODLApi)
+        pool, _ = opds_task_fixture.pool_with_licenses(
+            collection, num_licenses=1, available=True
+        )
+        deleted_pool, _ = opds_task_fixture.pool_with_licenses(
+            collection, num_licenses=1, available=True
+        )
+        deleted_pool_id = deleted_pool.id
+        db.session.delete(deleted_pool)
+
+        assert pool.licenses_reserved != 1
+
+        with patch.object(
+            opds_odl, "licensepool_ids_with_holds"
+        ) as mock_licensepool_ids_with_holds:
+            mock_licensepool_ids_with_holds.return_value = [deleted_pool_id, pool.id]
+            recalculate_hold_queue_collection.delay(collection.id).wait()
+
+        # The deleted pool was skipped
+        assert (
+            f"Skipping license pool {deleted_pool_id} because it no longer exists"
+            in caplog.text
+        )
+
+        # The other pool was recalculated
+        assert pool.licenses_reserved == 1
