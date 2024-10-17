@@ -1,6 +1,7 @@
 import datetime
 import json
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
@@ -661,6 +662,48 @@ class TestLicensePool:
 
         assert p1 in work.license_pools
         assert [p2] == LicensePool.with_no_work(db.session)
+
+    def test_get_active_holds(self, db: DatabaseTransactionFixture):
+        pool = db.licensepool(None)
+        decoy_pool = db.licensepool(None)
+
+        last_week = utc_now() - timedelta(days=7)
+        yesterday = utc_now() - timedelta(days=1)
+        tomorrow = utc_now() + timedelta(days=1)
+
+        # Holds that should be considered active.
+        active_hold1, _ = pool.on_hold_to(
+            db.patron(), start=last_week, end=None, position=None
+        )
+        active_hold2, _ = pool.on_hold_to(
+            db.patron(), start=last_week, end=None, position=1
+        )
+        # This one is a tricky case. It's active because the hold is not in position 0, so end
+        # is the estimated availability date, not the date that the hold expires. It is possible
+        # for a hold not to be ready by its estimated availability date, so it's still active.
+        active_hold3, _ = pool.on_hold_to(
+            db.patron(), start=last_week, end=yesterday, position=2
+        )
+        active_hold4, _ = pool.on_hold_to(
+            db.patron(), start=yesterday, end=tomorrow, position=0
+        )
+
+        # Holds that should not be considered active.
+        inactive_hold1, _ = pool.on_hold_to(
+            db.patron(), start=last_week, end=yesterday, position=0
+        )
+
+        # Holds on a different pool.
+        decoy_pool.on_hold_to(db.patron(), start=last_week, end=tomorrow, position=1)
+
+        active_holds = pool.get_active_holds()
+        assert len(active_holds) == 4
+        assert set(active_holds) == {
+            active_hold1,
+            active_hold2,
+            active_hold3,
+            active_hold4,
+        }
 
     def test_update_availability(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)

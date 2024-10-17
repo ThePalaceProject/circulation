@@ -631,6 +631,11 @@ class OPDS2WithODLApi(
         if hold is not None:
             raise AlreadyOnHold()
 
+        # This potentially has a race condition, if two web workers are creating a hold on the
+        # licensepool at the same time, then patrons_in_hold_queue may be inaccurate. This is
+        # fine, as the number is mostly informational and its regularly recalculated by the
+        # recalculate_hold_queue_collection celery task. So the number will be accurate soon
+        # enough.
         patrons_in_hold_queue = (
             licensepool.patrons_in_hold_queue
             if licensepool.patrons_in_hold_queue
