@@ -582,18 +582,6 @@ def application_version():
     return app.manager.version.version()
 
 
-# TODO: This route is deprecated and should be removed in a
-#       future release of the code, it has been left here for
-#       one release to ease any deployment issues.
-@app.route("/heartbeat")
-def heartbeat():
-    version_info = application_version()
-    version_info["WARNING"] = (
-        "The /heartbeat endpoint is deprecated. Please use /version.json instead."
-    )
-    return version_info
-
-
 @app.route("/healthcheck.html")
 def health_check():
     return Response("", 200)
