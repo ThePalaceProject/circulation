@@ -1,3 +1,4 @@
+# autoflake: skip_file
 """
 We rely on all of our sqlalchemy models being listed here, so that we can
 make sure they are all registered with the declarative base.
