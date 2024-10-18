@@ -1,5 +1,5 @@
 from palace.manager.core import classifier
-from palace.manager.core.classifier import *
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.ddc import DeweyDecimalClassifier as DDC
 
 

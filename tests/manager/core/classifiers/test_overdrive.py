@@ -1,4 +1,4 @@
-from palace.manager.core.classifier import *
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.overdrive import OverdriveClassifier as Overdrive
 
 

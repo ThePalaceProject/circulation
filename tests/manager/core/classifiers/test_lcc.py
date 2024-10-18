@@ -1,4 +1,4 @@
-from palace.manager.core.classifier import *
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.lcc import LCCClassifier as LCC
 
 

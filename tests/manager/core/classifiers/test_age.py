@@ -1,10 +1,11 @@
-from palace.manager.core.classifier import AgeOrGradeClassifier, Classifier
-from palace.manager.core.classifier import LCSHClassifier as LCSH
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.age import (
     AgeClassifier,
+    AgeOrGradeClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
 )
+from palace.manager.core.classifier.keyword import LCSHClassifier as LCSH
 
 
 class TestTargetAge:
