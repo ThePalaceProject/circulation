@@ -261,7 +261,7 @@ class LicensePool(Base):
 
     # One LicensePool can have many CirculationEvents
     circulation_events: Mapped[list[CirculationEvent]] = relationship(
-        "CirculationEvent", backref="license_pool", cascade="all, delete-orphan"
+        "CirculationEvent", back_populates="license_pool", cascade="all, delete-orphan"
     )
 
     # The date this LicensePool was first created in our db
@@ -1472,9 +1472,15 @@ class LicensePoolDeliveryMechanism(Base):
     data_source_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="delivery_mechanisms"
+    )
 
     identifier_id = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="delivery_mechanisms"
     )
 
     delivery_mechanism_id = Column(
@@ -1495,6 +1501,9 @@ class LicensePoolDeliveryMechanism(Base):
 
     # One LicensePoolDeliveryMechanism may be associated with one RightsStatus.
     rightsstatus_id = Column(Integer, ForeignKey("rightsstatus.id"), index=True)
+    rights_status: Mapped[RightsStatus] = relationship(
+        "RightsStatus", back_populates="licensepooldeliverymechanisms"
+    )
 
     @classmethod
     def set(
@@ -2002,12 +2011,12 @@ class RightsStatus(Base):
 
     # One RightsStatus may apply to many LicensePoolDeliveryMechanisms.
     licensepooldeliverymechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
-        relationship("LicensePoolDeliveryMechanism", backref="rights_status")
+        relationship("LicensePoolDeliveryMechanism", back_populates="rights_status")
     )
 
     # One RightsStatus may apply to many Resources.
     resources: Mapped[list[Resource]] = relationship(
-        "Resource", backref="rights_status"
+        "Resource", back_populates="rights_status"
     )
 
     @classmethod

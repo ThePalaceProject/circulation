@@ -107,7 +107,7 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CustomLists.
     custom_lists: Mapped[list[CustomList]] = relationship(
-        "CustomList", backref="library", uselist=True
+        "CustomList", back_populates="library", uselist=True
     )
 
     # Lists shared with this library
@@ -124,7 +124,7 @@ class Library(Base, HasSessionCache):
 
     # A Library may have many CirculationEvents
     circulation_events: Mapped[list[CirculationEvent]] = relationship(
-        "CirculationEvent", backref="library", cascade="all, delete-orphan"
+        "CirculationEvent", back_populates="library", cascade="all, delete-orphan"
     )
 
     library_announcements: Mapped[list[Announcement]] = relationship(

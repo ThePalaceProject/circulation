@@ -2,7 +2,7 @@ import sys
 
 from sqlalchemy import Column, Enum, ForeignKey, Index, Integer, Unicode
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Mapped, backref, relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.model.base import Base
@@ -32,9 +32,7 @@ class DeviceToken(Base):
         index=True,
         nullable=False,
     )
-    patron: Mapped[Patron] = relationship(
-        "Patron", backref=backref("device_tokens", passive_deletes=True)
-    )
+    patron: Mapped[Patron] = relationship("Patron", back_populates="device_tokens")
 
     token_type_enum = Enum(
         DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS, name="token_types"
