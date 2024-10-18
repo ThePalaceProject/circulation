@@ -11,6 +11,7 @@ import traceback
 from collections.abc import Mapping
 from hashlib import md5
 from io import BytesIO
+from typing import TYPE_CHECKING
 from urllib.parse import quote, urlparse, urlsplit
 
 import requests
@@ -27,7 +28,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import Mapped, backref, relationship
+from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
 from palace.manager.sqlalchemy.constants import (
@@ -38,10 +39,17 @@ from palace.manager.sqlalchemy.constants import (
 )
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import LicensePoolDeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePoolDeliveryMechanism,
+    RightsStatus,
+)
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.datasource import DataSource
+    from palace.manager.sqlalchemy.model.identifier import Identifier
 
 
 class Resource(Base):
@@ -68,7 +76,7 @@ class Resource(Base):
     # Many Editions may choose this resource (as opposed to other
     # resources linked to them with rel="image") as their cover image.
     cover_editions: Mapped[list[Edition]] = relationship(
-        "Edition", backref="cover", foreign_keys=[Edition.cover_id]
+        "Edition", back_populates="cover", foreign_keys=[Edition.cover_id]
     )
 
     # Many Works may use this resource (as opposed to other resources
@@ -76,7 +84,7 @@ class Resource(Base):
     from palace.manager.sqlalchemy.model.work import Work
 
     summary_works: Mapped[list[Work]] = relationship(
-        "Work", backref="summary", foreign_keys=[Work.summary_id]
+        "Work", back_populates="summary", foreign_keys=[Work.summary_id]
     )
 
     # Many LicensePools (but probably one at most) may use this
@@ -89,16 +97,27 @@ class Resource(Base):
         )
     )
 
-    links: Mapped[list[Hyperlink]] = relationship("Hyperlink", backref="resource")
+    links: Mapped[list[Hyperlink]] = relationship(
+        "Hyperlink", back_populates="resource"
+    )
 
     # The DataSource that is the controlling authority for this Resource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="resources"
+    )
 
     # An archived Representation of this Resource.
     representation_id = Column(Integer, ForeignKey("representations.id"), index=True)
+    representation: Mapped[Representation] = relationship(
+        "Representation", back_populates="resource"
+    )
 
     # The rights status of this Resource.
     rights_status_id = Column(Integer, ForeignKey("rightsstatus.id"))
+    rights_status: Mapped[RightsStatus] = relationship(
+        "RightsStatus", back_populates="resources"
+    )
 
     # An optional explanation of the rights status.
     rights_explanation = Column(Unicode)
@@ -108,7 +127,7 @@ class Resource(Base):
         "ResourceTransformation",
         foreign_keys="ResourceTransformation.original_id",
         lazy="joined",
-        backref=backref("original", uselist=False),
+        back_populates="original",
         uselist=True,
     )
 
@@ -116,7 +135,7 @@ class Resource(Base):
     derived_through: Mapped[ResourceTransformation] = relationship(
         "ResourceTransformation",
         foreign_keys="ResourceTransformation.derivative_id",
-        backref=backref("derivative", uselist=False),
+        back_populates="derivative",
         lazy="joined",
         uselist=False,
     )
@@ -372,9 +391,15 @@ class ResourceTransformation(Base):
     derivative_id = Column(
         Integer, ForeignKey("resources.id"), index=True, primary_key=True
     )
+    derivative: Mapped[Resource] = relationship(
+        "Resource", back_populates="derived_through", foreign_keys=[derivative_id]
+    )
 
     # The original resource that was transformed into the derivative.
     original_id = Column(Integer, ForeignKey("resources.id"), index=True)
+    original: Mapped[Resource] = relationship(
+        "Resource", back_populates="transformations", foreign_keys=[original_id]
+    )
 
     # The settings used for the transformation.
     settings: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
@@ -391,11 +416,13 @@ class Hyperlink(Base, LinkRelations):
     identifier_id = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
+    identifier: Mapped[Identifier] = relationship("Identifier", back_populates="links")
 
     # The DataSource through which this link was discovered.
     data_source_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
+    data_source: Mapped[DataSource] = relationship("DataSource", back_populates="links")
 
     # The link relation between the Identifier and the Resource.
     rel = Column(Unicode, index=True, nullable=False)
@@ -404,7 +431,7 @@ class Hyperlink(Base, LinkRelations):
     resource_id = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
-    resource: Resource
+    resource: Mapped[Resource] = relationship("Resource", back_populates="links")
 
     @classmethod
     def generic_uri(cls, data_source, identifier, rel, content=None):
@@ -462,7 +489,7 @@ class Representation(Base, MediaTypes):
     media_type = Column(Unicode)
 
     resource: Mapped[Resource] = relationship(
-        "Resource", backref="representation", uselist=False
+        "Resource", back_populates="representation", uselist=False
     )
 
     ### Records of things we tried to do with this representation.
@@ -499,10 +526,16 @@ class Representation(Base, MediaTypes):
     # An image Representation may be a thumbnail version of another
     # Representation.
     thumbnail_of_id = Column(Integer, ForeignKey("representations.id"), index=True)
+    thumbnail_of: Mapped[Representation] = relationship(
+        "Representation",
+        remote_side=[id],
+        back_populates="thumbnails",
+        post_update=True,
+    )
 
     thumbnails: Mapped[list[Representation]] = relationship(
         "Representation",
-        backref=backref("thumbnail_of", remote_side=[id]),
+        back_populates="thumbnail_of",
         lazy="joined",
         post_update=True,
     )

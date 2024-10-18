@@ -41,6 +41,7 @@ from palace.manager.util.permanent_work_id import WorkIDCalculator
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.customlist import CustomListEntry
+    from palace.manager.sqlalchemy.model.resource import Resource
     from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -85,17 +86,19 @@ class Edition(Base, EditionConstants):
     # it. Through the Equivalency class, it is associated with a
     # (probably huge) number of other identifiers.
     primary_identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    primary_identifier: Identifier  # for typing
+    primary_identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="primarily_identifies"
+    )
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
     work: Mapped[Work] = relationship(
-        "Work", uselist=False, backref="presentation_edition"
+        "Work", uselist=False, back_populates="presentation_edition"
     )
 
     # An Edition may show up in many CustomListEntries.
     custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", backref="edition"
+        "CustomListEntry", back_populates="edition"
     )
 
     # An Edition may be the presentation edition for many LicensePools.
@@ -133,9 +136,7 @@ class Edition(Base, EditionConstants):
     # A Project Gutenberg text was likely `published` long before being `issued`.
     published = Column(Date)
 
-    MEDIUM_ENUM = Enum(*EditionConstants.KNOWN_MEDIA, name="medium")
-
-    medium = Column(MEDIUM_ENUM, index=True)
+    medium = Column(Enum(*EditionConstants.KNOWN_MEDIA, name="medium"), index=True)
 
     # The playtime duration of an audiobook (seconds)
     # https://github.com/readium/webpub-manifest/tree/master/contexts/default#duration-and-number-of-pages
@@ -146,6 +147,8 @@ class Edition(Base, EditionConstants):
         ForeignKey("resources.id", use_alter=True, name="fk_editions_summary_id"),
         index=True,
     )
+    cover: Mapped[Resource] = relationship("Resource", back_populates="cover_editions")
+
     # These two let us avoid actually loading up the cover Resource
     # every time.
     cover_full_url = Column(Unicode)

@@ -137,6 +137,7 @@ class Subject(Base):
 
     # Each Subject may claim affinity with one Genre.
     genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
+    genre: Mapped[Genre] = relationship("Genre", back_populates="subjects")
 
     # A locked Subject has been reviewed by a human and software will
     # not mess with it without permission.
@@ -351,11 +352,15 @@ class Classification(Base):
     __tablename__ = "classifications"
     id = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Mapped[Identifier | None]
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="classifications"
+    )
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
     subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource | None]
+    data_source: Mapped[DataSource] = relationship(
+        "DataSource", back_populates="classifications"
+    )
 
     # How much weight the data source gives to this classification.
     weight = Column(Integer)
@@ -486,7 +491,7 @@ class Genre(Base, HasSessionCache):
     name = Column(Unicode, unique=True, index=True)
 
     # One Genre may have affinity with many Subjects.
-    subjects: Mapped[list[Subject]] = relationship("Subject", backref="genre")
+    subjects: Mapped[list[Subject]] = relationship("Subject", back_populates="genre")
 
     # One Genre may participate in many WorkGenre assignments.
     works = association_proxy("work_genres", "work")
@@ -495,7 +500,9 @@ class Genre(Base, HasSessionCache):
         "WorkGenre", back_populates="genre", cascade="all, delete-orphan"
     )
 
-    lane_genres: Mapped[list[LaneGenre]] = relationship("LaneGenre", backref="genre")
+    lane_genres: Mapped[list[LaneGenre]] = relationship(
+        "LaneGenre", back_populates="genre"
+    )
 
     def __repr__(self):
         if classifier.genres.get(self.name):

@@ -13,6 +13,7 @@ from palace.manager.sqlalchemy.model.base import Base
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.datasource import DataSource
+    from palace.manager.sqlalchemy.model.identifier import Identifier
 
 
 class Measurement(Base):
@@ -713,6 +714,9 @@ class Measurement(Base):
 
     # A Measurement is always associated with some Identifier.
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier: Mapped[Identifier] = relationship(
+        "Identifier", back_populates="measurements"
+    )
 
     # A Measurement always comes from some DataSource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)

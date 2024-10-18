@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.customlist import CustomListEntry
     from palace.manager.sqlalchemy.model.library import Library
     from palace.manager.sqlalchemy.model.licensing import LicensePool
+    from palace.manager.sqlalchemy.model.resource import Resource
 
 
 class WorkGenre(Base):
@@ -85,6 +86,7 @@ class WorkGenre(Base):
     genre: Mapped[Genre] = relationship("Genre", back_populates="work_genres")
 
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    work: Mapped[Work] = relationship("Work", back_populates="work_genres")
     affinity = Column(Float, index=True, default=0)
 
     @classmethod
@@ -146,6 +148,9 @@ class Work(Base, LoggerMixin):
     # A Work takes its presentation metadata from a single Edition.
     # But this Edition is a composite of provider, admin interface, etc.-derived Editions.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
+    presentation_edition: Mapped[Edition] = relationship(
+        "Edition", back_populates="work"
+    )
 
     # One Work may have many associated WorkCoverageRecords.
     coverage_records: Mapped[list[WorkCoverageRecord]] = relationship(
@@ -156,13 +161,13 @@ class Work(Base, LoggerMixin):
     # However, a CustomListEntry may lose its Work without
     # ceasing to exist.
     custom_list_entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", backref="work"
+        "CustomListEntry", back_populates="work"
     )
 
     # One Work may participate in many WorkGenre assignments.
     genres = association_proxy("work_genres", "genre", creator=WorkGenre.from_genre)
     work_genres: Mapped[list[WorkGenre]] = relationship(
-        "WorkGenre", backref="work", cascade="all, delete-orphan"
+        "WorkGenre", back_populates="work", cascade="all, delete-orphan"
     )
     audience = Column(Unicode, index=True)
     target_age = Column(INT4RANGE, index=True)
@@ -173,6 +178,7 @@ class Work(Base, LoggerMixin):
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
     )
+    summary: Mapped[Resource] = relationship("Resource", back_populates="summary_works")
     # This gives us a convenient place to store a cleaned-up version of
     # the content of the summary Resource.
     summary_text = Column(Unicode)
@@ -1533,8 +1539,8 @@ class Work(Base, LoggerMixin):
         # Create JSON
         results = []
         for item in rows:
-            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))  # type: ignore
-            item.classifications = list(  # type: ignore
+            item.identifiers = list(filter(lambda idx: idx[0] == item.id, identifiers))  # type: ignore[attr-defined]
+            item.classifications = list(  # type: ignore[attr-defined]
                 filter(lambda idx: idx[0] == item.id, all_subjects)
             )
 
@@ -1648,28 +1654,25 @@ class Work(Base, LoggerMixin):
 
         result["contributors"] = []
         if doc.presentation_edition and doc.presentation_edition.contributions:
-            for item in doc.presentation_edition.contributions:
+            for c in doc.presentation_edition.contributions:
                 contributor: dict = {}
-                _set_value(item.contributor, "contributor", contributor)
-                _set_value(item, "contribution", contributor)
+                _set_value(c.contributor, "contributor", contributor)
+                _set_value(c, "contribution", contributor)
                 result["contributors"].append(contributor)
 
         result["licensepools"] = []
         if doc.license_pools:
-            for item in doc.license_pools:
-                if not (
-                    item.open_access or item.unlimited_access or item.licenses_owned > 0
-                ):
+            for lp in doc.license_pools:
+                if not (lp.open_access or lp.unlimited_access or lp.licenses_owned > 0):
                     continue
 
                 lc: dict = {}
-                _set_value(item, "licensepools", lc)
-                # lc["availability_time"] = getattr(item, "availability_time").timestamp()
-                lc["available"] = item.unlimited_access or item.licenses_available > 0
-                lc["licensed"] = item.unlimited_access or item.licenses_owned > 0
+                _set_value(lp, "licensepools", lc)
+                lc["available"] = lp.unlimited_access or lp.licenses_available > 0
+                lc["licensed"] = lp.unlimited_access or lp.licenses_owned > 0
                 if doc.presentation_edition:
                     lc["medium"] = doc.presentation_edition.medium
-                lc["licensepool_id"] = item.id
+                lc["licensepool_id"] = lp.id
                 lc["quality"] = doc.quality
                 result["licensepools"].append(lc)
 
@@ -1686,24 +1689,24 @@ class Work(Base, LoggerMixin):
                 result["genres"].append(genre)
 
         result["identifiers"] = []
-        if doc.identifiers:  # type: ignore
-            for item in doc.identifiers:  # type: ignore
+        if doc.identifiers:  # type: ignore[attr-defined]
+            for i in doc.identifiers:  # type: ignore[attr-defined]
                 identifier: dict = {}
-                _set_value(item, "identifiers", identifier)
+                _set_value(i, "identifiers", identifier)
                 result["identifiers"].append(identifier)
 
         result["classifications"] = []
-        if doc.classifications:  # type: ignore
-            for item in doc.classifications:  # type: ignore
+        if doc.classifications:  # type: ignore[attr-defined]
+            for c in doc.classifications:  # type: ignore[attr-defined]
                 classification: dict = {}
-                _set_value(item, "classifications", classification)
+                _set_value(c, "classifications", classification)
                 result["classifications"].append(classification)
 
         result["customlists"] = []
         if doc.custom_list_entries:
-            for item in doc.custom_list_entries:
+            for cl in doc.custom_list_entries:
                 customlist: dict = {}
-                _set_value(item, "custom_list_entries", customlist)
+                _set_value(cl, "custom_list_entries", customlist)
                 result["customlists"].append(customlist)
 
         # No empty lists, they should be null

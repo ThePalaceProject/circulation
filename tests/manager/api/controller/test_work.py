@@ -79,12 +79,11 @@ class TestWorkController:
         # Find a real Contributor put in the system through the setup
         # process.
         [contribution] = work_fixture.english_1.presentation_edition.contributions
-        contributor = contribution.contributor
 
         # The contributor is created with both .sort_name and
         # .display_name, but we want to test what happens when both
         # pieces of data aren't avaiable, so unset .sort_name.
-        contributor.sort_name = None
+        contribution.contributor.sort_name = None
 
         # No contributor name -> ProblemDetail
         with work_fixture.request_context_with_library("/"):
@@ -101,7 +100,7 @@ class TestWorkController:
         assert NO_SUCH_LANE.uri == response.uri
         assert "Unknown contributor: Unknown Author" == response.detail
 
-        contributor = contributor.display_name
+        contributor = contribution.contributor.display_name
 
         # Bad facet data -> ProblemDetail
         with work_fixture.request_context_with_library("/?order=nosuchorder"):

@@ -64,10 +64,14 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     )
 
     # One DataSource can provide many Hyperlinks.
-    links: Mapped[list[Hyperlink]] = relationship("Hyperlink", backref="data_source")
+    links: Mapped[list[Hyperlink]] = relationship(
+        "Hyperlink", back_populates="data_source"
+    )
 
     # One DataSource can provide many Resources.
-    resources: Mapped[list[Resource]] = relationship("Resource", backref="data_source")
+    resources: Mapped[list[Resource]] = relationship(
+        "Resource", back_populates="data_source"
+    )
 
     # One DataSource can generate many Measurements.
     measurements: Mapped[list[Measurement]] = relationship(
@@ -76,7 +80,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     # One DataSource can provide many Classifications.
     classifications: Mapped[list[Classification]] = relationship(
-        "Classification", backref="data_source"
+        "Classification", back_populates="data_source"
     )
 
     # One DataSource can have many associated Credentials.
@@ -92,7 +96,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     # One DataSource can provide many LicensePoolDeliveryMechanisms.
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="data_source",
+        back_populates="data_source",
         foreign_keys="LicensePoolDeliveryMechanism.data_source_id",
     )
 
