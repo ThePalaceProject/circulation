@@ -13,10 +13,7 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.api.problem_details import (
-    INVALID_CREDENTIALS,
-    PATRON_OF_ANOTHER_LIBRARY,
-)
+from palace.manager.api.problem_details import INVALID_CREDENTIALS
 from palace.manager.api.sip.client import Sip2Encoding, SIPClient
 from palace.manager.api.sip.dialect import Dialect as Sip2Dialect
 from palace.manager.integration.settings import (
@@ -27,7 +24,7 @@ from palace.manager.integration.settings import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util import MoneyUtility
-from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+from palace.manager.util.problem_detail import ProblemDetail
 
 
 class SIP2Settings(BasicAuthProviderSettings):

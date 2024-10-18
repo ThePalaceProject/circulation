@@ -6,12 +6,10 @@ import re
 import string
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
-from typing import Any, SupportsIndex, TypeVar
+from typing import Any, TypeVar
 
 import sqlalchemy
 from money import Money
-from sqlalchemy import distinct, select
-from sqlalchemy.sql.functions import func
 
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
