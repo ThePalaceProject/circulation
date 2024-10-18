@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from palace.manager.util.resources import resources_dir
-
 # If the genre classification does not match the fiction classification, throw
 # away the genre classifications.
 #
@@ -13,6 +9,9 @@ from palace.manager.util.resources import resources_dir
 
 # SQL to find commonly used classifications not assigned to a genre
 # select count(identifiers.id) as c, subjects.type, substr(subjects.identifier, 0, 20) as i, substr(subjects.name, 0, 20) as n from workidentifiers join classifications on workidentifiers.id=classifications.work_identifier_id join subjects on classifications.subject_id=subjects.id where subjects.genre_id is null and subjects.fiction is null group by subjects.type, i, n order by c desc;
+from __future__ import annotations
+
+from palace.manager.util.resources import resources_dir
 
 
 def classifier_resources_dir():
