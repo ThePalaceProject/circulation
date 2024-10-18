@@ -20,12 +20,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core import classifier
-from palace.manager.core.classifier import (  # type: ignore[attr-defined]
-    COMICS_AND_GRAPHIC_NOVELS,
-    Classifier,
-    Erotica,
-    GenreData,
-)
+from palace.manager.core.classifier import Classifier, Erotica, GenreData
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.model.base import Base

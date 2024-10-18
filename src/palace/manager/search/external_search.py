@@ -26,12 +26,9 @@ from opensearch_dsl.query import Query as BaseQuery
 from opensearch_dsl.query import Range, Regexp, Term, Terms
 from spellchecker import SpellChecker
 
-from palace.manager.core.classifier import (
-    AgeClassifier,
-    Classifier,
-    GradeLevelClassifier,
-    KeywordBasedClassifier,
-)
+from palace.manager.core.classifier import Classifier
+from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifier
+from palace.manager.core.classifier.keyword import KeywordBasedClassifier
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.facets import FacetConstants
 from palace.manager.core.metadata_layer import IdentifierData

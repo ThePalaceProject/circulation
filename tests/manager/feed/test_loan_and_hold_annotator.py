@@ -3,11 +3,6 @@ from unittest.mock import MagicMock, patch
 from palace.manager.api.app import app
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
-from palace.manager.core.classifier import (  # type: ignore[attr-defined]
-    Classifier,
-    Fantasy,
-    Urban_Fantasy,
-)
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from palace.manager.feed.types import WorkEntry, WorkEntryData

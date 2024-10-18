@@ -1,6 +1,13 @@
 from urllib.parse import unquote
 
-from palace.manager.core.classifier import *
+from palace.manager.core.classifier import (
+    NO_VALUE,
+    Classifier,
+    Lowercased,
+    fiction_genres,
+    genres,
+    nonfiction_genres,
+)
 
 
 class SimplifiedGenreClassifier(Classifier):
@@ -29,18 +36,18 @@ class SimplifiedGenreClassifier(Classifier):
 
     @classmethod
     def is_fiction(cls, identifier, name):
-        if not globals()["genres"].get(identifier.original):
+        if not genres.get(identifier.original):
             return None
-        return globals()["genres"][identifier.original].is_fiction
+        return genres[identifier.original].is_fiction
 
     @classmethod
     def _genre_by_name(cls, name, genres):
         for genre in genres:
             if genre == name:
-                return globals()["genres"][name]
+                return genres[name]
             elif isinstance(genre, dict):
                 if name == genre["name"] or name in genre.get("subgenres", []):
-                    return globals()["genres"][name]
+                    return genres[name]
         return None
 
 

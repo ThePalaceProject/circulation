@@ -23,7 +23,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_ROLE,
 )
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
-from palace.manager.core.classifier import SimplifiedGenreClassifier
+from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.admin import AdminRole
