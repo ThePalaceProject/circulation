@@ -1,4 +1,5 @@
-from palace.manager.core.classifier import *
+from palace.manager.core import classifier
+from palace.manager.core.classifier import Classifier
 
 
 class GutenbergBookshelfClassifier(Classifier):
@@ -17,66 +18,66 @@ class GutenbergBookshelfClassifier(Classifier):
     }
 
     GENRES = {
-        Adventure: [
+        classifier.Adventure: [
             "Adventure",
             "Pirates, Buccaneers, Corsairs, etc.",
         ],
-        # African_American : ["African American Writers"],
-        Ancient_History: ["Classical Antiquity"],
-        Architecture: [
+        # African_American classifier.: ["African American Writers"],
+        classifier.Ancient_History: ["Classical Antiquity"],
+        classifier.Architecture: [
             "Architecture",
             "The American Architect and Building News",
         ],
-        Art: ["Art"],
-        Biography_Memoir: [
+        classifier.Art: ["Art"],
+        classifier.Biography_Memoir: [
             "Biographies",
             "Children's Biography",
         ],
-        Christianity: ["Christianity"],
-        Civil_War_History: "US Civil War",
-        Classics: [
+        classifier.Christianity: ["Christianity"],
+        classifier.Civil_War_History: "US Civil War",
+        classifier.Classics: [
             "Best Books Ever Listings",
             "Harvard Classics",
         ],
-        Cooking: [
+        classifier.Cooking: [
             "Armour's Monthly Cook Book",
             "Cookery",
         ],
-        Drama: [
+        classifier.Drama: [
             "One Act Plays",
             "Opera",
             "Plays",
         ],
-        Erotica: "Erotic Fiction",
-        Fantasy: "Fantasy",
-        Foreign_Language_Study: [
+        classifier.Erotica: "Erotic Fiction",
+        classifier.Fantasy: "Fantasy",
+        classifier.Foreign_Language_Study: [
             "Language Education",
         ],
-        Gardening: [
+        classifier.Gardening: [
             "Garden and Forest",
             "Horticulture",
         ],
-        Historical_Fiction: "Historical Fiction",
-        History: [
+        classifier.Historical_Fiction: "Historical Fiction",
+        classifier.History: [
             "Children's History",
         ],
-        Horror: ["Gothic Fiction", "Horror"],
-        Humorous_Fiction: ["Humor"],
-        Islam: "Islam",
-        Judaism: "Judaism",
-        Law: [
+        classifier.Horror: ["Gothic Fiction", "Horror"],
+        classifier.Humorous_Fiction: ["Humor"],
+        classifier.Islam: "Islam",
+        classifier.Judaism: "Judaism",
+        classifier.Law: [
             "British Law",
             "Noteworthy Trials",
             "United States Law",
         ],
-        Literary_Criticism: ["Bibliomania"],
-        Mathematics: "Mathematics",
-        Medical: [
+        classifier.Literary_Criticism: ["Bibliomania"],
+        classifier.Mathematics: "Mathematics",
+        classifier.Medical: [
             "Medicine",
             "The North American Medical and Surgical Journal",
             "Physiology",
         ],
-        Military_History: [
+        classifier.Military_History: [
             "American Revolutionary War",
             "World War I",
             "World War II",
@@ -84,22 +85,22 @@ class GutenbergBookshelfClassifier(Classifier):
             "Boer War",
             "Napoleonic",
         ],
-        Modern_History: "Current History",
-        Music: [
+        classifier.Modern_History: "Current History",
+        classifier.Music: [
             "Music",
             "Child's Own Book of Great Musicians",
         ],
-        Mystery: [
+        classifier.Mystery: [
             "Crime Fiction",
             "Detective Fiction",
             "Mystery Fiction",
         ],
-        Nature: [
+        classifier.Nature: [
             "Animal",
             "Animals-Wild",
             "Bird-Lore" "Birds, Illustrated by Color Photography",
         ],
-        Periodicals: [
+        classifier.Periodicals: [
             "Ainslee's",
             "Prairie Farmer",
             "Blackwood's Edinburgh Magazine",
@@ -168,31 +169,31 @@ class GutenbergBookshelfClassifier(Classifier):
             "The Yellow Book",
             "Women's Travel Journals",
         ],
-        Pets: ["Animals-Domestic"],
-        Philosophy: ["Philosophy"],
-        Photography: "Photography",
-        Poetry: [
+        classifier.Pets: ["Animals-Domestic"],
+        classifier.Philosophy: ["Philosophy"],
+        classifier.Photography: "Photography",
+        classifier.Poetry: [
             "Poetry",
             "Poetry, A Magazine of Verse",
             "Children's Verse",
         ],
-        Political_Science: [
+        classifier.Political_Science: [
             "Anarchism",
             "Politics",
         ],
-        Psychology: ["Psychology"],
-        Reference_Study_Aids: [
+        classifier.Psychology: ["Psychology"],
+        classifier.Reference_Study_Aids: [
             "Reference",
             "CIA World Factbooks",
         ],
-        Religion_Spirituality: [
+        classifier.Religion_Spirituality: [
             "Atheism",
             "Bahá'í Faith",
             "Hinduism",
             "Paganism",
             "Children's Religion",
         ],
-        Science: [
+        classifier.Science: [
             "Astronomy",
             "Biology",
             "Botany",
@@ -208,30 +209,30 @@ class GutenbergBookshelfClassifier(Classifier):
             "Physics",
             "Scientific American",
         ],
-        Science_Fiction: [
+        classifier.Science_Fiction: [
             "Astounding Stories",
             "Precursors of Science Fiction",
             "The Galaxy",
             "Science Fiction",
         ],
-        Social_Sciences: [
+        classifier.Social_Sciences: [
             "Anthropology",
             "Archaeology",
             "The American Journal of Archaeology",
             "Sociology",
         ],
-        Suspense_Thriller: [
+        classifier.Suspense_Thriller: [
             "Suspense",
             "Thriller",
         ],
-        Technology: [
+        classifier.Technology: [
             "Engineering",
             "Technology",
             "Transportation",
         ],
-        Travel: "Travel",
-        True_Crime: "Crime Nonfiction",
-        Westerns: "Western",
+        classifier.Travel: "Travel",
+        classifier.True_Crime: "Crime Nonfiction",
+        classifier.Westerns: "Western",
     }
 
     @classmethod

@@ -16,11 +16,7 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.api.lanes import ContributorLane
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
-from palace.manager.core.classifier import (  # type: ignore[attr-defined]
-    Classifier,
-    Fantasy,
-    Urban_Fantasy,
-)
+from palace.manager.core.classifier import Classifier, Fantasy, Urban_Fantasy
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,
     EbooksEntryPoint,

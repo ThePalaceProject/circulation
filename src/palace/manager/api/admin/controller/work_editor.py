@@ -27,12 +27,8 @@ from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     REMOTE_INTEGRATION_FAILED,
 )
-from palace.manager.core.classifier import (
-    NO_NUMBER,
-    NO_VALUE,
-    SimplifiedGenreClassifier,
-    genres,
-)
+from palace.manager.core.classifier import NO_NUMBER, NO_VALUE, genres
+from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.classification import (

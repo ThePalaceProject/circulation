@@ -32,7 +32,8 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, literal_column, select
 from sqlalchemy.sql.functions import func
 
-from palace.manager.core.classifier import Classifier, WorkClassifier
+from palace.manager.core.classifier import Classifier
+from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.search.service import SearchDocument
 from palace.manager.service.redis.redis import Redis

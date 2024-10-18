@@ -34,9 +34,6 @@ profile = "black"
 # to silence the noise in the mypy output for now, so its easier to see when
 # there are errors in the output.
 disable_error_code = "annotation-unchecked"
-exclude = [
-    'core/classifier',
-]
 explicit_package_bases = true
 files = ["alembic", "src/palace", "tests"]
 mypy_path = ["alembic", "src"]
@@ -159,15 +156,6 @@ strict_concatenate = true
 strict_equality = true
 warn_return_any = true
 warn_unused_ignores = true
-
-[[tool.mypy.overrides]]
-# This override silences errors for modules in our own codebase that we import
-# from other covered modules. Ideally we will be able to remove this override
-# eventually, once we have type hints for all of our own code.
-follow_imports = "silent"
-module = [
-    "palace.manager.core.classifier.*",
-]
 
 [[tool.mypy.overrides]]
 # This override silences errors for modules we import that don't currently

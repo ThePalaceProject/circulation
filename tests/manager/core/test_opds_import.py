@@ -861,7 +861,7 @@ class TestOPDSImporter:
         assert Subject.AGE_RANGE == seven.subject.type
         from palace.manager.core.classifier import Classifier
 
-        classifier = Classifier.classifiers.get(seven.subject.type, None)
+        classifier = Classifier.classifiers[seven.subject.type]
         classifier.classify(seven.subject)
 
         def sort_key(x: LicensePool) -> str:
