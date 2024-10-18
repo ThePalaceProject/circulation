@@ -1883,7 +1883,7 @@ class TestAxis360Fulfillment:
         # document.
         assert fulfillment.content_type == DeliveryMechanism.FINDAWAY_DRM
         assert fulfillment.content is not None
-        assert isinstance(fulfillment.content, str)  # type: ignore[unreachable]
+        assert isinstance(fulfillment.content, str)
 
         # The manifest document combines information from the
         # fulfillment document and the metadata document.

@@ -88,7 +88,7 @@ class TestHasPatronSelfTests:
             with pytest.raises(test_patron_lookup_exception) as excinfo:
                 test_patron_lookup_method(db.default_library())
         assert not isinstance(result_patron, (Patron, ProblemDetail))
-        assert expected_message == excinfo.value.message  # type: ignore
+        assert expected_message == excinfo.value.message
         assert excinfo.value.detail is None
 
     def test_default_patrons(

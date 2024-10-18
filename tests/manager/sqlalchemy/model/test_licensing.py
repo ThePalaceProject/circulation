@@ -719,7 +719,7 @@ class TestLicensePool:
         assert work.last_update_time is not None
 
         # Updating availability also modified work.last_update_time.
-        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
     def test_update_availability_does_nothing_if_given_no_data(
         self, db: DatabaseTransactionFixture
