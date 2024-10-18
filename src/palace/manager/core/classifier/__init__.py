@@ -658,7 +658,18 @@ genres_by_variable_name: dict[str, GenreData] = dict()
 GenreData.populate(genres_by_variable_name, genres, fiction_genres, nonfiction_genres)
 
 
+# The structure of this module is to make all the GenreData objects available,
+# for import anywhere in the codebase, as attributes of this module. This used
+# to be done by adding them all to globals(), but this made type checking with
+# mypy difficult. So instead we add them to a dictionary and then use __getattr__
+# to make them available as attributes of the module. This lets mypy know that
+# unknown attributes are actually GenreData objects.
+#
+# See this stackoverflow answer for more details:
 # https://stackoverflow.com/questions/60739889/bypass-mypys-module-has-no-attribute-on-dynamic-attribute-setting
+#
+# TODO: Eventually I'd like to refactor this, so we don't have to use __getattr__
+#   here, and can just import the GenreData objects directly.
 def __getattr__(name: str) -> GenreData:
     return genres_by_variable_name[name]
 
