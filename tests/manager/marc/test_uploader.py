@@ -64,10 +64,10 @@ class TestMarcUploadManager:
             assert uploader.locked is True
 
             # The lock is also reflected in the uploads object
-            assert marc_upload_manager_fixture.uploads.locked(by_us=True) is True  # type: ignore[unreachable]
+            assert marc_upload_manager_fixture.uploads.locked(by_us=True) is True
 
         # The lock is released after the context manager exits
-        assert uploader.locked is False  # type: ignore[unreachable]
+        assert uploader.locked is False
         assert marc_upload_manager_fixture.uploads.locked(by_us=True) is False
 
         # If an exception occurs, the lock is deleted and the exception is raised by calling

@@ -35,7 +35,7 @@ def test_cloudwatch_region_valid() -> None:
 class TestLogLevel:
     def test_level_string(self) -> None:
         assert LogLevel.debug == "DEBUG"
-        assert LogLevel.info == "INFO"  # type: ignore[unreachable]
+        assert LogLevel.info == "INFO"
         assert LogLevel.warning == "WARNING"
         assert LogLevel.error == "ERROR"
 
