@@ -278,7 +278,7 @@ class TestWork:
         assert work.last_update_time is not None
         # The last update time has been set.
         # Updating availability also modified work.last_update_time.
-        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)  # type: ignore[unreachable]
+        assert (utc_now() - work.last_update_time) < datetime.timedelta(seconds=2)
 
         # The index has not been updated.
         assert [] == external_search_fake_fixture.service.documents_all()

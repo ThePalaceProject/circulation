@@ -49,8 +49,11 @@ warn_unused_ignores = true
 # silences those errors, but only for the tests module.
 # See discussion here:
 # https://github.com/python/mypy/issues/2427
-disable_error_code = "method-assign"
+disable_error_code = "method-assign, union-attr"
 module = "tests.*"
+# Mypy seems to have issues in the test code where it thinks code is unreachable
+# when it is not. So we disable this warning for the tests module.
+warn_unreachable = false
 
 [[tool.mypy.overrides]]
 # This override is the equivalent of running mypy with the --strict flag.

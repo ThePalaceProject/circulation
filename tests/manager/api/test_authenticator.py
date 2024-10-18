@@ -1549,7 +1549,7 @@ class TestBasicAuthenticationProvider:
             assert isinstance(patron, Patron)
             assert patron.external_type == "xyz"
         else:
-            assert patron is expected  # type: ignore[unreachable]
+            assert patron is expected
 
     def test_update_patron_metadata(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture
@@ -1572,7 +1572,7 @@ class TestBasicAuthenticationProvider:
         # .neighborhood was not stored in .cached_neighborhood.  In
         # this case, it must be cheap to get .neighborhood every time,
         # and it's better not to store information we can get cheaply.
-        assert "Little Homeworld" == patron.neighborhood  # type: ignore[unreachable]
+        assert "Little Homeworld" == patron.neighborhood
         assert patron.cached_neighborhood is None
 
     def test_update_patron_metadata_noop_if_no_remote_metadata(
