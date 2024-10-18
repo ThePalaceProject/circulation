@@ -11,7 +11,7 @@ import pytest
 from jinja2 import Template
 from requests import Response
 
-from palace.manager.api.circulation import LoanInfo
+from palace.manager.api.circulation import HoldInfo, LoanInfo
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.importer import OPDS2WithODLImporter
 from palace.manager.core.coverage import CoverageFailure
@@ -26,7 +26,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.sqlalchemy.model.patron import Loan, Patron
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -176,7 +176,8 @@ class OPDS2WithODLApiFixture:
         loan_url: str | None = None,
         patron: Patron | None = None,
         pool: LicensePool | None = None,
-    ) -> tuple[LoanInfo, Loan]:
+        create_loan: bool = False,
+    ) -> LoanInfo:
         patron = patron or self.patron
         pool = pool or self.pool
         loan_url = loan_url or self.db.fresh_url()
@@ -184,13 +185,24 @@ class OPDS2WithODLApiFixture:
         self.mock_http.queue_response(
             201, content=self.loan_status_document(self_link=loan_url).model_dump_json()
         )
-        loan = self.api.checkout(patron, "pin", pool, MagicMock())
-        loan_db = (
-            self.db.session.query(Loan)
-            .filter(Loan.license_pool == pool, Loan.patron == patron)
-            .one()
-        )
-        return loan, loan_db
+        loan_info = self.api_checkout(patron=patron, licensepool=pool)
+        if create_loan:
+            loan_info.create_or_update(patron, pool)
+        return loan_info
+
+    def place_hold(
+        self,
+        patron: Patron | None = None,
+        pool: LicensePool | None = None,
+        create_hold: bool = False,
+    ) -> HoldInfo:
+        patron = patron or self.patron
+        pool = pool or self.pool
+
+        hold_info = self.api.place_hold(patron, "pin", pool, "dummy@email.com")
+        if create_hold:
+            hold_info.create_or_update(patron, pool)
+        return hold_info
 
 
 @pytest.fixture(scope="function")

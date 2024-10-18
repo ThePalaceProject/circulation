@@ -52,6 +52,7 @@ from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    License,
     LicensePool,
     LicensePoolDeliveryMechanism,
     RightsStatus,
@@ -350,6 +351,7 @@ class LoanInfo(LoanAndHoldInfoMixin):
     fulfillment: Fulfillment | None = None
     external_identifier: str | None = None
     locked_to: DeliveryMechanismInfo | None = None
+    license_identifier: str | None = None
 
     @classmethod
     def from_license_pool(
@@ -361,6 +363,7 @@ class LoanInfo(LoanAndHoldInfoMixin):
         fulfillment: Fulfillment | None = None,
         external_identifier: str | None = None,
         locked_to: DeliveryMechanismInfo | None = None,
+        license_identifier: str | None = None,
     ) -> Self:
         collection_id = license_pool.collection_id
         assert collection_id is not None
@@ -377,6 +380,7 @@ class LoanInfo(LoanAndHoldInfoMixin):
             fulfillment=fulfillment,
             external_identifier=external_identifier,
             locked_to=locked_to,
+            license_identifier=license_identifier,
         )
 
     def __repr__(self) -> str:
@@ -397,13 +401,25 @@ class LoanInfo(LoanAndHoldInfoMixin):
     ) -> tuple[Loan, bool]:
         session = Session.object_session(patron)
         license_pool = license_pool or self.license_pool(session)
-        loan, is_new = license_pool.loan_to(
+
+        if self.license_identifier is not None:
+            loanable = session.execute(
+                select(License).where(
+                    License.identifier == self.license_identifier,
+                    License.license_pool == license_pool,
+                )
+            ).scalar_one()
+        else:
+            loanable = license_pool
+
+        loan, is_new = loanable.loan_to(
             patron,
             start=self.start_date,
             end=self.end_date,
             fulfillment=self.fulfillment,
             external_identifier=self.external_identifier,
         )
+
         if self.locked_to:
             # The loan source is letting us know that the loan is
             # locked to a specific delivery mechanism. Even if

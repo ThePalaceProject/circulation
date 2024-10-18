@@ -359,7 +359,6 @@ class CirculationManager(LoggerMixin):
         self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(
             self._db,
-            self,
             self.services.integration_registry.license_providers(),
         )
         self.patron_auth_token = PatronAuthTokenController(self)
