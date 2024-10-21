@@ -159,7 +159,7 @@ class OPDS2WithODLApi(
     def _notification_url(
         short_name: str | None, patron_id: str, license_id: str
     ) -> str:
-        """Get the notification URL that should be passed in the ODL checkout link
+        """Get the notification URL that should be passed in the ODL checkout link.
 
         This is broken out into a separate function to make it easier to override
         in tests.

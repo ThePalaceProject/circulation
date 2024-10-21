@@ -51,6 +51,7 @@ from palace.manager.util.http import BadResponseException, RemoteIntegrationExce
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
+from tests.mocks.odl import MockOPDS2WithODLApi
 
 
 class TestOPDS2WithODLApi:
@@ -426,19 +427,31 @@ class TestOPDS2WithODLApi:
         patron_id = str(uuid.uuid4())
         license_id = str(uuid.uuid4())
 
+        def get_path(path: str) -> str:
+            return urlparse(path).path
+
         # Import the app so we can setup a request context to verify that we can correctly generate
         # notification url via url_for.
         from palace.manager.api.app import app
 
+        # Test that we generated the expected URL
         with app.test_request_context():
             notification_url = OPDS2WithODLApi._notification_url(
                 short_name, patron_id, license_id
             )
 
         assert (
-            urlparse(notification_url).path
+            get_path(notification_url)
             == f"/{short_name}/odl/notify/{patron_id}/{license_id}"
         )
+
+        # Test that our mock generates the same URL
+        with app.test_request_context():
+            assert get_path(
+                OPDS2WithODLApi._notification_url(short_name, patron_id, license_id)
+            ) == get_path(
+                MockOPDS2WithODLApi._notification_url(short_name, patron_id, license_id)
+            )
 
     def test_checkout_success(
         self,
