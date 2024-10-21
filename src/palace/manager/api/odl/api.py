@@ -155,9 +155,22 @@ class OPDS2WithODLApi(
 
         return self._hasher_instance
 
-    def _url_for(self, *args: Any, **kwargs: Any) -> str:
-        """Wrapper around flask's url_for to be overridden for tests."""
-        return url_for(*args, **kwargs)
+    @staticmethod
+    def _notification_url(
+        short_name: str | None, patron_id: str, license_id: str
+    ) -> str:
+        """Get the notification URL that should be passed in the ODL checkout link
+
+        This is broken out into a separate function to make it easier to override
+        in tests.
+        """
+        return url_for(
+            "opds2_with_odl_notification",
+            library_short_name=short_name,
+            patron_identifier=patron_id,
+            license_identifier=license_id,
+            _external=True,
+        )
 
     def _request_loan_status(
         self, method: str, url: str, ignored_problem_types: list[str] | None = None
@@ -327,7 +340,7 @@ class OPDS2WithODLApi(
         if not license:
             raise NoAvailableCopies()
 
-        identifier = license.identifier
+        identifier = str(license.identifier)
         checkout_id = str(uuid.uuid4())
         if self.collection is None:
             raise PalaceValueError(f"Collection not found: {self.collection_id}")
@@ -343,12 +356,10 @@ class OPDS2WithODLApi(
         self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
         encoded_pass = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
 
-        notification_url = self._url_for(
-            "opds2_with_odl_notification",
-            library_short_name=library_short_name,
-            patron_id=patron_id,
-            license_id=license.identifier,
-            _external=True,
+        notification_url = self._notification_url(
+            library_short_name,
+            patron_id,
+            identifier,
         )
 
         # We should never be able to get here if the license doesn't have a checkout_url, but
@@ -356,7 +367,7 @@ class OPDS2WithODLApi(
         assert license.checkout_url is not None
         url_template = URITemplate(license.checkout_url)
         checkout_url = url_template.expand(
-            id=str(identifier),
+            id=identifier,
             checkout_id=checkout_id,
             patron_id=patron_id,
             expires=requested_expiry.isoformat(),

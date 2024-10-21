@@ -37,12 +37,16 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
             token="new_token", expires=utc_now() + self.refresh_token_timedelta
         )
 
-    def _url_for(self, *args: Any, **kwargs: Any) -> str:
-        del kwargs["_external"]
-        return "http://{}?{}".format(
-            "/".join(args),
-            "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
-        )
+    @staticmethod
+    def _notification_url(
+        short_name: str | None, patron_id: str, license_id: str
+    ) -> str:
+        """Get the notification URL that should be passed in the ODL checkout link
+
+        This is broken out into a separate function to make it easier to override
+        in tests.
+        """
+        return f"https://cm/{short_name}/notification/{patron_id}/{license_id}"
 
     def _basic_auth_request(
         self,

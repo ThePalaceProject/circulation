@@ -421,6 +421,21 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.patron, "pin", pool
         )
 
+    def test__notification_url(self):
+        short_name = "short_name"
+        patron_id = str(uuid.uuid4())
+        license_id = str(uuid.uuid4())
+
+        # Import the app so we can setup a request context to verify that we can correctly generate
+        # notification url via url_for.
+        from palace.manager.api.app import app
+
+        with app.test_request_context(base_url="https://cm"):
+            assert (
+                OPDS2WithODLApi._notification_url(short_name, patron_id, license_id)
+                == f"https://cm/{short_name}/odl/notify/{patron_id}/{license_id}"
+            )
+
     def test_checkout_success(
         self,
         db: DatabaseTransactionFixture,
@@ -491,15 +506,12 @@ class TestOPDS2WithODLApi:
         assert expires_t < after_expiration
 
         notification_url = urllib.parse.unquote_plus(params["notification_url"][0])
-        assert (
-            f"http://opds2_with_odl_notification?library_short_name=%s&patron_id=%s&license_id=%s"
-            % (
-                opds2_with_odl_api_fixture.library.short_name,
-                expected_patron_id,
-                opds2_with_odl_api_fixture.license.identifier,
-            )
-            == notification_url
+        expected_notification_url = opds2_with_odl_api_fixture.api._notification_url(
+            opds2_with_odl_api_fixture.library.short_name,
+            expected_patron_id,
+            opds2_with_odl_api_fixture.license.identifier,
         )
+        assert notification_url == expected_notification_url
 
     def test_checkout_open_access(
         self,
