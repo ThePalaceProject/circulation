@@ -1,11 +1,10 @@
-from unittest.mock import PropertyMock, create_autospec, patch
+from unittest.mock import PropertyMock, create_autospec
 
 import pytest
 from flask import Response
 from freezegun import freeze_time
 from sqlalchemy.orm.exc import StaleDataError
 
-from palace.manager.api.controller import odl_notification
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
@@ -266,14 +265,11 @@ class TestODLNotificationController:
         mock_loan.license_pool.collection.integration_configuration.protocol = (
             db.protocol_string(Goals.LICENSE_GOAL, OPDS2WithODLApi)
         )
-        with (
-            flask_app_fixture.test_request_context(
-                "/",
-                method="POST",
-                library=odl_fixture.library,
-                data=odl_fixture.loan_status_document("revoked").model_dump_json(),
-            ),
-            patch.object(odl_notification, "object_session"),
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            library=odl_fixture.library,
+            data=odl_fixture.loan_status_document("revoked").model_dump_json(),
         ):
             response = odl_fixture.controller._process_notification(mock_loan)
         assert response.status_code == 204

@@ -5,7 +5,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import ValidationError
 from sqlalchemy import select
-from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -102,9 +102,8 @@ class ODLNotificationController(LoggerMixin):
             #   Once we move the OPDS2WithODL scripts to celery this should be possible.
             #   For now we just mark the loan as expired.
             if not status_doc.active:
-                session = object_session(loan)
                 try:
-                    with session.begin_nested():
+                    with self.db.begin_nested():
                         loan.end = utc_now()
                 except StaleDataError:
                     # This can happen if this callback happened while we were returning this
