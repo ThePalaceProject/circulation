@@ -37,12 +37,11 @@ class MockOPDS2WithODLApi(OPDS2WithODLApi):
             token="new_token", expires=utc_now() + self.refresh_token_timedelta
         )
 
-    def _url_for(self, *args: Any, **kwargs: Any) -> str:
-        del kwargs["_external"]
-        return "http://{}?{}".format(
-            "/".join(args),
-            "&".join([f"{key}={val}" for key, val in list(kwargs.items())]),
-        )
+    @staticmethod
+    def _notification_url(
+        short_name: str | None, patron_id: str, license_id: str
+    ) -> str:
+        return f"https://cm/{short_name}/odl/notify/{patron_id}/{license_id}"
 
     def _basic_auth_request(
         self,
