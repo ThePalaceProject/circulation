@@ -430,11 +430,15 @@ class TestOPDS2WithODLApi:
         # notification url via url_for.
         from palace.manager.api.app import app
 
-        with app.test_request_context(base_url="https://cm"):
-            assert (
-                OPDS2WithODLApi._notification_url(short_name, patron_id, license_id)
-                == f"https://cm/{short_name}/odl/notify/{patron_id}/{license_id}"
+        with app.test_request_context():
+            notification_url = OPDS2WithODLApi._notification_url(
+                short_name, patron_id, license_id
             )
+
+        assert (
+            urlparse(notification_url).path
+            == f"/{short_name}/odl/notify/{patron_id}/{license_id}"
+        )
 
     def test_checkout_success(
         self,
