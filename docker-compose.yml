@@ -65,7 +65,7 @@ services:
       target: scripts
 
   pg:
-    image: "postgres:12"
+    image: "postgres:16"
     environment:
       POSTGRES_USER: palace
       POSTGRES_PASSWORD: test
