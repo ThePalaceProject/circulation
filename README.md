@@ -123,7 +123,7 @@ docker restart opensearch
 #### Docker
 
 ```sh
-docker run -d --name pg -e POSTGRES_USER=palace -e POSTGRES_PASSWORD=test -e POSTGRES_DB=circ -p 5432:5432 postgres:12
+docker run -d --name pg -e POSTGRES_USER=palace -e POSTGRES_PASSWORD=test -e POSTGRES_DB=circ -p 5432:5432 postgres:16
 ```
 
 You can run `psql` in the container using the command
