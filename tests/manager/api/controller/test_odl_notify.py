@@ -1,6 +1,9 @@
+from unittest.mock import PropertyMock, create_autospec
+
 import pytest
 from flask import Response
 from freezegun import freeze_time
+from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.odl.api import OPDS2WithODLApi
@@ -9,6 +12,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
 )
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
@@ -249,3 +253,23 @@ class TestODLNotificationController:
             odl_fixture.controller.notify(
                 odl_fixture.patron_identifier, NON_EXISTENT_LICENSE_IDENTIFIER
             )
+
+    def test__process_notification_already_deleted(
+        self,
+        odl_fixture: ODLFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        mock_loan = create_autospec(Loan)
+        type(mock_loan).end = PropertyMock(side_effect=StaleDataError())
+        mock_loan.license_pool.collection.integration_configuration.protocol = (
+            db.protocol_string(Goals.LICENSE_GOAL, OPDS2WithODLApi)
+        )
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            library=odl_fixture.library,
+            data=odl_fixture.loan_status_document("revoked").model_dump_json(),
+        ):
+            response = odl_fixture.controller._process_notification(mock_loan)
+        assert response.status_code == 204

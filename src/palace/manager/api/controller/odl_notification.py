@@ -6,6 +6,7 @@ from flask_babel import lazy_gettext as _
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.problem_details import (
@@ -101,6 +102,14 @@ class ODLNotificationController(LoggerMixin):
             #   Once we move the OPDS2WithODL scripts to celery this should be possible.
             #   For now we just mark the loan as expired.
             if not status_doc.active:
-                loan.end = utc_now()
+                try:
+                    with self.db.begin_nested():
+                        loan.end = utc_now()
+                except StaleDataError:
+                    # This can happen if this callback happened while we were returning this
+                    # item. We can fetch the loan, but it's deleted by the time we go to do
+                    # the update. This is not a problem, as we were just marking the loan as
+                    # completed anyway so we just continue.
+                    ...
 
         return Response(status=204)
