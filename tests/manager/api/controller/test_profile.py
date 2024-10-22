@@ -91,11 +91,11 @@ class TestProfileController:
             assert request_patron.synchronize_annotations is True
 
             # The other patron is unaffected.
-            assert profile_fixture.other_patron.synchronize_annotations is False  # type: ignore[unreachable]
+            assert profile_fixture.other_patron.synchronize_annotations is False
 
         # Now we can create an annotation for the patron who enabled
         # annotation sync.
-        get_one_or_create(  # type: ignore[unreachable]
+        get_one_or_create(
             profile_fixture.db.session,
             Annotation,
             patron=request_patron,
