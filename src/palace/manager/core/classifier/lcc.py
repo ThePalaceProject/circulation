@@ -1,9 +1,10 @@
 import json
+import re
 
-from palace.manager.core.classifier import *
+from palace.manager.core import classifier
 
 
-class LCCClassifier(Classifier):
+class LCCClassifier(classifier.Classifier):
     TOP_LEVEL = re.compile("^([A-Z]{1,2})")
     FICTION = {"PN", "PQ", "PR", "PS", "PT", "PZ"}
     JUVENILE = {"PZ"}
@@ -24,19 +25,19 @@ class LCCClassifier(Classifier):
         # Sports: GV557-1198.995
         # TODO: E and F are actually "the Americas".
         # United_States_History is E151-E909, F1-F975 but not E456-E655
-        African_History: ["DT"],
-        Ancient_History: ["DE"],
-        Architecture: ["NA"],
-        Art_Criticism_Theory: ["BH"],
-        Asian_History: ["DS", "DU"],
-        Biography_Memoir: ["CT"],
-        Business: ["HC", "HF", "HJ"],
-        Christianity: ["BR", "BS", "BT", "BV", "BX"],
-        Cooking: ["TX"],
-        Crafts_Hobbies: ["TT"],
-        Economics: ["HB"],
-        Education: ["L"],
-        European_History: [
+        classifier.African_History: ["DT"],
+        classifier.Ancient_History: ["DE"],
+        classifier.Architecture: ["NA"],
+        classifier.Art_Criticism_Theory: ["BH"],
+        classifier.Asian_History: ["DS", "DU"],
+        classifier.Biography_Memoir: ["CT"],
+        classifier.Business: ["HC", "HF", "HJ"],
+        classifier.Christianity: ["BR", "BS", "BT", "BV", "BX"],
+        classifier.Cooking: ["TX"],
+        classifier.Crafts_Hobbies: ["TT"],
+        classifier.Economics: ["HB"],
+        classifier.Education: ["L"],
+        classifier.European_History: [
             "DA",
             "DAW",
             "DB",
@@ -51,24 +52,24 @@ class LCCClassifier(Classifier):
             "DQ",
             "DR",
         ],
-        Folklore: ["GR"],
-        Games: ["GV"],
-        Islam: ["BP"],
-        Judaism: ["BM"],
-        Literary_Criticism: ["Z"],
-        Mathematics: ["QA", "HA", "GA"],
-        Medical: ["QM", "R"],
-        Military_History: ["U", "V"],
-        Music: ["M"],
-        Parenting_Family: ["HQ"],
-        Periodicals: ["AP", "AN"],
-        Philosophy: ["BC", "BD", "BJ"],
-        Photography: ["TR"],
-        Political_Science: ["J", "HX"],
-        Psychology: ["BF"],
-        Reference_Study_Aids: ["AE", "AG", "AI"],
-        Religion_Spirituality: ["BL", "BQ"],
-        Science: [
+        classifier.Folklore: ["GR"],
+        classifier.Games: ["GV"],
+        classifier.Islam: ["BP"],
+        classifier.Judaism: ["BM"],
+        classifier.Literary_Criticism: ["Z"],
+        classifier.Mathematics: ["QA", "HA", "GA"],
+        classifier.Medical: ["QM", "R"],
+        classifier.Military_History: ["U", "V"],
+        classifier.Music: ["M"],
+        classifier.Parenting_Family: ["HQ"],
+        classifier.Periodicals: ["AP", "AN"],
+        classifier.Philosophy: ["BC", "BD", "BJ"],
+        classifier.Photography: ["TR"],
+        classifier.Political_Science: ["J", "HX"],
+        classifier.Psychology: ["BF"],
+        classifier.Reference_Study_Aids: ["AE", "AG", "AI"],
+        classifier.Religion_Spirituality: ["BL", "BQ"],
+        classifier.Science: [
             "QB",
             "QC",
             "QD",
@@ -82,7 +83,7 @@ class LCCClassifier(Classifier):
             "GC",
             "QP",
         ],
-        Social_Sciences: [
+        classifier.Social_Sciences: [
             "HD",
             "HE",
             "HF",
@@ -95,26 +96,26 @@ class LCCClassifier(Classifier):
             "GF",
             "GT",
         ],
-        Sports: ["SK"],
-        World_History: ["CB"],
+        classifier.Sports: ["SK"],
+        classifier.World_History: ["CB"],
     }
 
     LEFTOVERS = dict(
-        B=Philosophy,
-        T=Technology,
-        Q=Science,
-        S=Science,
-        H=Social_Sciences,
-        D=History,
-        N=Art,
-        L=Education,
-        E=United_States_History,
-        F=United_States_History,
-        BP=Religion_Spirituality,
+        B=classifier.Philosophy,
+        T=classifier.Technology,
+        Q=classifier.Science,
+        S=classifier.Science,
+        H=classifier.Social_Sciences,
+        D=classifier.History,
+        N=classifier.Art,
+        L=classifier.Education,
+        E=classifier.United_States_History,
+        F=classifier.United_States_History,
+        BP=classifier.Religion_Spirituality,
     )
 
     NAMES = json.loads(
-        classifier_resources_dir().joinpath("lcc_one_level.json").read_text()
+        classifier.classifier_resources_dir().joinpath("lcc_one_level.json").read_text()
     )
 
     @classmethod
@@ -159,4 +160,4 @@ class LCCClassifier(Classifier):
         return None
 
 
-Classifier.classifiers[Classifier.LCC] = LCCClassifier
+classifier.Classifier.classifiers[classifier.Classifier.LCC] = LCCClassifier

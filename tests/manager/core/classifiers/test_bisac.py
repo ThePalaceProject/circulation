@@ -1,8 +1,9 @@
 import pytest
 
-from palace.manager.core.classifier import BISACClassifier, Classifier
+from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.bisac import (
     RE,
+    BISACClassifier,
     MatchingRule,
     anything,
     fiction,

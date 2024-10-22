@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 from palace.manager.core.classifier import Classifier
@@ -244,6 +246,81 @@ class AgeClassifier(Classifier):
         return (target_age, age_words)
 
 
+class AgeOrGradeClassifier(Classifier):
+    @classmethod
+    def audience(cls, identifier, name):
+        audience = AgeClassifier.audience(identifier, name)
+        if audience == None:
+            audience = GradeLevelClassifier.audience(identifier, name)
+        return audience
+
+    @classmethod
+    def target_age(cls, identifier, name):
+        """This tag might contain a grade level, an age in years, or nothing.
+        We will try both a grade level and an age in years, but we
+        will require that the tag indicate what's being measured. A
+        tag like "9-12" will not match anything because we don't know if it's
+        age 9-12 or grade 9-12.
+        """
+        age = AgeClassifier.target_age(identifier, name, True)
+        if age == cls.range_tuple(None, None):
+            age = GradeLevelClassifier.target_age(identifier, name, True)
+        return age
+
+
+class FreeformAudienceClassifier(AgeOrGradeClassifier):
+    # NOTE: In practice, subjects like "books for all ages" tend to be
+    # more like advertising slogans than reliable indicators of an
+    # ALL_AGES audience. So the only subject of this type we handle is
+    # the literal string "all ages", as it would appear, e.g., in the
+    # output of the metadata wrangler.
+
+    @classmethod
+    def audience(cls, identifier, name):
+        if identifier in ("children", "pre-adolescent", "beginning reader"):
+            return cls.AUDIENCE_CHILDREN
+        elif identifier in (
+            "young adult",
+            "ya",
+            "teenagers",
+            "adolescent",
+            "early adolescents",
+        ):
+            return cls.AUDIENCE_YOUNG_ADULT
+        elif identifier == "adult":
+            return cls.AUDIENCE_ADULT
+        elif identifier == "adults only":
+            return cls.AUDIENCE_ADULTS_ONLY
+        elif identifier == "all ages":
+            return cls.AUDIENCE_ALL_AGES
+        elif identifier == "research":
+            return cls.AUDIENCE_RESEARCH
+        return AgeOrGradeClassifier.audience(identifier, name)
+
+    @classmethod
+    def target_age(cls, identifier, name):
+        if identifier == "beginning reader":
+            return cls.range_tuple(5, 8)
+        if identifier == "pre-adolescent":
+            return cls.range_tuple(9, 12)
+        if identifier == "early adolescents":
+            return cls.range_tuple(13, 15)
+        if identifier == "all ages":
+            return cls.range_tuple(cls.ALL_AGES_AGE_CUTOFF, None)
+        strict_age = AgeClassifier.target_age(identifier, name, True)
+        if strict_age[0] or strict_age[1]:
+            return strict_age
+
+        strict_grade = GradeLevelClassifier.target_age(identifier, name, True)
+        if strict_grade[0] or strict_grade[1]:
+            return strict_grade
+
+        # Default to assuming it's an unmarked age.
+        return AgeClassifier.target_age(identifier, name, False)
+
+
 Classifier.classifiers[Classifier.AGE_RANGE] = AgeClassifier
 Classifier.classifiers[Classifier.GRADE_LEVEL] = GradeLevelClassifier
 Classifier.classifiers[Classifier.INTEREST_LEVEL] = InterestLevelClassifier
+Classifier.classifiers[Classifier.FREEFORM_AUDIENCE] = FreeformAudienceClassifier
+Classifier.classifiers[Classifier.AXIS_360_AUDIENCE] = AgeOrGradeClassifier

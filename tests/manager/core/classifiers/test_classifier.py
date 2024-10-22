@@ -8,15 +8,13 @@ from psycopg2.extras import NumericRange
 from palace.manager.core import classifier
 from palace.manager.core.classifier import (
     Classifier,
-    FreeformAudienceClassifier,
-    GenreData,
     Lowercased,
-    WorkClassifier,
-    fiction_genres,
-    nonfiction_genres,
+    Science,
+    Science_Fiction,
 )
 from palace.manager.core.classifier.age import (
     AgeClassifier,
+    FreeformAudienceClassifier,
     GradeLevelClassifier,
     InterestLevelClassifier,
 )
@@ -25,14 +23,12 @@ from palace.manager.core.classifier.keyword import FASTClassifier as FAST
 from palace.manager.core.classifier.keyword import LCSHClassifier as LCSH
 from palace.manager.core.classifier.lcc import LCCClassifier as LCC
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
+from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
-
-genres = dict()
-GenreData.populate(globals(), genres, fiction_genres, nonfiction_genres)
 
 
 class TestLowercased:
@@ -1187,10 +1183,8 @@ class TestWorkClassifier:
         staff_source = DataSource.lookup(session, DataSource.LIBRARY_STAFF)
         subject1 = data.transaction.subject(type="type1", identifier="subject1")
         subject1.target_age = NumericRange(6, 8, "[)")
-        subject1.weight_as_indicator_of_target_age = 1
         subject2 = data.transaction.subject(type="type2", identifier="subject2")
         subject2.target_age = NumericRange(6, 8, "[)")
-        subject2.weight_as_indicator_of_target_age = 1
         subject3 = data.transaction.subject(type=Subject.AGE_RANGE, identifier="10-13")
         classification1 = data.transaction.classification(
             identifier=data.identifier, subject=subject1, data_source=source, weight=10

@@ -1,4 +1,5 @@
-from palace.manager.core.classifier import *
+from palace.manager.core.classifier import genres
+from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 
 
 class TestSimplifiedGenreClassifier:
@@ -18,10 +19,10 @@ class TestSimplifiedGenreClassifier:
         scrubbed = SimplifiedGenreClassifier.scrub_identifier(genre_name)
 
         genre = SimplifiedGenreClassifier.genre(scrubbed, genre_name, fiction=True)
-        assert genre.name == globals()["genres"][genre_name].name
+        assert genre.name == genres[genre_name].name
 
         genre = SimplifiedGenreClassifier.genre(scrubbed, genre_name)
-        assert genre.name == globals()["genres"][genre_name].name
+        assert genre.name == genres[genre_name].name
 
         genre = SimplifiedGenreClassifier.genre(scrubbed, genre_name, fiction=False)
         assert genre == None
