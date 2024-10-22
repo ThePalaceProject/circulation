@@ -21,7 +21,6 @@ from palace.manager.service.integration_registry.license_providers import (
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.licensing import License
 from palace.manager.sqlalchemy.model.patron import Loan, Patron
-from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
@@ -61,12 +60,6 @@ class ODLNotificationController(LoggerMixin):
         self, patron_identifier: str | None, license_identifier: str | None
     ) -> Response:
         loan = self._get_loan(patron_identifier, license_identifier)
-        return self._process_notification(loan)
-
-    # TODO: This method is deprecated and should be removed once all the loans
-    #   created using the old endpoint have expired.
-    def notify_deprecated(self, loan_id: int) -> Response:
-        loan = get_one(self.db, Loan, id=loan_id)
         return self._process_notification(loan)
 
     def _process_notification(self, loan: Loan | None) -> Response:

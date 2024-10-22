@@ -167,27 +167,6 @@ class TestODLNotificationController:
 
         assert loan.end == utc_now()
 
-    @freeze_time()
-    def test_notify_deprecated(
-        self,
-        flask_app_fixture: FlaskAppFixture,
-        odl_fixture: ODLFixture,
-    ) -> None:
-        loan = odl_fixture.create_loan()
-        assert loan.end != utc_now()
-        status_doc = odl_fixture.loan_status_document("revoked")
-        with flask_app_fixture.test_request_context(
-            "/",
-            method="POST",
-            data=status_doc.model_dump_json(),
-            library=odl_fixture.library,
-        ):
-            assert loan.id is not None
-            response = odl_fixture.controller.notify_deprecated(loan.id)
-            assert response.status_code == 204
-
-        assert loan.end == utc_now()
-
     def test_notify_errors(
         self,
         db: DatabaseTransactionFixture,
