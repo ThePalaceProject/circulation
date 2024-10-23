@@ -1,6 +1,7 @@
 from celery import shared_task
 
 from palace.manager.api.circulation import PatronActivityCirculationAPI
+from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.integration_registry.license_providers import (
@@ -11,9 +12,11 @@ from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.backoff import exponential_backoff
+from palace.manager.util.http import RemoteIntegrationException
 
 
-@shared_task(queue=QueueNames.high, bind=True)
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
 def sync_patron_activity(
     task: Task, collection_id: int, patron_id: int, pin: str | None, force: bool = False
 ) -> None:
@@ -68,7 +71,33 @@ def sync_patron_activity(
                 )
                 return
 
-            api.sync_patron_activity(patron, pin)
+            try:
+                api.sync_patron_activity(patron, pin)
+            except PatronAuthorizationFailedException:
+                patron_activity_status.fail()
+                task.log.exception(
+                    "Patron activity sync task failed due to PatronAuthorizationFailedException. "
+                    "Marking patron activity as failed."
+                )
+                return
+            except RemoteIntegrationException as e:
+                # This may have been a transient network error with the remote integration. Attempt to retry.
+                retries = task.request.retries
+                if retries < task.max_retries:
+                    wait_time = exponential_backoff(retries)
+                    patron_activity_status.clear()
+                    task.log.exception(
+                        f"Patron activity sync task failed ({e}). Retrying in {wait_time} seconds."
+                    )
+                    raise task.retry(countdown=wait_time)
+
+                # We've reached the max number of retries. Mark the status as failed, but don't fail
+                # the task itself, since this is likely an error that is outside our control.
+                patron_activity_status.fail()
+                task.log.exception(
+                    f"Patron activity sync task failed ({e}). Max retries exceeded."
+                )
+                return
 
             task.log.info(
                 f"Patron activity sync for patron '{patron.authorization_identifier}' (id: {patron_id}) "
