@@ -11,6 +11,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
 from sqlalchemy.orm import Session
 
+from palace.manager.util.log import logger_for_function
+
 # This is the lock ID used to ensure that only one circulation manager
 # initializes or migrates the database at a time.
 LOCK_ID_DB_INIT = 1000000001
@@ -121,25 +123,23 @@ def get_one_or_create(
     if one:
         return one, False
     else:
-        __transaction = db.begin_nested()
         try:
-            # These kwargs are supported by get_one() but not by create().
-            get_one_keys = ["on_multiple", "constraint"]
-            for key in get_one_keys:
-                if key in kwargs:
-                    del kwargs[key]
-            obj = create(db, model, create_method, create_method_kwargs, **kwargs)
-            __transaction.commit()
-            return obj
+            with db.begin_nested():
+                # These kwargs are supported by get_one() but not by create().
+                get_one_keys = ["on_multiple", "constraint"]
+                for key in get_one_keys:
+                    if key in kwargs:
+                        del kwargs[key]
+                obj = create(db, model, create_method, create_method_kwargs, **kwargs)
+                return obj
         except IntegrityError as e:
-            logging.info(
+            logger_for_function().debug(
                 "INTEGRITY ERROR on %r %r, %r: %r",
                 model,
                 create_method_kwargs,
                 kwargs,
                 e,
             )
-            __transaction.rollback()
             return db.query(model).filter_by(**kwargs).one(), False
 
 

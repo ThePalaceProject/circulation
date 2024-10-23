@@ -1,8 +1,15 @@
+import functools
+from unittest.mock import patch
+
 import pytest
 from psycopg2.extras import NumericRange
 from sqlalchemy import not_
 from sqlalchemy.orm.exc import MultipleResultsFound
 
+from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.sqlalchemy import util
+from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.util import (
     get_one,
@@ -44,6 +51,46 @@ class TestDatabaseInterface:
         constraint = not_(Edition.title.in_(titles))
         result = get_one(db.session, Edition, constraint=constraint)
         assert None == result
+
+    def test_get_one_or_create(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        data_source = DataSource.lookup(db.session, "Test", autocreate=True)
+        patron = db.patron()
+        collection = db.collection()
+
+        get_one_or_create = functools.partial(
+            util.get_one_or_create,
+            db.session,
+            Credential,
+            data_source=data_source,
+            type="Test token",
+            patron=patron,
+            collection=collection,
+        )
+
+        # If it doesn't exist... the function will create it
+        credential, is_new = get_one_or_create()
+        assert is_new
+        assert isinstance(credential, Credential)
+
+        # If it already exists, that gets returned instead
+        credential_existing, is_new = get_one_or_create()
+        assert not is_new
+        assert isinstance(credential_existing, Credential)
+        assert credential_existing == credential
+
+        # If there is a race condition, and an IntegrityError happens
+        # it will be handled, an error message logged, and the existing
+        # object returned
+        caplog.clear()
+        caplog.set_level(LogLevel.debug)
+        with patch.object(util, "get_one", return_value=None):
+            credential_existing, is_new = get_one_or_create()
+        assert not is_new
+        assert isinstance(credential_existing, Credential)
+        assert credential_existing == credential
+        assert "INTEGRITY ERROR" in caplog.text
 
 
 class TestNumericRangeConversion:

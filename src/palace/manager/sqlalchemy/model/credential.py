@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, relationship
@@ -120,15 +121,15 @@ class Credential(Base):
     @classmethod
     def lookup(
         cls,
-        _db,
-        data_source,
-        token_type,
-        patron,
-        refresher_method,
-        allow_persistent_token=False,
-        allow_empty_token=False,
-        collection=None,
-        force_refresh=False,
+        _db: Session,
+        data_source: DataSource | str,
+        token_type: str,
+        patron: Patron | None,
+        refresher_method: Callable[[Credential], Any] | None,
+        allow_persistent_token: bool = False,
+        allow_empty_token: bool = False,
+        collection: Collection | None = None,
+        force_refresh: bool = False,
     ) -> Credential:
         from palace.manager.sqlalchemy.model.datasource import DataSource
 

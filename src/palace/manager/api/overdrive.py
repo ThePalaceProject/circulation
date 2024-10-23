@@ -904,7 +904,7 @@ class OverdriveAPI(
             return response
 
     def get_patron_credential(
-        self, patron: Patron, pin: str | None, is_fulfillment=False
+        self, patron: Patron, pin: str | None, is_fulfillment: bool = False
     ) -> Credential:
         """Create an OAuth token for the given patron.
 
@@ -913,7 +913,7 @@ class OverdriveAPI(
         :param is_fulfillment: Boolean indicating whether we need a fulfillment credential.
         """
 
-        def refresh(credential):
+        def refresh(credential: Credential) -> Credential:
             return self.refresh_patron_access_token(
                 credential, patron, pin, is_fulfillment=is_fulfillment
             )
