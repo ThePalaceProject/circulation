@@ -65,7 +65,7 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
-from palace.manager.util.http import BadResponseException
+from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from palace.manager.util.web_publication_manifest import AudiobookManifest
 from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.bibliotheca import MockBibliothecaAPI
@@ -487,6 +487,13 @@ class TestBibliothecaAPI:
         assert datetime_utc(2015, 5, 25, 17, 5, 34) == h2.start
         assert datetime_utc(2015, 5, 27, 17, 5, 34) == h2.end
         assert 0 == h2.position
+
+        # Test the case where we get bad data in response
+        bibliotheca_fixture.api.queue_response(200, content="")
+        with pytest.raises(
+            RemoteIntegrationException, match="Unable to parse response XML"
+        ):
+            bibliotheca_fixture.api.sync_patron_activity(patron, "dummy pin")
 
     def test_place_hold(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         db = bibliotheca_fixture.db
