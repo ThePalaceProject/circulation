@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 
 from palace.manager.api.circulation import HoldInfo, LoanInfo
+from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.service.integration_registry.license_providers import (
@@ -13,6 +14,7 @@ from palace.manager.service.redis.models.patron_activity import (
     PatronActivity,
     PatronActivityStatus,
 )
+from palace.manager.util.http import RemoteIntegrationException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -127,7 +129,54 @@ class TestSyncPatronActivity:
         assert task_status.state == PatronActivityStatus.State.FAILED
         assert task_status.task_id == task.id
 
-    def test_exception(
+    def test_patron_authorization_failed_exception(
+        self, sync_task_fixture: SyncTaskFixture, caplog: pytest.LogCaptureFixture
+    ):
+        sync_task_fixture.mock_collection_api.patron_activity = MagicMock(
+            side_effect=PatronAuthorizationFailedException()
+        )
+
+        sync_patron_activity.apply_async(
+            (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
+        ).wait()
+
+        task_status = sync_task_fixture.redis_record.status()
+        assert task_status is not None
+        assert task_status.state == PatronActivityStatus.State.FAILED
+
+        assert (
+            "Patron activity sync task failed due to PatronAuthorizationFailedException"
+            in caplog.text
+        )
+
+    @patch("palace.manager.celery.tasks.patron_activity.exponential_backoff")
+    def test_remote_integration_exception(
+        self,
+        mock_backoff: MagicMock,
+        sync_task_fixture: SyncTaskFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Make sure our backoff function doesn't delay the test.
+        mock_backoff.return_value = 0
+
+        mock_activity = create_autospec(
+            sync_task_fixture.mock_collection_api.patron_activity,
+            side_effect=RemoteIntegrationException("http://test.com", "boom!"),
+        )
+        sync_task_fixture.mock_collection_api.patron_activity = mock_activity
+
+        sync_patron_activity.apply_async(
+            (sync_task_fixture.collection.id, sync_task_fixture.patron.id, "pin")
+        ).wait()
+
+        task_status = sync_task_fixture.redis_record.status()
+        assert task_status is not None
+        assert task_status.state == PatronActivityStatus.State.FAILED
+
+        assert mock_activity.call_count == 5
+        assert "Max retries exceeded" in caplog.text
+
+    def test_other_exception(
         self, sync_task_fixture: SyncTaskFixture, caplog: pytest.LogCaptureFixture
     ):
         sync_task_fixture.mock_registry.from_collection.side_effect = Exception("Boom!")
