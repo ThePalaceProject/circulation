@@ -90,7 +90,7 @@ class TestDatabaseInterface:
         assert not is_new
         assert isinstance(credential_existing, Credential)
         assert credential_existing == credential
-        assert "INTEGRITY ERRROR" in caplog.text
+        assert "INTEGRITY ERROR" in caplog.text
 
 
 class TestNumericRangeConversion:
