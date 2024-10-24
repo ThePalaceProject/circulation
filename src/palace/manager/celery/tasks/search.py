@@ -145,13 +145,13 @@ def search_indexing(task: Task, batch_size: int = 500) -> None:
         if len(works) > 0:
             index_works.delay(works=works)
 
-        if len(works) == batch_size:
-            # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-            # to process the next batch.
-            raise task.replace(search_indexing.s(batch_size=batch_size))
+    if len(works) == batch_size:
+        # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
+        # to process the next batch.
+        raise task.replace(search_indexing.s(batch_size=batch_size))
 
-        task.log.info(f"Finished queuing indexing tasks.")
-        return
+    task.log.info(f"Finished queuing indexing tasks.")
+    return
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
