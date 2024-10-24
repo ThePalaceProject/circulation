@@ -18,7 +18,7 @@ from typing import Optional, TypeVar
 import dateutil.parser
 from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
-from lxml.etree import _Element
+from lxml.etree import Error, _Element
 from pymarc import parse_xml_to_array
 from sqlalchemy.orm import Session
 
@@ -102,7 +102,7 @@ from palace.manager.util.datetime_helpers import (
     to_utc,
     utc_now,
 )
-from palace.manager.util.http import HTTP
+from palace.manager.util.http import HTTP, RemoteIntegrationException
 from palace.manager.util.problem_detail import BaseProblemDetailException
 from palace.manager.util.xmlparser import XMLParser, XMLProcessor
 
@@ -422,8 +422,15 @@ class BibliothecaAPI(
 
     def patron_activity(self, patron, pin):
         response = self._patron_activity_request(patron)
-        collection = self.collection
-        return PatronCirculationParser(self.collection).process_all(response.content)
+        try:
+            return PatronCirculationParser(self.collection).process_all(
+                response.content
+            )
+        except Error as e:
+            # XML parse error from remote.
+            raise RemoteIntegrationException(
+                response.url, "Unable to parse response XML."
+            ) from e
 
     TEMPLATE = "<%(request_type)s><ItemId>%(item_id)s</ItemId><PatronId>%(patron_id)s</PatronId></%(request_type)s>"
 
