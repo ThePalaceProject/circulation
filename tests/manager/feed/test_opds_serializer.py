@@ -3,7 +3,7 @@ import datetime
 import pytz
 from lxml import etree
 
-from palace.manager.feed.serializer.opds import OPDS1Serializer, is_sort_link
+from palace.manager.feed.serializer.opds import OPDS1Version1Serializer, is_sort_link
 from palace.manager.feed.serializer.opds2 import PALACE_REL_SORT
 from palace.manager.feed.types import (
     Acquisition,
@@ -22,7 +22,7 @@ class TestOPDSSerializer:
         child = FeedEntryType.create(text="child", attr="chattr", grandchild=grandchild)
         parent = FeedEntryType.create(text="parent", attr="pattr", child=child)
 
-        serialized = OPDS1Serializer()._serialize_feed_entry("parent", parent)
+        serialized = OPDS1Version1Serializer()._serialize_feed_entry("parent", parent)
 
         assert serialized.tag == "parent"
         assert serialized.text == "parent"
@@ -50,7 +50,7 @@ class TestOPDSSerializer:
             lc="lc",
         )
 
-        element = OPDS1Serializer()._serialize_author_tag("author", author)
+        element = OPDS1Version1Serializer()._serialize_author_tag("author", author)
 
         assert element.tag == "author"
         assert element.get(f"{{{OPDSFeed.OPF_NS}}}role") == author.role
@@ -102,7 +102,7 @@ class TestOPDSSerializer:
                 vendor="vendor", clientToken=FeedEntryType(text="token")
             ),
         )
-        element = OPDS1Serializer()._serialize_acquistion_link(link)
+        element = OPDS1Version1Serializer()._serialize_acquistion_link(link)
         assert element.tag == "link"
         assert dict(element.attrib) == dict(href=link.href)
 
@@ -159,7 +159,7 @@ class TestOPDSSerializer:
             duration=10,
         )
 
-        element = OPDS1Serializer().serialize_work_entry(data)
+        element = OPDS1Version1Serializer().serialize_work_entry(data)
 
         assert (
             element.get(f"{{{OPDSFeed.SCHEMA_NS}}}additionalType")
@@ -246,21 +246,21 @@ class TestOPDSSerializer:
 
     def test_serialize_work_entry_empty(self):
         # A no-data work entry
-        element = OPDS1Serializer().serialize_work_entry(WorkEntryData())
+        element = OPDS1Version1Serializer().serialize_work_entry(WorkEntryData())
         # This will create an empty <entry> tag
         assert element.tag == "entry"
         assert list(element) == []
 
     def test_serialize_opds_message(self):
         message = OPDSMessage("URN", 200, "Description")
-        serializer = OPDS1Serializer()
+        serializer = OPDS1Version1Serializer()
         result = serializer.serialize_opds_message(message)
         assert serializer.to_string(result) == serializer.to_string(message.tag)
 
     def test_serialize_sort_link(self):
         link = Link(href="test", rel="test_rel", title="text1")
         link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
-        serializer = OPDS1Serializer()
+        serializer = OPDS1Version1Serializer()
         assert is_sort_link(link)
         sort_link = serializer._serialize_sort_link(link)
         assert sort_link.attrib["title"] == "text1"

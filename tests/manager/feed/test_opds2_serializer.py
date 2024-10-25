@@ -3,7 +3,7 @@ import json
 from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
     PALACE_REL_SORT,
-    OPDS2Serializer,
+    OPDS2Version1Serializer,
 )
 from palace.manager.feed.types import (
     Acquisition,
@@ -44,7 +44,7 @@ class TestOPDS2Serializer:
             )
         ]
 
-        serialized = OPDS2Serializer().serialize_feed(feed)
+        serialized = OPDS2Version1Serializer().serialize_feed(feed)
         result = json.loads(serialized)
 
         assert result["metadata"]["title"] == "Title"
@@ -89,7 +89,7 @@ class TestOPDS2Serializer:
             duration=10,
         )
 
-        serializer = OPDS2Serializer()
+        serializer = OPDS2Version1Serializer()
 
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
@@ -155,7 +155,7 @@ class TestOPDS2Serializer:
             {"vendor": "vendor_name", "clientToken": FeedEntryType(text="token_value")}
         )
 
-        serializer = OPDS2Serializer()
+        serializer = OPDS2Version1Serializer()
         acquisition = Acquisition(
             href="http://acquisition",
             rel="acquisition",
@@ -222,13 +222,13 @@ class TestOPDS2Serializer:
             sort_name="Author,",
             link=Link(href="http://author", rel="contributor", title="Delete me!"),
         )
-        result = OPDS2Serializer()._serialize_contributor(author)
+        result = OPDS2Version1Serializer()._serialize_contributor(author)
         assert result["name"] == "Author"
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
 
     def test_serialize_opds_message(self):
-        assert OPDS2Serializer().serialize_opds_message(
+        assert OPDS2Version1Serializer().serialize_opds_message(
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
@@ -237,7 +237,7 @@ class TestOPDS2Serializer:
         link = Link(href="test", rel="test_rel", title="text1")
         link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
         feed_data.facet_links.append(link)
-        links = OPDS2Serializer()._serialize_feed_links(feed=feed_data)
+        links = OPDS2Version1Serializer()._serialize_feed_links(feed=feed_data)
 
         assert links == {
             "links": [

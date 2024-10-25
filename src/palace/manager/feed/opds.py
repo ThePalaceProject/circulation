@@ -8,8 +8,14 @@ from werkzeug.datastructures import MIMEAccept
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.feed.base import FeedInterface
 from palace.manager.feed.serializer.base import SerializerInterface
-from palace.manager.feed.serializer.opds import OPDS1Serializer
-from palace.manager.feed.serializer.opds2 import OPDS2Serializer
+from palace.manager.feed.serializer.opds import (
+    OPDS1Version1Serializer,
+    OPDS1Version2Serializer,
+)
+from palace.manager.feed.serializer.opds2 import (
+    OPDS2Version1Serializer,
+    OPDS2Version2Serializer,
+)
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
@@ -21,8 +27,11 @@ def get_serializer(
 ) -> SerializerInterface[Any]:
     # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
     serializers: dict[str, type[SerializerInterface[Any]]] = {
-        "application/atom+xml": OPDS1Serializer,
-        "application/opds+json": OPDS2Serializer,
+        "application/atom+xml": OPDS1Version1Serializer,
+        "application/atom+xml;api-version=2": OPDS1Version2Serializer,
+        "application/opds+json": OPDS2Version1Serializer,
+        "application/opds+json;api-version=1": OPDS2Version1Serializer,
+        "application/opds+json;api-version=2": OPDS2Version2Serializer,
     }
     if mime_types:
         match = mime_types.best_match(
@@ -30,7 +39,7 @@ def get_serializer(
         )
         return serializers[match]()
     # Default
-    return OPDS1Serializer()
+    return OPDS1Version1Serializer()
 
 
 class BaseOPDSFeed(FeedInterface):
@@ -90,7 +99,7 @@ class BaseOPDSFeed(FeedInterface):
             ),
             **response_kwargs,
         )
-        if isinstance(serializer, OPDS2Serializer):
+        if isinstance(serializer, OPDS2Version1Serializer):
             # Only OPDS2 has the same content type for feed and entry
             response.content_type = serializer.content_type()
         return response

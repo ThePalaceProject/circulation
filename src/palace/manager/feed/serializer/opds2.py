@@ -36,7 +36,7 @@ PALACE_REL_SORT = AtomFeed.PALACE_REL_SORT
 PALACE_PROPERTIES_ACTIVE_SORT = AtomFeed.PALACE_PROPS_NS + "active-sort"
 
 
-class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
+class OPDS2Version1Serializer(SerializerInterface[dict[str, Any]]):
     CONTENT_TYPE = "application/opds+json"
 
     def __init__(self) -> None:
@@ -237,3 +237,10 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     @classmethod
     def to_string(cls, data: dict[str, Any]) -> str:
         return json.dumps(data, indent=2)
+
+
+class OPDS2Version2Serializer(OPDS2Version1Serializer):
+    CONTENT_TYPE = "application/opds+json"
+
+    def __init__(self) -> None:
+        pass

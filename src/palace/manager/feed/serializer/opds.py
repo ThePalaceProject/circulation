@@ -64,7 +64,7 @@ def is_sort_link(link: Link) -> bool:
     )
 
 
-class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
+class OPDS1Version1Serializer(SerializerInterface[etree._Element], OPDSFeed):
     """An OPDS 1.2 Atom feed serializer"""
 
     def __init__(self) -> None:
@@ -415,3 +415,11 @@ class OPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
         if link.get("activeFacet", False):
             sort_link.add_attributes(dict(activeSort="true"))
         return self._serialize_feed_entry("link", sort_link)
+
+
+class OPDS1Version2Serializer(OPDS1Version1Serializer):
+    """An OPDS 1.2 Atom feed serializer with Palace specific modifications (version 2) to support
+    new IOS and Android client features."""
+
+    def __init__(self) -> None:
+        pass

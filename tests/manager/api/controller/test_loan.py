@@ -46,7 +46,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
-from palace.manager.feed.serializer.opds2 import OPDS2Serializer
+from palace.manager.feed.serializer.opds2 import OPDS2Version1Serializer
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -131,7 +131,10 @@ class OPDSSerializationTestHelper:
             (None, OPDSFeed.ENTRY_TYPE),
             ("default-foo-bar", OPDSFeed.ENTRY_TYPE),
             (AtomFeed.ATOM_TYPE, OPDSFeed.ENTRY_TYPE),
-            (OPDS2Serializer.CONTENT_TYPE, OPDS2Serializer.CONTENT_TYPE),
+            (
+                OPDS2Version1Serializer.CONTENT_TYPE,
+                OPDS2Version1Serializer.CONTENT_TYPE,
+            ),
         ],
     )
 
@@ -151,7 +154,7 @@ class OPDSSerializationTestHelper:
         if self.expected_content_type == OPDSFeed.ENTRY_TYPE:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
-        elif self.expected_content_type == OPDS2Serializer.CONTENT_TYPE:
+        elif self.expected_content_type == OPDS2Version1Serializer.CONTENT_TYPE:
             entry = response.get_json()
         else:
             assert (
