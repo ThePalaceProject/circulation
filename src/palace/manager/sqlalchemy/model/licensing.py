@@ -298,6 +298,8 @@ class LicensePool(Base):
     # Identifier from a given DataSource.
     __table_args__ = (
         UniqueConstraint("identifier_id", "data_source_id", "collection_id"),
+        # This index was added to speed up queries for generating MARC XML.
+        Index("ix_licensepools_collection_id_work_id", collection_id, work_id),
     )
 
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(

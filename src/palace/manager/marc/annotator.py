@@ -5,7 +5,6 @@ import urllib.parse
 from collections.abc import Mapping, Sequence
 
 from pymarc import Field, Indicators, Record, Subfield
-from sqlalchemy.orm import Session
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -44,13 +43,15 @@ class Annotator(LoggerMixin):
     }
 
     @classmethod
-    def marc_record(cls, work: Work, license_pool: LicensePool) -> Record:
+    def marc_record(
+        cls, work: Work, isbn_identifier: Identifier | None, license_pool: LicensePool
+    ) -> Record:
         edition = license_pool.presentation_edition
         identifier = license_pool.identifier
 
         record = cls._record()
         cls.add_control_fields(record, identifier, license_pool, edition)
-        cls.add_isbn(record, identifier)
+        cls.add_isbn(record, isbn_identifier)
 
         # TODO: The 240 and 130 fields are for translated works, so they can be grouped even
         #  though they have different titles. We do not group editions of the same work in
@@ -82,6 +83,7 @@ class Annotator(LoggerMixin):
         organization_code: str | None,
         include_summary: bool,
         include_genres: bool,
+        delta: bool,
     ) -> Record:
         record = cls._copy_record(record)
 
@@ -106,6 +108,9 @@ class Annotator(LoggerMixin):
             base_url,
             web_client_urls,
         )
+
+        if delta:
+            cls.set_revised(record)
 
         return record
 
@@ -201,28 +206,15 @@ class Annotator(LoggerMixin):
         record.add_field(Field(tag="003", data=marc_org))
 
     @classmethod
-    def add_isbn(cls, record: Record, identifier: Identifier) -> None:
+    def add_isbn(cls, record: Record, identifier: Identifier | None) -> None:
         # Add the ISBN if we have one.
-        isbn = None
-        if identifier.type == Identifier.ISBN:
-            isbn = identifier
-        if not isbn:
-            _db = Session.object_session(identifier)
-            identifier_ids = identifier.equivalent_identifier_ids()[identifier.id]
-            isbn = (
-                _db.query(Identifier)
-                .filter(Identifier.type == Identifier.ISBN)
-                .filter(Identifier.id.in_(identifier_ids))
-                .order_by(Identifier.id)
-                .first()
-            )
-        if isbn and isbn.identifier:
+        if identifier and identifier.identifier:
             record.add_field(
                 Field(
                     tag="020",
                     indicators=Indicators(" ", " "),
                     subfields=[
-                        Subfield(code="a", value=isbn.identifier),
+                        Subfield(code="a", value=identifier.identifier),
                     ],
                 )
             )

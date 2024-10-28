@@ -5,7 +5,7 @@ from functools import cached_property
 from io import BytesIO
 from string import Formatter
 from types import TracebackType
-from typing import TYPE_CHECKING, BinaryIO
+from typing import IO, TYPE_CHECKING, BinaryIO
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -212,7 +212,7 @@ class S3Service(LoggerMixin):
         return upload["UploadId"]
 
     def multipart_upload(
-        self, key: str, upload_id: str, part_number: int, content: bytes
+        self, key: str, upload_id: str, part_number: int, content: bytes | IO[bytes]
     ) -> MultipartS3UploadPart:
         self.log.info(f"Uploading part {part_number} of {key} to {self.bucket}")
         result = self.client.upload_part(

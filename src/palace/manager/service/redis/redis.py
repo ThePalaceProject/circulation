@@ -97,15 +97,6 @@ class RedisPrefixCheckMixin(ABC):
             RedisCommandArgs("MGET", args_end=None),
             RedisCommandArgs("EXISTS", args_end=None),
             RedisCommandArgs("EXPIRETIME"),
-            RedisCommandArgs("JSON.CLEAR"),
-            RedisCommandArgs("JSON.SET"),
-            RedisCommandArgs("JSON.STRLEN"),
-            RedisCommandArgs("JSON.STRAPPEND"),
-            RedisCommandArgs("JSON.NUMINCRBY"),
-            RedisCommandArgs("JSON.GET"),
-            RedisCommandArgs("JSON.OBJKEYS"),
-            RedisCommandArgs("JSON.ARRAPPEND"),
-            RedisCommandArgs("JSON.ARRLEN"),
             RedisVariableCommandArgs("EVALSHA", key_index=1),
         ]
     }

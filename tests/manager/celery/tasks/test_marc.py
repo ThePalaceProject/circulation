@@ -1,5 +1,4 @@
 import datetime
-from typing import Any
 from unittest.mock import ANY, call, patch
 
 import pytest
@@ -7,14 +6,11 @@ from pymarc import MARCReader
 from sqlalchemy import select
 
 from palace.manager.celery.tasks import marc
+from palace.manager.celery.tasks.marc import marc_export_collection_lock
 from palace.manager.marc.exporter import MarcExporter
 from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.service.redis.models.marc import (
-    MarcFileUploadSession,
-    MarcFileUploadSessionError,
-    MarcFileUploadState,
-)
+from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
@@ -49,6 +45,11 @@ class TestMarcExport:
         celery_fixture: CeleryFixture,
     ):
         marc_exporter_fixture.configure_export()
+        marc_exporter_fixture.marc_file(
+            collection=marc_exporter_fixture.collection1,
+            library=marc_exporter_fixture.library1,
+            created=utc_now() - datetime.timedelta(days=7),
+        )
         with patch.object(marc, "marc_export_collection") as marc_export_collection:
             # Runs against all the expected collections
             collections = [
@@ -59,12 +60,41 @@ class TestMarcExport:
             for collection in collections:
                 marc_exporter_fixture.work(collection)
             marc.marc_export.delay().wait()
+
+            # We make the calls to generate a full export for every collection
             marc_export_collection.delay.assert_has_calls(
                 [
-                    call(collection_id=collection.id, start_time=ANY, libraries=ANY)
+                    call(
+                        collection_id=collection.id,
+                        collection_name=collection.name,
+                        start_time=ANY,
+                        libraries=ANY,
+                    )
                     for collection in collections
                 ],
                 any_order=True,
+            )
+
+            # We make the calls to generate a delta export only for collection1
+            marc_export_collection.delay.assert_any_call(
+                collection_id=marc_exporter_fixture.collection1.id,
+                collection_name=marc_exporter_fixture.collection1.name,
+                start_time=ANY,
+                libraries=ANY,
+                delta=True,
+            )
+
+            # Make sure the call was made with the correct library set
+            [delta_call] = [
+                c
+                for c in marc_export_collection.delay.mock_calls
+                if "delta" in c.kwargs
+            ]
+            libraries_kwarg = delta_call.kwargs["libraries"]
+            assert len(libraries_kwarg) == 1
+            assert (
+                libraries_kwarg[0].get("library_id")
+                == marc_exporter_fixture.library1.id
             )
 
     def test_skip_collections(
@@ -75,33 +105,22 @@ class TestMarcExport:
         celery_fixture: CeleryFixture,
     ):
         marc_exporter_fixture.configure_export()
-        collections = [
-            marc_exporter_fixture.collection1,
-            marc_exporter_fixture.collection2,
-            marc_exporter_fixture.collection3,
-        ]
-        for collection in collections:
-            marc_exporter_fixture.work(collection)
         with patch.object(marc, "marc_export_collection") as marc_export_collection:
-            # Collection 1 should be skipped because it is locked
-            assert marc_exporter_fixture.collection1.id is not None
-            MarcFileUploadSession(
-                redis_fixture.client, marc_exporter_fixture.collection1.id
-            ).acquire()
+            # Collection 1 should be skipped because it has no works
 
             # Collection 2 should be skipped because it was updated recently
+            marc_exporter_fixture.work(marc_exporter_fixture.collection2)
             marc_exporter_fixture.marc_file(
-                collection=marc_exporter_fixture.collection2
+                collection=marc_exporter_fixture.collection2,
+                library=marc_exporter_fixture.library1,
             )
 
-            # Collection 3 should be skipped because its state is not INITIAL
-            assert marc_exporter_fixture.collection3.id is not None
-            upload_session = MarcFileUploadSession(
-                redis_fixture.client, marc_exporter_fixture.collection3.id
+            # Collection 3 should be skipped because it was updated recently
+            marc_exporter_fixture.work(marc_exporter_fixture.collection3)
+            marc_exporter_fixture.marc_file(
+                collection=marc_exporter_fixture.collection3,
+                library=marc_exporter_fixture.library2,
             )
-            with upload_session.lock() as acquired:
-                assert acquired
-                upload_session.set_state(MarcFileUploadState.QUEUED)
 
             marc.marc_export.delay().wait()
             marc_export_collection.delay.assert_not_called()
@@ -133,17 +152,7 @@ class MarcExportCollectionFixture:
         self.start_time = utc_now()
 
     def marc_files(self) -> list[MarcFile]:
-        # We need to ignore the test-file-1.mrc file, which is created by our call to configure_export.
-        return [
-            f
-            for f in self.db.session.execute(select(MarcFile)).scalars().all()
-            if f.key != self.marc_exporter_fixture.test_marc_file_key
-        ]
-
-    def redis_data(self, collection: Collection) -> dict[str, Any] | None:
-        assert collection.id is not None
-        uploads = MarcFileUploadSession(self.redis_fixture.client, collection.id)
-        return self.redis_fixture.client.json().get(uploads.key)
+        return self.db.session.execute(select(MarcFile)).scalars().all()
 
     def setup_minio_storage(self) -> None:
         self.services_fixture.services.storage.override(
@@ -156,14 +165,25 @@ class MarcExportCollectionFixture:
     def works(self, collection: Collection) -> list[Work]:
         return [self.marc_exporter_fixture.work(collection) for _ in range(15)]
 
-    def export_collection(self, collection: Collection) -> None:
+    def export_collection(self, collection: Collection, delta: bool = False) -> None:
         service = self.services_fixture.services.integration_registry.catalog_services()
         assert collection.id is not None
         info = MarcExporter.enabled_libraries(self.db.session, service, collection.id)
         libraries = [l.model_dump() for l in info]
         marc.marc_export_collection.delay(
-            collection.id, batch_size=5, start_time=self.start_time, libraries=libraries
+            collection.id,
+            collection_name=collection.name,
+            batch_size=5,
+            start_time=self.start_time,
+            libraries=libraries,
+            delta=delta,
         ).wait()
+
+    def redis_lock(self, collection: Collection, delta: bool = False) -> RedisLock:
+        assert collection.id is not None
+        return marc_export_collection_lock(
+            self.redis_fixture.client, collection.id, delta=delta
+        )
 
 
 @pytest.fixture
@@ -196,25 +216,23 @@ class TestMarcExportCollection:
     ):
         marc_export_collection_fixture.setup_minio_storage()
         collection = marc_exporter_fixture.collection1
-        work_uris = [
-            work.license_pools[0].identifier.urn
-            for work in marc_export_collection_fixture.works(collection)
-        ]
+        works = marc_export_collection_fixture.works(collection)
+        work_uris = [work.license_pools[0].identifier.urn for work in works]
 
         # Run the full end-to-end process for exporting a collection, this should generate
         # 3 batches of 5 works each, putting the results into minio.
         marc_export_collection_fixture.export_collection(collection)
 
-        # Verify that we didn't leave anything in the redis cache.
-        assert marc_export_collection_fixture.redis_data(collection) is None
+        # Lock is released
+        assert not marc_export_collection_fixture.redis_lock(collection).locked()
 
         # Verify that the expected number of files were uploaded to minio.
         uploaded_files = s3_service_integration_fixture.list_objects("public")
-        assert len(uploaded_files) == 3
+        assert len(uploaded_files) == 2
 
         # Verify that the expected number of marc files were created in the database.
         marc_files = marc_export_collection_fixture.marc_files()
-        assert len(marc_files) == 3
+        assert len(marc_files) == 2
         filenames = [marc_file.key for marc_file in marc_files]
 
         # Verify that the uploaded files are the expected ones.
@@ -233,10 +251,51 @@ class TestMarcExportCollection:
             assert all(record["003"].data == expected_org for record in records)
 
             # Make sure records have the correct status
-            expected_status = "c" if "delta" in file else "n"
-            assert all(
-                record.leader.record_status == expected_status for record in records
+            assert all(record.leader.record_status == "n" for record in records)
+
+        # Try running a delta export now
+        marc_export_collection_fixture.export_collection(collection, delta=True)
+
+        # Because no works have been updated since the last run, no delta exports are generated
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert len(marc_files) == 2
+
+        # Update a couple works last_updated_time
+        updated_works = [works[0], works[1]]
+        for work in updated_works:
+            work.last_update_time = utc_now()
+
+        marc_export_collection_fixture.export_collection(collection, delta=True)
+
+        # Now we generate marc files
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert len(marc_files) == 4
+        delta_marc_files = [
+            marc_file
+            for marc_file in marc_files
+            if marc_file.key and "delta" in marc_file.key
+        ]
+        assert len(delta_marc_files) == 2
+
+        # Verify that the marc files contain the expected works.
+        for marc_file in delta_marc_files:
+            assert marc_file.key is not None
+            data = s3_service_integration_fixture.get_object("public", marc_file.key)
+            records = list(MARCReader(data))
+            assert len(records) == 2
+            marc_uris = [record["001"].data for record in records]
+            assert set(marc_uris) == {
+                work.license_pools[0].identifier.urn for work in updated_works
+            }
+
+            # Make sure the records have the correct organization code.
+            expected_org = (
+                "library1-org" if "library1" in marc_file.key else "library2-org"
             )
+            assert all(record["003"].data == expected_org for record in records)
+
+            # Make sure records have the correct status
+            assert all(record.leader.record_status == "c" for record in records)
 
     def test_collection_no_works(
         self,
@@ -250,7 +309,7 @@ class TestMarcExportCollection:
 
         assert marc_export_collection_fixture.marc_files() == []
         assert s3_service_integration_fixture.list_objects("public") == []
-        assert marc_export_collection_fixture.redis_data(collection) is None
+        assert not marc_export_collection_fixture.redis_lock(collection).locked()
 
     def test_exception_handled(
         self,
@@ -266,10 +325,10 @@ class TestMarcExportCollection:
             with pytest.raises(Exception, match="Test Exception"):
                 marc_export_collection_fixture.export_collection(collection)
 
-        # After the exception, we should have aborted the multipart uploads and deleted the redis data.
+        # After the exception, we should have aborted the multipart uploads and released the lock
         assert marc_export_collection_fixture.marc_files() == []
-        assert marc_export_collection_fixture.redis_data(collection) is None
-        assert len(marc_export_collection_fixture.mock_s3.aborted) == 3
+        assert len(marc_export_collection_fixture.mock_s3.aborted) == 2
+        assert not marc_export_collection_fixture.redis_lock(collection).locked()
 
     def test_locked(
         self,
@@ -280,40 +339,12 @@ class TestMarcExportCollection:
     ):
         caplog.set_level(LogLevel.info)
         collection = marc_exporter_fixture.collection1
-        assert collection.id is not None
-        MarcFileUploadSession(redis_fixture.client, collection.id).acquire()
+        marc_export_collection_fixture.redis_lock(collection).acquire()
         marc_export_collection_fixture.setup_mock_storage()
         with patch.object(MarcExporter, "query_works") as query:
             marc_export_collection_fixture.export_collection(collection)
         query.assert_not_called()
         assert "another task is already processing it" in caplog.text
-
-    def test_outdated_task_run(
-        self,
-        redis_fixture: RedisFixture,
-        marc_exporter_fixture: MarcExporterFixture,
-        marc_export_collection_fixture: MarcExportCollectionFixture,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        # In the case that an old task is run again for some reason, it should
-        # detect that its update number is incorrect and exit.
-        caplog.set_level(LogLevel.info)
-        collection = marc_exporter_fixture.collection1
-        marc_export_collection_fixture.setup_mock_storage()
-        assert collection.id is not None
-
-        # Acquire the lock and start an upload, this simulates another task having done work
-        # that the current task doesn't know about.
-        uploads = MarcFileUploadSession(redis_fixture.client, collection.id)
-        with uploads.lock() as locked:
-            assert locked
-            uploads.append_buffers({"test": "data"})
-
-        with pytest.raises(MarcFileUploadSessionError, match="Update number mismatch"):
-            marc_export_collection_fixture.export_collection(collection)
-
-        assert marc_export_collection_fixture.marc_files() == []
-        assert marc_export_collection_fixture.redis_data(collection) is None
 
 
 def test_marc_export_cleanup(
@@ -323,7 +354,7 @@ def test_marc_export_cleanup(
     marc_exporter_fixture: MarcExporterFixture,
     services_fixture: ServicesFixture,
 ):
-    marc_exporter_fixture.configure_export(marc_file=False)
+    marc_exporter_fixture.configure_export()
     mock_s3 = s3_service_fixture.mock_service()
     services_fixture.services.storage.public.override(mock_s3)
 

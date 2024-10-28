@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Generator, Iterable, Sequence
-from uuid import UUID, uuid4
 
-import pytz
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, raiseload, selectinload
 
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.goals import Goals
@@ -16,26 +14,32 @@ from palace.manager.marc.settings import (
     MarcExporterLibrarySettings,
     MarcExporterSettings,
 )
-from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.contributor import Contribution
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
+)
+from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import (
+    Identifier,
+    RecursiveEquivalencyCache,
 )
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
-from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import create
+from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.uuid import uuid_encode
 
 
 class LibraryInfo(BaseModel):
@@ -48,11 +52,6 @@ class LibraryInfo(BaseModel):
     include_genres: bool
     web_client_urls: tuple[str, ...]
 
-    s3_key_full_uuid: str
-    s3_key_full: str
-
-    s3_key_delta_uuid: str
-    s3_key_delta: str | None = None
     model_config = ConfigDict(frozen=True)
 
 
@@ -83,35 +82,6 @@ class MarcExporter(
     @classmethod
     def library_settings_class(cls) -> type[MarcExporterLibrarySettings]:
         return MarcExporterLibrarySettings
-
-    @staticmethod
-    def _s3_key(
-        library: Library,
-        collection: Collection,
-        creation_time: datetime.datetime,
-        uuid: UUID,
-        since_time: datetime.datetime | None = None,
-    ) -> str:
-        """The path to the hosted MARC file for the given library, collection,
-        and date range."""
-
-        def date_to_string(date: datetime.datetime) -> str:
-            return date.astimezone(pytz.UTC).strftime("%Y-%m-%d")
-
-        root = "marc"
-        short_name = str(library.short_name)
-        creation = date_to_string(creation_time)
-
-        if since_time:
-            file_type = f"delta.{date_to_string(since_time)}.{creation}"
-        else:
-            file_type = f"full.{creation}"
-
-        uuid_encoded = uuid_encode(uuid)
-        collection_name = collection.name.replace(" ", "_")
-        filename = f"{collection_name}.{file_type}.{uuid_encoded}.mrc"
-        parts = [root, short_name, filename]
-        return "/".join(parts)
 
     @staticmethod
     def _needs_update(
@@ -206,10 +176,15 @@ class MarcExporter(
 
     @classmethod
     def enabled_libraries(
-        cls, session: Session, registry: CatalogServicesRegistry, collection_id: int
+        cls,
+        session: Session,
+        registry: CatalogServicesRegistry,
+        collection_id: int | None,
     ) -> Sequence[LibraryInfo]:
+        if collection_id is None:
+            return []
+
         library_info = []
-        creation_time = utc_now()
         for collection, library_integration in cls._enabled_collections_and_libraries(
             session, registry, collection_id
         ):
@@ -230,25 +205,6 @@ class MarcExporter(
             web_client_urls = cls._web_client_urls(
                 session, library, library_settings.web_client_url
             )
-            s3_key_full_uuid = uuid4()
-            s3_key_full = cls._s3_key(
-                library,
-                collection,
-                creation_time,
-                s3_key_full_uuid,
-            )
-            s3_key_delta_uuid = uuid4()
-            s3_key_delta = (
-                cls._s3_key(
-                    library,
-                    collection,
-                    creation_time,
-                    s3_key_delta_uuid,
-                    since_time=last_updated_time,
-                )
-                if last_updated_time
-                else None
-            )
             library_info.append(
                 LibraryInfo(
                     library_id=library_id,
@@ -259,10 +215,6 @@ class MarcExporter(
                     include_summary=library_settings.include_summary,
                     include_genres=library_settings.include_genres,
                     web_client_urls=web_client_urls,
-                    s3_key_full_uuid=str(s3_key_full_uuid),
-                    s3_key_full=s3_key_full,
-                    s3_key_delta_uuid=str(s3_key_delta_uuid),
-                    s3_key_delta=s3_key_delta,
                 )
             )
         library_info.sort(key=lambda info: info.library_id)
@@ -271,10 +223,14 @@ class MarcExporter(
     @staticmethod
     def query_works(
         session: Session,
-        collection_id: int,
-        work_id_offset: int | None,
+        collection_id: int | None,
         batch_size: int,
+        work_id_offset: int | None = None,
+        last_updated: datetime.datetime | None = None,
     ) -> list[Work]:
+        if collection_id is None:
+            return []
+
         query = (
             select(Work)
             .join(LicensePool)
@@ -283,12 +239,70 @@ class MarcExporter(
             )
             .limit(batch_size)
             .order_by(Work.id.asc())
+            .options(
+                # We set loader options on all the collection properties
+                # needed to generate the MARC records, so that don't end
+                # up doing queries for each work.
+                selectinload(Work.license_pools).options(
+                    selectinload(LicensePool.identifier),
+                    selectinload(LicensePool.presentation_edition).options(
+                        selectinload(Edition.contributions).options(
+                            selectinload(Contribution.contributor)
+                        )
+                    ),
+                    selectinload(LicensePool.delivery_mechanisms).options(
+                        selectinload(LicensePoolDeliveryMechanism.delivery_mechanism)
+                    ),
+                    selectinload(LicensePool.data_source),
+                ),
+                selectinload(Work.work_genres).options(selectinload(WorkGenre.genre)),
+                # We set raiseload on all the other properties, so we quickly know if
+                # a change causes us to start having to issue queries to get a property.
+                # This will raise a InvalidRequestError, that should fail our tests, so
+                # we know to add the new required properties to this function.
+                raiseload("*"),
+            )
         )
 
-        if work_id_offset is not None:
+        if last_updated:
+            query = query.where(Work.last_update_time > last_updated)
+
+        if work_id_offset:
             query = query.where(Work.id > work_id_offset)
 
-        return session.execute(query).scalars().unique().all()
+        return session.execute(query).scalars().all()
+
+    @staticmethod
+    def query_isbn_identifiers(
+        session: Session, identifiers: set[Identifier]
+    ) -> dict[Identifier, Identifier]:
+        results = {i: i for i in identifiers if i.type == Identifier.ISBN}
+        needs_lookup = {i.id: i for i in identifiers - results.keys()}
+        if not needs_lookup:
+            return results
+
+        isbn_query = (
+            select(RecursiveEquivalencyCache)
+            .join(
+                Identifier,
+                RecursiveEquivalencyCache.identifier_id == Identifier.id,
+            )
+            .where(
+                RecursiveEquivalencyCache.parent_identifier_id.in_(needs_lookup.keys()),
+                Identifier.type == Identifier.ISBN,
+            )
+            .options(
+                selectinload(RecursiveEquivalencyCache.identifier),
+            )
+        )
+        isbn_equivalents = session.execute(isbn_query).scalars().all()
+
+        for equivalent in isbn_equivalents:
+            parent_identifier = needs_lookup[equivalent.parent_identifier_id]
+            if parent_identifier not in results:
+                results[parent_identifier] = equivalent.identifier
+
+        return results
 
     @staticmethod
     def collection(session: Session, collection_id: int) -> Collection | None:
@@ -296,79 +310,38 @@ class MarcExporter(
             select(Collection).where(Collection.id == collection_id)
         ).scalar_one_or_none()
 
-    @classmethod
+    @staticmethod
     def process_work(
-        cls,
         work: Work,
+        license_pool: LicensePool,
+        isbn_identifier: Identifier | None,
         libraries_info: Iterable[LibraryInfo],
         base_url: str,
+        delta: bool,
         *,
-        upload_manager: MarcUploadManager,
         annotator: type[Annotator] = Annotator,
-    ) -> None:
-        pool = work.active_license_pool()
-        if pool is None:
-            return
-        base_record = annotator.marc_record(work, pool)
-
-        for library_info in libraries_info:
-            library_record = annotator.library_marc_record(
+    ) -> dict[LibraryInfo, bytes]:
+        base_record = annotator.marc_record(work, isbn_identifier, license_pool)
+        return {
+            library_info: annotator.library_marc_record(
                 base_record,
-                pool.identifier,
+                license_pool.identifier,
                 base_url,
                 library_info.library_short_name,
                 library_info.web_client_urls,
                 library_info.organization_code,
                 library_info.include_summary,
                 library_info.include_genres,
-            )
-
-            upload_manager.add_record(
-                library_info.s3_key_full,
-                library_record.as_marc(),
-            )
-
-            if (
-                library_info.last_updated
-                and library_info.s3_key_delta
-                and work.last_update_time
+                delta,
+            ).as_marc()
+            for library_info in libraries_info
+            if not delta
+            or (
+                work.last_update_time
+                and library_info.last_updated
                 and work.last_update_time > library_info.last_updated
-            ):
-                upload_manager.add_record(
-                    library_info.s3_key_delta,
-                    annotator.set_revised(library_record).as_marc(),
-                )
-
-    @staticmethod
-    def create_marc_upload_records(
-        session: Session,
-        start_time: datetime.datetime,
-        collection_id: int,
-        libraries_info: Iterable[LibraryInfo],
-        uploaded_keys: set[str],
-    ) -> None:
-        for library_info in libraries_info:
-            if library_info.s3_key_full in uploaded_keys:
-                create(
-                    session,
-                    MarcFile,
-                    id=library_info.s3_key_full_uuid,
-                    library_id=library_info.library_id,
-                    collection_id=collection_id,
-                    created=start_time,
-                    key=library_info.s3_key_full,
-                )
-            if library_info.s3_key_delta and library_info.s3_key_delta in uploaded_keys:
-                create(
-                    session,
-                    MarcFile,
-                    id=library_info.s3_key_delta_uuid,
-                    library_id=library_info.library_id,
-                    collection_id=collection_id,
-                    created=start_time,
-                    since=library_info.last_updated,
-                    key=library_info.s3_key_delta,
-                )
+            )
+        }
 
     @staticmethod
     def files_for_cleanup(

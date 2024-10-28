@@ -42,8 +42,6 @@ class MarcExporterFixture:
         self.collection2.libraries = [self.library1]
         self.collection3.libraries = [self.library2]
 
-        self.test_marc_file_key = "test-file-1.mrc"
-
     def integration(self) -> IntegrationConfiguration:
         return self._db.integration_configuration(
             MarcExporter, Goals.CATALOG_GOAL, name="MARC Exporter"
@@ -54,13 +52,13 @@ class MarcExporterFixture:
         edition = self._db.edition()
         self._db.licensepool(edition, collection=collection)
         work = self._db.work(presentation_edition=edition)
-        work.last_update_time = utc_now()
+        work.last_update_time = utc_now() - datetime.timedelta(days=1)
         return work
 
     def works(self, collection: Collection | None = None) -> list[Work]:
         return [self.work(collection) for _ in range(5)]
 
-    def configure_export(self, *, marc_file: bool = True) -> None:
+    def configure_export(self) -> None:
         marc_integration = self.integration()
         self._db.integration_library_configuration(
             marc_integration,
@@ -76,12 +74,6 @@ class MarcExporterFixture:
         self.collection1.export_marc_records = True
         self.collection2.export_marc_records = True
         self.collection3.export_marc_records = True
-
-        if marc_file:
-            self.marc_file(
-                key=self.test_marc_file_key,
-                created=utc_now() - datetime.timedelta(days=7),
-            )
 
     def enabled_libraries(
         self, collection: Collection | None = None
