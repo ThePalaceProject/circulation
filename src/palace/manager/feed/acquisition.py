@@ -146,7 +146,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         circumstances apply. You need to decide whether to call
         add_entrypoint_links in addition to calling this method.
         """
-        for group, value, new_facets, selected in facets.facet_groups:
+        for group, value, new_facets, selected, default_facet in facets.facet_groups:
             url = annotator.facet_url(new_facets)
             if not url:
                 continue
@@ -160,11 +160,18 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 # system. It may be left over from an earlier version,
                 # or just weird junk data.
                 continue
-            yield cls.facet_link(url, str(facet_title), str(group_title), selected)
+            yield cls.facet_link(
+                url, str(facet_title), str(group_title), selected, default_facet
+            )
 
     @classmethod
     def facet_link(
-        cls, href: str, title: str, facet_group_name: str, is_active: bool
+        cls,
+        href: str,
+        title: str,
+        facet_group_name: str,
+        is_active: bool,
+        is_default: bool,
     ) -> Link:
         """Build a set of attributes for a facet link.
 
@@ -174,8 +181,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
            e.g. "Sort By".
         :param is_active: True if this is the client's currently
            selected facet.
-
-        :retusrn: A dictionary of attributes, suitable for passing as
+        :param is_default: True if this is the default facet
+        :return: A dictionary of attributes, suitable for passing as
             keyword arguments into OPDSFeed.add_link_to_feed.
         """
         args = dict(href=href, title=title)
@@ -183,6 +190,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         args["facetGroup"] = facet_group_name
         if is_active:
             args["activeFacet"] = "true"
+        if is_default:
+            args["defaultFacet"] = "true"
         return Link.create(**args)
 
     def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
@@ -266,7 +275,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         url = url_generator(entrypoint)
         is_selected = entrypoint is selected_entrypoint
-        link = cls.facet_link(url, display_title, group_name, is_selected)
+        link = cls.facet_link(url, display_title, group_name, is_selected, is_default)
 
         # Unlike a normal facet group, every link in this facet
         # group has an additional attribute marking it as an entry

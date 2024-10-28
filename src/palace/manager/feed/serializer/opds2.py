@@ -34,6 +34,7 @@ MARC_CODE_TO_ROLES = {
 
 PALACE_REL_SORT = AtomFeed.PALACE_REL_SORT
 PALACE_PROPERTIES_ACTIVE_SORT = AtomFeed.PALACE_PROPS_NS + "active-sort"
+PALACE_PROPERTIES_DEFAULT = AtomFeed.PALACE_PROPERTIES_DEFAULT
 
 
 class OPDS2Version1Serializer(SerializerInterface[dict[str, Any]]):
@@ -255,6 +256,14 @@ class OPDS2Version2Serializer(OPDS2Version1Serializer):
             "title": link.title,
             "rel": PALACE_REL_SORT,
         }
+
+        properties: dict[str, str] = {}
+
+        sort_link["properties"] = properties
+
         if link.get("activeFacet", False):
-            sort_link["properties"] = {PALACE_PROPERTIES_ACTIVE_SORT: "true"}
+            properties.update({PALACE_PROPERTIES_ACTIVE_SORT: "true"})
+
+        if link.get("defaultFacet", False):
+            properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
         return sort_link

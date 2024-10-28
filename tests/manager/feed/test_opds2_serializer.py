@@ -2,6 +2,7 @@ import json
 
 from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
+    PALACE_PROPERTIES_DEFAULT,
     PALACE_REL_SORT,
     OPDS2Version1Serializer,
     OPDS2Version2Serializer,
@@ -236,7 +237,9 @@ class TestOPDS2Serializer:
     def test_serialize_v2_sort_links(self):
         feed_data = FeedData()
         link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
+        link.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
         feed_data.facet_links.append(link)
         links = OPDS2Version2Serializer()._serialize_feed_links(feed=feed_data)
 
@@ -246,7 +249,10 @@ class TestOPDS2Serializer:
                     "href": "test",
                     "rel": PALACE_REL_SORT,
                     "title": "text1",
-                    "properties": {PALACE_PROPERTIES_ACTIVE_SORT: "true"},
+                    "properties": {
+                        PALACE_PROPERTIES_ACTIVE_SORT: "true",
+                        PALACE_PROPERTIES_DEFAULT: "true",
+                    },
                 }
             ],
             "facets": [],

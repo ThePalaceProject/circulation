@@ -97,8 +97,8 @@ class BaseFacets(FacetConstants):
 
     @property
     def facet_groups(self):
-        """Yield a list of 4-tuples
-        (facet group, facet value, new Facets object, selected)
+        """Yield a list of 5-tuples
+        (facet group, facet value, new Facets object, selected, default)
         for use in building OPDS facets.
 
         This does not include the 'entry point' facet group,

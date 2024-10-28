@@ -43,6 +43,7 @@ ATTRIBUTE_MAPPING = {
     "facetGroup": f"{{{OPDSFeed.OPDS_NS}}}facetGroup",
     "facetGroupType": f"{{{OPDSFeed.SIMPLIFIED_NS}}}facetGroupType",
     "activeFacet": f"{{{OPDSFeed.OPDS_NS}}}activeFacet",
+    "defaultFacet": f"{{{OPDSFeed.PALACE_PROPS_NS}}}default",
     "ratingValue": f"{{{OPDSFeed.SCHEMA_NS}}}ratingValue",
     "activeSort": f"{{{OPDSFeed.PALACE_PROPS_NS}}}active-sort",
 }
@@ -413,7 +414,7 @@ class OPDS1Version1Serializer(SerializerInterface[etree._Element], OPDSFeed):
                 links.append(self._serialize_feed_entry("link", link))
         return links
 
-    def _serialize_sort_links(self, facet_links):
+    def _serialize_sort_links(self, facet_links: list[Link]) -> list[Link]:
         return []
 
 
@@ -437,14 +438,18 @@ class OPDS1Version2Serializer(OPDS1Version1Serializer):
         if facet_links:
             for link in facet_links:
                 if is_sort_link(link):
-                    links.append(self._serialize_sort_link("link", link))
+                    links.append(self._serialize_sort_link(link))
         return links
 
     def _serialize_sort_link(self, link: Link) -> etree._Element:
         sort_link = Link(
             href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
         )
+        attributes: dict[str, Any] = dict()
         if link.get("activeFacet", False):
-            sort_link.add_attributes(dict(activeSort="true"))
+            attributes.update(dict(activeSort="true"))
+        if link.get("defaultFacet", False):
+            attributes.update(dict(defaultFacet="true"))
+        sort_link.add_attributes(attributes)
 
         return self._serialize_feed_entry("link", sort_link)

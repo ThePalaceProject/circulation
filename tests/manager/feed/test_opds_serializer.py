@@ -263,7 +263,9 @@ class TestOPDSSerializer:
 
     def test_serialize_sort_link(self):
         link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
+        link.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
         serializer = OPDS1Version2Serializer()
         assert is_sort_link(link)
         sort_link = serializer._serialize_sort_link(link)
@@ -272,5 +274,9 @@ class TestOPDSSerializer:
         assert sort_link.attrib["rel"] == PALACE_REL_SORT
         assert (
             sort_link.attrib["{http://palaceproject.io/terms/properties/}active-sort"]
+            == "true"
+        )
+        assert (
+            sort_link.attrib["{http://palaceproject.io/terms/properties/}default"]
             == "true"
         )
