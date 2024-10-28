@@ -195,30 +195,14 @@ class OPDS2Version1Serializer(SerializerInterface[dict[str, Any]]):
 
         facet_links: dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
         for link in feed.facet_links:
-            if is_sort_link(link):
-                # TODO: When we remove the facet-based sort links [PP-1814],
-                # this code path will be removed and we'll want to pull the sort
-                # link data from the feed.sort_links once that is in place.
-                link_data["links"].append(self._serialize_sort_link(link))
-            else:
-                group = getattr(link, "facetGroup", None)
-                if group:
-                    facet_links[group]["links"].append(self._serialize_link(link))
-                    facet_links[group]["metadata"]["title"] = group
+            group = getattr(link, "facetGroup", None)
+            if group:
+                facet_links[group]["links"].append(self._serialize_link(link))
+                facet_links[group]["metadata"]["title"] = group
         for _, facets in facet_links.items():
             link_data["facets"].append(facets)
 
         return link_data
-
-    def _serialize_sort_link(self, link: Link) -> dict[str, Any]:
-        sort_link: dict[str, Any] = {
-            "href": link.href,
-            "title": link.title,
-            "rel": PALACE_REL_SORT,
-        }
-        if link.get("activeFacet", False):
-            sort_link["properties"] = {PALACE_PROPERTIES_ACTIVE_SORT: "true"}
-        return sort_link
 
     def _serialize_contributor(self, author: Author) -> dict[str, Any]:
         result: dict[str, Any] = {"name": author.name}
@@ -244,3 +228,33 @@ class OPDS2Version2Serializer(OPDS2Version1Serializer):
 
     def __init__(self) -> None:
         pass
+
+    def _serialize_feed_links(self, feed: FeedData) -> dict[str, Any]:
+        link_data: dict[str, list[dict[str, Any]]] = {"links": [], "facets": []}
+        for link in feed.links:
+            link_data["links"].append(self._serialize_link(link))
+
+        facet_links: dict[str, Any] = defaultdict(lambda: {"metadata": {}, "links": []})
+        for link in feed.facet_links:
+            if is_sort_link(link):
+                link_data["links"].append(self._serialize_sort_link(link))
+            else:
+                group = getattr(link, "facetGroup", None)
+                if group:
+                    facet_links[group]["links"].append(self._serialize_link(link))
+                    facet_links[group]["metadata"]["title"] = group
+        for _, facets in facet_links.items():
+            link_data["facets"].append(facets)
+
+        return link_data
+
+    @classmethod
+    def _serialize_sort_link(cls, link: Link) -> dict[str, Any]:
+        sort_link: dict[str, Any] = {
+            "href": link.href,
+            "title": link.title,
+            "rel": PALACE_REL_SORT,
+        }
+        if link.get("activeFacet", False):
+            sort_link["properties"] = {PALACE_PROPERTIES_ACTIVE_SORT: "true"}
+        return sort_link

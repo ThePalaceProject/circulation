@@ -3,7 +3,11 @@ import datetime
 import pytz
 from lxml import etree
 
-from palace.manager.feed.serializer.opds import OPDS1Version1Serializer, is_sort_link
+from palace.manager.feed.serializer.opds import (
+    OPDS1Version1Serializer,
+    OPDS1Version2Serializer,
+    is_sort_link,
+)
 from palace.manager.feed.serializer.opds2 import PALACE_REL_SORT
 from palace.manager.feed.types import (
     Acquisition,
@@ -260,7 +264,7 @@ class TestOPDSSerializer:
     def test_serialize_sort_link(self):
         link = Link(href="test", rel="test_rel", title="text1")
         link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
-        serializer = OPDS1Version1Serializer()
+        serializer = OPDS1Version2Serializer()
         assert is_sort_link(link)
         sort_link = serializer._serialize_sort_link(link)
         assert sort_link.attrib["title"] == "text1"

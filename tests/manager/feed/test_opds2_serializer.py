@@ -4,6 +4,7 @@ from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
     PALACE_REL_SORT,
     OPDS2Version1Serializer,
+    OPDS2Version2Serializer,
 )
 from palace.manager.feed.types import (
     Acquisition,
@@ -232,12 +233,12 @@ class TestOPDS2Serializer:
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
-    def test_serialize_sort_links(self):
+    def test_serialize_v2_sort_links(self):
         feed_data = FeedData()
         link = Link(href="test", rel="test_rel", title="text1")
         link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
         feed_data.facet_links.append(link)
-        links = OPDS2Version1Serializer()._serialize_feed_links(feed=feed_data)
+        links = OPDS2Version2Serializer()._serialize_feed_links(feed=feed_data)
 
         assert links == {
             "links": [

@@ -118,13 +118,11 @@ class OPDS1Version1Serializer(SerializerInterface[etree._Element], OPDSFeed):
                 breadcrumbs.append(self._serialize_feed_entry("link", link))
             serialized.append(breadcrumbs)
 
-        for link in feed.facet_links:
-            if is_sort_link(link):
-                serialized.append(self._serialize_sort_link(link))
-                # TODO once the clients are no longer relying on facet based sorting
-                # an "else" should be introduced here since we only need to provide one style of sorting links
-            serialized.append(self._serialize_feed_entry("link", link))
-            # TODO end else here
+        for link in self._serialize_facet_links(feed.facet_links):
+            serialized.append(link)
+
+        for link in self._serialize_sort_links(feed.facet_links):
+            serialized.append(link)
 
         etree.indent(serialized)
         return self.to_string(serialized)
@@ -408,13 +406,15 @@ class OPDS1Version1Serializer(SerializerInterface[etree._Element], OPDSFeed):
     def content_type(self) -> str:
         return OPDSFeed.ACQUISITION_FEED_TYPE
 
-    def _serialize_sort_link(self, link: Link) -> etree._Element:
-        sort_link = Link(
-            href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
-        )
-        if link.get("activeFacet", False):
-            sort_link.add_attributes(dict(activeSort="true"))
-        return self._serialize_feed_entry("link", sort_link)
+    def _serialize_facet_links(self, facet_links: list[Link]) -> list[Link]:
+        links = []
+        if facet_links:
+            for link in facet_links:
+                links.append(self._serialize_feed_entry("link", link))
+        return links
+
+    def _serialize_sort_links(self, facet_links):
+        return []
 
 
 class OPDS1Version2Serializer(OPDS1Version1Serializer):
@@ -423,3 +423,28 @@ class OPDS1Version2Serializer(OPDS1Version1Serializer):
 
     def __init__(self) -> None:
         pass
+
+    def _serialize_facet_links(self, facet_links: list[Link]) -> list[Link]:
+        links: list[Link] = []
+        if facet_links:
+            for link in facet_links:
+                if not is_sort_link(link):
+                    links.append(self._serialize_feed_entry("link", link))
+        return links
+
+    def _serialize_sort_links(self, facet_links: list[Link]) -> list[Link]:
+        links: list[Link] = []
+        if facet_links:
+            for link in facet_links:
+                if is_sort_link(link):
+                    links.append(self._serialize_sort_link("link", link))
+        return links
+
+    def _serialize_sort_link(self, link: Link) -> etree._Element:
+        sort_link = Link(
+            href=link.href, title=link.title, rel=AtomFeed.PALACE_REL_NS + "sort"
+        )
+        if link.get("activeFacet", False):
+            sort_link.add_attributes(dict(activeSort="true"))
+
+        return self._serialize_feed_entry("link", sort_link)
