@@ -234,13 +234,23 @@ class TestOPDS2Serializer:
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
-    def test_serialize_v2_sort_links(self):
+    def test_serialize_v2_feed_links(self):
         feed_data = FeedData()
+
+        # specify a sort link
         link = Link(href="test", rel="test_rel", title="text1")
         link.add_attributes(
             dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
         )
+
+        # include a non-sort facet
+        link2 = Link(href="test2", rel="test_rel", title="text1")
+        link2.add_attributes(
+            dict(facetGroup="test_group", activeFacet="false", defaultFacet="false")
+        )
+
         feed_data.facet_links.append(link)
+        feed_data.facet_links.append(link2)
         links = OPDS2Version2Serializer()._serialize_feed_links(feed=feed_data)
 
         assert links == {
@@ -255,5 +265,10 @@ class TestOPDS2Serializer:
                     },
                 }
             ],
-            "facets": [],
+            "facets": [
+                {
+                    "metadata": {"title": "test_group"},
+                    "links": [{"href": "test2", "rel": "test_rel", "title": "text1"}],
+                }
+            ],
         }
