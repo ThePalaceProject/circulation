@@ -323,7 +323,7 @@ class TestFacets:
 
         # available=all, collection=full, and order=title are the selected
         # facets.
-        selected = sorted(x[:2] for x in all_groups if x[-1] == True)
+        selected = sorted(x[:2] for x in all_groups if x[-2] == True)
         assert [
             ("available", "all"),
             ("collection", "full"),
@@ -363,7 +363,7 @@ class TestFacets:
             ["order", "title", True],
             ["order", "work_id", False],
         ]
-        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
+        assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
 
     def test_default(self, db: DatabaseTransactionFixture):
         # Calling Facets.default() is like calling the constructor with
@@ -494,7 +494,7 @@ class TestFacets:
         )
         all_groups = list(facets.facet_groups)
         expect = [["order", "author", False], ["order", "title", True]]
-        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
+        assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
 
     def test_facets_dont_need_a_library(self):
         enabled_facets = {
@@ -517,7 +517,7 @@ class TestFacets:
         )
         all_groups = list(facets.facet_groups)
         expect = [["order", "author", False], ["order", "title", True]]
-        assert expect == sorted(list(x[:2]) + [x[-1]] for x in all_groups)
+        assert expect == sorted(list(x[:2]) + [x[-2]] for x in all_groups)
 
     def test_items(self, db: DatabaseTransactionFixture):
         """Verify that Facets.items() returns all information necessary

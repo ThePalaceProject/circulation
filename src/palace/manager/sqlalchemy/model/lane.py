@@ -615,8 +615,8 @@ class Facets(FacetsWithEntryPoint):
 
     @property
     def facet_groups(self):
-        """Yield a list of 4-tuples
-        (facet group, facet value, new Facets object, selected)
+        """Yield a list of 5-tuples
+        (facet group, facet value, new Facets object, selected, value is default)
         for use in building OPDS facets.
 
         This does not yield anything for the 'entry point' facet group,
@@ -631,9 +631,11 @@ class Facets(FacetsWithEntryPoint):
             collection_name_facets,
         ) = self.enabled_facets
 
-        facet_config = FacetConfig.from_library(self.library)
+        facet_config = FacetConfig.from_library(self.library) if self.library else None
 
         def is_default_facet(facets, facet, facet_group_name) -> bool:
+            if not facet_config:
+                return False
             default_facet = facets.default_facet(facet_config, facet_group_name)
             return default_facet == facet
 
