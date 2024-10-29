@@ -249,6 +249,19 @@ class OPDS2Version2Serializer(OPDS2Version1Serializer):
 
         return link_data
 
+    def _serialize_link(self, link: Link) -> dict[str, Any]:
+        serialized = super()._serialize_link(link)
+
+        if link.get("activeFacet", False):
+            serialized["rel"] = "self"
+
+        if link.get("defaultFacet", False):
+            properties: dict[str, Any] = dict()
+            properties.update({PALACE_PROPERTIES_DEFAULT: "true"})
+            serialized["properties"] = properties
+
+        return serialized
+
     @classmethod
     def _serialize_sort_link(cls, link: Link) -> dict[str, Any]:
         sort_link: dict[str, Any] = {
