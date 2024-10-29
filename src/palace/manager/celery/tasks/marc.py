@@ -64,13 +64,27 @@ def marc_export(task: Task, force: bool = False) -> None:
 
             needs_delta = [l.model_dump() for l in libraries_info if l.last_updated]
             if needs_delta:
-                marc_export_collection.delay(
-                    collection_id=collection.id,
-                    collection_name=collection.name,
-                    start_time=start_time,
-                    libraries=needs_delta,
-                    delta=True,
+                min_last_updated = min(
+                    [l.last_updated for l in libraries_info if l.last_updated]
                 )
+                if not MarcExporter.query_works(
+                    session,
+                    collection.id,
+                    batch_size=1,
+                    last_updated=min_last_updated,
+                ):
+                    task.log.info(
+                        f"Skipping delta for collection {collection.name} ({collection.id}) "
+                        f"because no works have been updated."
+                    )
+                else:
+                    marc_export_collection.delay(
+                        collection_id=collection.id,
+                        collection_name=collection.name,
+                        start_time=start_time,
+                        libraries=needs_delta,
+                        delta=True,
+                    )
 
 
 def marc_export_collection_lock(

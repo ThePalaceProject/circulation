@@ -115,15 +115,24 @@ class TestMarcExport:
                 library=marc_exporter_fixture.library1,
             )
 
-            # Collection 3 should be skipped because it was updated recently
-            marc_exporter_fixture.work(marc_exporter_fixture.collection3)
+            # Collection 3 should get a full export, but not a delta, because
+            # its work hasn't been updated since the last full export
+            work = marc_exporter_fixture.work(marc_exporter_fixture.collection3)
+            work.last_update_time = utc_now() - datetime.timedelta(days=50)
             marc_exporter_fixture.marc_file(
                 collection=marc_exporter_fixture.collection3,
                 library=marc_exporter_fixture.library2,
+                created=utc_now() - datetime.timedelta(days=45),
             )
 
             marc.marc_export.delay().wait()
-            marc_export_collection.delay.assert_not_called()
+
+            marc_export_collection.delay.assert_called_once_with(
+                collection_id=marc_exporter_fixture.collection3.id,
+                collection_name=marc_exporter_fixture.collection3.name,
+                start_time=ANY,
+                libraries=ANY,
+            )
 
 
 class MarcExportCollectionFixture:
