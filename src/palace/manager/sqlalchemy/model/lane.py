@@ -39,7 +39,7 @@ from sqlalchemy.sql import select
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import Configuration, ConfigurationAttributeValue
 from palace.manager.core.entrypoint import EntryPoint, EverythingEntryPoint
-from palace.manager.core.facets import FacetConstants
+from palace.manager.core.facets import FacetConfig, FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.hybrid import hybrid_property
@@ -631,11 +631,24 @@ class Facets(FacetsWithEntryPoint):
             collection_name_facets,
         ) = self.enabled_facets
 
+        facet_config = FacetConfig.from_library(self.library)
+
+        def is_default_facet(facets, facet, facet_group_name) -> bool:
+            default_facet = facets.default_facet(facet_config, facet_group_name)
+            return default_facet == facet
+
         def dy(new_value):
             group = self.ORDER_FACET_GROUP_NAME
             current_value = self.order
             facets = self.navigate(order=new_value)
-            return (group, new_value, facets, current_value == new_value)
+
+            return (
+                group,
+                new_value,
+                facets,
+                current_value == new_value,
+                is_default_facet(facets, new_value, group),
+            )
 
         # First, the order facets.
         if len(order_facets) > 1:
@@ -647,7 +660,13 @@ class Facets(FacetsWithEntryPoint):
             group = self.AVAILABILITY_FACET_GROUP_NAME
             current_value = self.availability
             facets = self.navigate(availability=new_value)
-            return (group, new_value, facets, new_value == current_value)
+            return (
+                group,
+                new_value,
+                facets,
+                new_value == current_value,
+                is_default_facet(facets, new_value, group),
+            )
 
         if len(availability_facets) > 1:
             for facet in availability_facets:
@@ -658,7 +677,13 @@ class Facets(FacetsWithEntryPoint):
             group = self.COLLECTION_FACET_GROUP_NAME
             current_value = self.collection
             facets = self.navigate(collection=new_value)
-            return (group, new_value, facets, new_value == current_value)
+            return (
+                group,
+                new_value,
+                facets,
+                new_value == current_value,
+                is_default_facet(facets, new_value, group),
+            )
 
         if len(collection_facets) > 1:
             for facet in collection_facets:
@@ -669,14 +694,26 @@ class Facets(FacetsWithEntryPoint):
                 group = self.DISTRIBUTOR_FACETS_GROUP_NAME
                 current_value = self.distributor
                 facets = self.navigate(distributor=facet)
-                yield (group, facet, facets, facet == current_value)
+                yield (
+                    group,
+                    facet,
+                    facets,
+                    facet == current_value,
+                    is_default_facet(facets, facet, group),
+                )
 
         if len(collection_name_facets) > 1:
             for facet in collection_name_facets:
                 group = self.COLLECTION_NAME_FACETS_GROUP_NAME
                 current_value = self.collection_name
                 facets = self.navigate(collection_name=facet)
-                yield (group, facet, facets, facet == current_value)
+                yield (
+                    group,
+                    facet,
+                    facets,
+                    facet == current_value,
+                    is_default_facet(facets, facet, group),
+                )
 
     def modify_search_filter(self, filter):
         """Modify the given external_search.Filter object

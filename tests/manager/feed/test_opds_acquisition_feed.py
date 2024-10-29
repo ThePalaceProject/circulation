@@ -861,7 +861,7 @@ class TestOPDSAcquisitionFeed:
         class MockFacets:
             @property
             def facet_groups(self):
-                """Yield a facet group+facet 4-tuple that passes the test we're
+                """Yield a facet group+facet 5-tuple that passes the test we're
                 running (which will be turned into a link), and then a
                 bunch that don't (which will be ignored).
                 """
@@ -872,6 +872,7 @@ class TestOPDSAcquisitionFeed:
                     Facets.COLLECTION_FULL,
                     "try the featured collection instead",
                     True,
+                    False,
                 )
 
                 # Real facet group, nonexistent facet
@@ -880,6 +881,7 @@ class TestOPDSAcquisitionFeed:
                     "no such facet",
                     "this facet does not exist",
                     True,
+                    False,
                 )
 
                 # Nonexistent facet group, real facet
@@ -888,6 +890,7 @@ class TestOPDSAcquisitionFeed:
                     Facets.COLLECTION_FULL,
                     "this facet exists but it's in a nonexistent group",
                     True,
+                    False,
                 )
 
                 # Nonexistent facet group, nonexistent facet
@@ -896,15 +899,16 @@ class TestOPDSAcquisitionFeed:
                     "no such facet",
                     "i just don't know",
                     True,
+                    False,
                 )
 
         class MockFeed(OPDSAcquisitionFeed):
             links = []
 
             @classmethod
-            def facet_link(cls, url, facet_title, group_title, selected):
+            def facet_link(cls, url, facet_title, group_title, selected, is_default):
                 # Return the passed-in objects as is.
-                return (url, facet_title, group_title, selected)
+                return (url, facet_title, group_title, selected, is_default)
 
         annotator = MockAnnotator()
         facets = MockFacets()
