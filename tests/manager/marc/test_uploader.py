@@ -1,6 +1,7 @@
 from functools import partial
 from io import BytesIO
 from tempfile import TemporaryFile
+from unittest.mock import create_autospec
 from uuid import UUID, uuid4
 
 import pytest
@@ -28,7 +29,7 @@ class MarcUploadManagerFixture:
 
         self.create_uploader = partial(
             MarcUploadManager,
-            self.mock_s3_service,
+            storage_service=self.mock_s3_service,
             collection_name=self.collection_name,
             library_short_name=self.library_short_name,
             creation_time=self.creation_time,
@@ -182,7 +183,9 @@ class TestMarcUploadManager:
             uploader.complete()
 
     def test_context_manager(
-        self, marc_upload_manager_fixture: MarcUploadManagerFixture
+        self,
+        marc_upload_manager_fixture: MarcUploadManagerFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
         # Nesting context manager raises an exception
         uploader = marc_upload_manager_fixture.create_uploader()
@@ -206,3 +209,16 @@ class TestMarcUploadManager:
         assert uploader.finalized
         assert len(marc_upload_manager_fixture.mock_s3_service.uploads) == 0
         assert len(marc_upload_manager_fixture.mock_s3_service.aborted) == 1
+
+        # If the exception causes an exception, we just swallow the exception
+        # and log it, since we are already handing the outer exception.
+        uploader = marc_upload_manager_fixture.create_uploader()
+        uploader.abort = create_autospec(
+            uploader.abort, side_effect=Exception("Another exception")
+        )
+        caplog.clear()
+        with pytest.raises(Exception, match="Boom!"):
+            with uploader:
+                raise Exception("Boom!")
+        assert "Failed to abort upload" in caplog.text
+        assert "due to exception (Another exception)." in caplog.text

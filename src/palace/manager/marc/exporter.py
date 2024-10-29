@@ -291,6 +291,10 @@ class MarcExporter(
                 RecursiveEquivalencyCache.parent_identifier_id.in_(needs_lookup.keys()),
                 Identifier.type == Identifier.ISBN,
             )
+            .order_by(
+                RecursiveEquivalencyCache.parent_identifier_id,
+                RecursiveEquivalencyCache.identifier_id,
+            )
             .options(
                 selectinload(RecursiveEquivalencyCache.identifier),
             )

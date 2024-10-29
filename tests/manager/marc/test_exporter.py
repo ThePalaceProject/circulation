@@ -1,5 +1,6 @@
 import datetime
 from functools import partial
+from unittest.mock import MagicMock
 
 import pytest
 from freezegun import freeze_time
@@ -317,7 +318,7 @@ class TestMarcExporter:
             Equivalency,
             input_id=overdrive_identifier.id,
             output_id=od_isbn_1.id,
-            strength=0.5,
+            strength=5,
         )
         create(
             db.session,
@@ -344,6 +345,14 @@ class TestMarcExporter:
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
 
+        # Calling with only ISBN doesn't do a query, it just returns the identifiers
+        assert MarcExporter.query_isbn_identifiers(
+            MagicMock(side_effect=Exception("Should not be called")),
+            {
+                isbn_identifier,
+            },
+        ) == {isbn_identifier: isbn_identifier}
+
         equivalent_isbns = MarcExporter.query_isbn_identifiers(
             db.session,
             {
@@ -355,7 +364,7 @@ class TestMarcExporter:
         )
         assert equivalent_isbns == {
             isbn_identifier: isbn_identifier,
-            overdrive_identifier: od_isbn_2,
+            overdrive_identifier: od_isbn_1,
             gutenberg_identifier: gutenberg_isbn,
         }
 
