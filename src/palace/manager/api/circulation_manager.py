@@ -21,6 +21,9 @@ from palace.manager.api.controller.loan import LoanController
 from palace.manager.api.controller.marc import MARCRecordController
 from palace.manager.api.controller.odl_notification import ODLNotificationController
 from palace.manager.api.controller.opds_feed import OPDSFeedController
+from palace.manager.api.controller.patron_activity_history import (
+    PatronActivityHistoryController,
+)
 from palace.manager.api.controller.patron_auth_token import PatronAuthTokenController
 from palace.manager.api.controller.playtime_entries import PlaytimeEntriesController
 from palace.manager.api.controller.profile import ProfileController
@@ -110,6 +113,7 @@ class CirculationManager(LoggerMixin):
     work_controller: WorkController
     analytics_controller: AnalyticsController
     profiles: ProfileController
+    patron_activity_history: PatronActivityHistoryController
     patron_devices: DeviceTokensController
     version: ApplicationVersionController
     odl_notification_controller: ODLNotificationController
@@ -356,6 +360,7 @@ class CirculationManager(LoggerMixin):
         self.analytics_controller = AnalyticsController(self)
         self.profiles = ProfileController(self)
         self.patron_devices = DeviceTokensController(self)
+        self.patron_activity_history = PatronActivityHistoryController(self)
         self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(
             self._db,

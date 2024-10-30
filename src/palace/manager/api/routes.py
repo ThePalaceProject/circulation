@@ -332,6 +332,15 @@ def patron_profile():
     return app.manager.profiles.protocol()
 
 
+@library_dir_route("/patrons/me/erase_activity_history", methods=["PUT"])
+@has_library
+@allows_patron_web
+@requires_auth
+@returns_problem_detail
+def erase_activity_history():
+    return app.manager.patron_activity_history.erase()
+
+
 @library_dir_route("/patrons/me/devices", methods=["GET"])
 @has_library
 @allows_patron_web
