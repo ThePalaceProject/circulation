@@ -29,7 +29,12 @@ class AnalyticsController(CirculationManagerController):
             if isinstance(pools, ProblemDetail):
                 return pools
             self.manager.analytics.collect_event(
-                library, pools[0], event_type, utc_now(), neighborhood=neighborhood
+                library,
+                pools[0],
+                event_type,
+                utc_now(),
+                neighborhood=neighborhood,
+                patron=patron,
             )
             return Response({}, 200)
         else:

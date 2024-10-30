@@ -973,7 +973,11 @@ class CirculationAPI(LoggerMixin):
             neighborhood = getattr(request_patron, "neighborhood", None)
 
         self.analytics.collect_event(
-            library, licensepool, name, neighborhood=neighborhood
+            library,
+            licensepool,
+            name,
+            neighborhood=neighborhood,
+            patron=patron,
         )
 
     def _collect_checkout_event(self, patron: Patron, licensepool: LicensePool) -> None:

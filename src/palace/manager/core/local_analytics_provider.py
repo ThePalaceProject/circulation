@@ -13,6 +13,7 @@ class LocalAnalyticsProvider(LoggerMixin):
         time,
         old_value=None,
         new_value=None,
+        patron=None,
         **kwargs
     ):
         if not library and not license_pool:

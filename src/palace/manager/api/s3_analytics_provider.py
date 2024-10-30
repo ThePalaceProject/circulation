@@ -11,6 +11,7 @@ from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.patron import Patron
 
 if TYPE_CHECKING:
     from palace.manager.service.storage.s3 import S3Service
@@ -32,6 +33,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         new_value,
         neighborhood: str | None = None,
         user_agent: str | None = None,
+        patron: Patron | None = None,
     ) -> dict:
         """Create a Python dict containing required information about the event.
 
@@ -132,6 +134,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "language": work.language if work else None,
             "open_access": license_pool.open_access if license_pool else None,
             "user_agent": user_agent,
+            "patron_uuid": str(patron.uuid) if patron else None,
         }
 
         return event
@@ -145,6 +148,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         old_value=None,
         new_value=None,
         user_agent: str | None = None,
+        patron: Patron | None = None,
         **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
@@ -188,6 +192,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             old_value,
             new_value,
             user_agent=user_agent,
+            patron=patron,
         )
         content = json.dumps(
             event,

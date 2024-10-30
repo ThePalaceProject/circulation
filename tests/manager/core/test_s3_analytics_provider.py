@@ -100,6 +100,8 @@ class TestS3AnalyticsProvider:
     def test_analytics_data_with_associated_license_pool_is_correctly_stored_in_s3(
         self, s3_analytics_fixture: S3AnalyticsFixture
     ):
+        patron = s3_analytics_fixture.db.patron()
+
         # Create a test book
         work = s3_analytics_fixture.db.work(
             data_source_name=DataSource.GUTENBERG,
@@ -127,6 +129,7 @@ class TestS3AnalyticsProvider:
             event_type,
             event_time,
             user_agent=user_agent,
+            patron=patron,
         )
 
         # Assert
@@ -181,3 +184,4 @@ class TestS3AnalyticsProvider:
         assert event["series_position"] == work.series_position
         assert event["language"] == work.language
         assert event["user_agent"] == user_agent
+        assert event["patron_uuid"] == str(patron.uuid)
