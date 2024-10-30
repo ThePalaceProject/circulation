@@ -6,7 +6,6 @@ from collections import defaultdict
 from decimal import Decimal
 
 import pytest
-from money import Money
 
 from palace.manager.util import (
     Bigrams,
@@ -375,32 +374,69 @@ class TestMedian:
 
 class TestMoneyUtility:
     @pytest.mark.parametrize(
-        "expected_amount, input_amount, money_amount, money_currency",
+        "expected_amount, expected_string, input_amount",
         [
-            [Decimal("0"), None, "0", "USD"],
-            [Decimal("4.00"), "4", "4.00", "USD"],
-            [Decimal("-4.00"), "-4", "-4.00", "USD"],
-            [Decimal("4.40"), "4.40", "4.40", "USD"],
-            [Decimal("4.40"), "$4.40", "4.40", "USD"],
-            [Decimal("4.4"), 4.4, "4.40", "USD"],
-            [Decimal("4"), 4, "4", "USD"],
-            [Decimal("0.4"), 0.4, ".4", "USD"],
-            [Decimal("0.4"), ".4", ".4", "USD"],
-            [Decimal("4444.40"), "4,444.40", "4444.40", "USD"],
+            [
+                Decimal("0"),
+                "0.00",
+                None,
+            ],
+            [
+                Decimal("4.00"),
+                "4.00",
+                "4",
+            ],
+            [
+                Decimal("-4.00"),
+                "-4.00",
+                "-4",
+            ],
+            [
+                Decimal("4.40"),
+                "4.40",
+                "4.40",
+            ],
+            [
+                Decimal("4.40"),
+                "4.40",
+                "$4.40",
+            ],
+            [
+                Decimal("4.4"),
+                "4.40",
+                4.4,
+            ],
+            [
+                Decimal("4"),
+                "4.00",
+                4,
+            ],
+            [
+                Decimal("0.4"),
+                "0.40",
+                0.4,
+            ],
+            [
+                Decimal("0.4"),
+                "0.40",
+                ".4",
+            ],
+            [
+                Decimal("4444.40"),
+                "4444.40",
+                "4,444.40",
+            ],
         ],
     )
     def test_parse(
         self,
         expected_amount: Decimal,
+        expected_string: str,
         input_amount: str | float | int | None,
-        money_amount: str,
-        money_currency: str,
     ):
         parsed = MoneyUtility.parse(input_amount)
-        money = Money(money_amount, money_currency)
-
-        assert money == parsed
-        assert expected_amount == parsed.amount
+        assert expected_amount == parsed
+        assert expected_string == str(parsed)
 
     @pytest.mark.parametrize(
         "bad_value",

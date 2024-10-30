@@ -6,7 +6,6 @@ from urllib import parse
 import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from money import Money
 from pydantic import field_validator
 
 from palace.manager.api.authentication.base import PatronData
@@ -475,9 +474,9 @@ class MilleniumPatronAPI(
                     fines = MoneyUtility.parse(v)
                 except ValueError:
                     self.log.warning(
-                        'Malformed fine amount for patron: "%s". Treating as no fines.'
+                        f"Malformed fine amount ({v}) for patron. Treating as no fines."
                     )
-                    fines = Money("0", "USD")
+                    fines = MoneyUtility.parse(0)
             elif k == self.BLOCK_FIELD:
                 block_reason = self._patron_block_reason(self.block_types, v)
             elif k == self.EXPIRATION_FIELD:

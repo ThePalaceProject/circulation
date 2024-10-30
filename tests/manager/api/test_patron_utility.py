@@ -133,6 +133,7 @@ class TestPatronUtility:
         # If you accrue excessive fines you lose borrowing privileges.
         # Verify that all these tests work no matter what data type has been stored in
         # patron.fines.
+        patron_fines: str | int | float | Decimal | None
         for patron_fines in ("1", "0.75", 1, 1.0, Decimal(1), MoneyUtility.parse("1")):
             patron.fines = patron_fines
 

@@ -114,10 +114,10 @@ class TestConfiguration:
         settings.max_outstanding_fines = 0
         max_fines = m(library)
         assert max_fines is not None
-        assert 0 == max_fines.amount
+        assert 0 == max_fines
 
         # A more lenient approach.
         settings.max_outstanding_fines = 100.0
         max_fines = m(library)
         assert max_fines is not None
-        assert 100 == max_fines.amount
+        assert 100 == max_fines

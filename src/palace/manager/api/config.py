@@ -1,10 +1,10 @@
 from collections.abc import Iterable
+from decimal import Decimal
 
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Cipher.PKCS1_OAEP import PKCS1OAEP_Cipher
 from Crypto.PublicKey import RSA
 from flask_babel import lazy_gettext as _
-from money import Money
 
 from palace.manager.core.config import CannotLoadConfiguration  # noqa: autoflake
 from palace.manager.core.config import IntegrationException  # noqa: autoflake
@@ -93,10 +93,10 @@ class Configuration(CoreConfiguration):
         return library.settings.tiny_collection_languages
 
     @classmethod
-    def max_outstanding_fines(cls, library: Library) -> Money | None:
-        if library.settings.max_outstanding_fines is None:
+    def max_outstanding_fines(cls, library: Library) -> Decimal | None:
+        if (max_fines := library.settings.max_outstanding_fines) is None:
             return None
-        return MoneyUtility.parse(library.settings.max_outstanding_fines)
+        return MoneyUtility.parse(max_fines)
 
     @classmethod
     def estimate_language_collections_for_library(cls, library: Library) -> None:

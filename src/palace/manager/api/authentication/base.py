@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TypeVar
 
-from money import Money
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -222,10 +221,8 @@ class PatronData:
         :param external_type: A string classifying the patron
         according to some library-specific scheme.
 
-        :param fines: A Money object representing the amount the
-        patron owes in fines. Note that only the value portion of the
-        Money object will be stored in the database; the currency portion
-        will be ignored. (e.g. "20 USD" will become 20)
+        :param fines: A Decimal object representing the amount the
+        patron owes in fines.
 
         :param block_reason: A string indicating why the patron is
         blocked from borrowing items. (Even if this is set to None, it
@@ -324,11 +321,6 @@ class PatronData:
 
     @fines.setter
     def fines(self, value):
-        """When setting patron fines, only store the numeric portion of
-        a Money object.
-        """
-        if isinstance(value, Money):
-            value = value.amount
         self._fines = value
 
     def apply(self, patron: Patron):

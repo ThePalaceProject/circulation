@@ -6,10 +6,10 @@ import re
 import string
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
+from decimal import Decimal, InvalidOperation
 from typing import Any, TypeVar
 
 import sqlalchemy
-from money import Money
 
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
@@ -462,25 +462,26 @@ english_bigrams.proportional = Counter(english_bigram_frequencies)
 
 
 class MoneyUtility:
-    DEFAULT_CURRENCY = "USD"
-
     @classmethod
-    def parse(cls, amount: str | float | int | None) -> Money:
-        """Attempt to turn a string into a Money object."""
-        currency = cls.DEFAULT_CURRENCY
+    def parse(cls, amount: str | float | int | None) -> Decimal:
+        """Attempt to turn a string into a Decimal object representing money."""
         if not amount:
             amount = "0"
         amount = str(amount)
 
         if amount[0] == "$":
-            currency = "USD"
             amount = amount[1:]
 
-        # `Money` does not properly handle commas in the amount, so we strip
-        # them out of US dollar amounts, since it won't change the "value."
-        if currency == "USD":
-            amount = "".join(amount.split(","))
-        return Money(amount, currency)
+        # We assume we are working with currency amounts where ',' is used as a possible
+        # thousands seperator, so we can safely strip them.
+        amount = "".join(amount.split(","))
+        try:
+            return Decimal(amount).quantize(Decimal("1.00"))
+        except InvalidOperation:
+            raise ValueError(
+                "amount value could not be converted to "
+                "Decimal(): '{}'".format(amount)
+            ) from None
 
 
 def is_session(value: object) -> bool:

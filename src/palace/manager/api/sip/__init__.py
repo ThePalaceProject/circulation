@@ -464,7 +464,7 @@ class SIP2AuthenticationProvider(
         # patron has excessive fines, we can use that as the reason
         # they're blocked.
         if "fee_limit" in info:
-            fee_limit = MoneyUtility.parse(info["fee_limit"]).amount
+            fee_limit = MoneyUtility.parse(info["fee_limit"])
             if fee_limit and patrondata.fines > fee_limit:
                 block_reason = PatronData.EXCESSIVE_FINES
 
