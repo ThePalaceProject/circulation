@@ -160,7 +160,7 @@ class OutstandingFines(CannotLoan):
         parsed_fines = None
         if fines:
             try:
-                parsed_fines = MoneyUtility.parse(fines).amount
+                parsed_fines = MoneyUtility.parse(fines)
             except ValueError:
                 # If the fines are not in a valid format, we'll just leave them as None.
                 ...

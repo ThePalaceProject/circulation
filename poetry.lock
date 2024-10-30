@@ -1537,8 +1537,6 @@ files = [
     {file = "frozendict-2.4.4-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:d13b4310db337f4d2103867c5a05090b22bc4d50ca842093779ef541ea9c9eea"},
     {file = "frozendict-2.4.4-cp39-cp39-win_amd64.whl", hash = "sha256:b3b967d5065872e27b06f785a80c0ed0a45d1f7c9b85223da05358e734d858ca"},
     {file = "frozendict-2.4.4-cp39-cp39-win_arm64.whl", hash = "sha256:4ae8d05c8d0b6134bfb6bfb369d5fa0c4df21eabb5ca7f645af95fdc6689678e"},
-    {file = "frozendict-2.4.4-py311-none-any.whl", hash = "sha256:705efca8d74d3facbb6ace80ab3afdd28eb8a237bfb4063ed89996b024bc443d"},
-    {file = "frozendict-2.4.4-py312-none-any.whl", hash = "sha256:d9647563e76adb05b7cde2172403123380871360a114f546b4ae1704510801e5"},
     {file = "frozendict-2.4.4.tar.gz", hash = "sha256:3f7c031b26e4ee6a3f786ceb5e3abf1181c4ade92dce1f847da26ea2c96008c7"},
 ]
 
@@ -2547,16 +2545,6 @@ files = [
     {file = "MarkupSafe-2.1.5-cp39-cp39-win32.whl", hash = "sha256:00e046b6dd71aa03a41079792f8473dc494d564611a8f89bbbd7cb93295ebdcf"},
     {file = "MarkupSafe-2.1.5-cp39-cp39-win_amd64.whl", hash = "sha256:fa173ec60341d6bb97a89f5ea19c85c5643c1e7dedebc22f5181eb73573142c5"},
     {file = "MarkupSafe-2.1.5.tar.gz", hash = "sha256:d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b"},
-]
-
-[[package]]
-name = "money"
-version = "1.3.0"
-description = "Python Money Class"
-optional = false
-python-versions = "*"
-files = [
-    {file = "money-1.3.0.tar.gz", hash = "sha256:ac049caf19df9502f7a481d5959fc51b038baaa68c5dcef2070ffbb785729f7d"},
 ]
 
 [[package]]
@@ -5186,4 +5174,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "1dab2a8585f34a1b06a4fb3ea843c1d4cff705e5ff3205faa9aae5483cfdc7b8"
+content-hash = "45c2dcd455f64e81499d53304bfcbba49313dbd0b426ca9b2d85323dae6c9ae8"

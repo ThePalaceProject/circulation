@@ -1,7 +1,6 @@
 import datetime
 
 import dateutil
-from money import Money
 
 from palace.manager.api.circulation_exceptions import (
     AuthorizationBlocked,
@@ -102,13 +101,9 @@ class PatronUtility:
         if not patron.fines:
             return False
 
-        if isinstance(patron.fines, Money):
-            patron_fines = patron.fines
-        else:
-            patron_fines = MoneyUtility.parse(patron.fines)
-        actual_fines = patron_fines.amount
+        actual_fines = MoneyUtility.parse(patron.fines)
         max_fines = Configuration.max_outstanding_fines(patron.library)
-        if max_fines is not None and actual_fines > max_fines.amount:
+        if max_fines is not None and actual_fines > max_fines:
             return True
         return False
 

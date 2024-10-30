@@ -19,7 +19,6 @@ import pytest
 from _pytest._code import ExceptionInfo
 from flask import url_for
 from freezegun import freeze_time
-from money import Money
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -72,6 +71,7 @@ from palace.manager.sqlalchemy.model.integration import (
 )
 from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.util import MoneyUtility
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import RemoteIntegrationException
@@ -173,7 +173,7 @@ def patron_data() -> PatronData:
         personal_name="4",
         email_address="5",
         authorization_expires=utc_now(),
-        fines=Money(6, "USD"),
+        fines=MoneyUtility.parse(6),
         block_reason=PatronData.NO_VALUE,
     )
 
@@ -225,7 +225,7 @@ class TestPatronData:
             authorization_expires=patron_data.authorization_expires.strftime(
                 "%Y-%m-%d"
             ),
-            fines="6",
+            fines="6.00",
             block_reason=None,
         )
         assert data == expect
@@ -388,7 +388,7 @@ class TestPatronData:
         patron.authorization_identifier = "1234"
         patron.username = "user"
         patron.last_external_sync = now
-        patron.fines = Money(10, "USD")
+        patron.fines = MoneyUtility.parse(10)
         authenticated_by_username = PatronData(
             authorization_identifier="user", complete=False
         )
@@ -2434,7 +2434,7 @@ class TestBasicAuthenticationProviderAuthenticate:
         patrondata = PatronData(
             permanent_id=db.fresh_str(),
             authorization_identifier=db.fresh_str(),
-            fines=Money(1, "USD"),
+            fines=MoneyUtility.parse(1),
         )
 
         provider = mock_basic(
