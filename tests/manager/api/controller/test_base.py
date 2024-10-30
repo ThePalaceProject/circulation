@@ -312,7 +312,7 @@ class TestBaseController:
                     pool1.identifier.type,
                     pool1.identifier.identifier,
                 )
-                work.age_appropriate_for_patron.called_with(
+                work.age_appropriate_for_patron.assert_called_once_with(
                     circulation_fixture.default_patron
                 )
 
