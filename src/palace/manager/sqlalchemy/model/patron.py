@@ -20,6 +20,7 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
@@ -106,6 +107,12 @@ class Patron(Base, RedisKeyMixin):
     # but does not give them the authority to borrow books. i.e. their
     # website username.
     username = Column(Unicode)
+
+    # A universally unique identifier across all CMs used to track patron activity
+    # in a way that allows users to disassociate their patron info
+    # with account activity at any time.  When this UUID is reset it effectively
+    # dissociates any patron activity history with this patron.
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4)
 
     # The last time this record was synced up with an external library
     # system such as an ILS.
