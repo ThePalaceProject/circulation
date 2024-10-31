@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import flask
 
 from palace.manager.api.s3_analytics_provider import S3AnalyticsProvider
 from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
 
@@ -31,7 +35,15 @@ class Analytics(LoggerMixin):
                     "S3 analytics is not configured: No analytics bucket was specified."
                 )
 
-    def collect_event(self, library: Library, license_pool: LicensePool, event_type: str, time: datetime = None, patron: Patron | None = None, **kwargs):  # type: ignore[no-untyped-def]
+    def collect_event(
+        self,
+        library: Library,
+        license_pool: LicensePool | None,
+        event_type: str,
+        time: datetime | None = None,
+        patron: Patron | None = None,
+        **kwargs: Any,
+    ) -> None:
         if not time:
             time = utc_now()
 

@@ -26,11 +26,11 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     @staticmethod
     def _create_event_object(
         library: Library,
-        license_pool: LicensePool,
+        license_pool: LicensePool | None,
         event_type: str,
         time: datetime.datetime,
-        old_value,
-        new_value,
+        old_value: Any = None,
+        new_value: Any = None,
         neighborhood: str | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
@@ -142,9 +142,9 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     def collect_event(
         self,
         library: Library,
-        license_pool: LicensePool,
+        license_pool: LicensePool | None,
         event_type: str,
-        time: datetime,
+        time: datetime.datetime,
         old_value: Any = None,
         new_value: Any = None,
         user_agent: str | None = None,
@@ -178,7 +178,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :type patron: Patron
         """
 
-        if not library and not license_pool:
+        if not library:
             raise ValueError("Either library or license_pool must be provided.")
 
         event = self._create_event_object(
