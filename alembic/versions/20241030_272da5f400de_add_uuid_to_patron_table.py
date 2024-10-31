@@ -1,7 +1,7 @@
 """Add UUID to patron table
 
 Revision ID: 272da5f400de
-Revises: 1938277e993f
+Revises: 3faa5bba3ddf
 Create Date: 2024-10-30 17:41:28.151677+00:00
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
 revision = "272da5f400de"
-down_revision = "1938277e993f"
+down_revision = "3faa5bba3ddf"
 branch_labels = None
 depends_on = None
 
