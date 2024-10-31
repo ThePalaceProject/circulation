@@ -22,7 +22,29 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "patrons",
-        sa.Column("uuid", UUID(as_uuid=True), nullable=False, default=uuid.uuid4),
+        sa.Column("uuid", UUID(as_uuid=True), nullable=True, default=uuid.uuid4),
+    )
+
+    conn = op.get_bind()
+    rows = conn.execute("SELECT id from patrons").all()
+
+    for row in rows:
+        conn.execute(
+            """
+            UPDATE patrons
+            SET uuid = %(uuid)s
+            WHERE id = %(id)s
+            """,
+            {
+                "id": row.id,
+                "uuid": uuid.uuid4(),
+            },
+        )
+
+    op.alter_column(
+        table_name="patrons",
+        column_name="uuid",
+        nullable=True,
     )
 
 
