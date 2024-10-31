@@ -200,7 +200,7 @@ class TestSIP2AuthenticationProvider:
         assert "foo@example.com" == patrondata.email_address
         assert "LE CARRÉ, JOHN" == patrondata.personal_name
         assert 0 == patrondata.fines
-        assert patrondata.authorization_expires is None
+        assert PatronData.NO_VALUE == patrondata.authorization_expires
         assert patrondata.external_type is None
         assert PatronData.NO_VALUE == patrondata.block_reason
 
@@ -417,7 +417,7 @@ class TestSIP2AuthenticationProvider:
         assert "foo@example.com" == patrondata.email_address
         assert "LE CARRÉ, JOHN" == patrondata.personal_name
         assert 0 == patrondata.fines
-        assert patrondata.authorization_expires is None
+        assert PatronData.NO_VALUE == patrondata.authorization_expires
         assert patrondata.external_type is None
         assert PatronData.NO_VALUE == patrondata.block_reason
 
@@ -560,7 +560,7 @@ class TestSIP2AuthenticationProvider:
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
         assert 0 == patron.fines
-        assert patron.authorization_expires is None
+        assert PatronData.NO_VALUE == patron.authorization_expires
         assert patron.external_type is None
         assert PatronData.NO_VALUE == patron.block_reason
 
@@ -592,7 +592,7 @@ class TestSIP2AuthenticationProvider:
         assert "foo@example.com" == patron.email_address
         assert "LE CARRÉ, JOHN" == patron.personal_name
         assert 0 == patron.fines
-        assert patron.authorization_expires is None
+        assert PatronData.NO_VALUE == patron.authorization_expires
         assert patron.external_type is None
         assert PatronData.NO_VALUE == patron.block_reason
 
@@ -606,7 +606,7 @@ class TestSIP2AuthenticationProvider:
         assert "foo@example.com" == patron.email_address
         assert "SHELDON, ALICE" == patron.personal_name
         assert 0 == patron.fines
-        assert patron.authorization_expires is None
+        assert PatronData.NO_VALUE == patron.authorization_expires
         assert patron.external_type is None
         assert "no borrowing privileges" == patron.block_reason
 

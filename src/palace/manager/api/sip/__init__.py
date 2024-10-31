@@ -420,16 +420,20 @@ class SIP2AuthenticationProvider(
         patrondata.fines = MoneyUtility.parse(fines)
         if "sipserver_patron_class" in info:
             patrondata.external_type = info["sipserver_patron_class"]
+
+        # If we don't have any expiry information, we set it to NO_VALUE,
+        # so the expiry gets cleared if there once was an expiry, and there
+        # no longer is, since this can prevent borrowing otherwise.
+        patron_expiry = PatronData.NO_VALUE
         for expire_field in [
             "sipserver_patron_expiration",
             "polaris_patron_expiration",
         ]:
             if expire_field in info:
-                value = info.get(expire_field)
-                value = self.parse_date(value)
-                if value:
-                    patrondata.authorization_expires = value
+                if (expiry := self.parse_date(info.get(expire_field))) is not None:
+                    patron_expiry = expiry
                     break
+        patrondata.authorization_expires = patron_expiry
 
         if self.patron_status_should_block:
             patrondata.block_reason = self.info_to_patrondata_block_reason(
