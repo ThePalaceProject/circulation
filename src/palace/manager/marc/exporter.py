@@ -241,7 +241,7 @@ class MarcExporter(
             .order_by(Work.id.asc())
             .options(
                 # We set loader options on all the collection properties
-                # needed to generate the MARC records, so that don't end
+                # needed to generate the MARC records, so that we don't end
                 # up doing queries for each work.
                 selectinload(Work.license_pools).options(
                     selectinload(LicensePool.identifier),

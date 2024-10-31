@@ -13,6 +13,10 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.identifier import (
+    Identifier,
+    RecursiveEquivalencyCache,
+)
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
@@ -190,9 +194,10 @@ def marc_export_collection(
                 ]
 
                 # Find ISBN for any work that needs it
-                isbns = MarcExporter.query_isbn_identifiers(
+                isbns = RecursiveEquivalencyCache.equivalent_identifiers(
                     session,
                     {pool.identifier for work, pool in works_with_pools},
+                    Identifier.ISBN,
                 )
 
                 for work, pool in works_with_pools:

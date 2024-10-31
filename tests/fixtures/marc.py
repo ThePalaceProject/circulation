@@ -52,6 +52,10 @@ class MarcExporterFixture:
         edition = self._db.edition()
         self._db.licensepool(edition, collection=collection)
         work = self._db.work(presentation_edition=edition)
+        # We set the works last updated time to 1 day ago, so we know this work
+        # will only be included in delta exports covering a time range before
+        # 1 day ago. This lets us easily test works being included / excluded
+        # based on their `last_update_time`.
         work.last_update_time = utc_now() - datetime.timedelta(days=1)
         return work
 

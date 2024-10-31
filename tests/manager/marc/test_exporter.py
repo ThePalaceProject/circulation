@@ -1,20 +1,15 @@
 import datetime
 from functools import partial
-from unittest.mock import MagicMock
 
 import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 
-from palace.manager.core.equivalents_coverage import (
-    EquivalentIdentifiersCoverageProvider,
-)
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.settings import MarcExporterLibrarySettings
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
-from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
@@ -304,69 +299,6 @@ class TestMarcExporter:
             _ = result[0].license_pools[0].loans
 
         assert query_works(work_id_offset=works[3].id) == works[4:]
-
-    def test_query_isbn_identifiers(self, db: DatabaseTransactionFixture) -> None:
-        # This is already an isbn so no lookup necessary
-        isbn_identifier = db.identifier(identifier_type=Identifier.ISBN)
-
-        # Overdrive identifier with two ISBN associated
-        overdrive_identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
-        od_isbn_1 = db.identifier(identifier_type=Identifier.ISBN)
-        od_isbn_2 = db.identifier(identifier_type=Identifier.ISBN)
-        create(
-            db.session,
-            Equivalency,
-            input_id=overdrive_identifier.id,
-            output_id=od_isbn_1.id,
-            strength=5,
-        )
-        create(
-            db.session,
-            Equivalency,
-            input_id=overdrive_identifier.id,
-            output_id=od_isbn_2.id,
-            strength=1,
-        )
-
-        # Gutenberg ID with one associated ISBN
-        gutenberg_identifier = db.identifier(identifier_type=Identifier.GUTENBERG_ID)
-        gutenberg_isbn = db.identifier(identifier_type=Identifier.ISBN)
-        create(
-            db.session,
-            Equivalency,
-            input_id=gutenberg_identifier.id,
-            output_id=gutenberg_isbn.id,
-            strength=5,
-        )
-
-        # Proquest ID with no associated ISBN
-        proquest_identfier = db.identifier(identifier_type=Identifier.PROQUEST_ID)
-
-        # We're using the RecursiveEquivalencyCache, so must refresh it.
-        EquivalentIdentifiersCoverageProvider(db.session).run()
-
-        # Calling with only ISBN doesn't do a query, it just returns the identifiers
-        assert MarcExporter.query_isbn_identifiers(
-            MagicMock(side_effect=Exception("Should not be called")),
-            {
-                isbn_identifier,
-            },
-        ) == {isbn_identifier: isbn_identifier}
-
-        equivalent_isbns = MarcExporter.query_isbn_identifiers(
-            db.session,
-            {
-                isbn_identifier,
-                overdrive_identifier,
-                gutenberg_identifier,
-                proquest_identfier,
-            },
-        )
-        assert equivalent_isbns == {
-            isbn_identifier: isbn_identifier,
-            overdrive_identifier: od_isbn_1,
-            gutenberg_identifier: gutenberg_isbn,
-        }
 
     def test_collection(self, marc_exporter_fixture: MarcExporterFixture) -> None:
         collection_id = marc_exporter_fixture.collection1.id

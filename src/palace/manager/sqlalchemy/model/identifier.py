@@ -23,7 +23,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.exc import MultipleResultsFound, NoResultFound
-from sqlalchemy.orm import Mapped, joinedload, relationship
+from sqlalchemy.orm import Mapped, joinedload, relationship, selectinload
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 from sqlalchemy.sql.expression import and_, or_
@@ -1216,3 +1216,54 @@ class RecursiveEquivalencyCache(Base):
     is_parent = Column(Boolean, Computed("parent_identifier_id = identifier_id"))
 
     __table_args__ = (UniqueConstraint(parent_identifier_id, identifier_id),)
+
+    @staticmethod
+    def equivalent_identifiers(
+        session: Session, identifiers: set[Identifier], type: str | None = None
+    ) -> dict[Identifier, Identifier]:
+        """
+        Find all equivalent identifiers for the given Identifiers.
+
+        :param session: DB Session
+        :param identifiers: Set of Identifiers that we need equivalencies for
+        :param type: An optional type, if given only equivalent identifiers
+                     of this type will be returned.
+        :return: A dictionary mapping input identifiers to equivalent identifiers.
+        """
+
+        # Find identifiers that don't need to be looked up
+        results = (
+            {i: i for i in identifiers if i.type == type} if type is not None else {}
+        )
+        needs_lookup = {i.id: i for i in identifiers - results.keys()}
+        if not needs_lookup:
+            return results
+
+        query = (
+            select(RecursiveEquivalencyCache)
+            .join(
+                Identifier,
+                RecursiveEquivalencyCache.identifier_id == Identifier.id,
+            )
+            .where(
+                RecursiveEquivalencyCache.parent_identifier_id.in_(needs_lookup.keys()),
+            )
+            .order_by(
+                RecursiveEquivalencyCache.parent_identifier_id,
+                RecursiveEquivalencyCache.is_parent.desc(),
+                RecursiveEquivalencyCache.identifier_id.desc(),
+            )
+            .options(
+                selectinload(RecursiveEquivalencyCache.identifier),
+            )
+        )
+        if type is not None:
+            query = query.where(Identifier.type == Identifier.ISBN)
+
+        equivalents = session.execute(query).scalars().all()
+
+        for equivalent in equivalents:
+            parent_identifier = needs_lookup[equivalent.parent_identifier_id]
+            results[parent_identifier] = equivalent.identifier
+
+        return results

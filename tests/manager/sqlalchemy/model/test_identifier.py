@@ -1,18 +1,23 @@
 import datetime
-from unittest.mock import PropertyMock, create_autospec
+from unittest.mock import MagicMock, PropertyMock, create_autospec
 
 import pytest
 
+from palace.manager.core.equivalents_coverage import (
+    EquivalentIdentifiersCoverageProvider,
+)
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import (
+    Equivalency,
     Identifier,
     ProQuestIdentifierParser,
     RecursiveEquivalencyCache,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
+from palace.manager.sqlalchemy.util import create
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.manager.sqlalchemy.model.test_coverage import (
     ExampleEquivalencyCoverageRecordFixture,
@@ -764,6 +769,96 @@ class TestRecursiveEquivalencyCache:
         # RecursiveEquivalencyCache was deleted by cascade
         all_recursives = session.query(RecursiveEquivalencyCache).all()
         assert len(all_recursives) == 3
+
+    def test_equivalent_identifiers(self, db: DatabaseTransactionFixture) -> None:
+        # This is already an isbn so no lookup necessary
+        isbn_identifier = db.identifier(identifier_type=Identifier.ISBN)
+
+        # Overdrive identifier with two ISBN associated
+        overdrive_identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        od_isbn_1 = db.identifier(identifier_type=Identifier.ISBN)
+        od_isbn_2 = db.identifier(identifier_type=Identifier.ISBN)
+        create(
+            db.session,
+            Equivalency,
+            input_id=overdrive_identifier.id,
+            output_id=od_isbn_1.id,
+            strength=5,
+        )
+        create(
+            db.session,
+            Equivalency,
+            input_id=overdrive_identifier.id,
+            output_id=od_isbn_2.id,
+            strength=1,
+        )
+
+        # Gutenberg ID with one associated ISBN
+        gutenberg_identifier = db.identifier(identifier_type=Identifier.GUTENBERG_ID)
+        gutenberg_isbn = db.identifier(identifier_type=Identifier.ISBN)
+        create(
+            db.session,
+            Equivalency,
+            input_id=gutenberg_identifier.id,
+            output_id=gutenberg_isbn.id,
+            strength=5,
+        )
+
+        # Proquest ID with no associated ISBN but an associated GUTENBERG_ID
+        proquest_identfier = db.identifier(identifier_type=Identifier.PROQUEST_ID)
+        proquest_gutenberg = db.identifier(identifier_type=Identifier.GUTENBERG_ID)
+        create(
+            db.session,
+            Equivalency,
+            input_id=proquest_identfier.id,
+            output_id=proquest_gutenberg.id,
+            strength=2,
+        )
+
+        # We're using the RecursiveEquivalencyCache, so must refresh it.
+        EquivalentIdentifiersCoverageProvider(db.session).run()
+
+        # Calling with only identifiers of the specified type doesn't do a query,
+        # it just returns the identifiers
+        assert RecursiveEquivalencyCache.equivalent_identifiers(
+            MagicMock(side_effect=Exception("Should not be called")),
+            {
+                isbn_identifier,
+            },
+            type=Identifier.ISBN,
+        ) == {isbn_identifier: isbn_identifier}
+
+        equivalent_isbns = RecursiveEquivalencyCache.equivalent_identifiers(
+            db.session,
+            {
+                isbn_identifier,
+                overdrive_identifier,
+                gutenberg_identifier,
+                proquest_identfier,
+            },
+            type=Identifier.ISBN,
+        )
+        assert equivalent_isbns == {
+            isbn_identifier: isbn_identifier,
+            overdrive_identifier: od_isbn_1,
+            gutenberg_identifier: gutenberg_isbn,
+        }
+
+        equivalents = RecursiveEquivalencyCache.equivalent_identifiers(
+            db.session,
+            {
+                isbn_identifier,
+                overdrive_identifier,
+                gutenberg_identifier,
+                proquest_identfier,
+            },
+        )
+        assert equivalents == {
+            isbn_identifier: isbn_identifier,
+            overdrive_identifier: od_isbn_1,
+            gutenberg_identifier: gutenberg_isbn,
+            proquest_identfier: proquest_gutenberg,
+        }
 
 
 class TestProQuestIdentifierParser:
