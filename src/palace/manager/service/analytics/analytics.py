@@ -31,7 +31,7 @@ class Analytics(LoggerMixin):
                     "S3 analytics is not configured: No analytics bucket was specified."
                 )
 
-    def collect_event(self, library, license_pool, event_type, time=None, patron: Patron | None = None, **kwargs):  # type: ignore[no-untyped-def]
+    def collect_event(self, library: Library, license_pool: LicensePool, event_type: str, time: datetime = None, patron: Patron | None = None, **kwargs):  # type: ignore[no-untyped-def]
         if not time:
             time = utc_now()
 

@@ -112,6 +112,8 @@ class TestS3AnalyticsProvider:
             audience=Classifier.AUDIENCE_ADULT,
             with_license_pool=True,
         )
+
+        neighborhood = "test neighborhood"
         license_pool = work.license_pools[0]
         edition = work.presentation_edition
 
@@ -130,6 +132,7 @@ class TestS3AnalyticsProvider:
             event_time,
             user_agent=user_agent,
             patron=patron,
+            neighborhood=neighborhood,
         )
 
         # Assert
@@ -185,3 +188,4 @@ class TestS3AnalyticsProvider:
         assert event["language"] == work.language
         assert event["user_agent"] == user_agent
         assert event["patron_uuid"] == str(patron.uuid)
+        assert event["location"] == neighborhood

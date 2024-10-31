@@ -4,7 +4,7 @@ import datetime
 import json
 import random
 import string
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
@@ -141,20 +141,17 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
     def collect_event(
         self,
-        library,
-        license_pool,
-        event_type,
-        time,
-        old_value=None,
-        new_value=None,
+        library: Library,
+        license_pool: LicensePool,
+        event_type: str,
+        time: datetime,
+        old_value: Any = None,
+        new_value: Any = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
         **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :param library: Library associated with the event
         :type library: core.model.library.Library
@@ -168,9 +165,6 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :param time: Event's timestamp
         :type time: datetime.datetime
 
-        :param neighborhood: Geographic location of the event
-        :type neighborhood: str
-
         :param old_value: Old value of the metric changed by the event
         :type old_value: Any
 
@@ -179,6 +173,9 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :param user_agent: The user_agent of the caller.
         :type user_agent:  str
+
+        :param patron: The patron associated with the event, where applicable
+        :type patron: Patron
         """
 
         if not library and not license_pool:
@@ -193,6 +190,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             new_value,
             user_agent=user_agent,
             patron=patron,
+            **kwargs,
         )
         content = json.dumps(
             event,
