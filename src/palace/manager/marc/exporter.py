@@ -23,10 +23,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import (
-    Identifier,
-    RecursiveEquivalencyCache,
-)
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -271,42 +268,6 @@ class MarcExporter(
             query = query.where(Work.id > work_id_offset)
 
         return session.execute(query).scalars().all()
-
-    @staticmethod
-    def query_isbn_identifiers(
-        session: Session, identifiers: set[Identifier]
-    ) -> dict[Identifier, Identifier]:
-        results = {i: i for i in identifiers if i.type == Identifier.ISBN}
-        needs_lookup = {i.id: i for i in identifiers - results.keys()}
-        if not needs_lookup:
-            return results
-
-        isbn_query = (
-            select(RecursiveEquivalencyCache)
-            .join(
-                Identifier,
-                RecursiveEquivalencyCache.identifier_id == Identifier.id,
-            )
-            .where(
-                RecursiveEquivalencyCache.parent_identifier_id.in_(needs_lookup.keys()),
-                Identifier.type == Identifier.ISBN,
-            )
-            .order_by(
-                RecursiveEquivalencyCache.parent_identifier_id,
-                RecursiveEquivalencyCache.identifier_id,
-            )
-            .options(
-                selectinload(RecursiveEquivalencyCache.identifier),
-            )
-        )
-        isbn_equivalents = session.execute(isbn_query).scalars().all()
-
-        for equivalent in isbn_equivalents:
-            parent_identifier = needs_lookup[equivalent.parent_identifier_id]
-            if parent_identifier not in results:
-                results[parent_identifier] = equivalent.identifier
-
-        return results
 
     @staticmethod
     def collection(session: Session, collection_id: int) -> Collection | None:
