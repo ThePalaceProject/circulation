@@ -11,7 +11,6 @@ from pymarc import Indicators, MARCReader, Record
 from palace.manager.marc.annotator import Annotator
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
@@ -108,7 +107,7 @@ class TestAnnotator:
         work, pool = annotator_fixture.test_work()
         annotator = annotator_fixture.annotator
 
-        record = annotator.marc_record(work, pool)
+        record = annotator.marc_record(work, pool.identifier, pool)
         assert annotator_fixture.record_tags(record) == {
             1,
             5,
@@ -136,7 +135,7 @@ class TestAnnotator:
     def test__copy_record(self, annotator_fixture: AnnotatorFixture):
         work, pool = annotator_fixture.test_work()
         annotator = annotator_fixture.annotator
-        record = annotator.marc_record(work, pool)
+        record = annotator.marc_record(work, None, pool)
         copied = annotator_fixture.annotator._copy_record(record)
         assert copied is not record
         assert copied.as_marc() == record.as_marc()
@@ -144,7 +143,7 @@ class TestAnnotator:
     def test_library_marc_record(self, annotator_fixture: AnnotatorFixture):
         work, pool = annotator_fixture.test_work()
         annotator = annotator_fixture.annotator
-        generic_record = annotator.marc_record(work, pool)
+        generic_record = annotator.marc_record(work, None, pool)
 
         library_marc_record = functools.partial(
             annotator.library_marc_record,
@@ -156,6 +155,7 @@ class TestAnnotator:
             organization_code="xyz",
             include_summary=True,
             include_genres=True,
+            delta=False,
         )
 
         library_record = library_marc_record()
@@ -199,6 +199,13 @@ class TestAnnotator:
         annotator_fixture.assert_record_tags(
             library_record, includes={3, 520, 650}, excludes={856}
         )
+
+        # If the record is part of a delta, then the flag is set
+        library_record = library_marc_record(delta=False)
+        assert library_record.leader.record_status == "n"
+
+        library_record = library_marc_record(delta=True)
+        assert library_record.leader.record_status == "c"
 
     def test_leader(self, annotator_fixture: AnnotatorFixture):
         leader = annotator_fixture.annotator.leader(False)
@@ -273,19 +280,9 @@ class TestAnnotator:
         annotator_fixture.annotator.add_isbn(record, isbn)
         annotator_fixture.assert_field(record, "020", {"a": isbn.identifier})
 
-        # If the identifier isn't an ISBN, but has an equivalent that is, it still
-        # works.
-        equivalent = db.identifier()
-        data_source = DataSource.lookup(db.session, DataSource.OCLC)
-        equivalent.equivalent_to(data_source, isbn, 1)
-        record = annotator_fixture.record()
-        annotator_fixture.annotator.add_isbn(record, equivalent)
-        annotator_fixture.assert_field(record, "020", {"a": isbn.identifier})
-
         # If there is no ISBN, the field is left out.
-        non_isbn = db.identifier()
         record = annotator_fixture.record()
-        annotator_fixture.annotator.add_isbn(record, non_isbn)
+        annotator_fixture.annotator.add_isbn(record, None)
         assert [] == record.get_fields("020")
 
     def test_add_title(

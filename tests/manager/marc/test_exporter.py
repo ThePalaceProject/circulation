@@ -1,45 +1,23 @@
 import datetime
 from functools import partial
-from unittest.mock import ANY, call, create_autospec
-from uuid import UUID
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy.exc import InvalidRequestError
 
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.marc.settings import MarcExporterLibrarySettings
-from palace.manager.marc.uploader import MarcUploadManager
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
-from palace.manager.sqlalchemy.util import create, get_one
+from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.marc import MarcExporterFixture
 
 
 class TestMarcExporter:
-    def test__s3_key(self, marc_exporter_fixture: MarcExporterFixture) -> None:
-        library = marc_exporter_fixture.library1
-        collection = marc_exporter_fixture.collection1
-
-        uuid = UUID("c2370bf2-28e1-40ff-9f04-4864306bd11c")
-        now = datetime_utc(2024, 8, 27)
-        since = datetime_utc(2024, 8, 20)
-
-        s3_key = partial(MarcExporter._s3_key, library, collection, now, uuid)
-
-        assert (
-            s3_key()
-            == f"marc/{library.short_name}/{collection.name}.full.2024-08-27.wjcL8ijhQP-fBEhkMGvRHA.mrc"
-        )
-
-        assert (
-            s3_key(since_time=since)
-            == f"marc/{library.short_name}/{collection.name}.delta.2024-08-20.2024-08-27.wjcL8ijhQP-fBEhkMGvRHA.mrc"
-        )
-
     @freeze_time("2020-02-20T10:00:00Z")
     @pytest.mark.parametrize(
         "last_updated_time, update_frequency, expected",
@@ -235,6 +213,7 @@ class TestMarcExporter:
             collection_id=marc_exporter_fixture.collection1.id,
         )
 
+        assert enabled_libraries(collection_id=None) == []
         assert enabled_libraries() == []
 
         # Collections have marc export enabled, and the marc exporter integration is setup, but
@@ -266,8 +245,6 @@ class TestMarcExporter:
             assert library_info.include_summary is False
             assert library_info.include_genres is False
             assert library_info.web_client_urls == ("http://web-client",)
-            assert library_info.s3_key_full.startswith("marc/library2/collection1.full")
-            assert library_info.s3_key_delta is None
 
         assert_library_2(library_2_info)
 
@@ -293,8 +270,6 @@ class TestMarcExporter:
         assert library_1_info.include_summary is True
         assert library_1_info.include_genres is True
         assert library_1_info.web_client_urls == ()
-        assert library_1_info.s3_key_full.startswith("marc/library1/collection1.full")
-        assert library_1_info.s3_key_delta is None
 
     def test_query_works(self, marc_exporter_fixture: MarcExporterFixture) -> None:
         assert marc_exporter_fixture.collection1.id is not None
@@ -306,11 +281,23 @@ class TestMarcExporter:
             batch_size=3,
         )
 
+        assert query_works(collection_id=None) == []
         assert query_works() == []
 
         works = marc_exporter_fixture.works()
 
-        assert query_works() == works[:3]
+        result = query_works()
+        assert result == works[:3]
+
+        # Make sure the loader options are correctly set on the results, this will cause an InvalidRequestError
+        # to be raised on any attribute access that doesn't have a loader setup. LicensePool.loans is an example
+        # of an unconfigured attribute.
+        with pytest.raises(
+            InvalidRequestError,
+            match="'LicensePool.loans' is not available due to lazy='raise'",
+        ):
+            _ = result[0].license_pools[0].loans
+
         assert query_works(work_id_offset=works[3].id) == works[4:]
 
     def test_collection(self, marc_exporter_fixture: MarcExporterFixture) -> None:
@@ -329,105 +316,38 @@ class TestMarcExporter:
 
     def test_process_work(self, marc_exporter_fixture: MarcExporterFixture) -> None:
         marc_exporter_fixture.configure_export()
+        marc_exporter_fixture.marc_file(
+            library=marc_exporter_fixture.library1,
+            created=utc_now() - datetime.timedelta(days=14),
+        )
 
         collection = marc_exporter_fixture.collection1
         work = marc_exporter_fixture.work(collection)
+        pool = work.license_pools[0]
         enabled_libraries = marc_exporter_fixture.enabled_libraries(collection)
-
-        mock_upload_manager = create_autospec(MarcUploadManager)
 
         process_work = partial(
             MarcExporter.process_work,
             work,
+            pool,
+            None,
             enabled_libraries,
             "http://base.url",
-            upload_manager=mock_upload_manager,
         )
 
-        process_work()
-        mock_upload_manager.add_record.assert_has_calls(
-            [
-                call(enabled_libraries[0].s3_key_full, ANY),
-                call(enabled_libraries[0].s3_key_delta, ANY),
-                call(enabled_libraries[1].s3_key_full, ANY),
-            ]
-        )
+        # We get both libraries included in a full record
+        processed_works = process_work(False)
+        assert list(processed_works.keys()) == enabled_libraries
 
-        # If the work has no license pools, it is skipped.
-        mock_upload_manager.reset_mock()
-        work.license_pools = []
-        process_work()
-        mock_upload_manager.add_record.assert_not_called()
-
-    def test_create_marc_upload_records(
-        self, marc_exporter_fixture: MarcExporterFixture
-    ) -> None:
-        marc_exporter_fixture.configure_export()
-
-        collection = marc_exporter_fixture.collection1
-        assert collection.id is not None
-        enabled_libraries = marc_exporter_fixture.enabled_libraries(collection)
-
-        marc_exporter_fixture.session.query(MarcFile).delete()
-
-        start_time = utc_now()
-
-        # If there are no uploads, then no records are created.
-        MarcExporter.create_marc_upload_records(
-            marc_exporter_fixture.session,
-            start_time,
-            collection.id,
-            enabled_libraries,
-            set(),
-        )
-
-        assert len(marc_exporter_fixture.session.query(MarcFile).all()) == 0
-
-        # If there are uploads, then records are created.
-        assert enabled_libraries[0].s3_key_delta is not None
-        MarcExporter.create_marc_upload_records(
-            marc_exporter_fixture.session,
-            start_time,
-            collection.id,
-            enabled_libraries,
-            {
-                enabled_libraries[0].s3_key_full,
-                enabled_libraries[1].s3_key_full,
-                enabled_libraries[0].s3_key_delta,
-            },
-        )
-
-        assert len(marc_exporter_fixture.session.query(MarcFile).all()) == 3
-
-        assert get_one(
-            marc_exporter_fixture.session,
-            MarcFile,
-            collection=collection,
-            library_id=enabled_libraries[0].library_id,
-            key=enabled_libraries[0].s3_key_full,
-        )
-
-        assert get_one(
-            marc_exporter_fixture.session,
-            MarcFile,
-            collection=collection,
-            library_id=enabled_libraries[1].library_id,
-            key=enabled_libraries[1].s3_key_full,
-        )
-
-        assert get_one(
-            marc_exporter_fixture.session,
-            MarcFile,
-            collection=collection,
-            library_id=enabled_libraries[0].library_id,
-            key=enabled_libraries[0].s3_key_delta,
-            since=enabled_libraries[0].last_updated,
-        )
+        # But we only get library1 in a delta record, since this is the first full marc export
+        # for library2, so there is no timestamp to create a delta record against.
+        [processed_work] = process_work(True).keys()
+        assert processed_work.library_id == marc_exporter_fixture.library1.id
 
     def test_files_for_cleanup_deleted_disabled(
         self, marc_exporter_fixture: MarcExporterFixture
     ) -> None:
-        marc_exporter_fixture.configure_export(marc_file=False)
+        marc_exporter_fixture.configure_export()
         files_for_cleanup = partial(
             MarcExporter.files_for_cleanup,
             marc_exporter_fixture.session,
@@ -485,7 +405,7 @@ class TestMarcExporter:
     def test_files_for_cleanup_outdated_full(
         self, marc_exporter_fixture: MarcExporterFixture
     ) -> None:
-        marc_exporter_fixture.configure_export(marc_file=False)
+        marc_exporter_fixture.configure_export()
         files_for_cleanup = partial(
             MarcExporter.files_for_cleanup,
             marc_exporter_fixture.session,
@@ -509,7 +429,7 @@ class TestMarcExporter:
     def test_files_for_cleanup_outdated_delta(
         self, marc_exporter_fixture: MarcExporterFixture
     ) -> None:
-        marc_exporter_fixture.configure_export(marc_file=False)
+        marc_exporter_fixture.configure_export()
         files_for_cleanup = partial(
             MarcExporter.files_for_cleanup,
             marc_exporter_fixture.session,

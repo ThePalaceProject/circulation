@@ -5,7 +5,7 @@ import sys
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, BinaryIO, NamedTuple, Protocol
+from typing import IO, TYPE_CHECKING, BinaryIO, NamedTuple, Protocol
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -73,10 +73,15 @@ class MockMultipartS3ContextManager(MultipartS3ContextManager):
     def _upload_abort(self) -> None: ...
 
 
-@dataclass
 class MockMultipartUploadPart:
-    part_data: MultipartS3UploadPart
-    content: bytes
+    def __init__(
+        self, part_data: MultipartS3UploadPart, content: bytes | IO[bytes]
+    ) -> None:
+        self.part_data = part_data
+        if isinstance(content, bytes):
+            self.content = content
+        else:
+            self.content = content.read()
 
 
 @dataclass
@@ -131,7 +136,7 @@ class MockS3Service(S3Service):
         return upload_id
 
     def multipart_upload(
-        self, key: str, upload_id: str, part_number: int, content: bytes
+        self, key: str, upload_id: str, part_number: int, content: bytes | IO[bytes]
     ) -> MultipartS3UploadPart:
         etag = str(uuid4())
         if not 1 <= part_number <= 10000:
