@@ -4,10 +4,11 @@ import typing
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Union
+from typing import Any
 
 import annotated_types
 import typing_extensions
+from flask_babel import LazyString
 from pydantic import (
     AliasChoices,
     AliasPath,
@@ -187,7 +188,7 @@ class ConfigurationFormItemType(Enum):
     IMAGE = "image"
 
 
-ConfigurationFormOptionsType = Mapping[Union[Enum, str, None], str]
+ConfigurationFormOptionsType = Mapping[Enum | str | None, str | LazyString]
 
 
 @dataclass(frozen=True)
@@ -201,14 +202,14 @@ class ConfigurationFormItem:
     """
 
     # The label for the form item, used as the field label in the admin interface.
-    label: str
+    label: str | LazyString
 
     # The type of the form item, used to determine the type of the field displayed
     # in the admin interface.
     type: ConfigurationFormItemType = ConfigurationFormItemType.TEXT
 
     # The description of the form item, displayed below the field in the admin interface.
-    description: str | None = None
+    description: str | LazyString | None = None
 
     # The format of the form item, in some cases used to determine the format of the field
     # displayed in the admin interface.
