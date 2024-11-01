@@ -1325,10 +1325,10 @@ class ResponseParser:
         2000: LibraryAuthorizationFailedException,
         2001: LibraryAuthorizationFailedException,
         2002: LibraryAuthorizationFailedException,
-        2003: LibraryAuthorizationFailedException,  # "Encoded input parameters exceed limit", whatever that meaus
-        2004: LibraryAuthorizationFailedException,
+        2003: LibraryAuthorizationFailedException,  # "Encoded input parameters exceed limit", whatever that means
+        2004: LibraryAuthorizationFailedException,  # Authorization string is not properly encoded
         2005: LibraryAuthorizationFailedException,  # Invalid credentials
-        2005: LibraryAuthorizationFailedException,  # Wrong library ID
+        2006: LibraryAuthorizationFailedException,  # Library ID not associated with given vendor
         2007: LibraryAuthorizationFailedException,  # Invalid library ID
         2008: LibraryAuthorizationFailedException,  # Invalid library ID
         3100: LibraryInvalidInputException,  # Missing title ID
