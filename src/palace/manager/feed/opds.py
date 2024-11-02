@@ -12,10 +12,7 @@ from palace.manager.feed.serializer.opds import (
     OPDS1Version1Serializer,
     OPDS1Version2Serializer,
 )
-from palace.manager.feed.serializer.opds2 import (
-    OPDS2Version1Serializer,
-    OPDS2Version2Serializer,
-)
+from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
@@ -27,11 +24,9 @@ def get_serializer(
 ) -> SerializerInterface[Any]:
     # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
     serializers: dict[str, type[SerializerInterface[Any]]] = {
+        "application/atom+xml; api-version=2": OPDS1Version2Serializer,
         "application/atom+xml": OPDS1Version1Serializer,
-        "application/atom+xml;api-version=2": OPDS1Version2Serializer,
-        "application/opds+json": OPDS2Version1Serializer,
-        "application/opds+json;api-version=1": OPDS2Version1Serializer,
-        "application/opds+json;api-version=2": OPDS2Version2Serializer,
+        "application/opds+json": OPDS2Serializer,
     }
     if mime_types:
         match = mime_types.best_match(

@@ -4,8 +4,7 @@ from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
     PALACE_PROPERTIES_DEFAULT,
     PALACE_REL_SORT,
-    OPDS2Version1Serializer,
-    OPDS2Version2Serializer,
+    OPDS2Serializer,
 )
 from palace.manager.feed.types import (
     Acquisition,
@@ -46,7 +45,7 @@ class TestOPDS2Serializer:
             )
         ]
 
-        serialized = OPDS2Version1Serializer().serialize_feed(feed)
+        serialized = OPDS2Serializer().serialize_feed(feed)
         result = json.loads(serialized)
 
         assert result["metadata"]["title"] == "Title"
@@ -91,7 +90,7 @@ class TestOPDS2Serializer:
             duration=10,
         )
 
-        serializer = OPDS2Version1Serializer()
+        serializer = OPDS2Serializer()
 
         entry = serializer.serialize_work_entry(data)
         metadata = entry["metadata"]
@@ -157,7 +156,7 @@ class TestOPDS2Serializer:
             {"vendor": "vendor_name", "clientToken": FeedEntryType(text="token_value")}
         )
 
-        serializer = OPDS2Version1Serializer()
+        serializer = OPDS2Serializer()
         acquisition = Acquisition(
             href="http://acquisition",
             rel="acquisition",
@@ -224,62 +223,17 @@ class TestOPDS2Serializer:
             sort_name="Author,",
             link=Link(href="http://author", rel="contributor", title="Delete me!"),
         )
-        result = OPDS2Version1Serializer()._serialize_contributor(author)
+        result = OPDS2Serializer()._serialize_contributor(author)
         assert result["name"] == "Author"
         assert result["sortAs"] == "Author,"
         assert result["links"] == [{"href": "http://author", "rel": "contributor"}]
 
     def test_serialize_opds_message(self):
-        assert OPDS2Version1Serializer().serialize_opds_message(
+        assert OPDS2Serializer().serialize_opds_message(
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
-    def test_serialize_v1_feed_links(self):
-        feed_data = FeedData()
-
-        # specify a sort link
-        link = Link(href="test1", rel="test_rel1", title="text1")
-        link.add_attributes(
-            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
-        )
-
-        # include a non-sort facet
-        link2 = Link(href="test2", title="text2", rel="test_rel2")
-        link2.add_attributes(
-            dict(facetGroup="test_group", activeFacet="true", defaultFacet="true")
-        )
-
-        feed_data.facet_links.append(link)
-        feed_data.facet_links.append(link2)
-        links = OPDS2Version1Serializer()._serialize_feed_links(feed=feed_data)
-
-        assert links == {
-            "links": [],
-            "facets": [
-                {
-                    "metadata": {"title": "Sort by"},
-                    "links": [
-                        {
-                            "href": "test1",
-                            "rel": "test_rel1",
-                            "title": "text1",
-                        }
-                    ],
-                },
-                {
-                    "metadata": {"title": "test_group"},
-                    "links": [
-                        {
-                            "href": "test2",
-                            "rel": "test_rel2",
-                            "title": "text2",
-                        }
-                    ],
-                },
-            ],
-        }
-
-    def test_serialize_v2_feed_links(self):
+    def test_serialize_feed(self):
         feed_data = FeedData()
 
         # specify a sort link
@@ -296,9 +250,11 @@ class TestOPDS2Serializer:
 
         feed_data.facet_links.append(link)
         feed_data.facet_links.append(link2)
-        links = OPDS2Version2Serializer()._serialize_feed_links(feed=feed_data)
+        links = json.loads(OPDS2Serializer().serialize_feed(feed=feed_data))
 
         assert links == {
+            "publications": [],
+            "metadata": {},
             "links": [
                 {
                     "href": "test",
