@@ -233,7 +233,7 @@ class TestOPDS2Serializer:
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
-    def test_serialize_feed(self):
+    def test_serialize_feed_sort_and_facet_links(self):
         feed_data = FeedData()
 
         # specify a sort link

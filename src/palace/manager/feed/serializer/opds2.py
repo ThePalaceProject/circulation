@@ -145,7 +145,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
         return publication
 
     def _serialize_link(self, link: Link) -> dict[str, Any]:
-        serialized = {"href": link.href, "rel": link.rel}
+        serialized: dict[str, Any] = {"href": link.href, "rel": link.rel}
         if link.type:
             serialized["type"] = link.type
         if link.title:
@@ -226,7 +226,7 @@ class OPDS2Serializer(SerializerInterface[dict[str, Any]]):
     def to_string(cls, data: dict[str, Any]) -> str:
         return json.dumps(data, indent=2)
 
-    def _serialize_feed_links(self, feed: FeedData) -> list[Link]:
+    def _serialize_feed_links(self, feed: FeedData) -> list[dict[str, Any]]:
         links = []
         if feed.links:
             for link in feed.links:

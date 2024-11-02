@@ -94,7 +94,7 @@ class BaseOPDSFeed(FeedInterface):
             ),
             **response_kwargs,
         )
-        if isinstance(serializer, OPDS2Version1Serializer):
+        if isinstance(serializer, OPDS2Serializer):
             # Only OPDS2 has the same content type for feed and entry
             response.content_type = serializer.content_type()
         return response
