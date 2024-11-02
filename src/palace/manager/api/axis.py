@@ -143,8 +143,8 @@ class Axis360Settings(BaseCirculationApiSettings):
         form=ConfigurationFormItem(
             label=_("Verify SSL Certificate"),
             description=_(
-                "This should always be True in production, it may need to be set to False to use the"
-                "Axis 360 QA Environment."
+                "This should always be True in production; though, it may need "
+                "to be set to False to use the Axis 360 QA Environment."
             ),
             type=ConfigurationFormItemType.SELECT,
             options={
