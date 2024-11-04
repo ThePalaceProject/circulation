@@ -178,6 +178,7 @@ class ConfigurationFormItemType(Enum):
     """Enumeration of configuration setting types"""
 
     TEXT = None
+    DATE = "date-picker"
     TEXTAREA = "textarea"
     SELECT = "select"
     LIST = "list"
