@@ -154,7 +154,7 @@ class OPDSSerializationTestHelper:
         if self.expected_content_type == OPDSFeed.ENTRY_TYPE:
             feed = feedparser.parse(response.get_data())
             [entry] = feed["entries"]
-        elif self.expected_content_type == OPDS2Version1Serializer.CONTENT_TYPE:
+        elif self.expected_content_type == OPDS2Serializer.CONTENT_TYPE:
             entry = response.get_json()
         else:
             assert (

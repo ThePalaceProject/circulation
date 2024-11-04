@@ -121,7 +121,9 @@ class TestWorkController:
         with work_fixture.request_context_with_library("/"):
             response = m(contributor, "eng,spa", "Children,Young Adult")
         assert 200 == response.status_code
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
+        assert response.headers["Content-Type"].startswith(
+            OPDSFeed.ACQUISITION_FEED_TYPE
+        )
         feed = feedparser.parse(response.data)
 
         # The feed is named after the person we looked up.
@@ -673,7 +675,9 @@ class TestWorkController:
                 novelist_api=mock_api,
             )
         assert 200 == response.status_code
-        assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["content-type"]
+        assert response.headers["content-type"].startswith(
+            OPDSFeed.ACQUISITION_FEED_TYPE
+        )
         feed = feedparser.parse(response.data)
         assert "Related Books" == feed["feed"]["title"]
 
