@@ -350,7 +350,7 @@ class OPDSFeedController(CirculationManagerController):
 
         # We have a query -- add it to the keyword arguments used when
         # generating a URL.
-        make_url_kwargs["q"] = query.encode("utf8")
+        make_url_kwargs["q"] = query
 
         # Run a search.
         annotator = self.manager.annotator(lane, facets)
