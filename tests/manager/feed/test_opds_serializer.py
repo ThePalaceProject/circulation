@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 import pytz
 from lxml import etree
@@ -291,6 +292,11 @@ class TestOPDSSerializer:
             sort_link.attrib["{http://palaceproject.io/terms/properties/}default"]
             == "true"
         )
+
+        with patch.object(serializer, "_serialize_sort_links") as serialize_sort_links:
+
+            serializer.serialize_feed(feed)
+            assert serialize_sort_links.call_count == 1
 
     def test_serialize_non_sort_facetgroup_link_v2(self):
         facet_link = Link(href="test", rel="test_rel", title="text1")

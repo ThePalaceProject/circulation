@@ -6,7 +6,6 @@ from functools import partial
 from typing import Any, cast
 
 from lxml import etree
-from typing_extensions import override
 
 from palace.manager.core.facets import FacetConstants
 from palace.manager.feed.serializer.base import SerializerInterface
@@ -71,7 +70,7 @@ def is_sort_facet(link: Link) -> bool:
     )
 
 
-class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
+class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC):
     def __init__(self) -> None:
         pass
 
@@ -84,7 +83,7 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
     def _attr_name(self, attr_name: str, mapping: dict[str, str] | None = None) -> str:
         if not mapping:
-            mapping = V1_ATTRIBUTE_MAPPING
+            mapping = self._get_attribute_mapping()
         return mapping.get(attr_name, attr_name)
 
     def serialize_feed(
@@ -326,7 +325,9 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
     @abc.abstractmethod
     def _get_attribute_mapping(self) -> dict[str, str]:
-        pass
+        """This method should return a mapping of object attributes found on links and objects in the FeedData
+        to the related attribute names defined in the OPDS specification.
+        """
 
     def _serialize_author_tag(self, tag: str, author: Author) -> etree._Element:
         entry: etree._Element = self._tag(tag)
@@ -415,15 +416,15 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed):
 
     @abc.abstractmethod
     def content_type(self) -> str:
-        pass
+        """return the content type associated with the serialization. This value should include the api-version."""
 
     @abc.abstractmethod
     def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
-        pass
+        """This method implements serialization of the facet_links from the feed data."""
 
     @abc.abstractmethod
     def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
-        pass
+        """This method implements serialization of the sort links from the feed data."""
 
 
 class OPDS1Version1Serializer(BaseOPDS1Serializer):
@@ -432,7 +433,6 @@ class OPDS1Version1Serializer(BaseOPDS1Serializer):
     the http://palaceproject.io/terms/properties/default property indicating default facets
     """
 
-    @override
     def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
         links = []
         if feed.facet_links:
@@ -440,17 +440,14 @@ class OPDS1Version1Serializer(BaseOPDS1Serializer):
                 links.append(self._serialize_feed_entry("link", link))
         return links
 
-    @override
     def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
         # Since this version of the serializer implements sort links as facets,
         # we return an empty list of sort links.
         return []
 
-    @override
     def _get_attribute_mapping(self) -> dict[str, str]:
         return V1_ATTRIBUTE_MAPPING
 
-    @override
     def content_type(self) -> str:
         return OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=1"
 
@@ -463,8 +460,8 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
     inidcated by the http://palaceproject.io/terms/properties/default property.
     """
 
-    @override
     def _serialize_facet_links(self, feed: FeedData) -> list[Link]:
+        # serializes the non-sort related facets.
         links: list[Link] = []
         facet_links = feed.facet_links
         if facet_links:
@@ -474,13 +471,15 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
                     links.append(self._serialize_feed_entry("link", link))
         return links
 
-    @override
     def _serialize_sort_links(self, feed: FeedData) -> list[Link]:
+        # this version of the feed filters out the sort facets and
+        # serializes them in a way that makes use of palace extensions.
         links: list[Link] = []
         facet_links = feed.facet_links
         if facet_links:
             for link in feed.facet_links:
                 # select only the sort facets for serialization
+
                 if is_sort_facet(link):
                     links.append(self._serialize_sort_link(link))
         return links
@@ -498,10 +497,8 @@ class OPDS1Version2Serializer(BaseOPDS1Serializer):
 
         return self._serialize_feed_entry("link", sort_link)
 
-    @override
     def _get_attribute_mapping(self) -> dict[str, str]:
         return V2_ATTRIBUTE_MAPPING
 
-    @override
     def content_type(self) -> str:
         return OPDSFeed.ACQUISITION_FEED_TYPE + "; api-version=2"

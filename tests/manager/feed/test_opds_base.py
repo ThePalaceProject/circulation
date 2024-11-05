@@ -59,6 +59,5 @@ class TestBaseOPDSFeed:
         ],
     )
     def test_get_serializer1(self, accept_header: str, serializer):
-        # The q-value should take priority
         request = Request.from_values(headers=dict(Accept=accept_header))
         assert isinstance(get_serializer(request.accept_mimetypes), serializer)

@@ -131,10 +131,7 @@ class OPDSSerializationTestHelper:
             (None, OPDSFeed.ENTRY_TYPE),
             ("default-foo-bar", OPDSFeed.ENTRY_TYPE),
             (AtomFeed.ATOM_TYPE, OPDSFeed.ENTRY_TYPE),
-            (
-                OPDS2Serializer.CONTENT_TYPE,
-                OPDS2Serializer.CONTENT_TYPE,
-            ),
+            (OPDS2Serializer.CONTENT_TYPE, OPDS2Serializer.CONTENT_TYPE),
         ],
     )
 
