@@ -29,16 +29,13 @@ def upgrade() -> None:
     rows = conn.execute("SELECT id from patrons").all()
 
     for row in rows:
+        uid = str(uuid.uuid4())
         conn.execute(
-            """
-            UPDATE patrons
-            SET uuid = %(uuid)s
-            WHERE id = %(id)s
-            """,
-            {
-                "id": row.id,
-                "uuid": uuid.uuid4(),
-            },
+            "UPDATE patrons SET uuid = ? WHERE id = ?",
+            (
+                uid,
+                row.id,
+            ),
         )
 
     op.alter_column(

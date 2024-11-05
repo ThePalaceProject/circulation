@@ -112,7 +112,7 @@ class Patron(Base, RedisKeyMixin):
     # in a way that allows users to disassociate their patron info
     # with account activity at any time.  When this UUID is reset it effectively
     # dissociates any patron activity history with this patron.
-    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4)
+    uuid = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
 
     # The last time this record was synced up with an external library
     # system such as an ILS.
