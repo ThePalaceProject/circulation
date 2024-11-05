@@ -299,8 +299,8 @@ class TestURNLookupController:
 
                 # We got an OPDS feed that includes an entry for the work.
                 assert 200 == response.status_code
-                assert (
-                    OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
+                assert response.headers["Content-Type"].startswith(
+                    OPDSFeed.ACQUISITION_FEED_TYPE
                 )
                 response_data = response.data.decode("utf8")
                 assert identifier.urn in response_data
@@ -340,7 +340,9 @@ class TestURNLookupController:
 
             # We got an OPDS feed that includes an entry for the work.
             assert 200 == response.status_code
-            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
+            assert response.headers["Content-Type"].startswith(
+                OPDSFeed.ACQUISITION_FEED_TYPE
+            )
             response_data = response.data.decode("utf8")
             assert identifier.urn in response_data
             assert work.title in response_data

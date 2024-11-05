@@ -8,7 +8,10 @@ from werkzeug.datastructures import MIMEAccept
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.feed.base import FeedInterface
 from palace.manager.feed.serializer.base import SerializerInterface
-from palace.manager.feed.serializer.opds import OPDS1Serializer
+from palace.manager.feed.serializer.opds import (
+    OPDS1Version1Serializer,
+    OPDS1Version2Serializer,
+)
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets
@@ -21,7 +24,8 @@ def get_serializer(
 ) -> SerializerInterface[Any]:
     # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
     serializers: dict[str, type[SerializerInterface[Any]]] = {
-        "application/atom+xml": OPDS1Serializer,
+        "application/atom+xml; api-version=2": OPDS1Version2Serializer,
+        "application/atom+xml": OPDS1Version1Serializer,
         "application/opds+json": OPDS2Serializer,
     }
     if mime_types:
@@ -30,7 +34,7 @@ def get_serializer(
         )
         return serializers[match]()
     # Default
-    return OPDS1Serializer()
+    return OPDS1Version1Serializer()
 
 
 class BaseOPDSFeed(FeedInterface):

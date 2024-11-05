@@ -47,6 +47,7 @@ class AtomFeed:
     PALACE_PROPS_NS = "http://palaceproject.io/terms/properties/"
 
     PALACE_REL_SORT = PALACE_REL_NS + "sort"
+    PALACE_PROPERTIES_DEFAULT = PALACE_PROPS_NS + "default"
 
     nsmap = {
         None: ATOM_NS,

@@ -1,13 +1,18 @@
 import datetime
+from unittest.mock import patch
 
 import pytz
 from lxml import etree
 
-from palace.manager.feed.serializer.opds import OPDS1Serializer, is_sort_link
+from palace.manager.feed.serializer.opds import (
+    OPDS1Version1Serializer,
+    OPDS1Version2Serializer,
+)
 from palace.manager.feed.serializer.opds2 import PALACE_REL_SORT
 from palace.manager.feed.types import (
     Acquisition,
     Author,
+    FeedData,
     FeedEntryType,
     IndirectAcquisition,
     Link,
@@ -22,7 +27,7 @@ class TestOPDSSerializer:
         child = FeedEntryType.create(text="child", attr="chattr", grandchild=grandchild)
         parent = FeedEntryType.create(text="parent", attr="pattr", child=child)
 
-        serialized = OPDS1Serializer()._serialize_feed_entry("parent", parent)
+        serialized = OPDS1Version1Serializer()._serialize_feed_entry("parent", parent)
 
         assert serialized.tag == "parent"
         assert serialized.text == "parent"
@@ -50,7 +55,7 @@ class TestOPDSSerializer:
             lc="lc",
         )
 
-        element = OPDS1Serializer()._serialize_author_tag("author", author)
+        element = OPDS1Version1Serializer()._serialize_author_tag("author", author)
 
         assert element.tag == "author"
         assert element.get(f"{{{OPDSFeed.OPF_NS}}}role") == author.role
@@ -102,7 +107,7 @@ class TestOPDSSerializer:
                 vendor="vendor", clientToken=FeedEntryType(text="token")
             ),
         )
-        element = OPDS1Serializer()._serialize_acquistion_link(link)
+        element = OPDS1Version1Serializer()._serialize_acquistion_link(link)
         assert element.tag == "link"
         assert dict(element.attrib) == dict(href=link.href)
 
@@ -159,7 +164,7 @@ class TestOPDSSerializer:
             duration=10,
         )
 
-        element = OPDS1Serializer().serialize_work_entry(data)
+        element = OPDS1Version1Serializer().serialize_work_entry(data)
 
         assert (
             element.get(f"{{{OPDSFeed.SCHEMA_NS}}}additionalType")
@@ -246,27 +251,141 @@ class TestOPDSSerializer:
 
     def test_serialize_work_entry_empty(self):
         # A no-data work entry
-        element = OPDS1Serializer().serialize_work_entry(WorkEntryData())
+        element = OPDS1Version1Serializer().serialize_work_entry(WorkEntryData())
         # This will create an empty <entry> tag
         assert element.tag == "entry"
         assert list(element) == []
 
     def test_serialize_opds_message(self):
         message = OPDSMessage("URN", 200, "Description")
-        serializer = OPDS1Serializer()
+        serializer = OPDS1Version1Serializer()
         result = serializer.serialize_opds_message(message)
         assert serializer.to_string(result) == serializer.to_string(message.tag)
 
-    def test_serialize_sort_link(self):
-        link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
-        serializer = OPDS1Serializer()
-        assert is_sort_link(link)
-        sort_link = serializer._serialize_sort_link(link)
+    def test_serialize_sort_link_v2(self):
+        sort_link_input = Link(href="test", rel="test_rel", title="text1")
+        sort_link_input.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
+
+        facet_link = Link(href="test", rel="test_rel", title="text1")
+        facet_link.add_attributes(
+            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        )
+
+        serializer = OPDS1Version2Serializer()
+        feed = FeedData()
+        feed.facet_links = [sort_link_input, facet_link]
+
+        sort_links = serializer._serialize_sort_links(feed)
+        # we expect only the sort link to be returned.
+        assert len(sort_links) == 1
+        sort_link = sort_links[0]
         assert sort_link.attrib["title"] == "text1"
         assert sort_link.attrib["href"] == "test"
         assert sort_link.attrib["rel"] == PALACE_REL_SORT
         assert (
             sort_link.attrib["{http://palaceproject.io/terms/properties/}active-sort"]
             == "true"
+        )
+        assert (
+            sort_link.attrib["{http://palaceproject.io/terms/properties/}default"]
+            == "true"
+        )
+
+        with patch.object(serializer, "_serialize_sort_links") as serialize_sort_links:
+
+            serializer.serialize_feed(feed)
+            assert serialize_sort_links.call_count == 1
+
+    def test_serialize_non_sort_facetgroup_link_v2(self):
+        facet_link = Link(href="test", rel="test_rel", title="text1")
+        facet_link.add_attributes(
+            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        )
+
+        sort_link = Link(href="test", rel="test_rel", title="text1")
+        sort_link.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
+        serializer = OPDS1Version2Serializer()
+        feed = FeedData()
+        feed.facet_links = [facet_link, sort_link]
+        facet_links = serializer._serialize_facet_links(feed)
+
+        # we expect only the non sort facet links to be returned.
+        assert len(facet_links) == 1
+        facet_link = facet_links[0]
+        assert facet_link.attrib["title"] == "text1"
+        assert facet_link.attrib["href"] == "test"
+        assert facet_link.attrib["rel"] == "test_rel"
+        assert (
+            facet_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"]
+            == "true"
+        )
+        assert (
+            facet_link.attrib["{http://palaceproject.io/terms/properties/}default"]
+            == "true"
+        )
+
+        assert (
+            facet_link.attrib["{http://opds-spec.org/2010/catalog}facetGroup"]
+            == "non_sort_group"
+        )
+
+    def test_serialize_facets_and_sort_links_v1(self):
+        sort_link_input = Link(href="test", rel="test_rel", title="text1")
+        sort_link_input.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
+
+        facet_link = Link(href="test", rel="test_rel", title="text1")
+        facet_link.add_attributes(
+            dict(facetGroup="non_sort_group", activeFacet="true", defaultFacet="true")
+        )
+
+        serializer = OPDS1Version1Serializer()
+        feed = FeedData()
+        feed.facet_links = [sort_link_input, facet_link]
+
+        sort_links = serializer._serialize_sort_links(feed)
+        # we expect no sort links to be returned
+        assert len(sort_links) == 0
+
+        # and two facet links:
+        facet_links = serializer._serialize_facet_links(feed)
+        assert len(facet_links) == 2
+
+        sort_link = facet_links[0]
+        assert sort_link.attrib["title"] == "text1"
+        assert sort_link.attrib["href"] == "test"
+        assert sort_link.attrib["rel"] == "test_rel"
+        assert (
+            sort_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"] == "true"
+        )
+        assert (
+            sort_link.attrib["{http://opds-spec.org/2010/catalog}facetGroup"]
+            == "Sort by"
+        )
+
+        assert (
+            "{http://palaceproject.io/terms/properties/}default" not in sort_link.attrib
+        )
+
+        facet_link = facet_links[1]
+        assert facet_link.attrib["title"] == "text1"
+        assert facet_link.attrib["href"] == "test"
+        assert facet_link.attrib["rel"] == "test_rel"
+        assert (
+            facet_link.attrib["{http://opds-spec.org/2010/catalog}activeFacet"]
+            == "true"
+        )
+        assert (
+            facet_link.attrib["{http://opds-spec.org/2010/catalog}facetGroup"]
+            == "non_sort_group"
+        )
+
+        assert (
+            "{http://palaceproject.io/terms/properties/}default"
+            not in facet_link.attrib
         )

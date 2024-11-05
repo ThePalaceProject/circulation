@@ -2,6 +2,7 @@ import json
 
 from palace.manager.feed.serializer.opds2 import (
     PALACE_PROPERTIES_ACTIVE_SORT,
+    PALACE_PROPERTIES_DEFAULT,
     PALACE_REL_SORT,
     OPDS2Serializer,
 )
@@ -232,21 +233,52 @@ class TestOPDS2Serializer:
             OPDSMessage("URN", 200, "Description")
         ) == dict(urn="URN", description="Description")
 
-    def test_serialize_sort_links(self):
+    def test_serialize_feed_sort_and_facet_links(self):
         feed_data = FeedData()
+
+        # specify a sort link
         link = Link(href="test", rel="test_rel", title="text1")
-        link.add_attributes(dict(facetGroup="Sort by", activeFacet="true"))
+        link.add_attributes(
+            dict(facetGroup="Sort by", activeFacet="true", defaultFacet="true")
+        )
+
+        # include a non-sort facet
+        link2 = Link(href="test2", title="text2", rel="test_2_rel")
+        link2.add_attributes(
+            dict(facetGroup="test_group", activeFacet="true", defaultFacet="true")
+        )
+
         feed_data.facet_links.append(link)
-        links = OPDS2Serializer()._serialize_feed_links(feed=feed_data)
+        feed_data.facet_links.append(link2)
+        links = json.loads(OPDS2Serializer().serialize_feed(feed=feed_data))
 
         assert links == {
+            "publications": [],
+            "metadata": {},
             "links": [
                 {
                     "href": "test",
                     "rel": PALACE_REL_SORT,
                     "title": "text1",
-                    "properties": {PALACE_PROPERTIES_ACTIVE_SORT: "true"},
+                    "properties": {
+                        PALACE_PROPERTIES_ACTIVE_SORT: "true",
+                        PALACE_PROPERTIES_DEFAULT: "true",
+                    },
                 }
             ],
-            "facets": [],
+            "facets": [
+                {
+                    "metadata": {"title": "test_group"},
+                    "links": [
+                        {
+                            "href": "test2",
+                            "rel": "self",
+                            "title": "text2",
+                            "properties": {
+                                PALACE_PROPERTIES_DEFAULT: "true",
+                            },
+                        }
+                    ],
+                }
+            ],
         }

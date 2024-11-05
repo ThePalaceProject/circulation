@@ -20,7 +20,9 @@ class TestURNLookupController:
 
             # We got an OPDS feed.
             assert 200 == response.status_code
-            assert OPDSFeed.ACQUISITION_FEED_TYPE == response.headers["Content-Type"]
+            assert response.headers["Content-Type"].startswith(
+                OPDSFeed.ACQUISITION_FEED_TYPE
+            )
 
             # Parse it.
             feed = feedparser.parse(response.data)
