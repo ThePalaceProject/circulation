@@ -44,7 +44,7 @@ def upgrade() -> None:
     op.alter_column(
         table_name="patrons",
         column_name="uuid",
-        nullable=True,
+        nullable=False,
     )
 
 
