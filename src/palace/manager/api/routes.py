@@ -332,13 +332,12 @@ def patron_profile():
     return app.manager.profiles.protocol()
 
 
-@library_dir_route("/patrons/me/erase_activity_history", methods=["PUT"])
+@library_dir_route("/patrons/me/reset_statistics_uuid", methods=["PUT"])
 @has_library
 @allows_patron_web
 @requires_auth
-@returns_problem_detail
-def erase_activity_history():
-    return app.manager.patron_activity_history.erase()
+def reset_statistics_uuid():
+    return app.manager.patron_activity_history.reset_statistics_uuid()
 
 
 @library_dir_route("/patrons/me/devices", methods=["GET"])

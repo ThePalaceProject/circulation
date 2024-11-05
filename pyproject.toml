@@ -88,6 +88,7 @@ module = [
     "palace.manager.api.controller.loan",
     "palace.manager.api.controller.marc",
     "palace.manager.api.controller.odl_notification",
+    "palace.manager.api.controller.patron_activity_history",
     "palace.manager.api.discovery.*",
     "palace.manager.api.enki",
     "palace.manager.api.lcp.hash",

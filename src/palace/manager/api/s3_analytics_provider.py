@@ -4,7 +4,7 @@ import datetime
 import json
 import random
 import string
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
@@ -29,8 +29,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         license_pool: LicensePool | None,
         event_type: str,
         time: datetime.datetime,
-        old_value: Any = None,
-        new_value: Any = None,
+        old_value: int | None = None,
+        new_value: int | None = None,
         neighborhood: str | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
@@ -145,8 +145,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         license_pool: LicensePool | None,
         event_type: str,
         time: datetime.datetime,
-        old_value: Any = None,
-        new_value: Any = None,
+        old_value: int | None = None,
+        new_value: int | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
         **kwargs,
@@ -177,9 +177,6 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :param patron: The patron associated with the event, where applicable
         :type patron: Patron
         """
-
-        if not library:
-            raise ValueError("Either library or license_pool must be provided.")
 
         event = self._create_event_object(
             library,

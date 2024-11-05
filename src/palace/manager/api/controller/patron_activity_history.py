@@ -5,15 +5,14 @@ import uuid
 import flask
 from flask import Response
 
-from palace.manager.api.controller.circulation_manager import (
-    CirculationManagerController,
-)
+from palace.manager.sqlalchemy.model.patron import Patron
 
 
-class PatronActivityHistoryController(CirculationManagerController):
+class PatronActivityHistoryController:
 
-    def erase(self):
-        """Erases the patron's activity by resetting the UUID that links the patron to past activity"""
-        patron = flask.request.patron
+    def reset_statistics_uuid(self) -> Response:
+        """Resets the patron's the statistics UUID that links the patron to past activity thus effectively erasing the
+        link between activity history and patron."""
+        patron: Patron = flask.request.patron  # type: ignore [attr-defined]
         patron.uuid = uuid.uuid4()
-        return Response("Erased", 200)
+        return Response("UUID reset", 200)
