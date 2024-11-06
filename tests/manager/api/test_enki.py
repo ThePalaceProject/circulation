@@ -23,6 +23,7 @@ from palace.manager.api.enki import (
     EnkiCollectionReaper,
     EnkiImport,
     EnkiLibrarySettings,
+    EnkiSettings,
 )
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.metadata_layer import CirculationData, Metadata, TimestampData
@@ -93,6 +94,42 @@ class TestEnkiAPI:
 
         collection.protocol = EnkiAPI.label()
         EnkiAPI(db.session, collection)
+
+    @pytest.mark.parametrize(
+        "base_url, endpoint, expected",
+        [
+            (
+                "https://enkilibrary.org/API",
+                "ItemAPI",
+                "https://enkilibrary.org/API/ItemAPI",
+            ),
+            (
+                "https://enkilibrary.org/API/",
+                "UserAPI",
+                "https://enkilibrary.org/API/UserAPI",
+            ),
+            (
+                "https://other.test.url/TEST//",
+                "ListAPI",
+                "https://other.test.url/TEST/ListAPI",
+            ),
+        ],
+    )
+    def test__url(
+        self,
+        db: DatabaseTransactionFixture,
+        base_url: str,
+        endpoint: str,
+        expected: str,
+    ) -> None:
+        self.collection = db.collection(
+            name="Test Enki Collection",
+            protocol=EnkiAPI,
+            library=db.default_library(),
+            settings=EnkiSettings(url=base_url),
+        )
+        api = EnkiAPI(db.session, self.collection)
+        assert api._url(endpoint) == expected
 
     def test_enki_library_id(self, enki_test_fixture: EnkiTestFixure):
         db = enki_test_fixture.db
@@ -441,7 +478,7 @@ class TestEnkiAPI:
             kwargs,
         ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert enki_test_fixture.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api._url("UserAPI") == url
         assert "getSELink" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]
@@ -537,7 +574,7 @@ class TestEnkiAPI:
             kwargs,
         ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert enki_test_fixture.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api._url("UserAPI") == url
         assert "getSELink" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]
@@ -589,7 +626,7 @@ class TestEnkiAPI:
             kwargs,
         ] = enki_test_fixture.api.requests.pop()
         assert "get" == method
-        assert enki_test_fixture.api.base_url + "UserAPI" == url
+        assert enki_test_fixture.api._url("UserAPI") == url
         assert "getSEPatronData" == params["method"]
         assert "123" == params["username"]
         assert "pin" == params["password"]

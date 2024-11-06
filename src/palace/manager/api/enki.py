@@ -74,7 +74,7 @@ from palace.manager.util.pydantic import HttpUrl
 
 
 class EnkiConstants:
-    PRODUCTION_BASE_URL = "https://enkilibrary.org/API/"
+    PRODUCTION_BASE_URL = "https://enkilibrary.org/API"
 
 
 class EnkiSettings(BaseCirculationApiSettings):
@@ -148,7 +148,7 @@ class EnkiAPI(
     def description(cls) -> str:
         return cls.DESCRIPTION  # type: ignore[no-any-return]
 
-    def __init__(self, _db: Session, collection: Collection):
+    def __init__(self, _db: Session, collection: Collection) -> None:
         self._db = _db
         if collection.protocol != self.ENKI:
             raise ValueError(
@@ -158,7 +158,10 @@ class EnkiAPI(
         super().__init__(_db, collection)
 
         self.collection_id = collection.id
-        self.base_url = self.settings.url or self.PRODUCTION_BASE_URL
+        self.base_url = self.settings.url
+
+    def _url(self, endpoint: str) -> str:
+        return f"{self.base_url}/{endpoint}"
 
     def enki_library_id(self, library: Library) -> str | None:
         """Find the Enki library ID for the given library."""
@@ -300,7 +303,7 @@ class EnkiAPI(
         start_int = int((start - epoch).total_seconds())
         end_int = int((end - epoch).total_seconds())
 
-        url = self.base_url + self.item_endpoint
+        url = self._url(self.item_endpoint)
         args = dict(
             method="getRecentActivityTime", stime=str(start_int), etime=str(end_int)
         )
@@ -328,7 +331,7 @@ class EnkiAPI(
         :yield: A sequence of Metadata objects.
         """
         minutes = self._minutes_since(since)
-        url = self.base_url + self.list_endpoint
+        url = self._url(self.list_endpoint)
         args = dict(
             method="getUpdateTitles",
             minutes=minutes,
@@ -348,7 +351,7 @@ class EnkiAPI(
         :return: If the book is in the library's collection, a
             Metadata object with attached CirculationData. Otherwise, None.
         """
-        url = self.base_url + self.item_endpoint
+        url = self._url(self.item_endpoint)
         args = dict(
             method="getItem",
             recordid=enki_id,
@@ -381,7 +384,7 @@ class EnkiAPI(
         self.log.debug(
             "requesting : " + str(qty) + " books starting at econtentRecord" + str(strt)
         )
-        url = str(self.base_url) + str(self.list_endpoint)
+        url = self._url(self.list_endpoint)
         args = {"method": "getAllTitles", "id": "secontent", "strt": strt, "qty": qty}
         response = self.request(url, params=args)
         yield from BibliographicParser().process_all(response.content)
@@ -447,7 +450,7 @@ class EnkiAPI(
         enki_library_id: str | None,
     ) -> RequestsResponse:
         self.log.debug("Sending checkout request for %s" % book_id)
-        url = str(self.base_url) + str(self.user_endpoint)
+        url = self._url(self.user_endpoint)
         args = {
             "method": "getSELink",
             "username": barcode,
@@ -552,7 +555,7 @@ class EnkiAPI(
         self, patron: str | None, pin: str | None, enki_library_id: str | None
     ) -> RequestsResponse:
         self.log.debug("Querying Enki for information on patron %s" % patron)
-        url = str(self.base_url) + str(self.user_endpoint)
+        url = self._url(self.user_endpoint)
         args = {
             "method": "getSEPatronData",
             "username": patron,
