@@ -360,7 +360,7 @@ class CirculationManager(LoggerMixin):
         self.analytics_controller = AnalyticsController(self)
         self.profiles = ProfileController(self)
         self.patron_devices = DeviceTokensController(self)
-        self.patron_activity_history = PatronActivityHistoryController(self)
+        self.patron_activity_history = PatronActivityHistoryController()
         self.version = ApplicationVersionController()
         self.odl_notification_controller = ODLNotificationController(
             self._db,
