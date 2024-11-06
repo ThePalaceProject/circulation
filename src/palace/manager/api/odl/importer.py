@@ -1,26 +1,26 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Callable, Mapping, Sequence
+from functools import cached_property
+from typing import Any, cast
 from urllib.parse import urljoin
 
-import dateutil
+from pydantic import TypeAdapter, ValidationError
 from requests import Response
 from sqlalchemy.orm import Session
-from webpub_manifest_parser.odl import ODLFeedParserFactory
-from webpub_manifest_parser.opds2.registry import OPDS2LinkRelationsRegistry
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.auth import OdlAuthenticatedRequest
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.metadata_layer import FormatData, LicenseData, Metadata
-from palace.manager.core.opds2_import import (
-    OPDS2Importer,
-    OPDS2ImportMonitor,
-    RWPMManifestParser,
-)
+from palace.manager.core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
+from palace.manager.opds import opds2, rwpm
+from palace.manager.opds.lcp.status import LoanStatus
+from palace.manager.opds.odl import odl
+from palace.manager.opds.odl.info import LicenseInfo
+from palace.manager.opds.odl.odl import Opds2OrOpds2WithOdlPublication
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -30,12 +30,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
-from palace.manager.util import first_or_default
-from palace.manager.util.datetime_helpers import to_utc
 from palace.manager.util.http import HTTP
-
-if TYPE_CHECKING:
-    from webpub_manifest_parser.opds2.ast import OPDS2Feed, OPDS2Publication
 
 
 class OPDS2WithODLImporter(OPDS2Importer):
@@ -63,7 +58,6 @@ class OPDS2WithODLImporter(OPDS2Importer):
         self,
         db: Session,
         collection: Collection,
-        parser: RWPMManifestParser | None = None,
         data_source_name: str | None = None,
         http_get: Callable[..., Response] | None = None,
     ):
@@ -77,9 +71,6 @@ class OPDS2WithODLImporter(OPDS2Importer):
             If this is None, no LicensePools will be created -- only Editions.
         :type collection: Collection
 
-        :param parser: Feed parser
-        :type parser: RWPMManifestParser
-
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
             If there is no DataSource with this name, one will be created.
@@ -90,7 +81,6 @@ class OPDS2WithODLImporter(OPDS2Importer):
         super().__init__(
             db,
             collection,
-            parser if parser else RWPMManifestParser(ODLFeedParserFactory()),
             data_source_name,
         )
 
@@ -134,9 +124,9 @@ class OPDS2WithODLImporter(OPDS2Importer):
 
     def _extract_publication_metadata(
         self,
-        feed: OPDS2Feed,
-        publication: OPDS2Publication,
+        publication: opds2.BasePublication,
         data_source_name: str | None,
+        feed_self_url: str,
     ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
 
@@ -147,11 +137,11 @@ class OPDS2WithODLImporter(OPDS2Importer):
         :return: Publication's metadata
         """
         metadata = super()._extract_publication_metadata(
-            feed, publication, data_source_name
+            publication, data_source_name, feed_self_url
         )
 
-        if not publication.licenses:
-            # This is an unlimited-access title with no license information. Nothing to do.
+        if not isinstance(publication, odl.Publication):
+            # This is a generic OPDS2 publication, not an ODL publication.
             return self._process_unlimited_access_title(metadata)
 
         formats = []
@@ -159,52 +149,39 @@ class OPDS2WithODLImporter(OPDS2Importer):
         medium = None
 
         skipped_license_formats = set(self.settings.skipped_license_formats)  # type: ignore[attr-defined]
-        publication_availability = self._extract_availability(
-            publication.metadata.availability
-        )
+        publication_availability = publication.metadata.availability.available
 
         for odl_license in publication.licenses:
             identifier = odl_license.metadata.identifier
 
-            checkout_link = first_or_default(
-                odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.BORROW.key)
-            )
-            if checkout_link:
-                checkout_link = checkout_link.href
+            checkout_link = odl_license.links.get(
+                rel=opds2.AcquisitionLinkRelations.borrow,
+                type=LoanStatus.content_type(),
+                raising=True,
+            ).href
 
-            license_info_document_link = first_or_default(
-                odl_license.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
-            )
-            if license_info_document_link:
-                license_info_document_link = license_info_document_link.href
+            license_info_document_link = odl_license.links.get(
+                rel=rwpm.LinkRelations.self,
+                type=LicenseInfo.content_type(),
+                raising=True,
+            ).href
 
-            expires = (
-                to_utc(odl_license.metadata.terms.expires)
-                if odl_license.metadata.terms
-                else None
-            )
-            concurrency = (
-                int(odl_license.metadata.terms.concurrency)
-                if odl_license.metadata.terms
-                else None
-            )
+            expires = odl_license.metadata.terms.expires_datetime
+            concurrency = odl_license.metadata.terms.concurrency
 
-            if not license_info_document_link:
-                parsed_license = None
-            elif (
-                not self._extract_availability(odl_license.metadata.availability)
-                or not publication_availability
-            ):
-                # No need to fetch the license document, we already know that this title is not available.
-                parsed_license = LicenseData(
+            parsed_license = (
+                LicenseData(
                     identifier=identifier,
                     checkout_url=None,
                     status_url=license_info_document_link,
                     status=LicenseStatus.unavailable,
                     checkouts_available=0,
                 )
-            else:
-                parsed_license = self.get_license_data(
+                if (
+                    not odl_license.metadata.availability.available
+                    or not publication_availability
+                )
+                else self.get_license_data(
                     license_info_document_link,
                     checkout_link,
                     identifier,
@@ -212,6 +189,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
                     concurrency,
                     self.http_get,
                 )
+            )
 
             if parsed_license is not None:
                 licenses.append(parsed_license)
@@ -227,7 +205,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
                 if not medium:
                     medium = Edition.medium_from_media_type(license_format)
 
-                drm_schemes: list[str | None]
+                drm_schemes: Sequence[str | None]
                 if license_format in self.LICENSE_FORMATS:
                     # Special case to handle DeMarque audiobooks which include the protection
                     # in the content type. When we see a license format of
@@ -269,11 +247,10 @@ class OPDS2WithODLImporter(OPDS2Importer):
     @classmethod
     def fetch_license_info(
         cls, document_link: str, do_get: Callable[..., Response]
-    ) -> dict[str, Any] | None:
+    ) -> bytes | None:
         resp = do_get(document_link, headers={})
         if resp.status_code in (200, 201):
-            license_info_document = resp.json()
-            return license_info_document  # type: ignore[no-any-return]
+            return resp.content
         else:
             cls.logger().warning(
                 f"License Info Document is not available. "
@@ -284,7 +261,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
     @classmethod
     def parse_license_info(
         cls,
-        license_info_document: dict[str, Any],
+        license_info_document: bytes | str | None,
         license_info_link: str,
         checkout_link: str | None,
     ) -> LicenseData | None:
@@ -299,73 +276,27 @@ class OPDS2WithODLImporter(OPDS2Importer):
         :return: LicenseData if all the license's attributes are correct, None, otherwise
         """
 
-        identifier = license_info_document.get("identifier")
-        document_status = license_info_document.get("status")
-        document_checkouts = license_info_document.get("checkouts", {})
-        document_left = document_checkouts.get("left")
-        document_available = document_checkouts.get("available")
-        document_terms = license_info_document.get("terms", {})
-        document_expires = document_terms.get("expires")
-        document_concurrency = document_terms.get("concurrency")
-        document_format = license_info_document.get("format")
-
-        if identifier is None:
-            cls.logger().error("License info document has no identifier.")
+        if license_info_document is None:
             return None
 
-        expires = None
-        if document_expires is not None:
-            expires = dateutil.parser.parse(document_expires)
-            expires = to_utc(expires)
-
-        if document_status is not None:
-            status = LicenseStatus.get(document_status)
-            if status.value != document_status:
-                cls.logger().warning(
-                    f"Identifier # {identifier} unknown status value "
-                    f"{document_status} defaulting to {status.value}."
-                )
-        else:
-            status = LicenseStatus.unavailable
-            cls.logger().warning(
-                f"Identifier # {identifier} license info document does not have "
-                f"required key 'status'."
+        try:
+            document = LicenseInfo.model_validate_json(license_info_document)
+        except ValidationError as e:
+            cls.logger().error(
+                f"License Info Document at {license_info_link} is not valid. {e}"
             )
-
-        if document_available is not None:
-            available = int(document_available)
-        else:
-            available = 0
-            cls.logger().warning(
-                f"Identifier # {identifier} license info document does not have "
-                f"required key 'checkouts.available'."
-            )
-
-        left = None
-        if document_left is not None:
-            left = int(document_left)
-
-        concurrency = None
-        if document_concurrency is not None:
-            concurrency = int(document_concurrency)
-
-        content_types = None
-        if document_format is not None:
-            if isinstance(document_format, str):
-                content_types = [document_format]
-            elif isinstance(document_format, list):
-                content_types = document_format
+            return None
 
         return LicenseData(
-            identifier=identifier,
+            identifier=document.identifier,
             checkout_url=checkout_link,
             status_url=license_info_link,
-            expires=expires,
-            checkouts_left=left,
-            checkouts_available=available,
-            status=status,
-            terms_concurrency=concurrency,
-            content_types=content_types,
+            expires=document.terms.expires_datetime,
+            checkouts_left=document.checkouts.left,
+            checkouts_available=document.checkouts.available,
+            status=document.status,
+            terms_concurrency=document.terms.concurrency,
+            content_types=list(document.formats),
         )
 
     @classmethod
@@ -421,6 +352,16 @@ class OPDS2WithODLImporter(OPDS2Importer):
             parsed_license.status = LicenseStatus.unavailable
 
         return parsed_license
+
+    @cached_property
+    def _publication_type_adapter(self) -> TypeAdapter[Opds2OrOpds2WithOdlPublication]:
+        return TypeAdapter(Opds2OrOpds2WithOdlPublication)
+
+    def _get_publication(
+        self,
+        publication: dict[str, Any],
+    ) -> opds2.Publication | odl.Publication:
+        return self._publication_type_adapter.validate_python(publication)
 
 
 class OPDS2WithODLImportMonitor(OdlAuthenticatedRequest, OPDS2ImportMonitor):

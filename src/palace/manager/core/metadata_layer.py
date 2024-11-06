@@ -540,7 +540,7 @@ class LicenseData(LicenseFunctions):
         self.terms_concurrency = terms_concurrency
         self.content_types = content_types
 
-    def add_to_pool(self, db: Session, pool: LicensePool):
+    def add_to_pool(self, db: Session, pool: LicensePool) -> License:
         license_obj, _ = get_one_or_create(
             db,
             License,

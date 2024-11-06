@@ -6,16 +6,10 @@ from collections.abc import Generator
 from typing import Any, cast
 
 from sqlalchemy.orm import raiseload
-from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import TimestampData
-from palace.manager.core.opds2_import import (
-    OPDS2API,
-    OPDS2Importer,
-    OPDS2ImportMonitor,
-    RWPMManifestParser,
-)
+from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.scripts.input import CollectionInputScript
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -28,7 +22,6 @@ def main():
         importer_class=OPDS2Importer,
         monitor_class=OPDS2ReaperMonitor,
         protocol=OPDS2Importer.NAME,
-        parser=RWPMManifestParser(OPDS2FeedParserFactory()),
     )
 
     reaper_script.run()

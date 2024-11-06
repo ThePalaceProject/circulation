@@ -7,7 +7,7 @@ import string
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
 from decimal import Decimal, InvalidOperation
-from typing import Any, TypeVar
+from typing import TypeVar, overload
 
 import sqlalchemy
 
@@ -499,7 +499,18 @@ def is_session(value: object) -> bool:
     )
 
 
-def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
+T = TypeVar("T")
+
+
+@overload
+def first_or_default(collection: Iterable[T], default: T) -> T: ...
+
+
+@overload
+def first_or_default(collection: Iterable[T], default: None = ...) -> T | None: ...
+
+
+def first_or_default(collection: Iterable[T], default: T | None = None) -> T | None:
     """Return first element of the specified collection or the default value if the collection is empty.
 
     :param collection: Collection
@@ -511,9 +522,6 @@ def first_or_default(collection: Iterable, default: Any | None = None) -> Any:
         element = default
 
     return element
-
-
-T = TypeVar("T")
 
 
 def chunks(

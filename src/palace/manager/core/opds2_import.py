@@ -1,27 +1,16 @@
 from __future__ import annotations
 
-import logging
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from functools import cached_property
-from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
-import webpub_manifest_parser.opds2.ast as opds2_ast
 from flask_babel import lazy_gettext as _
+from pydantic import ValidationError
 from requests import Response
 from sqlalchemy.orm import Session
 from uritemplate import URITemplate
-from webpub_manifest_parser.core import ManifestParserFactory, ManifestParserResult
-from webpub_manifest_parser.core.analyzer import NodeFinder
-from webpub_manifest_parser.core.ast import Link, Manifestlike
-from webpub_manifest_parser.errors import BaseError
-from webpub_manifest_parser.opds2.registry import (
-    OPDS2LinkRelationsRegistry,
-    OPDS2MediaTypesRegistry,
-)
-from webpub_manifest_parser.utils import encode, first_or_default
 
 from palace.manager.api.circulation import RedirectFulfillment
 from palace.manager.api.circulation_exceptions import CannotFulfill
@@ -47,6 +36,9 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.opds import opds2, rwpm
+from palace.manager.opds.opds2 import AcquisitionObject
+from palace.manager.opds.types.link import CompactCollection
 from palace.manager.sqlalchemy.constants import (
     IdentifierType,
     LinkRelations,
@@ -66,73 +58,14 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util import first_or_default
 from palace.manager.util.http import HTTP, BadResponseException
-from palace.manager.util.opds_writer import OPDSFeed
-
-if TYPE_CHECKING:
-    from webpub_manifest_parser.core import ast as core_ast
-
-
-class RWPMManifestParser:
-    def __init__(self, manifest_parser_factory: ManifestParserFactory):
-        """Initialize a new instance of RWPMManifestParser class.
-
-        :param manifest_parser_factory: Factory creating a new instance
-            of a RWPM-compatible parser (RWPM, OPDS 2.x, ODL 2.x, etc.)
-        """
-        if not isinstance(manifest_parser_factory, ManifestParserFactory):
-            raise ValueError(
-                "Argument 'manifest_parser_factory' must be an instance of {}".format(
-                    ManifestParserFactory
-                )
-            )
-
-        self._manifest_parser_factory = manifest_parser_factory
-
-    def parse_manifest(
-        self, manifest: str | dict[str, Any] | Manifestlike
-    ) -> ManifestParserResult:
-        """Parse the feed into an RPWM-like AST object.
-
-        :param manifest: RWPM-like manifest
-        :return: Parsed RWPM-like manifest
-        """
-        result = None
-        input_stream: BytesIO | StringIO
-
-        try:
-            if isinstance(manifest, bytes):
-                input_stream = BytesIO(manifest)
-                parser = self._manifest_parser_factory.create()
-                result = parser.parse_stream(input_stream)
-            elif isinstance(manifest, str):
-                input_stream = StringIO(manifest)
-                parser = self._manifest_parser_factory.create()
-                result = parser.parse_stream(input_stream)
-            elif isinstance(manifest, dict):
-                parser = self._manifest_parser_factory.create()
-                result = parser.parse_json(manifest)
-            elif isinstance(manifest, Manifestlike):
-                result = ManifestParserResult(manifest)
-            else:
-                raise ValueError(
-                    "Argument 'manifest' must be either a string, a dictionary, or an instance of {}".format(
-                        Manifestlike
-                    )
-                )
-        except BaseError:
-            logging.exception("Failed to parse the RWPM-like manifest")
-
-            raise
-
-        return result
 
 
 class OPDS2ImporterSettings(OPDSImporterSettings):
     custom_accept_header: str = FormField(
         default="{}, {};q=0.9, */*;q=0.1".format(
-            OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
+            opds2.PublicationFeed.content_type(), "application/json"
         ),
         form=ConfigurationFormItem(
             label=_("Custom accept header"),
@@ -271,7 +204,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         self,
         db: Session,
         collection: Collection,
-        parser: RWPMManifestParser,
         data_source_name: str | None = None,
     ):
         """Initialize a new instance of OPDS2Importer class.
@@ -281,7 +213,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param collection: Circulation Manager's collection.
             LicensePools created by this OPDS2Import class will be associated with the given Collection.
             If this is None, no LicensePools will be created -- only Editions.
-        :param parser: Feed parser
         :param data_source_name: Name of the source of this OPDS feed.
             All Editions created by this import will be associated with this DataSource.
             If there is no DataSource with this name, one will be created.
@@ -289,7 +220,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             This is only for use when you are importing OPDS metadata without any particular Collection in mind.
         """
         super().__init__(db, collection, data_source_name)
-        self._parser = parser
         self.ignored_identifier_types = self.settings.ignored_identifier_types
 
     def _is_identifier_allowed(self, identifier: Identifier) -> bool:
@@ -300,8 +230,8 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         return identifier.type not in self.ignored_identifier_types
 
-    def _extract_subjects(self, subjects: list[core_ast.Subject]) -> list[SubjectData]:
-        """Extract a list of SubjectData objects from the webpub-manifest-parser's subject.
+    def _extract_subjects(self, subjects: Sequence[rwpm.Subject]) -> list[SubjectData]:
+        """Extract a list of SubjectData objects from the rwpm.Subject.
 
         :param subjects: Parsed subject object
         :return: List of subjects metadata
@@ -312,33 +242,33 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         for subject in subjects:
             self.log.debug(
-                f"Started extracting subject metadata from {encode(subject)}"
+                f"Started extracting subject metadata from {subject.model_dump_json()}"
             )
 
             scheme = subject.scheme
-
-            subject_type = Subject.by_uri.get(scheme)
+            subject_type = Subject.by_uri.get(scheme) if scheme is not None else None
             if not subject_type:
                 # We can't represent this subject because we don't
                 # know its scheme. Just treat it as a tag.
                 subject_type = Subject.TAG
 
             subject_metadata = SubjectData(
-                type=subject_type, identifier=subject.code, name=subject.name, weight=1
+                type=subject_type,
+                identifier=subject.code,
+                name=str(subject.name),
+                weight=1,
             )
 
             subject_metadata_list.append(subject_metadata)
 
             self.log.debug(
                 "Finished extracting subject metadata from {}: {}".format(
-                    encode(subject), encode(subject_metadata)
+                    subject.model_dump_json(), subject_metadata
                 )
             )
 
         self.log.debug(
-            "Finished extracting subjects metadata: {}".format(
-                encode(subject_metadata_list)
-            )
+            f"Finished extracting subjects metadata: {subject_metadata_list}"
         )
 
         return subject_metadata_list
@@ -358,16 +288,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         return marc_code_mapping | {role.lower(): role for role in Contributor.Role}
 
     def _extract_contributor_roles(
-        self, roles: Sequence[str] | str | None, default: str
+        self, roles: Sequence[str], default: str
     ) -> list[str]:
         """
         Normalize the contributor roles from the OPDS2 feed to our internal representation.
         """
-        if roles is None:
-            roles = []
-        elif isinstance(roles, str):
-            roles = [roles]
-
         mapped_roles = set()
         for role in roles:
             if (lowercased_role := role.lower()) not in self._contributor_roles:
@@ -381,10 +306,10 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
     def _extract_contributors(
         self,
-        contributors: list[core_ast.Contributor],
+        contributors: Sequence[rwpm.Contributor],
         default_role: str,
     ) -> list[ContributorData]:
-        """Extract a list of ContributorData objects from the webpub-manifest-parser's contributor.
+        """Extract a list of ContributorData objects from rwpm.Contributor.
 
         :param contributors: Parsed contributor object
         :param default_role: Default role
@@ -396,53 +321,48 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         for contributor in contributors:
             self.log.debug(
-                "Started extracting contributor metadata from {}".format(
-                    encode(contributor)
-                )
+                f"Started extracting contributor metadata from {contributor.model_dump_json()}"
             )
 
-            if not contributor.name:
-                self.log.warning(
-                    f"Contributor has no name. Skipping. {encode(contributor)}"
-                )
-                continue
+            if isinstance(contributor, rwpm.ContributorWithRole):
+                roles = self._extract_contributor_roles(contributor.roles, default_role)
+            else:
+                roles = [default_role]
 
             contributor_metadata = ContributorData(
                 sort_name=contributor.sort_as,
-                display_name=contributor.name,
+                display_name=str(contributor.name),
                 family_name=None,
                 wikipedia_name=None,
-                roles=self._extract_contributor_roles(contributor.roles, default_role),
+                roles=roles,
             )
 
             self.log.debug(
-                "Finished extracting contributor metadata from {}: {}".format(
-                    encode(contributor), encode(contributor_metadata)
-                )
+                f"Finished extracting contributor metadata from {contributor.model_dump_json()}: {contributor_metadata}"
             )
 
             contributor_metadata_list.append(contributor_metadata)
 
         self.log.debug(
-            "Finished extracting contributors metadata: {}".format(
-                encode(contributor_metadata_list)
-            )
+            f"Finished extracting contributors metadata: {contributor_metadata_list}"
         )
 
         return contributor_metadata_list
 
     def _extract_link(
-        self, link: Link, feed_self_url: str, default_link_rel: str | None = None
+        self, link: opds2.Link, feed_self_url: str, default_link_rel: str | None = None
     ) -> LinkData:
-        """Extract a LinkData object from webpub-manifest-parser's link.
+        """Extract a LinkData object from opds2.Link.
 
-        :param link: webpub-manifest-parser's link
+        :param link: link
         :param feed_self_url: Feed's self URL
         :param default_link_rel: Default link's relation
 
         :return: Link metadata
         """
-        self.log.debug(f"Started extracting link metadata from {encode(link)}")
+        self.log.debug(
+            f"Started extracting link metadata from {link.model_dump_json()}"
+        )
 
         # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one.
         rights_uri = RightsStatus.rights_uri_from_string("")
@@ -463,15 +383,13 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         )
 
         self.log.debug(
-            "Finished extracting link metadata from {}: {}".format(
-                encode(link), encode(link_metadata)
-            )
+            f"Finished extracting link metadata from {link.model_dump_json()}: {link_metadata}"
         )
 
         return link_metadata
 
     def _extract_description_link(
-        self, publication: opds2_ast.OPDS2Publication
+        self, publication: opds2.BasePublication
     ) -> LinkData | None:
         """Extract description from the publication object and create a Hyperlink.DESCRIPTION link containing it.
 
@@ -480,7 +398,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         self.log.debug(
             "Started extracting a description link from {}".format(
-                encode(publication.metadata.description)
+                publication.metadata.description
             )
         )
 
@@ -495,14 +413,14 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         self.log.debug(
             "Finished extracting a description link from {}: {}".format(
-                encode(publication.metadata.description), encode(description_link)
+                publication.metadata.description, description_link
             )
         )
 
         return description_link
 
     def _extract_image_links(
-        self, publication: opds2_ast.OPDS2Publication, feed_self_url: str
+        self, publication: opds2.BasePublication, feed_self_url: str
     ) -> list[LinkData]:
         """Extracts a list of LinkData objects containing information about artwork.
 
@@ -510,9 +428,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param feed_self_url: Feed's self URL
         :return: List of links metadata
         """
-        self.log.debug(
-            f"Started extracting image links from {encode(publication.images)}"
-        )
+        self.log.debug(f"Started extracting image links from {publication.images}")
 
         if not publication.images:
             return []
@@ -530,7 +446,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         sorted_raw_image_links = list(
             reversed(
                 sorted(
-                    publication.images.links,
+                    publication.images,
                     key=lambda link: (link.width or 0, link.height or 0),
                 )
             )
@@ -554,23 +470,21 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             image_links.append(cover_link)
 
         self.log.debug(
-            "Finished extracting image links from {}: {}".format(
-                encode(publication.images), encode(image_links)
-            )
+            f"Finished extracting image links from {publication.images}: {image_links}"
         )
 
         return image_links
 
     def _extract_links(
-        self, publication: opds2_ast.OPDS2Publication, feed_self_url: str
+        self, publication: opds2.BasePublication, feed_self_url: str
     ) -> list[LinkData]:
-        """Extract a list of LinkData objects from a list of webpub-manifest-parser links.
+        """Extract a list of LinkData objects from opds2.Publication.
 
         :param publication: Publication object
         :param feed_self_url: Feed's self URL
         :return: List of links metadata
         """
-        self.log.debug(f"Started extracting links from {encode(publication.links)}")
+        self.log.debug(f"Started extracting links from {publication.links}")
 
         links = []
 
@@ -586,41 +500,30 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         if image_links:
             links.extend(image_links)
 
-        self.log.debug(
-            "Finished extracting links from {}: {}".format(
-                encode(publication.links), encode(links)
-            )
-        )
+        self.log.debug(f"Finished extracting links from {publication.links}: {links}")
 
         return links
 
     def _extract_media_types_and_drm_scheme_from_link(
-        self, link: core_ast.Link
-    ) -> list[tuple[str, str]]:
+        self, link: opds2.Link
+    ) -> list[tuple[str, str | None]]:
         """Extract information about content's media type and used DRM schema from the link.
 
         :param link: Link object
         :return: 2-tuple containing information about the content's media type and its DRM schema
         """
         self.log.debug(
-            "Started extracting media types and a DRM scheme from {}".format(
-                encode(link)
-            )
+            f"Started extracting media types and a DRM scheme from {link.model_dump_json()}"
         )
 
-        media_types_and_drm_scheme = []
+        media_types_and_drm_scheme: list[tuple[str, str | None]] = []
 
-        if (
-            link.properties
-            and link.properties.availability
-            and link.properties.availability.state
-            != opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
-        ):
-            self.log.info(f"Link unavailable. Skipping. {encode(link)}")
+        if not link.properties.availability.available:
+            self.log.info(f"Link unavailable. Skipping. {link.model_dump_json()}")
             return []
 
         # We need to take into account indirect acquisition links
-        if link.properties and link.properties.indirect_acquisition:
+        if link.properties.indirect_acquisition:
             # We make the assumption that when we have nested indirect acquisition links
             # that the most deeply nested link is the content type, and the link at the nesting
             # level above that is the DRM. We discard all other levels of indirection, assuming
@@ -630,11 +533,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             # where the top level link is a OPDS feed and the common case of a single
             # indirect_acquisition link.
             for acquisition_object in link.properties.indirect_acquisition:
-                nested_acquisition = acquisition_object
+                nested_acquisition: AcquisitionObject | None = acquisition_object
                 nested_types = [link.type]
                 while nested_acquisition:
                     nested_types.append(nested_acquisition.type)
-                    nested_acquisition = first_or_default(nested_acquisition.child)
+                    nested_acquisition = first_or_default(nested_acquisition.children)
                 [drm_type, media_type] = nested_types[-2:]
 
                 # We then check this returned pair of content types to make sure they match known
@@ -657,13 +560,15 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         self.log.debug(
             "Finished extracting media types and a DRM scheme from {}: {}".format(
-                encode(link), encode(media_types_and_drm_scheme)
+                link, media_types_and_drm_scheme
             )
         )
 
         return media_types_and_drm_scheme
 
-    def _extract_medium_from_links(self, links: core_ast.LinkList) -> str | None:
+    def _extract_medium_from_links(
+        self, links: CompactCollection[opds2.Link]
+    ) -> str | None:
         """Extract the publication's medium from its links.
 
         :param links: List of links
@@ -688,7 +593,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
     @staticmethod
     def _extract_medium(
-        publication: opds2_ast.OPDS2Publication,
+        publication: opds2.BasePublication,
         default_medium: str | None = Edition.BOOK_MEDIUM,
     ) -> str | None:
         """Extract the publication's medium from its metadata.
@@ -705,79 +610,41 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return medium
 
-    def _extract_identifier(
-        self, publication: opds2_ast.OPDS2Publication
-    ) -> Identifier:
+    def _extract_identifier(self, publication: opds2.BasePublication) -> Identifier:
         """Extract the publication's identifier from its metadata.
 
         :param publication: Publication object
         :return: Identifier object
         """
-        return self.parse_identifier(publication.metadata.identifier)  # type: ignore[no-any-return]
-
-    @classmethod
-    def _extract_availability(
-        cls, availability: opds2_ast.OPDS2AvailabilityInformation | None
-    ) -> bool:
-        """Extract the publication's availability from its availability information.
-
-        We default to a publication being available if no availability information is provided or if the provided
-        availability information is past the time specified in its `until` field. The `since` field on the
-        availability information is not used, it is assumed to be informational and always in the past if it is
-        present. This is based on a discussion with the OPDS 2.0 working group.
-
-        TODO: Update our handling of the `since` field based on the resolution of the discussion here:
-          https://github.com/opds-community/drafts/discussions/63#discussioncomment-9806140
-
-        :return: Boolean value indicating whether the publication is available.
-        """
-        available = opds2_ast.OPDS2AvailabilityType.AVAILABLE.value
-        if (
-            availability
-            and availability.state != available
-            and (not availability.until or availability.until > utc_now())
-        ):
-            return False
-
-        return True
+        return self.parse_identifier(publication.metadata.identifier)
 
     def _extract_publication_metadata(
         self,
-        feed: opds2_ast.OPDS2Feed,
-        publication: opds2_ast.OPDS2Publication,
+        publication: opds2.BasePublication,
         data_source_name: str | None,
+        feed_self_url: str,
     ) -> Metadata:
-        """Extract a Metadata object from webpub-manifest-parser's publication.
+        """Extract a Metadata object from opds2.Publication.
 
         :param publication: Feed object
         :param publication: Publication object
         :param data_source_name: Data source's name
         :return: Publication's metadata
         """
-        self.log.debug(
-            "Started extracting metadata from publication {}".format(
-                encode(publication)
-            )
-        )
+        self.log.debug(f"Started extracting metadata from publication {publication}")
 
-        title = publication.metadata.title
-
-        if title == OPDSFeed.NO_TITLE:
-            title = None
-
-        subtitle = publication.metadata.subtitle
+        title = str(publication.metadata.title)
+        subtitle = str(publication.metadata.subtitle)
 
         languages = first_or_default(publication.metadata.languages)
         derived_medium = self._extract_medium_from_links(publication.links)
         medium = self._extract_medium(publication, derived_medium)
 
-        publisher = first_or_default(publication.metadata.publishers)
-        if publisher:
-            publisher = publisher.name
+        first_publisher = first_or_default(publication.metadata.publishers)
+        publisher = str(first_publisher.name) if first_publisher else None
 
-        imprint = first_or_default(publication.metadata.imprints)
-        if imprint:
-            imprint = imprint.name
+        first_imprint = first_or_default(publication.metadata.imprints)
+        imprint = str(first_imprint.name) if first_imprint else None
 
         published = publication.metadata.published
         subjects = self._extract_subjects(publication.metadata.subjects)
@@ -826,9 +693,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 f"Ignoring the time tracking flag for entry {publication.metadata.identifier}"
             )
 
-        feed_self_url = first_or_default(
-            feed.links.get_by_rel(OPDS2LinkRelationsRegistry.SELF.key)
-        ).href
         links = self._extract_links(publication, feed_self_url)
 
         last_opds_update = publication.metadata.modified
@@ -848,7 +712,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         # FIXME: It seems that OPDS 2.0 spec doesn't contain information about rights so we use the default one
         rights_uri = RightsStatus.rights_uri_from_string("")
 
-        if self._extract_availability(publication.metadata.availability):
+        if publication.metadata.availability.available:
             licenses_owned = LicensePool.UNLIMITED_ACCESS
             licenses_available = LicensePool.UNLIMITED_ACCESS
         else:
@@ -896,7 +760,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         self.log.debug(
             "Finished extracting metadata from publication {}: {}".format(
-                encode(publication), encode(metadata)
+                publication, metadata
             )
         )
 
@@ -904,7 +768,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
     def _find_formats_in_non_open_access_acquisition_links(
         self,
-        ast_link_list: list[core_ast.Link],
+        ast_link_list: Sequence[opds2.StrictLink],
         link_data_list: list[LinkData],
         rights_uri: str,
         circulation_data: CirculationData,
@@ -940,24 +804,14 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         return formats
 
-    @staticmethod
-    def _get_publications(
-        feed: opds2_ast.OPDS2Feed,
-    ) -> Iterable[opds2_ast.OPDS2Publication]:
-        """Return all the publications in the feed.
-        :param feed: OPDS 2.0 feed
-        :return: An iterable list of publications containing in the feed
-        """
-        if feed.publications:
-            yield from feed.publications
-
-        if feed.groups:
-            for group in feed.groups:
-                if group.publications:
-                    yield from group.publications
+    def _get_publication(
+        self,
+        publication: dict[str, Any],
+    ) -> opds2.BasePublication:
+        return opds2.Publication.model_validate(publication)
 
     @staticmethod
-    def _is_acquisition_link(link: core_ast.Link) -> bool:
+    def _is_acquisition_link(link: opds2.Link) -> bool:
         """Return a boolean value indicating whether a link can be considered an acquisition link.
 
         :param link: Link object
@@ -1026,130 +880,141 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         return failure
 
     def _record_publication_unrecognizable_identifier(
-        self, publication: opds2_ast.OPDS2Publication
+        self, identifier: str | None, title: str | None
     ) -> None:
         """Record a publication's unrecognizable identifier, i.e. identifier that has an unknown format
             and could not be parsed by CM.
 
         :param publication: OPDS 2.x publication object
         """
-        original_identifier = publication.metadata.identifier
-        title = publication.metadata.title
-
-        if original_identifier is None:
+        if identifier is None:
             self.log.warning(f"Publication '{title}' does not have an identifier.")
         else:
             self.log.warning(
-                f"Publication # {original_identifier} ('{title}') has an unrecognizable identifier."
+                f"Publication # {identifier} ('{title}') has an unrecognizable identifier."
             )
 
-    def extract_next_links(self, feed: str | opds2_ast.OPDS2Feed) -> list[str]:
+    def _parse_feed(self, feed: str | bytes) -> opds2.PublicationFeedNoValidation:
+        return opds2.PublicationFeedNoValidation.model_validate_json(feed)
+
+    def extract_next_links(self, feed: str | bytes) -> list[str]:
         """Extracts "next" links from the feed.
 
         :param feed: OPDS 2.0 feed
         :return: List of "next" links
         """
-        parser_result = self._parser.parse_manifest(feed)
-        parsed_feed = parser_result.root
-
-        if not parsed_feed:
+        try:
+            parsed_feed = self._parse_feed(feed)
+        except ValidationError:
             return []
 
-        next_links = parsed_feed.links.get_by_rel(self.NEXT_LINK_RELATION)
-        next_links = [next_link.href for next_link in next_links]
+        next_links = [
+            next_link.href
+            for next_link in parsed_feed.links.get_collection(
+                rel=self.NEXT_LINK_RELATION
+            )
+        ]
 
-        return next_links  # type: ignore[no-any-return]
+        return next_links
 
     def extract_last_update_dates(
-        self, feed: str | opds2_ast.OPDS2Feed
+        self, feed: str | bytes
     ) -> list[tuple[str | None, datetime | None]]:
         """Extract last update date of the feed.
 
         :param feed: OPDS 2.0 feed
         :return: A list of 2-tuples containing publication's identifiers and their last modified dates
         """
-        parser_result = self._parser.parse_manifest(feed)
-        parsed_feed = parser_result.root
+        try:
+            parsed_feed = self._parse_feed(feed)
 
-        if not parsed_feed:
+            return [
+                (publication.metadata.identifier, publication.metadata.modified)
+                for publication in [
+                    self._get_publication(publication)
+                    for publication in parsed_feed.publications
+                ]
+            ]
+        except ValidationError:
             return []
 
-        dates = [
-            (publication.metadata.identifier, publication.metadata.modified)
-            for publication in self._get_publications(parsed_feed)
-            if publication.metadata.modified
-        ]
-
-        return dates
-
-    def _parse_feed_links(self, links: list[core_ast.Link]) -> None:
+    def _parse_feed_links(self, links: CompactCollection[opds2.StrictLink]) -> None:
         """Parse the global feed links. Currently only parses the token endpoint link"""
-        for link in links:
-            if first_or_default(link.rels) == Hyperlink.TOKEN_AUTH:
-                # Save the collection-wide token authentication endpoint
-                self.collection.integration_configuration.context_update(
-                    {OPDS2API.TOKEN_AUTH_CONFIG_KEY: link.href}
-                )
+        token_auth_link = links.get(rel=Hyperlink.TOKEN_AUTH)
+        if token_auth_link is not None:
+            self.collection.integration_configuration.context_update(
+                {OPDS2API.TOKEN_AUTH_CONFIG_KEY: token_auth_link.href}
+            )
+
+    def _get_allowed_identifier(
+        self, identifier: str | None, title: str | None
+    ) -> Identifier | None:
+        recognized_identifier = self.parse_identifier(identifier)
+        if not recognized_identifier or not self._is_identifier_allowed(
+            recognized_identifier
+        ):
+            self._record_publication_unrecognizable_identifier(identifier, title)
+            return None
+        return recognized_identifier
 
     def extract_feed_data(
-        self, feed: str | opds2_ast.OPDS2Feed, feed_url: str | None = None
+        self, feed: str | bytes, feed_url: str | None = None
     ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
         """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
         :param feed: OPDS 2.0 feed
         :param feed_url: Feed URL used to resolve relative links
         """
-        parser_result = self._parser.parse_manifest(feed)
-        feed = parser_result.root
+        try:
+            parsed_feed = self._parse_feed(feed)
+        except ValidationError:
+            self.log.exception("Error validating feed")
+            return {}, {}
+
         publication_metadata_dictionary = {}
         failures: dict[str, list[CoverageFailure]] = {}
 
-        if feed.links:
-            self._parse_feed_links(feed.links)
+        if parsed_feed.links:
+            self._parse_feed_links(parsed_feed.links)
 
-        for publication in self._get_publications(feed):
-            recognized_identifier = self._extract_identifier(publication)
+        for publication_dict in parsed_feed.publications:
+            try:
+                publication = self._get_publication(publication_dict)
+            except ValidationError as e:
+                raw_identifier = publication_dict.get("metadata", {}).get("identifier")
+                raw_title = publication_dict.get("metadata", {}).get("title")
+                recognized_identifier = self._get_allowed_identifier(
+                    raw_identifier, raw_title
+                )
+                if recognized_identifier:
+                    self._record_coverage_failure(
+                        failures, recognized_identifier, str(e)
+                    )
 
-            if not recognized_identifier or not self._is_identifier_allowed(
-                recognized_identifier
-            ):
-                self._record_publication_unrecognizable_identifier(publication)
+                continue
+            recognized_identifier = self._get_allowed_identifier(
+                publication.metadata.identifier, str(publication.metadata.title)
+            )
+
+            if not recognized_identifier:
                 continue
 
+            feed_self_url = parsed_feed.links.get(
+                rel=rwpm.LinkRelations.self, raising=True
+            ).href
             publication_metadata = self._extract_publication_metadata(
-                feed, publication, self.data_source_name
+                publication, self.data_source_name, feed_self_url
             )
 
             publication_metadata_dictionary[
                 publication_metadata.primary_identifier.identifier
             ] = publication_metadata
 
-        node_finder = NodeFinder()
-
-        for error in parser_result.errors:
-            publication = node_finder.find_parent_or_self(
-                parser_result.root, error.node, opds2_ast.OPDS2Publication
-            )
-
-            if publication:
-                recognized_identifier = self._extract_identifier(publication)
-
-                if not recognized_identifier or not self._is_identifier_allowed(
-                    recognized_identifier
-                ):
-                    self._record_publication_unrecognizable_identifier(publication)
-                else:
-                    self._record_coverage_failure(
-                        failures, recognized_identifier, error.error_message
-                    )
-            else:
-                self.log.warning(f"{error.error_message}")
-
         return publication_metadata_dictionary, failures
 
 
 class OPDS2ImportMonitor(OPDSImportMonitor):
     PROTOCOL = OPDS2API.label()
-    MEDIA_TYPE = OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
+    MEDIA_TYPE = opds2.PublicationFeed.content_type(), "application/json"
 
     def _verify_media_type(self, url: str, resp: Response) -> None:
         # Make sure we got an OPDS feed, and not an error page that was
@@ -1164,5 +1029,5 @@ class OPDS2ImportMonitor(OPDSImportMonitor):
 
     def _get_accept_header(self) -> str:
         return "{}, {};q=0.9, */*;q=0.1".format(
-            OPDS2MediaTypesRegistry.OPDS_FEED.key, "application/json"
+            opds2.PublicationFeed.content_type(), "application/json"
         )
