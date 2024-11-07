@@ -69,22 +69,3 @@ class TestLocalAnalyticsProvider:
         assert database.default_library() == event.library
         assert CirculationEvent.DISTRIBUTOR_CHECKIN == event.type
         assert now == event.start
-
-    def test_collect_with_missing_information(
-        self, local_analytics_provider_fixture: LocalAnalyticsProviderFixture
-    ):
-        """A circulation event may be collected with either the
-        library or the license pool missing, but not both.
-        """
-
-        data = local_analytics_provider_fixture
-        database = local_analytics_provider_fixture.transaction
-        now = utc_now()
-        data.la.collect_event(database.default_library(), None, "event", now)
-
-        pool = database.licensepool(None)
-        data.la.collect_event(None, pool, "event", now)
-
-        with pytest.raises(ValueError) as excinfo:
-            data.la.collect_event(None, None, "event", now)
-        assert "Either library or license_pool must be provided." in str(excinfo.value)

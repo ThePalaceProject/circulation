@@ -332,6 +332,14 @@ def patron_profile():
     return app.manager.profiles.protocol()
 
 
+@library_dir_route("/patrons/me/reset_statistics_uuid", methods=["PUT"])
+@has_library
+@allows_patron_web
+@requires_auth
+def reset_statistics_uuid():
+    return app.manager.patron_activity_history.reset_statistics_uuid()
+
+
 @library_dir_route("/patrons/me/devices", methods=["GET"])
 @has_library
 @allows_patron_web

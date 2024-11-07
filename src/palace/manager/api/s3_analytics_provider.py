@@ -11,6 +11,7 @@ from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.patron import Patron
 
 if TYPE_CHECKING:
     from palace.manager.service.storage.s3 import S3Service
@@ -25,13 +26,14 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
     @staticmethod
     def _create_event_object(
         library: Library,
-        license_pool: LicensePool,
+        license_pool: LicensePool | None,
         event_type: str,
         time: datetime.datetime,
-        old_value,
-        new_value,
+        old_value: int | None = None,
+        new_value: int | None = None,
         neighborhood: str | None = None,
         user_agent: str | None = None,
+        patron: Patron | None = None,
     ) -> dict:
         """Create a Python dict containing required information about the event.
 
@@ -132,25 +134,24 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             "language": work.language if work else None,
             "open_access": license_pool.open_access if license_pool else None,
             "user_agent": user_agent,
+            "patron_uuid": str(patron.uuid) if patron else None,
         }
 
         return event
 
     def collect_event(
         self,
-        library,
-        license_pool,
-        event_type,
-        time,
-        old_value=None,
-        new_value=None,
+        library: Library,
+        license_pool: LicensePool | None,
+        event_type: str,
+        time: datetime.datetime,
+        old_value: int | None = None,
+        new_value: int | None = None,
         user_agent: str | None = None,
+        patron: Patron | None = None,
         **kwargs,
     ):
         """Log the event using the appropriate for the specific provider's mechanism.
-
-        :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :param library: Library associated with the event
         :type library: core.model.library.Library
@@ -164,9 +165,6 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         :param time: Event's timestamp
         :type time: datetime.datetime
 
-        :param neighborhood: Geographic location of the event
-        :type neighborhood: str
-
         :param old_value: Old value of the metric changed by the event
         :type old_value: Any
 
@@ -175,10 +173,10 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
         :param user_agent: The user_agent of the caller.
         :type user_agent:  str
-        """
 
-        if not library and not license_pool:
-            raise ValueError("Either library or license_pool must be provided.")
+        :param patron: The patron associated with the event, where applicable
+        :type patron: Patron
+        """
 
         event = self._create_event_object(
             library,
@@ -188,6 +186,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             old_value,
             new_value,
             user_agent=user_agent,
+            patron=patron,
+            **kwargs,
         )
         content = json.dumps(
             event,

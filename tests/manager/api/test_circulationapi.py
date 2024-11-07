@@ -883,8 +883,10 @@ class TestCirculationAPI:
             def __init__(self):
                 self.events = []
 
-            def collect_event(self, library, licensepool, name, neighborhood):
-                self.events.append((library, licensepool, name, neighborhood))
+            def collect_event(
+                self, library, licensepool, name, neighborhood, patron=None
+            ):
+                self.events.append((library, licensepool, name, neighborhood, patron))
                 return True
 
         analytics = MockAnalytics()
@@ -917,16 +919,43 @@ class TestCirculationAPI:
 
         # Worst case scenario -- the only information we can find is
         # the Library associated with the CirculationAPI object itself.
-        assert_event((None, None, "event"), (l1, None, "event", None))
+        assert_event(
+            (None, None, "event"),
+            (
+                l1,
+                None,
+                "event",
+                None,
+                None,
+            ),
+        )
 
         # If a LicensePool is provided, it's passed right through
         # to Analytics.collect_event.
-        assert_event((None, lp2, "event"), (l1, lp2, "event", None))
+        assert_event(
+            (None, lp2, "event"),
+            (
+                l1,
+                lp2,
+                "event",
+                None,
+                None,
+            ),
+        )
 
         # If a Patron is provided, their Library takes precedence over
         # the Library associated with the CirculationAPI (though this
         # shouldn't happen).
-        assert_event((p2, None, "event"), (l2, None, "event", None))
+        assert_event(
+            (p2, None, "event"),
+            (
+                l2,
+                None,
+                "event",
+                None,
+                p2,
+            ),
+        )
 
         # We must run the rest of the tests in a simulated Flask request
         # context.
@@ -936,14 +965,32 @@ class TestCirculationAPI:
             # associated with the CirculationAPI (though this
             # shouldn't happen).
             flask.request.library = l2  # type: ignore
-            assert_event((None, None, "event"), (l2, None, "event", None))
+            assert_event(
+                (None, None, "event"),
+                (
+                    l2,
+                    None,
+                    "event",
+                    None,
+                    None,
+                ),
+            )
 
         with app.test_request_context():
             # The library of the request patron also takes precedence
             # over both (though again, this shouldn't happen).
             flask.request.library = l1  # type: ignore
             flask.request.patron = p2  # type: ignore
-            assert_event((None, None, "event"), (l2, None, "event", None))
+            assert_event(
+                (None, None, "event"),
+                (
+                    l2,
+                    None,
+                    "event",
+                    None,
+                    p2,
+                ),
+            )
 
         # Now let's check neighborhood gathering.
         p2.neighborhood = "Compton"
@@ -951,19 +998,19 @@ class TestCirculationAPI:
             # Neighborhood is only gathered if we explicitly ask for
             # it.
             flask.request.patron = p2  # type: ignore
-            assert_event((p2, None, "event"), (l2, None, "event", None))
-            assert_event((p2, None, "event", False), (l2, None, "event", None))
-            assert_event((p2, None, "event", True), (l2, None, "event", "Compton"))
+            assert_event((p2, None, "event"), (l2, None, "event", None, p2))
+            assert_event((p2, None, "event", False), (l2, None, "event", None, p2))
+            assert_event((p2, None, "event", True), (l2, None, "event", "Compton", p2))
 
             # Neighborhood is not gathered if the request's active
             # patron is not the patron who triggered the event.
-            assert_event((p1, None, "event", True), (l1, None, "event", None))
+            assert_event((p1, None, "event", True), (l1, None, "event", None, p1))
 
         with app.test_request_context():
             # Even if we ask for it, neighborhood is not gathered if
             # the data isn't available.
             flask.request.patron = p1  # type: ignore
-            assert_event((p1, None, "event", True), (l1, None, "event", None))
+            assert_event((p1, None, "event", True), (l1, None, "event", None, p1))
 
         # Finally, remove the mock Analytics object entirely and
         # verify that calling _collect_event doesn't cause a crash.
