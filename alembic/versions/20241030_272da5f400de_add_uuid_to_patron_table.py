@@ -29,9 +29,12 @@ def upgrade() -> None:
     rows = conn.execute("SELECT id from patrons").all()
 
     for row in rows:
-        uid = str(uuid.uuid4())
+        uid = uuid.uuid4()
         conn.execute(
-            "UPDATE patrons SET uuid = ? WHERE id = ?",
+            """
+            UPDATE patrons SET uuid = %s
+            WHERE id = %s
+            """,
             (
                 uid,
                 row.id,
