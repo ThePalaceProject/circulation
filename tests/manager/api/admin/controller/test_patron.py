@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
@@ -7,7 +9,9 @@ from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.problem_details import NO_SUCH_PATRON
 from palace.manager.api.adobe_vendor_id import AuthdataUtility
 from palace.manager.api.authentication.base import PatronData
+from palace.manager.api.authenticator import LibraryAuthenticator
 from palace.manager.sqlalchemy.model.admin import AdminRole
+from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 
@@ -29,23 +33,23 @@ class TestPatronController:
     def test__load_patrondata(self, patron_controller_fixture: PatronControllerFixture):
         """Test the _load_patrondata helper method."""
 
-        class MockAuthenticator:
-            def __init__(self, providers):
-                self.unique_patron_lookup_providers = providers
+        def mock_authenticator(providers):
+            mock_authenticator_ = MagicMock(spec=LibraryAuthenticator)
+            mock_authenticator_.unique_patron_lookup_providers = providers
+            return mock_authenticator_
 
         class MockAuthenticationProvider:
-            def __init__(self, patron_dict):
-                self.patron_dict = patron_dict
+            def __init__(self, patron_data_dict: dict[str, PatronData]):
+                self.patron_dict = patron_data_dict
 
-            def remote_patron_lookup(self, patrondata):
+            def remote_patron_lookup(self, patrondata) -> PatronData | None:
                 return self.patron_dict.get(patrondata.authorization_identifier)
 
-        authenticator = MockAuthenticator([])
-        auth_provider = MockAuthenticationProvider({})
+        authenticator = mock_authenticator([])
         identifier = "Patron"
 
         form = ImmutableMultiDict([("identifier", identifier)])
-        m = patron_controller_fixture.manager.admin_patron_controller._load_patrondata
+        m = patron_controller_fixture.manager.admin_patron_controller._load_patron_data
 
         # User doesn't have admin permission
         with patron_controller_fixture.ctrl.request_context_with_library("/"):
@@ -71,7 +75,8 @@ class TestPatronController:
             )
 
         # Authenticator can't find patron with this identifier
-        authenticator.unique_patron_lookup_providers.append(auth_provider)
+        auth_provider = MockAuthenticationProvider({})
+        authenticator = mock_authenticator([auth_provider])
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
             flask.request.form = form
             response = m(authenticator)
@@ -85,15 +90,15 @@ class TestPatronController:
 
         # Authenticator can find patron with this identifier
         auth_provider = MockAuthenticationProvider(
-            {identifier: {"authorization_identifier": identifier}}
+            {identifier: PatronData(authorization_identifier=identifier)}
         )
-        authenticator.unique_patron_lookup_providers.clear()
-        authenticator.unique_patron_lookup_providers.append(auth_provider)
+        authenticator = mock_authenticator([auth_provider])
 
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
             flask.request.form = form
             response = m(authenticator)
-            assert identifier == response["authorization_identifier"]
+            assert not isinstance(response, ProblemDetail)
+            assert identifier == response.authorization_identifier
 
     def test_lookup_patron(self, patron_controller_fixture: PatronControllerFixture):
         # Here's a patron.
@@ -103,7 +108,7 @@ class TestPatronController:
         # This PatronController will always return information about that
         # patron, no matter what it's asked for.
         class MockPatronController(PatronController):
-            def _load_patrondata(self, authenticator):
+            def _load_patron_data(self, authenticator):
                 self.called_with = authenticator
                 return PatronData(
                     authorization_identifier="An Identifier",
@@ -112,7 +117,7 @@ class TestPatronController:
 
         controller = MockPatronController(patron_controller_fixture.manager)
 
-        authenticator = object()
+        authenticator = MagicMock()
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
             response = controller.lookup_patron(authenticator)
             # The authenticator was passed into _load_patrondata()
@@ -121,6 +126,7 @@ class TestPatronController:
             # _load_patrondata() returned a PatronData object. We
             # converted it to a dictionary, which will be dumped to
             # JSON on the way out.
+            assert not isinstance(response, ProblemDetail)
             assert "An Identifier" == response["authorization_identifier"]
             assert "A Patron" == response["personal_name"]
 
@@ -138,7 +144,7 @@ class TestPatronController:
         class MockPatronController(PatronController):
             mock_patrondata: PatronData | None = None
 
-            def _load_patrondata(self, authenticator):
+            def _load_patron_data(self, authenticator):
                 self.called_with = authenticator
                 return self.mock_patrondata
 
@@ -148,7 +154,7 @@ class TestPatronController:
         )
 
         # We reset their Adobe ID.
-        authenticator = object()
+        authenticator = MagicMock()
         with patron_controller_fixture.request_context_with_library_and_admin("/"):
             form = ImmutableMultiDict([("identifier", patron.authorization_identifier)])
             flask.request.form = form
@@ -170,6 +176,8 @@ class TestPatronController:
             flask.request.form = form
             response = controller.reset_adobe_id(authenticator)
 
+            assert isinstance(response, ProblemDetail)
             assert 404 == response.status_code
             assert NO_SUCH_PATRON.uri == response.uri
+            assert response.detail is not None
             assert "Could not create local patron object" in response.detail

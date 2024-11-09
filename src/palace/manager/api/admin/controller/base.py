@@ -18,9 +18,11 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.util.log import LoggerMixin
+from palace.manager.util.problem_detail import ProblemDetail
 
 
-class AdminController:
+class AdminController(LoggerMixin):
     def __init__(self, manager):
         self.manager = manager
         self._db = self.manager._db
@@ -60,7 +62,7 @@ class AdminController:
         flask.request.admin = None
         return INVALID_ADMIN_CREDENTIALS
 
-    def authenticated_admin(self, admin_details):
+    def authenticated_admin(self, admin_details) -> Admin:
         """Creates or updates an admin with the given details"""
 
         admin, is_new = get_one_or_create(self._db, Admin, email=admin_details["email"])
@@ -92,7 +94,7 @@ class AdminController:
 
         return admin
 
-    def check_csrf_token(self):
+    def check_csrf_token(self) -> str | ProblemDetail:
         """Verifies that the CSRF token in the form data or X-CSRF-Token header
         matches the one in the session cookie.
         """
@@ -102,11 +104,13 @@ class AdminController:
             return INVALID_CSRF_TOKEN
         return cookie_token
 
-    def get_csrf_token(self):
+    @staticmethod
+    def get_csrf_token() -> str | None:
         """Returns the CSRF token for the current session."""
         return flask.request.cookies.get("csrf_token")
 
-    def generate_csrf_token(self):
+    @staticmethod
+    def generate_csrf_token() -> str:
         """Generate a random CSRF token."""
         return base64.b64encode(os.urandom(24)).decode("utf-8")
 
@@ -114,22 +118,22 @@ class AdminController:
 class AdminPermissionsControllerMixin:
     """Mixin that provides methods for verifying an admin's roles."""
 
-    def require_system_admin(self):
-        admin = getattr(flask.request, "admin", None)
+    def require_system_admin(self) -> None:
+        admin: Admin | None = getattr(flask.request, "admin", None)
         if not admin or not admin.is_system_admin():
             raise AdminNotAuthorized()
 
-    def require_sitewide_library_manager(self):
-        admin = getattr(flask.request, "admin", None)
+    def require_sitewide_library_manager(self) -> None:
+        admin: Admin | None = getattr(flask.request, "admin", None)
         if not admin or not admin.is_sitewide_library_manager():
             raise AdminNotAuthorized()
 
-    def require_library_manager(self, library):
-        admin = getattr(flask.request, "admin", None)
+    def require_library_manager(self, library: Library) -> None:
+        admin: Admin | None = getattr(flask.request, "admin", None)
         if not admin or not admin.is_library_manager(library):
             raise AdminNotAuthorized()
 
-    def require_librarian(self, library):
-        admin = getattr(flask.request, "admin", None)
+    def require_librarian(self, library: Library) -> None:
+        admin: Admin | None = getattr(flask.request, "admin", None)
         if not admin or not admin.is_librarian(library):
             raise AdminNotAuthorized()

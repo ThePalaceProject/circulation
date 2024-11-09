@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
@@ -475,7 +475,7 @@ class PatronData:
         return {}
 
     @property
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         """Convert the information in this PatronData to a dictionary
         which can be converted to JSON and sent out to a client.
         """
