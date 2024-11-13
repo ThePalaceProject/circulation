@@ -24,8 +24,8 @@ def get_serializer(
 ) -> SerializerInterface[Any]:
     # Ordering matters for poor matches (eg. */*), so we will keep OPDS1 first
     serializers: dict[str, type[SerializerInterface[Any]]] = {
-        "application/atom+xml; api-version=2": OPDS1Version2Serializer,
         "application/atom+xml": OPDS1Version1Serializer,
+        "application/atom+xml; api-version=2": OPDS1Version2Serializer,
         "application/opds+json": OPDS2Serializer,
     }
     if mime_types:

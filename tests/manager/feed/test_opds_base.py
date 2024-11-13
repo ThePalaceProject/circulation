@@ -15,6 +15,7 @@ class TestBaseOPDSFeed:
         "accept_header, serializer",
         [
             # test api-version parameter when specified return the appropriate version
+            ["*/*", OPDS1Version1Serializer],
             ["application/atom+xml;", OPDS1Version1Serializer],
             ["application/atom+xml;api-version=1", OPDS1Version1Serializer],
             ["application/atom+xml;api-version=2", OPDS1Version2Serializer],
