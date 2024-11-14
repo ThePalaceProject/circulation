@@ -430,9 +430,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         self.log.debug(f"Started extracting image links from {publication.images}")
 
-        if not publication.images:
-            return []
-
         # FIXME: This code most likely will not work in general.
         # There's no guarantee that these images have the same media type,
         # or that the second-largest image isn't far too large to use as a thumbnail.
@@ -497,8 +494,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             links.append(description_link)
 
         image_links = self._extract_image_links(publication, feed_self_url)
-        if image_links:
-            links.extend(image_links)
+        links.extend(image_links)
 
         self.log.debug(f"Finished extracting links from {publication.links}: {links}")
 

@@ -680,6 +680,54 @@ class TestOPDS2Importer(OPDS2Test):
             Contributor.Role.AUTHOR
         ]
 
+    def test_extract_next_links(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        extract_next_links = opds2_importer_fixture.importer.extract_next_links
+
+        # Bad feed
+        assert extract_next_links(b"garbage") == []
+
+        # No next links
+        assert extract_next_links(opds2_files_fixture.sample_data("feed.json")) == []
+
+        # One next link
+        assert extract_next_links(opds2_files_fixture.sample_data("feed2.json")) == [
+            "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
+        ]
+
+    def test_extract_last_update_dates(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        extract_last_update_dates = (
+            opds2_importer_fixture.importer.extract_last_update_dates
+        )
+
+        # Bad feed
+        assert extract_last_update_dates(b"garbage") == []
+
+        # Feed with last update dates
+        assert extract_last_update_dates(
+            opds2_files_fixture.sample_data("feed.json")
+        ) == [
+            (
+                "urn:isbn:978-3-16-148410-0",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "http://example.org/huckleberry-finn",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "urn:proquest.com/document-id/181639",
+                datetime.datetime(2022, 9, 12, 21, 4, tzinfo=datetime.timezone.utc),
+            ),
+        ]
+
 
 class Opds2ApiFixture:
     def __init__(self, db: DatabaseTransactionFixture, mock_http: MagicMock):
