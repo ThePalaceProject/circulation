@@ -402,6 +402,7 @@ class LoanInfo(LoanAndHoldInfoMixin):
         session = Session.object_session(patron)
         license_pool = license_pool or self.license_pool(session)
 
+        loanable: LicensePool | License
         if self.license_identifier is not None:
             loanable = session.execute(
                 select(License).where(
@@ -416,7 +417,6 @@ class LoanInfo(LoanAndHoldInfoMixin):
             patron,
             start=self.start_date,
             end=self.end_date,
-            fulfillment=self.fulfillment,
             external_identifier=self.external_identifier,
         )
 
