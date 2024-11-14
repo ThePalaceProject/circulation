@@ -49,7 +49,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import OPDSFilesFixture
+from tests.fixtures.files import OPDS2FilesFixture
 from tests.fixtures.odl import OPDS2WithODLApiFixture
 from tests.mocks.odl import MockOPDS2WithODLApi
 
@@ -589,7 +589,7 @@ class TestOPDS2WithODLApi:
         self,
         db: DatabaseTransactionFixture,
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-        opds_files_fixture: OPDSFilesFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
     ) -> None:
         # This book is available to check out.
         opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
@@ -604,7 +604,7 @@ class TestOPDS2WithODLApi:
             ).model_dump_json(),
         )
         opds2_with_odl_api_fixture.mock_http.queue_response(
-            201, content=opds_files_fixture.sample_text("lcp/license/ul.json")
+            201, content=opds2_files_fixture.sample_text("lcp/license/ul.json")
         )
         loan = opds2_with_odl_api_fixture.api_checkout()
         assert (

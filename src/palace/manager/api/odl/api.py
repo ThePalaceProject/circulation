@@ -50,9 +50,9 @@ from palace.manager.api.odl.settings import (
 )
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.lcp.credential import LCPCredentialFactory
-from palace.manager.opds.base import BaseLink
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
+from palace.manager.opds.types.link import BaseLink
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.collection import Collection

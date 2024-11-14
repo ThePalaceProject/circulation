@@ -4,7 +4,8 @@ from functools import cached_property
 
 from pydantic import AwareDatetime, Field
 
-from palace.manager.opds.base import BaseLink, BaseOpdsModel, ListOfLinks
+from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.types.link import BaseLink, CompactCollection
 
 # TODO: Remove this when we drop support for Python 3.10
 if sys.version_info >= (3, 11):
@@ -104,7 +105,7 @@ class LoanStatus(BaseOpdsModel):
     status: Status
     message: str
     updated: Updated
-    links: ListOfLinks[Link]
+    links: CompactCollection[Link]
     potential_rights: PotentialRights = Field(default_factory=PotentialRights)
     events: list[Event] = Field(default_factory=list)
 

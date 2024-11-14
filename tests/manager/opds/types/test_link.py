@@ -4,21 +4,15 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.opds.base import BaseLink, ListOfLinks, obj_or_set_to_set
-
-
-def test_obj_or_set_to_set():
-    assert obj_or_set_to_set(None) == set()
-    assert obj_or_set_to_set("foo") == {"foo"}
-    assert obj_or_set_to_set({"foo"}) == {"foo"}
+from palace.manager.opds.types.link import BaseLink, CompactCollection
 
 
 class TestBaseLink:
     def test_rels(self):
         link = BaseLink(href="http://example.com", rel="foo")
-        assert link.rels == {"foo"}
-        link = BaseLink(href="http://example.com", rel={"foo", "bar"})
-        assert link.rels == {"foo", "bar"}
+        assert link.rels == ("foo",)
+        link = BaseLink(href="http://example.com", rel=("foo", "bar"))
+        assert link.rels == ("foo", "bar")
 
     def test_href_templated(self):
         link = BaseLink(href="http://example.com", rel="foo")
@@ -29,7 +23,7 @@ class TestBaseLink:
         )
 
 
-class ListOfLinksFixture:
+class CompactCollectionFixture:
     def __init__(self):
         self.foo_link = BaseLink(
             href="http://example.com/foo", rel="foo", type="application/xyz"
@@ -52,33 +46,43 @@ class ListOfLinksFixture:
             self.bam_link,
             self.fizz_link,
         ]
-        self.links = ListOfLinks(self.list)
-        self.validator = TypeAdapter(ListOfLinks[BaseLink])
+        self.links = CompactCollection(self.list)
+        self.validator = TypeAdapter(CompactCollection[BaseLink])
 
 
 @pytest.fixture
 def list_of_links_fixture():
-    return ListOfLinksFixture()
+    return CompactCollectionFixture()
 
 
-class TestListOfLinks:
-    def test_get_list(self, list_of_links_fixture: ListOfLinksFixture) -> None:
+class TestCompactCollection:
+    def test_boolean(self, list_of_links_fixture: CompactCollectionFixture) -> None:
+        assert list_of_links_fixture.links
+        assert not CompactCollection([])
+
+    def test_get_collection(
+        self, list_of_links_fixture: CompactCollectionFixture
+    ) -> None:
         links = list_of_links_fixture.links
-        assert links.get_list() == list_of_links_fixture.list
-        assert links.get_list(rel="bar") == [
-            list_of_links_fixture.bar_link,
-            list_of_links_fixture.baz_link,
-        ]
-        assert links.get_list(type="application/xyz") == [
-            list_of_links_fixture.foo_link,
-            list_of_links_fixture.baz_link,
-            list_of_links_fixture.fizz_link,
-        ]
-        assert links.get_list(rel="bar", type="application/xyz") == [
-            list_of_links_fixture.baz_link
-        ]
+        assert links.get_collection() == links
+        assert links.get_collection(rel="bar") == CompactCollection(
+            (
+                list_of_links_fixture.bar_link,
+                list_of_links_fixture.baz_link,
+            )
+        )
+        assert links.get_collection(type="application/xyz") == CompactCollection(
+            (
+                list_of_links_fixture.foo_link,
+                list_of_links_fixture.baz_link,
+                list_of_links_fixture.fizz_link,
+            )
+        )
+        assert links.get_collection(
+            rel="bar", type="application/xyz"
+        ) == CompactCollection((list_of_links_fixture.baz_link,))
 
-    def test_get(self, list_of_links_fixture: ListOfLinksFixture) -> None:
+    def test_get(self, list_of_links_fixture: CompactCollectionFixture) -> None:
         links = list_of_links_fixture.links
         assert links.get() == list_of_links_fixture.foo_link
         assert links.get(rel="foo") == list_of_links_fixture.foo_link
@@ -113,13 +117,13 @@ class TestListOfLinks:
         ):
             links.get(rel="foo", type="application/xyz", raising=True)
 
-    def test_validate(self, list_of_links_fixture: ListOfLinksFixture) -> None:
+    def test_validate(self, list_of_links_fixture: CompactCollectionFixture) -> None:
         validator = list_of_links_fixture.validator
 
         # The list of links is valid, so it should return the same list.
         validated = validator.validate_python(list_of_links_fixture.list)
         assert validated == list_of_links_fixture.links
-        assert isinstance(validated, ListOfLinks)
+        assert isinstance(validated, CompactCollection)
         for link in validated:
             assert isinstance(link, BaseLink)
 
@@ -145,7 +149,7 @@ class TestListOfLinks:
         )
         validated = validator.validate_json(json_obj)
         assert len(validated) == 2
-        assert isinstance(validated, ListOfLinks)
+        assert isinstance(validated, CompactCollection)
         for link in validated:
             assert isinstance(link, BaseLink)
 
@@ -159,3 +163,4 @@ class TestListOfLinks:
         assert second.type == "application/xyz"
 
         assert validator.dump_json(validated, exclude_unset=True) == json_obj.encode()
+        assert validator.dump_python(validated, exclude_unset=True) == validated
