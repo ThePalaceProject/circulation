@@ -5,6 +5,8 @@ requires = ["poetry-core>=1.0.0"]
 [tool.coverage.report]
 exclude_also = [
     "if TYPE_CHECKING:",
+    '@(abc\.)?abstractmethod$',
+    '@(typing\.)?overload$',
     '^\s*\.\.\.\s*$',
     '^\s*pass\s*$',
     '^\s*raise NotImplementedError\s*$',
