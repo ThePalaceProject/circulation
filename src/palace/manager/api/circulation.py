@@ -348,7 +348,6 @@ class LoanInfo(LoanAndHoldInfoMixin):
     identifier: str
     start_date: datetime.datetime | None = None
     end_date: datetime.datetime | None
-    fulfillment: Fulfillment | None = None
     external_identifier: str | None = None
     locked_to: DeliveryMechanismInfo | None = None
     license_identifier: str | None = None
@@ -360,7 +359,6 @@ class LoanInfo(LoanAndHoldInfoMixin):
         *,
         start_date: datetime.datetime | None = None,
         end_date: datetime.datetime | None,
-        fulfillment: Fulfillment | None = None,
         external_identifier: str | None = None,
         locked_to: DeliveryMechanismInfo | None = None,
         license_identifier: str | None = None,
@@ -377,23 +375,17 @@ class LoanInfo(LoanAndHoldInfoMixin):
             identifier=identifier,
             start_date=start_date,
             end_date=end_date,
-            fulfillment=fulfillment,
             external_identifier=external_identifier,
             locked_to=locked_to,
             license_identifier=license_identifier,
         )
 
     def __repr__(self) -> str:
-        if self.fulfillment:
-            fulfillment = " Fulfilled by: " + repr(self.fulfillment)
-        else:
-            fulfillment = ""
-        return "<LoanInfo for {}/{}, start={} end={}>{}".format(
+        return "<LoanInfo for {}/{}, start={} end={}>".format(
             self.identifier_type,
             self.identifier,
             self.start_date.isoformat() if self.start_date else self.start_date,
             self.end_date.isoformat() if self.end_date else self.end_date,
-            fulfillment,
         )
 
     def create_or_update(
