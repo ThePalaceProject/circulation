@@ -24,7 +24,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import create, tuple_to_numericrange
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.library import LibraryFixture
 
@@ -80,59 +80,57 @@ class TestBaseController:
             "/", headers=dict(Authorization=circulation_fixture.valid_auth)
         ):
             result = circulation_fixture.controller.authenticated_patron_from_request()
-            assert circulation_fixture.default_patron == result
-            assert circulation_fixture.default_patron == flask.request.patron  # type: ignore
+            assert result == circulation_fixture.default_patron
+            assert (
+                getattr(flask.request, "patron") == circulation_fixture.default_patron
+            )
 
         # No authorization header -> 401 error.
         with (
             patch.object(
                 circulation_fixture.controller,
                 "authorization_header",
-                lambda: None,
-            ),
+            ) as mock_auth_header,
             circulation_fixture.request_context_with_library("/"),
         ):
+            mock_auth_header.return_value = None
             result = circulation_fixture.controller.authenticated_patron_from_request()
             assert isinstance(result, Response)
-            assert 401 == result.status_code
-            assert None == flask.request.patron  # type: ignore
-
-        # Exception contacting the authentication authority -> ProblemDetail
-        def remote_failure(self, header):
-            raise RemoteInitiatedServerError("argh", "service")
+            assert result.status_code == 401
+            assert getattr(flask.request, "patron") is None
 
         with (
             patch.object(
                 circulation_fixture.manager.auth,
                 "authenticated_patron",
-                remote_failure,
-            ),
+            ) as mock_auth_patron,
             circulation_fixture.request_context_with_library(
                 "/", headers=dict(Authorization=circulation_fixture.valid_auth)
             ),
         ):
+            # Exception contacting the authentication authority -> ProblemDetail
+            mock_auth_patron.side_effect = RemoteInitiatedServerError("argh", "service")
             result = circulation_fixture.controller.authenticated_patron_from_request()
             assert isinstance(result, ProblemDetail)
-            assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-            assert "Error in authentication service" == result.detail
-            assert None == flask.request.patron  # type: ignore
+            assert result.uri == REMOTE_INTEGRATION_FAILED.uri
+            assert result.detail == "Error in authentication service"
+            assert getattr(flask.request, "patron") is None
 
-        # Credentials provided but don't identify anyone in particular
-        # -> 401 error.
-        with (
-            patch.object(
-                circulation_fixture.manager.auth,
-                "authenticated_patron",
-                lambda db, header: None,
-            ),
-            circulation_fixture.request_context_with_library(
-                "/", headers=dict(Authorization=circulation_fixture.valid_auth)
-            ),
-        ):
+            # Any other ProblemDetailException -> ProblemDetail
+            pd = ProblemDetail("uri")
+            mock_auth_patron.side_effect = ProblemDetailException(pd)
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert result is pd
+            assert getattr(flask.request, "patron") is None
+
+            # Credentials provided but don't identify anyone in particular
+            # -> 401 error.
+            mock_auth_patron.side_effect = None
+            mock_auth_patron.return_value = None
             result = circulation_fixture.controller.authenticated_patron_from_request()
             assert isinstance(result, ProblemDetail)
-            assert 401 == result.status_code
-            assert None == flask.request.patron  # type: ignore
+            assert result.status_code == 401
+            assert getattr(flask.request, "patron") is None
 
     def test_authenticated_patron_invalid_credentials(
         self, circulation_fixture: CirculationControllerFixture
