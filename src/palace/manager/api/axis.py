@@ -9,6 +9,7 @@ import ssl
 import urllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
 from urllib.parse import urlparse
@@ -481,7 +482,7 @@ class Axis360API(
             self.internal_format(delivery_mechanism),
         )
         for loan in activities:
-            if not isinstance(loan, LoanInfo):
+            if not isinstance(loan, AxisLoanInfo):
                 continue
             if not (
                 loan.identifier_type == identifier.type
@@ -547,7 +548,7 @@ class Axis360API(
         pin: str | None,
         identifier: Identifier | None = None,
         internal_format: str | None = None,
-    ) -> list[LoanInfo | HoldInfo]:
+    ) -> list[AxisLoanInfo | HoldInfo]:
         if identifier:
             assert identifier.identifier is not None
             title_ids = [identifier.identifier]
@@ -1517,7 +1518,18 @@ class HoldReleaseResponseParser(XMLResponseParser[Literal[True]]):
         return True
 
 
-class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
+@dataclass(kw_only=True)
+class AxisLoanInfo(LoanInfo):
+    """
+    An extension of the normal LoanInfo dataclass that includes some Axis 360-specific
+    information, since the Axis 360 API uses this object to get information about
+    loan fulfillment in addition to checkout.
+    """
+
+    fulfillment: Fulfillment | None
+
+
+class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]]):
     def __init__(self, api: Axis360API, internal_format: str | None = None) -> None:
         """Constructor.
 
@@ -1544,7 +1556,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
 
     def process_one(
         self, e: _Element, ns: dict[str, str] | None
-    ) -> LoanInfo | HoldInfo | None:
+    ) -> AxisLoanInfo | HoldInfo | None:
         # Figure out which book we're talking about.
         axis_identifier = self.text_of_subtag(e, "axis:titleId", ns)
         availability = self._xpath1(e, "axis:availability", ns)
@@ -1554,7 +1566,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
         checked_out = self._xpath1_boolean(availability, "axis:isCheckedout", ns)
         on_hold = self._xpath1_boolean(availability, "axis:isInHoldQueue", ns)
 
-        info: LoanInfo | HoldInfo | None = None
+        info: AxisLoanInfo | HoldInfo | None = None
         if checked_out:
             start_date = self._xpath1_date(availability, "axis:checkoutStartDate", ns)
             end_date = self._xpath1_date(availability, "axis:checkoutEndDate", ns)
@@ -1599,7 +1611,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[LoanInfo, HoldInfo]]):
             else:
                 # We're out of luck -- we can't fulfill this loan.
                 fulfillment = None
-            info = LoanInfo(
+            info = AxisLoanInfo(
                 collection_id=self.collection_id,
                 identifier_type=self.id_type,
                 identifier=axis_identifier,
