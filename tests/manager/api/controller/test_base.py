@@ -84,52 +84,55 @@ class TestBaseController:
             assert circulation_fixture.default_patron == flask.request.patron  # type: ignore
 
         # No authorization header -> 401 error.
-        with patch(
-            "palace.manager.api.controller.base.BaseCirculationManagerController.authorization_header",
-            lambda x: None,
+        with (
+            patch.object(
+                circulation_fixture.controller,
+                "authorization_header",
+                lambda: None,
+            ),
+            circulation_fixture.request_context_with_library("/"),
         ):
-            with circulation_fixture.request_context_with_library("/"):
-                result = (
-                    circulation_fixture.controller.authenticated_patron_from_request()
-                )
-                assert isinstance(result, Response)
-                assert 401 == result.status_code
-                assert None == flask.request.patron  # type: ignore
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert isinstance(result, Response)
+            assert 401 == result.status_code
+            assert None == flask.request.patron  # type: ignore
 
         # Exception contacting the authentication authority -> ProblemDetail
         def remote_failure(self, header):
             raise RemoteInitiatedServerError("argh", "service")
 
-        with patch(
-            "palace.manager.api.controller.base.BaseCirculationManagerController.authenticated_patron",
-            remote_failure,
-        ):
-            with circulation_fixture.request_context_with_library(
+        with (
+            patch.object(
+                circulation_fixture.manager.auth,
+                "authenticated_patron",
+                remote_failure,
+            ),
+            circulation_fixture.request_context_with_library(
                 "/", headers=dict(Authorization=circulation_fixture.valid_auth)
-            ):
-                result = (
-                    circulation_fixture.controller.authenticated_patron_from_request()
-                )
-                assert isinstance(result, ProblemDetail)
-                assert REMOTE_INTEGRATION_FAILED.uri == result.uri
-                assert "Error in authentication service" == result.detail
-                assert None == flask.request.patron  # type: ignore
+            ),
+        ):
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert isinstance(result, ProblemDetail)
+            assert REMOTE_INTEGRATION_FAILED.uri == result.uri
+            assert "Error in authentication service" == result.detail
+            assert None == flask.request.patron  # type: ignore
 
         # Credentials provided but don't identify anyone in particular
         # -> 401 error.
-        with patch(
-            "palace.manager.api.controller.base.BaseCirculationManagerController.authenticated_patron",
-            lambda self, x: None,
-        ):
-            with circulation_fixture.request_context_with_library(
+        with (
+            patch.object(
+                circulation_fixture.manager.auth,
+                "authenticated_patron",
+                lambda db, header: None,
+            ),
+            circulation_fixture.request_context_with_library(
                 "/", headers=dict(Authorization=circulation_fixture.valid_auth)
-            ):
-                result = (
-                    circulation_fixture.controller.authenticated_patron_from_request()
-                )
-                assert isinstance(result, Response)
-                assert 401 == result.status_code
-                assert None == flask.request.patron  # type: ignore
+            ),
+        ):
+            result = circulation_fixture.controller.authenticated_patron_from_request()
+            assert isinstance(result, ProblemDetail)
+            assert 401 == result.status_code
+            assert None == flask.request.patron  # type: ignore
 
     def test_authenticated_patron_invalid_credentials(
         self, circulation_fixture: CirculationControllerFixture

@@ -4,15 +4,11 @@ from flask_babel import lazy_gettext as _
 from werkzeug.datastructures import Authorization
 
 from palace.manager.api.circulation_exceptions import RemoteInitiatedServerError
-from palace.manager.api.problem_details import (
-    INVALID_CREDENTIALS,
-    LIBRARY_NOT_FOUND,
-    REMOTE_INTEGRATION_FAILED,
-)
+from palace.manager.api.problem_details import INVALID_CREDENTIALS, LIBRARY_NOT_FOUND
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.log import LoggerMixin
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 
 class BaseCirculationManagerController(LoggerMixin):
@@ -61,7 +57,7 @@ class BaseCirculationManagerController(LoggerMixin):
           authentication, a ProblemDetail.
         """
         # Start off by assuming authentication will not work.
-        flask.request.patron = None  # type: ignore[attr-defined]
+        setattr(flask.request, "patron", None)
 
         auth = self.authorization_header()
 
@@ -69,21 +65,15 @@ class BaseCirculationManagerController(LoggerMixin):
             # No credentials were provided.
             return self.authenticate()
 
-        try:
-            patron = self.authenticated_patron(auth)
-        except RemoteInitiatedServerError as e:
-            return REMOTE_INTEGRATION_FAILED.detailed(
-                _("Error in authentication service")
-            )
-        if patron is None:
-            # Credentials were provided but they turned out not
-            # to identify anyone in particular.
-            return self.authenticate()
+        patron = self.authenticated_patron(auth)
         if isinstance(patron, Patron):
-            flask.request.patron = patron  # type: ignore[attr-defined]
+            setattr(flask.request, "patron", patron)
+
         return patron
 
-    def authenticated_patron(self, authorization_header: Authorization):
+    def authenticated_patron(
+        self, authorization_header: Authorization
+    ) -> Patron | ProblemDetail:
         """Look up the patron authenticated by the given authorization header.
 
         The header could contain a barcode and pin or a token for an
@@ -93,12 +83,16 @@ class BaseCirculationManagerController(LoggerMixin):
 
         If there's no problem, return a Patron object.
         """
-        patron = self.manager.auth.authenticated_patron(self._db, authorization_header)
-        if not patron:
-            return INVALID_CREDENTIALS
-
-        if isinstance(patron, ProblemDetail):
-            return patron
+        try:
+            patron = self.manager.auth.authenticated_patron(
+                self._db, authorization_header
+            )
+            if not patron:
+                return INVALID_CREDENTIALS
+        except RemoteInitiatedServerError as e:
+            return e.problem_detail.detailed(_("Error in authentication service"))
+        except BaseProblemDetailException as e:
+            return e.problem_detail
 
         return patron
 
