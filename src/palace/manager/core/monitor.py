@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 import traceback
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import InvalidRequestError
@@ -883,12 +884,17 @@ class ReaperMonitor(Monitor):
             post_delete_ops = []
             for i in qu.limit(self.BATCH_SIZE):
                 self.log.info("Deleting %r", i)
-                post_delete_ops = self.post_delete_op(i)
+                post_delete_op = self.post_delete_op(i)
+                if post_delete_op:
+                    post_delete_ops.append(post_delete_op)
                 self.delete(i)
                 rows_deleted += 1
+
             self._db.commit()
+
             for op in post_delete_ops:
                 op()
+
             count = qu.count()
         return TimestampData(achievements="Items deleted: %d" % rows_deleted)
 
@@ -901,8 +907,8 @@ class ReaperMonitor(Monitor):
         """
         self._db.delete(row)
 
-    def post_delete_op(self, row: MODEL_CLASS):
-        pass
+    def post_delete_op(self, row: MODEL_CLASS) -> Callable | None:
+        return None
 
     def query(self):
         return self._db.query(self.MODEL_CLASS).filter(self.where_clause)
