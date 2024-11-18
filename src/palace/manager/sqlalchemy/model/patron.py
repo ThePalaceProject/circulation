@@ -65,12 +65,8 @@ class LoanAndHoldMixin:
         return None
 
     @property
-    def library(self) -> Library | None:
-        """Try to find the corresponding library for this Loan/Hold."""
-        if self.patron:
-            return self.patron.library
-        # If this Loan/Hold belongs to an external patron, there may be no library.
-        return None
+    def library(self) -> Library:
+        return self.patron.library
 
 
 class Patron(Base, RedisKeyMixin):
