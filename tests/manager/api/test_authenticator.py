@@ -420,7 +420,7 @@ class TestPatronData:
         assert "2" == patron.authorization_identifier
         assert default_library == patron.library
         assert True == is_new
-        assert CirculationEvent.NEW_PATRON == analytics.event_type
+        assert CirculationEvent.NEW_PATRON == analytics.last_event_type
         assert 1 == analytics.count
 
         # Patron.neighborhood was set, even though there is no

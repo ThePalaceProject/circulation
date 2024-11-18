@@ -8,11 +8,13 @@ from palace.manager.api.monitor import (
     LoanReaper,
 )
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Annotation
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestLoanlikeReaperMonitor:
@@ -26,7 +28,9 @@ class TestLoanlikeReaperMonitor:
             OPDSForDistributorsAPI.label()
         ]
 
-    def test_reaping(self, db: DatabaseTransactionFixture):
+    def test_reaping(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
         # This patron stopped using the circulation manager a long time
         # ago.
         inactive_patron = db.patron()
@@ -152,6 +156,7 @@ class TestLoanlikeReaperMonitor:
 
         # Now we fire up the loan reaper.
         monitor = LoanReaper(db.session)
+        monitor.services.analytics = services_fixture.analytics_fixture.analytics_mock
         monitor.run()
 
         # All of the inactive patron's loans have been reaped,
@@ -171,8 +176,18 @@ class TestLoanlikeReaperMonitor:
         assert 2 == len(current_patron.loans)
         assert 2 == len(current_patron.holds)
 
+        call_args_list = (
+            services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
+        )
+        assert len(call_args_list) == 2
+        for call_args in call_args_list:
+            assert call_args.kwargs["event_type"] == CirculationEvent.CM_LOAN_EXPIRED
+
         # Now fire up the hold reaper.
         hold_monitor = HoldReaper(db.session)
+        hold_monitor.services.analytics = (
+            services_fixture.analytics_fixture.analytics_mock
+        )
         hold_monitor.run()
 
         # All of the inactive patron's holds have been reaped,
@@ -180,6 +195,13 @@ class TestLoanlikeReaperMonitor:
         # The active patron is unaffected.
         assert [sot_hold] == inactive_patron.holds
         assert 2 == len(current_patron.holds)
+
+        call_args_list = (
+            services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
+        )
+        assert len(call_args_list) == 2
+        for call_args in call_args_list:
+            assert call_args.kwargs["event_type"] == CirculationEvent.CM_HOLD_EXPIRED
 
 
 class TestIdlingAnnotationReaper:
