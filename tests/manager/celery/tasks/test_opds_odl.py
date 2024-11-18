@@ -3,7 +3,6 @@ from typing import cast
 from unittest.mock import call, patch
 
 import pytest
-from fixtures.services import ServicesFixture
 from freezegun import freeze_time
 from sqlalchemy import func, select
 
@@ -29,6 +28,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class OpdsTaskFixture:
