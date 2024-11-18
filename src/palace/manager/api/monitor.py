@@ -56,7 +56,7 @@ class LoanlikeReaperMonitor(ReaperMonitor):
                 if isinstance(row, Loan)
                 else CirculationEvent.CM_HOLD_EXPIRED
             )
-            self.analytics.collect_event(
+            self.services.analytics.collect_event(
                 library=row.library,
                 license_pool=row.license_pool,
                 event_type=event_type,

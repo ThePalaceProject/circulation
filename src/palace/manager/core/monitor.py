@@ -907,7 +907,7 @@ class ReaperMonitor(Monitor):
         """
         self._db.delete(row)
 
-    def post_delete_op(self, row: MODEL_CLASS) -> Callable | None:
+    def post_delete_op(self, row) -> Callable | None:
         return None
 
     def query(self):
