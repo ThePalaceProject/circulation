@@ -1205,7 +1205,11 @@ class CirculationAPI(LoggerMixin):
             self._collect_event(patron, licensepool, CirculationEvent.CM_HOLD_PLACE)
 
         if existing_loan:
-            self._collect_event(patron, licensepool, CirculationEvent.CM_LOAN_REVOKED)
+            # Send out analytics event capturing the unusual circumstance  that a loan was converted to a hold
+            # TODO: Do we know what the conditions under which this situation can occur?
+            self._collect_event(
+                patron, licensepool, CirculationEvent.CM_LOAN_CONVERTED_TO_HOLD
+            )
             self._db.delete(existing_loan)
         __transaction.commit()
         return None, hold, is_new
