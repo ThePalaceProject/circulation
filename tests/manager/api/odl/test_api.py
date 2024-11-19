@@ -717,9 +717,18 @@ class TestOPDS2WithODLApi:
         are copies available.
         """
         # We think there are copies available.
-        license = opds2_with_odl_api_fixture.setup_license(concurrency=1, available=1)
+        pool = opds2_with_odl_api_fixture.pool
+        pool.licenses = []
+        license_1 = db.license(pool, terms_concurrency=1, checkouts_available=1)
+        license_2 = db.license(pool, checkouts_available=1)
+        pool.update_availability_from_licenses()
 
         # But the distributor says there are no available copies.
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            response_type,
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
         opds2_with_odl_api_fixture.mock_http.queue_response(
             400,
             response_type,
@@ -730,8 +739,77 @@ class TestOPDS2WithODLApi:
             opds2_with_odl_api_fixture.api_checkout()
 
         assert db.session.query(Loan).count() == 0
-        assert license.license_pool.licenses_available == 0
-        assert license.checkouts_available == 0
+        assert opds2_with_odl_api_fixture.pool.licenses_available == 0
+        assert license_1.checkouts_available == 0
+        assert license_2.checkouts_available == 0
+
+    def test_checkout_many_licenses(
+        self,
+        db: DatabaseTransactionFixture,
+        opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    ) -> None:
+        """
+        The title has 5 different licenses available, we are out of sync, so we think
+        some of them have copies available when they are not.
+        """
+        # We think there are copies available.
+        pool = opds2_with_odl_api_fixture.pool
+        pool.licenses = []
+        license_unavailable_1 = db.license(
+            pool, checkouts_available=2, expires=utc_now() + datetime.timedelta(weeks=4)
+        )
+        license_unavailable_2 = db.license(
+            pool, terms_concurrency=1, checkouts_available=1
+        )
+        license_untouched = db.license(pool, checkouts_left=1, checkouts_available=1)
+        license_lent = db.license(
+            pool,
+            checkouts_left=1,
+            checkouts_available=1,
+            expires=utc_now() + datetime.timedelta(weeks=1),
+        )
+        license_expired = db.license(
+            pool,
+            terms_concurrency=10,
+            checkouts_available=10,
+            expires=utc_now() - datetime.timedelta(weeks=1),
+        )
+        pool.update_availability_from_licenses()
+
+        assert opds2_with_odl_api_fixture.pool.best_available_licenses() == [
+            license_untouched,
+            license_lent,
+            license_unavailable_2,
+            license_unavailable_1,
+        ]
+
+        # But the distributor says there are no available copies for license_unavailable_1
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            "application/api-problem+json",
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
+        # And for license_unavailable_2
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            400,
+            "application/api-problem+json",
+            content=opds2_with_odl_api_fixture.files.sample_text("unavailable.json"),
+        )
+        # But license_lent is still available, and we successfully check it out
+        opds2_with_odl_api_fixture.mock_http.queue_response(
+            201,
+            content=opds2_with_odl_api_fixture.loan_status_document().model_dump_json(),
+        )
+
+        loan_info = opds2_with_odl_api_fixture.api_checkout()
+
+        assert opds2_with_odl_api_fixture.pool.licenses_available == 1
+        assert license_unavailable_2.checkouts_available == 0
+        assert license_unavailable_1.checkouts_available == 0
+        assert license_lent.checkouts_available == 0
+        assert license_untouched.checkouts_available == 1
+
+        assert loan_info.license_identifier == license_lent.identifier
 
     def test_checkout_ready_hold_no_available_copies(
         self,

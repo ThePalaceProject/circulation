@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import Callable
 from functools import cached_property, partial
-from typing import Any
+from typing import Any, Literal
 
 from dependency_injector.wiring import Provide, inject
 from flask import url_for
@@ -59,6 +59,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    License,
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
@@ -334,77 +335,80 @@ class OPDS2WithODLApi(
         ) and licensepool.licenses_available < 1:
             raise NoAvailableCopies()
 
-        # Create a local loan so its database id can be used to
-        # receive notifications from the distributor.
-        license = licensepool.best_available_license()
-        if not license:
-            raise NoAvailableCopies()
-
-        identifier = str(license.identifier)
-        checkout_id = str(uuid.uuid4())
         if self.collection is None:
             raise PalaceValueError(f"Collection not found: {self.collection_id}")
         default_loan_period = self.collection.default_loan_period(patron.library)
-
         requested_expiry = utc_now() + datetime.timedelta(days=default_loan_period)
         patron_id = patron.identifier_to_remote_service(licensepool.data_source)
         library_short_name = patron.library.short_name
-
         hasher = self._get_hasher()
         unhashed_pass = self._credential_factory.get_patron_passphrase(db, patron)
         hashed_pass = unhashed_pass.hash(hasher)
         self._credential_factory.set_hashed_passphrase(db, patron, hashed_pass)
         encoded_pass = base64.b64encode(binascii.unhexlify(hashed_pass.hashed))
 
-        notification_url = self._notification_url(
-            library_short_name,
-            patron_id,
-            identifier,
-        )
-
-        # We should never be able to get here if the license doesn't have a checkout_url, but
-        # we assert it anyway, to be sure we fail fast if it happens.
-        assert license.checkout_url is not None
-        url_template = URITemplate(license.checkout_url)
-        checkout_url = url_template.expand(
-            id=identifier,
-            checkout_id=checkout_id,
-            patron_id=patron_id,
-            expires=requested_expiry.isoformat(),
-            notification_url=notification_url,
-            passphrase=encoded_pass,
-            hint=self.settings.passphrase_hint,
-            hint_url=self.settings.passphrase_hint_url,
-        )
-
-        try:
-            doc = self._request_loan_status(
-                "POST",
-                checkout_url,
-                ignored_problem_types=[
-                    "http://opds-spec.org/odl/error/checkout/unavailable"
-                ],
+        licenses = licensepool.best_available_licenses()
+        license_: License | None = None
+        loan_status: LoanStatus | Literal[False] = False
+        while licenses and not loan_status:
+            license_ = licenses.pop()
+            identifier = str(license_.identifier)
+            checkout_id = str(uuid.uuid4())
+            notification_url = self._notification_url(
+                library_short_name,
+                patron_id,
+                identifier,
             )
-        except OpdsWithOdlException as e:
-            if e.type == "http://opds-spec.org/odl/error/checkout/unavailable":
-                # TODO: This would be a good place to do an async availability update, since we know
-                #   the book is unavailable, when we thought it was available. For now, we know that
-                #   the license has no checkouts_available, so we do that update.
-                license.checkouts_available = 0
-                if hold:
-                    # If we have a hold, it means we thought the book was available, but it wasn't.
-                    # So we need to update its position in the hold queue. We will put it at position
-                    # 1, since the patron should be first in line. This may mean that there are two
-                    # patrons in position 1 in the hold queue, but this will be resolved next time
-                    # the hold queue is recalculated.
-                    hold.position = 1
-                    hold.end = None
-                # Update the pool and the next holds in the queue when a license is reserved.
-                licensepool.update_availability_from_licenses()
-                raise NoAvailableCopies()
-            raise
 
-        if not doc.active:
+            # We should never be able to get here if the license doesn't have a checkout_url, but
+            # we assert it anyway, to be sure we fail fast if it happens.
+            assert license_.checkout_url is not None
+            url_template = URITemplate(license_.checkout_url)
+            checkout_url = url_template.expand(
+                id=identifier,
+                checkout_id=checkout_id,
+                patron_id=patron_id,
+                expires=requested_expiry.isoformat(),
+                notification_url=notification_url,
+                passphrase=encoded_pass,
+                hint=self.settings.passphrase_hint,
+                hint_url=self.settings.passphrase_hint_url,
+            )
+
+            try:
+                loan_status = self._request_loan_status(
+                    "POST",
+                    checkout_url,
+                    ignored_problem_types=[
+                        "http://opds-spec.org/odl/error/checkout/unavailable"
+                    ],
+                )
+            except OpdsWithOdlException as e:
+                if e.type == "http://opds-spec.org/odl/error/checkout/unavailable":
+                    # TODO: This would be a good place to do an async availability update, since we know
+                    #   the book is unavailable, when we thought it was available. For now, we know that
+                    #   the license has no checkouts_available, so we do that update.
+                    license_.checkouts_available = 0
+                    if licenses:
+                        # There are more licenses we can try to loan from, so we continue the loop.
+                        continue
+                    if hold:
+                        # If we have a hold, it means we thought the book was available, but it wasn't.
+                        # So we need to update its position in the hold queue. We will put it at position
+                        # 1, since the patron should be first in line. This may mean that there are two
+                        # patrons in position 1 in the hold queue, but this will be resolved next time
+                        # the hold queue is recalculated.
+                        hold.position = 1
+                        hold.end = None
+                    # Update the pool and the next holds in the queue when a license is reserved.
+                    licensepool.update_availability_from_licenses()
+                    raise NoAvailableCopies()
+                raise
+
+        if license_ is None or loan_status is False:
+            raise NoAvailableCopies()
+
+        if not loan_status.active:
             # Something went wrong with this loan and we don't actually
             # have the book checked out. This should never happen.
             # Remove the loan we created.
@@ -412,7 +416,7 @@ class OPDS2WithODLApi(
 
         # We save the link to the loan status document in the loan's external_identifier field, so
         # we are able to retrieve it later.
-        loan_status_document_link: BaseLink | None = doc.links.get(
+        loan_status_document_link: BaseLink | None = loan_status.links.get(
             rel="self", type=LoanStatus.content_type()
         )
 
@@ -424,7 +428,7 @@ class OPDS2WithODLApi(
         # TODO: Raise this issue with LCP server maintainers, and try to get a fix in place.
         #   once that is done, we should be able to remove this fallback.
         if not loan_status_document_link:
-            license_document_link = doc.links.get(
+            license_document_link = loan_status.links.get(
                 rel="license", type=LicenseDocument.content_type()
             )
             if license_document_link:
@@ -441,13 +445,13 @@ class OPDS2WithODLApi(
 
         loan = LoanInfo.from_license_pool(
             licensepool,
-            end_date=doc.potential_rights.end,
+            end_date=loan_status.potential_rights.end,
             external_identifier=loan_status_document_link.href,
-            license_identifier=license.identifier,
+            license_identifier=license_.identifier,
         )
 
         # We also need to update the remaining checkouts for the license.
-        license.checkout()
+        license_.checkout()
 
         # If there was a hold CirculationAPI will take care of deleting it. So we just need to
         # update the license pool to reflect the loan. Since update_availability_from_licenses
