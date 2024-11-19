@@ -510,7 +510,7 @@ class TestLicense:
         )
         licenses.perpetual.checkout()
 
-        # The time-and-loan-limited license also counts as time-limited for this.
+        # Next up is the time-and-loan-limited license.
         assert (
             first_or_default(licenses.pool.best_available_licenses())
             == licenses.time_and_loan_limited

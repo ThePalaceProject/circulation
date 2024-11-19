@@ -749,8 +749,8 @@ class TestOPDS2WithODLApi:
         opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
     ) -> None:
         """
-        The title has 5 different licenses available, we are out of sync, so we think
-        some of them have copies available when they are not.
+        The title has 5 different licenses. Several of them seem to have copies available. But
+        we are out of sync, so it turns out that not all of them do.
         """
         # We think there are copies available.
         pool = opds2_with_odl_api_fixture.pool
