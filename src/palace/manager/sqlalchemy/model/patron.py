@@ -515,7 +515,7 @@ class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
 
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
     patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
     # A Loan is always associated with a LicensePool.
@@ -565,7 +565,7 @@ class Hold(Base, LoanAndHoldMixin):
 
     __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="holds"
