@@ -67,7 +67,7 @@ class PalacePublicationMetadata(BaseOpdsModel, LoggerMixin):
     #   type of publication based on the type set, it would be nice to do some additional validation here
     #   and constrain this to PublicationTypes. Right now the Palace Bookshelf feed uses
     #   'https://schema.org/EBook' (which is not a valid type) both because it starts with
-    #   https:// (schema.org uses http://) and because it's its a Format, not a Type. Once we
+    #   https:// (schema.org uses http://) and because its a Format, not a Type. Once we get
     #   this sorted out, we should add validation here. For now we just accept any string but
     #   log a warning if it's not a valid PublicationType.
     type: str = Field(..., alias="@type")
@@ -86,6 +86,6 @@ class PalacePublicationMetadata(BaseOpdsModel, LoggerMixin):
     @field_validator("type")
     @classmethod
     def warning_when_type_is_not_valid(cls, type_: str) -> str:
-        if type_ not in [t for t in PublicationTypes]:
+        if type_ not in list(PublicationTypes):
             cls.logger().warning(f"@type '{type_}' is not a valid PublicationType.")
         return type_

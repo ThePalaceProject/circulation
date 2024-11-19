@@ -85,7 +85,7 @@ class TestLanguageMap:
         assert test_map != "baz"
 
         # When comparing with a dictionary, the comparison will return True
-        # the dictionary would create an equivalent LanguageMap.
+        # if the dictionary would create an equivalent LanguageMap.
         assert test_map == {"eng": "foo", "fra": "bar"}
         assert test_map == {"fr": "bar", "en": "foo"}
         assert test_map != {"en": "foo"}

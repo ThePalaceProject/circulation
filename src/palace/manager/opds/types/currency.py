@@ -44,18 +44,7 @@ class CurrencyCode(str):
         cls, _: type[Any], __: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         """
-        Return a Pydantic CoreSchema with the currency subset of the
-        [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) format.
-        It excludes bonds testing codes and precious metals.
-
-         Args:
-             _: The source type.
-             __: The handler to get the CoreSchema.
-
-         Returns:
-            A Pydantic CoreSchema with the subset of the currency subset of the
-            [ISO4217](https://en.wikipedia.org/wiki/ISO_4217) format.
-            It excludes bonds testing codes and precious metals.
+        Return a Pydantic CoreSchema for validating this object.
         """
         return core_schema.with_info_after_validator_function(
             cls._validate,
