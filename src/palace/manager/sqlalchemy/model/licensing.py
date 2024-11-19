@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 from enum import Enum as PythonEnum
+from enum import IntEnum, auto
 from operator import and_
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -1099,44 +1100,68 @@ class LicensePool(Base):
         hold.update(start, end, position)
         return hold, new
 
-    def best_available_license(self) -> License | None:
-        """Determine the next license that should be lent out for this pool.
+    class _LicensePriority(IntEnum):
+        TIME_LIMITED = auto()
+        PERPETUAL = auto()
+        TIME_AND_LOAN_LIMITED = auto()
+        LOAN_LIMITED = auto()
+
+    @staticmethod
+    def _time_limited_sort_key(license_: License) -> int:
+        if license_.expires is None:
+            return 0
+        return int(license_.expires.timestamp())
+
+    @staticmethod
+    def _loan_limited_sort_key(license_: License) -> int:
+        return (license_.checkouts_left or 0) * -1
+
+    @classmethod
+    def _license_sort_func(cls, license_: License) -> tuple[_LicensePriority, int, int]:
+        time_limited_key = cls._time_limited_sort_key(license_)
+        loan_limited_key = cls._loan_limited_sort_key(license_)
+
+        if license_.is_time_limited and license_.is_loan_limited:
+            return (
+                cls._LicensePriority.TIME_AND_LOAN_LIMITED,
+                time_limited_key,
+                loan_limited_key,
+            )
+
+        if license_.is_time_limited:
+            return cls._LicensePriority.TIME_LIMITED, time_limited_key, loan_limited_key
+
+        if license_.is_loan_limited:
+            return cls._LicensePriority.LOAN_LIMITED, time_limited_key, loan_limited_key
+
+        return cls._LicensePriority.PERPETUAL, time_limited_key, loan_limited_key
+
+    def best_available_licenses(self) -> list[License]:
+        """
+        Determine the next license that should be lent out from this pool.
+
+        This function returns a list of licenses that are available for lending, sorted
+        by priority. The highest priority license (the one that the next loan should be made from)
+        is the first one in the list.
 
         Time-limited licenses and perpetual licenses are the best. It doesn't matter which
         is used first, unless a time-limited license would expire within the loan period, in
-        which case it's better to loan the time-limited license so the perpetual one is still
-        available. We can handle this by always loaning the time-limited one first, followed
-        by perpetual. If there is more than one time-limited license, it's better to use the one
+        which case it's better to loan the time-limited license so the perpetual one remains
+        available.
+
+        We handle this by always loaning the time-limited one first, followed by the perpetual
+        one. If there is more than one time-limited license, it's better to use the one
         expiring soonest.
 
         If no time-limited or perpetual licenses are available, the next best is a loan-limited
-        license. We should choose the license with the most remaining loans, so that we'll
-        maximize the number of concurrent checkouts available in the future.
-
-        The worst option would be pay-per-use, but we don't yet support any distributors that
-        offer that model.
+        license. If a license is both time-limited and loan-limited, it's better to use it before
+        a license that is only loan-limited. We should choose the license with the most remaining
+        loans, so that we'll maximize the number of concurrent checkouts available in the future.
         """
-        best: License | None = None
-
-        for license in (l for l in self.licenses if l.is_available_for_borrowing):
-            if (
-                not best
-                or (license.is_time_limited and not best.is_time_limited)
-                or (
-                    license.is_time_limited
-                    and best.is_time_limited
-                    and license.expires < best.expires  # type: ignore[operator]
-                )
-                or (license.is_perpetual and not best.is_time_limited)
-                or (
-                    license.is_loan_limited
-                    and best.is_loan_limited
-                    and license.checkouts_left > best.checkouts_left  # type: ignore[operator]
-                )
-            ):
-                best = license
-
-        return best
+        return sorted(
+            (l for l in self.licenses if l.is_available_for_borrowing),
+            key=self._license_sort_func,
+        )
 
     @classmethod
     def consolidate_works(cls, _db, batch_size=10):
