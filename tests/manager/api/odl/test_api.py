@@ -764,8 +764,8 @@ class TestOPDS2WithODLApi:
         license_untouched = db.license(pool, checkouts_left=1, checkouts_available=1)
         license_lent = db.license(
             pool,
-            checkouts_left=1,
-            checkouts_available=1,
+            checkouts_left=4,
+            checkouts_available=4,
             expires=utc_now() + datetime.timedelta(weeks=1),
         )
         license_expired = db.license(
@@ -775,12 +775,13 @@ class TestOPDS2WithODLApi:
             expires=utc_now() - datetime.timedelta(weeks=1),
         )
         pool.update_availability_from_licenses()
+        assert pool.licenses_available == 8
 
         assert opds2_with_odl_api_fixture.pool.best_available_licenses() == [
-            license_untouched,
-            license_lent,
-            license_unavailable_2,
             license_unavailable_1,
+            license_unavailable_2,
+            license_lent,
+            license_untouched,
         ]
 
         # But the distributor says there are no available copies for license_unavailable_1
@@ -803,10 +804,10 @@ class TestOPDS2WithODLApi:
 
         loan_info = opds2_with_odl_api_fixture.api_checkout()
 
-        assert opds2_with_odl_api_fixture.pool.licenses_available == 1
+        assert opds2_with_odl_api_fixture.pool.licenses_available == 4
         assert license_unavailable_2.checkouts_available == 0
         assert license_unavailable_1.checkouts_available == 0
-        assert license_lent.checkouts_available == 0
+        assert license_lent.checkouts_available == 3
         assert license_untouched.checkouts_available == 1
 
         assert loan_info.license_identifier == license_lent.identifier

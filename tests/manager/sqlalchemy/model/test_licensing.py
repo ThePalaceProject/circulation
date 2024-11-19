@@ -27,6 +27,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
+from palace.manager.util import first_or_default
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.analytics_provider import MockAnalyticsProvider
@@ -481,44 +482,60 @@ class TestLicense:
 
         # First, make sure the overall order is correct
         assert licenses.pool.best_available_licenses() == [
-            loan_limited_2,
-            licenses.loan_limited,
-            licenses.time_and_loan_limited,
-            licenses.perpetual,
-            licenses.time_limited,
             time_limited_2,
+            licenses.time_limited,
+            licenses.perpetual,
+            licenses.time_and_loan_limited,
+            licenses.loan_limited,
+            loan_limited_2,
         ]
 
         # We use the time-limited license that's expiring first.
-        assert licenses.pool.best_available_licenses().pop() == time_limited_2
+        assert (
+            first_or_default(licenses.pool.best_available_licenses()) == time_limited_2
+        )
         time_limited_2.checkout()
 
         # When that's not available, we use the next time-limited license.
-        assert licenses.pool.best_available_licenses().pop() == licenses.time_limited
+        assert (
+            first_or_default(licenses.pool.best_available_licenses())
+            == licenses.time_limited
+        )
         licenses.time_limited.checkout()
 
         # Next is the perpetual license.
-        assert licenses.pool.best_available_licenses().pop() == licenses.perpetual
+        assert (
+            first_or_default(licenses.pool.best_available_licenses())
+            == licenses.perpetual
+        )
         licenses.perpetual.checkout()
 
         # The time-and-loan-limited license also counts as time-limited for this.
         assert (
-            licenses.pool.best_available_licenses().pop()
+            first_or_default(licenses.pool.best_available_licenses())
             == licenses.time_and_loan_limited
         )
         licenses.time_and_loan_limited.checkout()
 
         # Then the loan-limited license with the most remaining checkouts.
-        assert licenses.pool.best_available_licenses().pop() == licenses.loan_limited
+        assert (
+            first_or_default(licenses.pool.best_available_licenses())
+            == licenses.loan_limited
+        )
         licenses.loan_limited.checkout()
 
         # That license allows 2 concurrent checkouts, so it's still the
         # best license until it's checked out again.
-        assert licenses.pool.best_available_licenses().pop() == licenses.loan_limited
+        assert (
+            first_or_default(licenses.pool.best_available_licenses())
+            == licenses.loan_limited
+        )
         licenses.loan_limited.checkout()
 
         # There's one more loan-limited license.
-        assert licenses.pool.best_available_licenses().pop() == loan_limited_2
+        assert (
+            first_or_default(licenses.pool.best_available_licenses()) == loan_limited_2
+        )
         loan_limited_2.checkout()
 
         # Now all licenses are either loaned out or expired.
