@@ -245,6 +245,7 @@ opensearch-dsl = "~1.0"
 opensearch-py = "~1.1"
 palace-webpub-manifest-parser = "^4.0.0"
 pillow = "^11.0"
+pycountry = "^24.6.1"
 pycryptodome = "^3.18"
 pydantic = {version = "^2.9.2", extras = ["email"]}
 pydantic-settings = "^2.5.2"

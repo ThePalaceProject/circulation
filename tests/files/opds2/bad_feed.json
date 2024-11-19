@@ -74,11 +74,20 @@
           },
           {
             "name": "Samuel Langhorne Clemens"
+          },
+          "Test 123",
+          5555,
+          {
+            "bad": "data"
           }
         ],
+        "editor": 123,
+        "illustrator": {
+          "foo": []
+        },
         "identifier": "http://example.org/huckleberry-finn",
         "language": [
-          "enzz"
+          "enzz", "qx"
         ],
         "publisher": {
           "name": "Test Publisher"

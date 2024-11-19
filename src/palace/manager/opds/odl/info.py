@@ -1,28 +1,14 @@
-import sys
-from enum import auto
+from collections.abc import Sequence
 from functools import cached_property
 
 from pydantic import AwareDatetime, Field, NonNegativeInt
 
-from palace.manager.opds.base import BaseOpdsModel, obj_or_set_to_set
-from palace.manager.opds.odl.odl import Protection, Terms
-from palace.manager.opds.opds import Price
-
-# TODO: Remove this when we drop support for Python 3.10
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from backports.strenum import StrEnum
-
-
-class Status(StrEnum):
-    """
-    https://drafts.opds.io/odl-1.0.html#41-syntax
-    """
-
-    PREORDER = auto()
-    AVAILABLE = auto()
-    UNAVAILABLE = auto()
+from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.odl.protection import Protection
+from palace.manager.opds.odl.terms import Terms
+from palace.manager.opds.opds2 import Price
+from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
+from palace.manager.sqlalchemy.model.licensing import LicenseStatus
 
 
 class Loan(BaseOpdsModel):
@@ -60,9 +46,14 @@ class LicenseInfo(BaseOpdsModel):
         return "application/vnd.odl.info+json"
 
     identifier: str
-    status: Status
+    status: LicenseStatus
     checkouts: Checkouts
-    format: frozenset[str] | str
+    format: StrOrTuple[str] = tuple()
+
+    @cached_property
+    def formats(self) -> Sequence[str]:
+        return obj_or_tuple_to_tuple(self.format)
+
     created: AwareDatetime | None = None
     terms: Terms = Field(default_factory=Terms)
     protection: Protection = Field(default_factory=Protection)
@@ -70,9 +61,5 @@ class LicenseInfo(BaseOpdsModel):
     source: str | None = None
 
     @cached_property
-    def formats(self) -> frozenset[str]:
-        return obj_or_set_to_set(self.format)
-
-    @cached_property
     def active(self) -> bool:
-        return self.status == Status.AVAILABLE
+        return self.status == LicenseStatus.available

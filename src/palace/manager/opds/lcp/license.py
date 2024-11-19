@@ -8,7 +8,8 @@ from pydantic import (
 )
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.opds.base import BaseLink, BaseOpdsModel, ListOfLinks
+from palace.manager.opds.base import BaseOpdsModel
+from palace.manager.opds.types.link import BaseLink, CompactCollection
 
 
 class Link(BaseLink):
@@ -106,13 +107,13 @@ class LicenseDocument(BaseOpdsModel):
     provider: str
     updated: AwareDatetime | None = None
     encryption: Encryption
-    links: ListOfLinks[Link]
+    links: CompactCollection[Link]
     rights: Rights | None = None
     signature: Signature
 
     @field_validator("links")
     @classmethod
-    def _validate_links(cls, value: ListOfLinks[Link]) -> ListOfLinks[Link]:
+    def _validate_links(cls, value: CompactCollection[Link]) -> CompactCollection[Link]:
         if value.get(rel="hint") is None:
             raise PalaceValueError("links must contain a link with rel 'hint'")
         if value.get(rel="publication") is None:

@@ -6,8 +6,8 @@ https://drafts.opds.io/authentication-for-opds-1.0
 from pydantic import BaseModel, Field, field_validator
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.opds.base import ListOfLinks
-from palace.manager.opds.opds import Link
+from palace.manager.opds.rwpm import Link
+from palace.manager.opds.types.link import CompactCollection
 
 
 class AuthenticationLabels(BaseModel):
@@ -18,7 +18,7 @@ class AuthenticationLabels(BaseModel):
 class Authentication(BaseModel):
     type: str
     labels: AuthenticationLabels | None = None
-    links: ListOfLinks[Link]
+    links: CompactCollection[Link]
 
 
 class AuthenticationDocument(BaseModel):
@@ -37,7 +37,7 @@ class AuthenticationDocument(BaseModel):
     title: str
     authentication: list[Authentication]
     description: str | None = None
-    links: ListOfLinks[Link] = Field(default_factory=ListOfLinks)
+    links: CompactCollection[Link] = Field(default_factory=CompactCollection)
 
     @field_validator("authentication")
     @classmethod
