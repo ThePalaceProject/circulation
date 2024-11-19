@@ -168,20 +168,13 @@ class TestLoanlikeReaperMonitor:
         assert {open_access_loan, sot_loan, unlimited_access_loan} == set(
             inactive_patron.loans
         )
-        assert 3 == len(inactive_patron.holds)
+        assert len(inactive_patron.holds) == 3
 
         # The active patron's loans and holds are unaffected, either
         # because they have not expired or because they have no known
         # expiration date and were created relatively recently.
-        assert 2 == len(current_patron.loans)
-        assert 2 == len(current_patron.holds)
-
-        call_args_list = (
-            services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
-        )
-        assert len(call_args_list) == 2
-        for call_args in call_args_list:
-            assert call_args.kwargs["event_type"] == CirculationEvent.CM_LOAN_EXPIRED
+        assert len(current_patron.loans) == 2
+        assert len(current_patron.holds) == 2
 
         # Now fire up the hold reaper.
         hold_monitor = HoldReaper(db.session)
@@ -196,12 +189,18 @@ class TestLoanlikeReaperMonitor:
         assert [sot_hold] == inactive_patron.holds
         assert 2 == len(current_patron.holds)
 
+        # verify expected circ event count and order for two monitor operations.
         call_args_list = (
             services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
         )
-        assert len(call_args_list) == 2
-        for call_args in call_args_list:
-            assert call_args.kwargs["event_type"] == CirculationEvent.CM_HOLD_EXPIRED
+        assert len(call_args_list) == 4
+        event_types = [call_args.kwargs["event_type"] for call_args in call_args_list]
+        assert event_types == [
+            CirculationEvent.CM_LOAN_EXPIRED,
+            CirculationEvent.CM_LOAN_EXPIRED,
+            CirculationEvent.CM_HOLD_EXPIRED,
+            CirculationEvent.CM_HOLD_EXPIRED,
+        ]
 
 
 class TestIdlingAnnotationReaper:

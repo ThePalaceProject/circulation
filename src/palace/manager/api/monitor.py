@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 from sqlalchemy import and_, or_
 
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
@@ -47,23 +45,20 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
 
-    def post_delete_op(self, row: Loan | Hold) -> Callable:
+    def post_delete(self, row: Loan | Hold) -> None:
+        ce = CirculationEvent
+        event_type = (
+            CirculationEvent.CM_LOAN_EXPIRED
+            if isinstance(row, Loan)
+            else CirculationEvent.CM_HOLD_EXPIRED
+        )
 
-        def post_delete() -> None:
-            ce = CirculationEvent
-            event_type = (
-                CirculationEvent.CM_LOAN_EXPIRED
-                if isinstance(row, Loan)
-                else CirculationEvent.CM_HOLD_EXPIRED
-            )
-            self.services.analytics.collect_event(
-                library=row.library,
-                license_pool=row.license_pool,
-                event_type=event_type,
-                patron=row.patron,
-            )
-
-        return post_delete
+        self.services.analytics.collect_event(
+            library=row.library,
+            license_pool=row.license_pool,
+            event_type=event_type,
+            patron=row.patron,
+        )
 
 
 class LoanReaper(LoanlikeReaperMonitor):
