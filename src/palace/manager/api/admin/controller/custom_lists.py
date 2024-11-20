@@ -23,6 +23,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.problem_details import CANNOT_DELETE_SHARED_LIST
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWED
 from palace.manager.core.query.customlist import CustomListQueries
@@ -83,7 +84,7 @@ class CustomListsController(
         )
 
     def custom_lists(self) -> dict | ProblemDetail | Response | None:
-        library: Library = flask.request.library  # type: ignore  # "Request" has no attribute "library"
+        library = get_request_library()
         self.require_librarian(library)
 
         if flask.request.method == "GET":
@@ -322,7 +323,7 @@ class CustomListsController(
         return url_fn
 
     def custom_list(self, list_id: int) -> Response | dict | ProblemDetail | None:
-        library: Library = flask.request.library  # type: ignore
+        library = get_request_library()
         self.require_librarian(library)
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
 
@@ -375,7 +376,7 @@ class CustomListsController(
 
         elif flask.request.method == "DELETE":
             # Deleting requires a library manager.
-            self.require_library_manager(flask.request.library)  # type: ignore
+            self.require_library_manager(get_request_library())
 
             if len(list.shared_locally_with_libraries) > 0:
                 return CANNOT_DELETE_SHARED_LIST
@@ -413,7 +414,7 @@ class CustomListsController(
         customlist = get_one(self._db, CustomList, id=customlist_id)
         if not customlist:
             return MISSING_CUSTOM_LIST
-        if customlist.library != flask.request.library:  # type: ignore
+        if customlist.library != get_request_library():
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
             )

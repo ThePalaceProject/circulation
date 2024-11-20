@@ -249,8 +249,8 @@ class TestCustomListsController:
         library = admin_librarian_fixture.ctrl.db.library()
         with admin_librarian_fixture.request_context_with_admin(
             "/", method="POST", admin=admin
-        ):
-            flask.request.library = library  # type: ignore[attr-defined]
+        ) as ctx:
+            setattr(ctx.request, "library", library)
             form = ImmutableMultiDict(
                 [
                     ("name", "name"),

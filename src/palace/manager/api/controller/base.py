@@ -123,5 +123,5 @@ class BaseCirculationManagerController(LoggerMixin):
 
         if not library:
             return LIBRARY_NOT_FOUND
-        flask.request.library = library  # type: ignore[attr-defined]
+        setattr(flask.request, "library", library)
         return library

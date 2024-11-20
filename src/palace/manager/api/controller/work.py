@@ -17,6 +17,7 @@ from palace.manager.api.lanes import (
     SeriesLane,
 )
 from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.metadata_layer import ContributorData
@@ -40,7 +41,7 @@ class WorkController(CirculationManagerController):
         self, contributor_name, languages, audiences, feed_class=OPDSAcquisitionFeed
     ):
         """Serve a feed of books written by a particular author"""
-        library = flask.request.library
+        library = get_request_library()
         if not contributor_name:
             return NO_SUCH_LANE.detailed(_("No contributor provided"))
 
@@ -105,7 +106,7 @@ class WorkController(CirculationManagerController):
         returns a single entry while the /works lookup protocol returns a
         feed containing any number of entries.
         """
-        library = flask.request.library
+        library = get_request_library()
         work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
@@ -146,7 +147,7 @@ class WorkController(CirculationManagerController):
     ):
         """Serve a groups feed of books related to a given book."""
 
-        library = flask.request.library
+        library = get_request_library()
         work = self.load_work(library, identifier_type, identifier)
         if work is None:
             return NOT_FOUND_ON_REMOTE
@@ -203,7 +204,7 @@ class WorkController(CirculationManagerController):
     ):
         """Serve a feed of recommendations related to a given book."""
 
-        library = flask.request.library
+        library = get_request_library()
         work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
@@ -255,7 +256,7 @@ class WorkController(CirculationManagerController):
 
     def series(self, series_name, languages, audiences, feed_class=OPDSAcquisitionFeed):
         """Serve a feed of books in a given series."""
-        library = flask.request.library
+        library = get_request_library()
         if not series_name:
             return NO_SUCH_LANE.detailed(_("No series provided"))
 

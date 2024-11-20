@@ -1,9 +1,9 @@
 from collections.abc import Generator
 from contextlib import contextmanager
-from unittest.mock import MagicMock
+from unittest.mock import create_autospec
 
-import flask
 import pytest
+from flask.ctx import RequestContext
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
@@ -11,6 +11,7 @@ from palace.manager.api.app import app, initialize_database
 from palace.manager.sqlalchemy.flask_sqlalchemy_session import current_session
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.circulation import MockCirculationManager
@@ -27,7 +28,7 @@ class ScopedSessionFixture:
         with db_fixture.patch_engine():
             initialize_database()
         self.app.manager = MockCirculationManager(app._db, services.services)
-        self.mock_library = MagicMock()
+        self.mock_library = create_autospec(Library)
         self.mock_library.has_root_lanes = False
 
     def _cleanup(self) -> None:
@@ -45,10 +46,10 @@ class ScopedSessionFixture:
             fixture._cleanup()
 
     @contextmanager
-    def request_context(self, path: str) -> Generator[None, None, None]:
+    def request_context(self, path: str) -> Generator[RequestContext]:
         with self.app.test_request_context(path) as ctx:
-            ctx.request.library = self.mock_library  # type: ignore[attr-defined]
-            yield
+            setattr(ctx.request, "library", self.mock_library)
+            yield ctx
 
 
 @pytest.fixture
@@ -135,7 +136,6 @@ class TestScopedSession:
             # The controller still works in the new request context -
             # nothing it needs is associated with the previous scoped
             # session.
-            flask.request.library = scoped_session_fixture.mock_library  # type: ignore[attr-defined]
             response = app.manager.index_controller()
             assert 302 == response.status_code
 

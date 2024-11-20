@@ -6,7 +6,6 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any
 
-import flask
 import pytest
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
@@ -250,7 +249,7 @@ class ControllerFixture:
         else:
             library = self.db.default_library()
         with self.app.test_request_context(route, *args, **kwargs) as c:
-            flask.request.library = library
+            setattr(c.request, "library", library)
             yield c
 
 

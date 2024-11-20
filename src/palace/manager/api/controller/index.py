@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import flask
 from flask import Response, redirect, url_for
 
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -15,7 +15,7 @@ class IndexController(CirculationManagerController):
 
     def __call__(self):
         # The simple case: the app is equally open to all clients.
-        library_short_name = flask.request.library.short_name
+        library_short_name = get_request_library().short_name
         if not self.has_root_lanes():
             return redirect(
                 url_for(
@@ -43,7 +43,7 @@ class IndexController(CirculationManagerController):
 
         :return: A boolean
         """
-        return flask.request.library.has_root_lanes
+        return get_request_library().has_root_lanes
 
     def authenticated_patron_root_lane(self):
         patron = self.authenticated_patron_from_request()
@@ -54,7 +54,7 @@ class IndexController(CirculationManagerController):
         return patron.root_lane
 
     def appropriate_index_for_patron_type(self):
-        library_short_name = flask.request.library.short_name
+        library_short_name = get_request_library().short_name
         root_lane = self.authenticated_patron_root_lane()
         if isinstance(root_lane, ProblemDetail):
             return root_lane

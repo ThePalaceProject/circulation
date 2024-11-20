@@ -348,46 +348,33 @@ class TestURNLookupController:
             assert work.title in response_data
 
 
-class LoadMethodsFixture:
-    transaction: DatabaseTransactionFixture
-    app: Flask
-
-
-@pytest.fixture()
-def load_methods_fixture(
-    db,
-) -> LoadMethodsFixture:
-    data = LoadMethodsFixture()
-    data.transaction = db
-    data.app = Flask(LoadMethodsFixture.__name__)
-    Babel(data.app)
-    return data
-
-
 class TestLoadMethods:
     def test_load_facets_from_request(
-        self, load_methods_fixture: LoadMethodsFixture, library_fixture: LibraryFixture
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
     ):
-        fixture, data = load_methods_fixture, load_methods_fixture.transaction
-
         # The library has two EntryPoints enabled.
         settings = library_fixture.mock_settings()
         settings.enabled_entry_points = [
             EbooksEntryPoint.INTERNAL_NAME,
             AudiobooksEntryPoint.INTERNAL_NAME,
         ]
-        library = data.library(settings=settings)
+        library = db.library(settings=settings)
 
-        with fixture.app.test_request_context("/?order=%s" % Facets.ORDER_TITLE):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context(
+            "/?order=%s" % Facets.ORDER_TITLE, library=library
+        ):
             facets = load_facets_from_request()
             assert Facets.ORDER_TITLE == facets.order
             # Enabled facets are passed in to the newly created Facets,
             # in case the load method received a custom config.
             assert facets.facets_enabled_at_init is not None
 
-        with fixture.app.test_request_context("/?order=bad_facet"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context(
+            "/?order=bad_facet", library=library
+        ):
             problemdetail = load_facets_from_request()
             assert INVALID_INPUT.uri == problemdetail.uri
 
@@ -396,16 +383,18 @@ class TestLoadMethods:
         # configured on the present library.
         worklist = WorkList()
         worklist.initialize(library)
-        with fixture.app.test_request_context("/?entrypoint=Audio"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context(
+            "/?entrypoint=Audio", library=library
+        ):
             facets = load_facets_from_request(worklist=worklist)
             assert AudiobooksEntryPoint == facets.entrypoint
             assert facets.entrypoint_is_default is False
 
         # If the requested EntryPoint not configured, the default
         # EntryPoint is used.
-        with fixture.app.test_request_context("/?entrypoint=NoSuchEntryPoint"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context(
+            "/?entrypoint=NoSuchEntryPoint", library=library
+        ):
             default_entrypoint = object()
             facets = load_facets_from_request(
                 worklist=worklist, default_entrypoint=default_entrypoint
@@ -415,19 +404,18 @@ class TestLoadMethods:
 
         # Load a SearchFacets object that pulls information from an
         # HTTP header.
-        with fixture.app.test_request_context("/", headers={"Accept-Language": "ja"}):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context(
+            "/", headers={"Accept-Language": "ja"}, library=library
+        ):
             facets = load_facets_from_request(base_class=SearchFacets)
             assert ["jpn"] == facets.languages
 
     def test_load_facets_from_request_class_instantiation(
-        self, load_methods_fixture: LoadMethodsFixture
+        self, flask_app_fixture: FlaskAppFixture, db: DatabaseTransactionFixture
     ):
         """The caller of load_facets_from_request() can specify a class other
         than Facets to call from_request() on.
         """
-
-        fixture, data = load_methods_fixture, load_methods_fixture.transaction
 
         class MockFacets:
             called_with: dict
@@ -439,19 +427,14 @@ class TestLoadMethods:
                 return facets
 
         kwargs = dict(some_arg="some value")
-        with fixture.app.test_request_context(""):
-            flask.request.library = data.default_library()  # type: ignore[attr-defined]
+        with flask_app_fixture.test_request_context("", library=db.default_library()):
             facets = load_facets_from_request(
                 None, None, base_class=MockFacets, base_class_constructor_kwargs=kwargs
             )
         assert isinstance(facets, MockFacets)
         assert "some value" == facets.called_with["some_arg"]
 
-    def test_load_pagination_from_request(
-        self, load_methods_fixture: LoadMethodsFixture
-    ):
-        fixture = load_methods_fixture
-
+    def test_load_pagination_from_request(self, flask_app_fixture: FlaskAppFixture):
         # Verify that load_pagination_from_request instantiates a
         # pagination object of the specified class (Pagination, by
         # default.)
@@ -464,7 +447,7 @@ class TestLoadMethods:
                 cls.called_with = (get_arg, default_size, kwargs)
                 return "I'm a pagination object!"
 
-        with fixture.app.test_request_context("/"):
+        with flask_app_fixture.test_request_context("/"):
             # Call load_pagination_from_request and verify that
             # Mock.from_request was called with the arguments we expect.
             extra_kwargs = dict(extra="kwarg")
@@ -478,13 +461,13 @@ class TestLoadMethods:
 
         # If no default size is specified, we trust from_request to
         # use the class default.
-        with fixture.app.test_request_context("/"):
+        with flask_app_fixture.test_request_context("/"):
             pagination = load_pagination_from_request(base_class=Mock)
             assert (flask.request.args.get, None, {}) == Mock.called_with
 
         # Now try a real case using the default pagination class,
         # Pagination
-        with fixture.app.test_request_context("/?size=50&after=10"):
+        with flask_app_fixture.test_request_context("/?size=50&after=10"):
             pagination = load_pagination_from_request()
             assert isinstance(pagination, Pagination)
             assert 50 == pagination.size

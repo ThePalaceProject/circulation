@@ -4,11 +4,11 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 
-import flask
 from flask import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.goals import Goals
 from palace.manager.marc.exporter import MarcExporter
 from palace.manager.service.integration_registry.catalog_services import (
@@ -60,7 +60,7 @@ class MARCRecordController:
 
     @staticmethod
     def library() -> Library:
-        return flask.request.library  # type: ignore[no-any-return,attr-defined]
+        return get_request_library()
 
     def has_integration(self, session: Session, library: Library) -> bool:
         protocols = self.registry.get_protocols(MarcExporter)

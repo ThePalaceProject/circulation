@@ -4,7 +4,6 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
-import flask
 import pytest
 from flask.ctx import RequestContext
 from flask_babel import Babel
@@ -43,10 +42,10 @@ class FlaskAppFixture:
     ) -> Generator[RequestContext]:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
-            flask.request.library = library  # type: ignore[attr-defined]
-            flask.request.admin = admin  # type: ignore[attr-defined]
-            flask.request.form = ImmutableMultiDict()
-            flask.request.files = ImmutableMultiDict()
+            setattr(c.request, "library", library)
+            setattr(c.request, "admin", admin)
+            setattr(c.request, "form", ImmutableMultiDict())
+            setattr(c.request, "files", ImmutableMultiDict())
             try:
                 yield c
             finally:

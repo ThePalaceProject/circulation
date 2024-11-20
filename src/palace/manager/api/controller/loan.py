@@ -23,6 +23,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -89,7 +90,7 @@ class LoanController(CirculationManagerController):
            book or the license file.
         """
         patron = flask.request.patron  # type: ignore[attr-defined]
-        library = flask.request.library  # type: ignore[attr-defined]
+        library = get_request_library()
 
         header = self.authorization_header()
         credential = self.manager.auth.get_credential_from_header(header)
@@ -300,7 +301,7 @@ class LoanController(CirculationManagerController):
             # There's still a chance this request can succeed, but if not,
             # we'll be sending out authentication_response.
             patron = None
-        library = flask.request.library  # type: ignore
+        library = get_request_library()
         header = self.authorization_header()
         credential = self.manager.auth.get_credential_from_header(header)
 
@@ -492,7 +493,7 @@ class LoanController(CirculationManagerController):
         self, identifier_type: str, identifier: str
     ) -> OPDSEntryResponse | ProblemDetail | None:
         patron = flask.request.patron  # type: ignore[attr-defined]
-        library = flask.request.library  # type: ignore[attr-defined]
+        library = get_request_library()
         pools = self.load_licensepools(library, identifier_type, identifier)
         if isinstance(pools, ProblemDetail):
             return pools

@@ -960,11 +960,11 @@ class TestCirculationAPI:
         # We must run the rest of the tests in a simulated Flask request
         # context.
         app = Flask(__name__)
-        with app.test_request_context():
+        with app.test_request_context() as ctx:
             # The request library takes precedence over the Library
             # associated with the CirculationAPI (though this
             # shouldn't happen).
-            flask.request.library = l2  # type: ignore
+            setattr(ctx.request, "library", l2)
             assert_event(
                 (None, None, "event"),
                 (
@@ -976,11 +976,11 @@ class TestCirculationAPI:
                 ),
             )
 
-        with app.test_request_context():
+        with app.test_request_context() as ctx:
             # The library of the request patron also takes precedence
             # over both (though again, this shouldn't happen).
-            flask.request.library = l1  # type: ignore
-            flask.request.patron = p2  # type: ignore
+            setattr(ctx.request, "library", l1)
+            setattr(ctx.request, "patron", p2)
             assert_event(
                 (None, None, "event"),
                 (
