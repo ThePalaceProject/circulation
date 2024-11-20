@@ -50,7 +50,7 @@ class MockAdminController(MockController):
     def authenticated_admin_from_request(self):
         if self.authenticated:
             admin = object()
-            flask.request.admin = self.AUTHENTICATED_ADMIN
+            setattr(flask.request, "admin", self.AUTHENTICATED_ADMIN)
             return self.AUTHENTICATED_ADMIN
         # For the redirect case we want to return a Problem Detail.
         elif self.authenticated_problem_detail:

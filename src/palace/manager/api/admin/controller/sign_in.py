@@ -26,6 +26,7 @@ from palace.manager.api.admin.template_styles import (
     section_style,
     small_link_style,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -116,7 +117,7 @@ class SignInController(AdminController):
         return SanitizedRedirections.redirect(redirect_url)
 
     def change_password(self):
-        admin = flask.request.admin
+        admin = get_request_admin()
         new_password = flask.request.form.get("password")
         if new_password:
             admin.password = new_password

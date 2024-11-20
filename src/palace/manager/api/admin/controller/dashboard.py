@@ -8,6 +8,7 @@ from sqlalchemy import desc, nullslast
 from sqlalchemy.orm import Session
 
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
@@ -26,7 +27,7 @@ class DashboardController(CirculationManagerController):
     def stats(
         self, stats_function: Callable[[Admin, Session], StatisticsResponse]
     ) -> StatisticsResponse:
-        admin: Admin = getattr(flask.request, "admin")
+        admin = get_request_admin()
         return stats_function(admin, self._db)
 
     def circulation_events(self):

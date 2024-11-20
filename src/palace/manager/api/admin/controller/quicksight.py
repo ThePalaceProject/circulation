@@ -8,6 +8,7 @@ from palace.manager.api.admin.model.quicksight import (
     QuicksightGenerateUrlRequest,
     QuicksightGenerateUrlResponse,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from palace.manager.sqlalchemy.model.admin import Admin
@@ -43,7 +44,7 @@ class QuickSightController(LoggerMixin):
         return arns
 
     def generate_quicksight_url(self, dashboard_name) -> dict:
-        admin: Admin = getattr(flask.request, "admin")
+        admin: Admin = get_request_admin()
         request_data = QuicksightGenerateUrlRequest(**flask.request.args)
 
         authorized_arns = self.dashboard_authorized_arns(dashboard_name)
