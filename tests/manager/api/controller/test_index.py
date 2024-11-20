@@ -1,7 +1,5 @@
 import json
 
-import flask
-
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.util.authentication_for_opds import AuthenticationForOPDSDocument
 from tests.fixtures.api_controller import CirculationControllerFixture
@@ -9,8 +7,8 @@ from tests.fixtures.api_controller import CirculationControllerFixture
 
 class TestIndexController:
     def test_simple_redirect(self, circulation_fixture: CirculationControllerFixture):
-        with circulation_fixture.app.test_request_context("/"):
-            flask.request.library = circulation_fixture.library  # type: ignore
+        with circulation_fixture.app.test_request_context("/") as ctx:
+            setattr(ctx.request, "library", circulation_fixture.library)
             response = circulation_fixture.manager.index_controller()
             assert 302 == response.status_code
             assert "http://localhost/default/groups/" == response.headers["location"]

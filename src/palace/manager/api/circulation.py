@@ -35,6 +35,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
@@ -948,12 +949,12 @@ class CirculationAPI(LoggerMixin):
         if patron:
             # The library of the patron who caused the event.
             library = patron.library
-        elif flask.request and getattr(flask.request, "library", None):
-            # The library associated with the current request.
-            library = getattr(flask.request, "library")
         else:
-            # The library associated with the CirculationAPI itself.
-            library = self.library
+            # The library associated with the current request, defaulting to
+            # the library associated with the CirculationAPI itself if we are
+            # outside a request context, or if the request context does not
+            # have a library associated with it.
+            library = get_request_library(default=self.library)
 
         neighborhood = None
         if (

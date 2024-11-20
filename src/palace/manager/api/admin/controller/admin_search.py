@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import flask
 from sqlalchemy import func, or_
 
 from palace.manager.api.admin.controller.base import AdminController
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,
@@ -30,7 +30,7 @@ class AdminSearchController(AdminController):
         - Publisher
         - Subject
         """
-        library: Library = flask.request.library  # type: ignore
+        library = get_request_library()
         collection_ids = [coll.id for coll in library.collections if coll.id]
         return self._search_field_values_cached(collection_ids)
 

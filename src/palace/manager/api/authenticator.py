@@ -33,6 +33,7 @@ from palace.manager.api.problem_details import (
     UNKNOWN_SAML_PROVIDER,
     UNSUPPORTED_AUTHENTICATION_MECHANISM,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.user_profile import ProfileController
 from palace.manager.integration.goals import Goals
 from palace.manager.service.analytics.analytics import Analytics
@@ -129,7 +130,7 @@ class Authenticator(LoggerMixin):
 
     @property
     def current_library_short_name(self):
-        return flask.request.library.short_name
+        return get_request_library().short_name
 
     def populate_authenticators(
         self, _db, libraries: Iterable[Library], analytics: Analytics | None

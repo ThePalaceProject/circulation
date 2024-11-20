@@ -767,8 +767,7 @@ class TestWorkController:
             )
 
         # test no library
-        with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = None  # type: ignore[attr-defined]
+        with work_fixture.request_context_with_library_and_admin("/", library=None):
             with pytest.raises(ProblemDetailException) as exc:
                 work_fixture.manager.admin_work_controller.suppress(
                     lp.identifier.type, lp.identifier.identifier
@@ -817,8 +816,7 @@ class TestWorkController:
             )
 
         # test no library
-        with work_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = None  # type: ignore[attr-defined]
+        with work_fixture.request_context_with_library_and_admin("/", library=None):
             with pytest.raises(ProblemDetailException) as exc:
                 work_fixture.manager.admin_work_controller.unsuppress(
                     lp.identifier.type, lp.identifier.identifier

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import flask
-
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
     URNLookupController as CoreURNLookupController,
 )
@@ -18,7 +17,7 @@ class URNLookupController(CoreURNLookupController):
         top-level WorkList, and use it to generate an OPDS lookup
         feed.
         """
-        library = flask.request.library
+        library = get_request_library()
         top_level_worklist = self.manager.top_level_lanes[library.id]
         annotator = CirculationManagerAnnotator(top_level_worklist)
         return super().work_lookup(annotator, route_name)

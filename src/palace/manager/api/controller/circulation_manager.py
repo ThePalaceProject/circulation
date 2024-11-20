@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-import flask
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session, eagerload
@@ -17,6 +16,7 @@ from palace.manager.api.problem_details import (
     NOT_AGE_APPROPRIATE,
     REMOTE_INTEGRATION_FAILED,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.redis.redis import Redis
@@ -82,7 +82,7 @@ class CirculationManagerController(BaseCirculationManagerController):
     @property
     def circulation(self) -> CirculationAPI:
         """Return the appropriate CirculationAPI for the request Library."""
-        library_id = flask.request.library.id  # type: ignore[attr-defined]
+        library_id = get_request_library().id
         return self.manager.circulation_apis[library_id]  # type: ignore[no-any-return]
 
     @property
@@ -103,7 +103,7 @@ class CirculationManagerController(BaseCirculationManagerController):
 
     def load_lane(self, lane_identifier: int | None) -> Lane | WorkList | ProblemDetail:
         """Turn user input into a Lane object."""
-        library_id = flask.request.library.id  # type: ignore[attr-defined]
+        library_id = get_request_library().id
 
         lane = None
         if lane_identifier is None:

@@ -15,6 +15,7 @@ from palace.manager.api.lanes import (
     JackpotWorkList,
 )
 from palace.manager.api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
     load_facets_from_request,
     load_pagination_from_request,
@@ -45,7 +46,7 @@ class OPDSFeedController(CirculationManagerController):
         :param feed_class: A replacement for AcquisitionFeed, for use in
             tests.
         """
-        library = flask.request.library
+        library = get_request_library()
 
         # Special case: a patron with a root lane who attempts to access
         # the library's top-level WorkList is redirected to their root
@@ -128,7 +129,7 @@ class OPDSFeedController(CirculationManagerController):
         if isinstance(search_engine, ProblemDetail):
             return search_engine
 
-        library_short_name = flask.request.library.short_name
+        library_short_name = get_request_library().short_name
         url = url_for(
             "feed",
             lane_identifier=lane_identifier,
@@ -159,7 +160,7 @@ class OPDSFeedController(CirculationManagerController):
         lane = self.load_lane(lane_identifier)
         if isinstance(lane, ProblemDetail):
             return lane
-        library = flask.request.library
+        library = get_request_library()
         library_short_name = library.short_name
         url = url_for(
             "navigation_feed",
@@ -191,7 +192,7 @@ class OPDSFeedController(CirculationManagerController):
         """Build or retrieve a crawlable acquisition feed for the
         request library.
         """
-        library = flask.request.library
+        library = get_request_library()
         url = url_for(
             "crawlable_library_feed",
             library_short_name=library.short_name,
@@ -224,7 +225,7 @@ class OPDSFeedController(CirculationManagerController):
         # TODO: A library is not strictly required here, since some
         # CustomLists aren't associated with a library, but this isn't
         # a use case we need to support now.
-        library = flask.request.library
+        library = get_request_library()
         list = CustomList.find(self._db, list_name, library=library)
         if not list:
             return NO_SUCH_LIST
@@ -285,7 +286,7 @@ class OPDSFeedController(CirculationManagerController):
         )
 
     def _load_search_facets(self, lane):
-        entrypoints = list(flask.request.library.entrypoints)
+        entrypoints = list(get_request_library().entrypoints)
         if len(entrypoints) > 1:
             # There is more than one enabled EntryPoint.
             # By default, search them all.
@@ -326,7 +327,7 @@ class OPDSFeedController(CirculationManagerController):
         # Check whether there is a query string -- if not, we want to
         # send an OpenSearch document explaining how to search.
         query = flask.request.args.get("q")
-        library_short_name = flask.request.library.short_name
+        library_short_name = get_request_library().short_name
 
         # Create a function that, when called, generates a URL to the
         # search controller.
@@ -391,7 +392,7 @@ class OPDSFeedController(CirculationManagerController):
         :return: A ProblemDetail if there's a problem loading the faceting
             object; otherwise the return value of `feed_factory`.
         """
-        library = flask.request.library
+        library = get_request_library()
         search_engine = self.search_engine
         if isinstance(search_engine, ProblemDetail):
             return search_engine

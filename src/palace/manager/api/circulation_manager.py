@@ -32,6 +32,7 @@ from palace.manager.api.controller.work import WorkController
 from palace.manager.api.lanes import load_lanes
 from palace.manager.api.problem_details import NO_SUCH_LANE
 from palace.manager.api.saml.controller import SAMLController
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.app_server import (
     ApplicationVersionController,
     load_facets_from_request,
@@ -392,7 +393,7 @@ class CirculationManager(LoggerMixin):
         elif lane and isinstance(lane, WorkList):
             library = lane.get_library(self._db)
         if not library and hasattr(flask.request, "library"):
-            library = flask.request.library
+            library = get_request_library()
 
         # If no library is provided, the best we can do is a generic
         # annotator for this application.
@@ -434,7 +435,7 @@ class CirculationManager(LoggerMixin):
         internal details of deployment, it should only be enabled when
         diagnosing deployment problems.
         """
-        name = flask.request.library.short_name
+        name = get_request_library().short_name
         value = self.authentication_for_opds_documents.get(name, None)
         if value is None:
             # The document was not in the cache, either because it's

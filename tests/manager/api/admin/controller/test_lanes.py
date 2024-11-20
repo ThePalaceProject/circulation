@@ -1,6 +1,5 @@
 import json
 
-import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
@@ -84,8 +83,7 @@ class TestLanesController:
         lane_for_list.priority = 2
         lane_for_list.size = 1
 
-        with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with alm_fixture.request_context_with_library_and_admin("/", library=library):
             # The admin is not a librarian for this library.
             pytest.raises(
                 AdminNotAuthorized,
@@ -135,13 +133,17 @@ class TestLanesController:
             assert True == list_info.get("inherit_parent_restrictions")
 
     def test_lanes_post_errors(self, alm_fixture: AdminLibraryManagerFixture):
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict([])
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict([])
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert NO_DISPLAY_NAME_FOR_LANE == response
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                 ]
@@ -154,8 +156,10 @@ class TestLanesController:
         )
         list.library = alm_fixture.ctrl.db.default_library()
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("id", "12345"),
                     ("display_name", "lane"),
@@ -166,9 +170,10 @@ class TestLanesController:
             assert MISSING_LANE == response
 
         library = alm_fixture.ctrl.db.library()
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.library = library  # type: ignore[attr-defined]
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST", library=library
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -183,8 +188,10 @@ class TestLanesController:
         lane2 = alm_fixture.ctrl.db.lane("lane2")
         lane1.customlists += [list]
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("id", lane1.id),
                     ("display_name", "lane2"),
@@ -194,8 +201,10 @@ class TestLanesController:
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane2"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -204,8 +213,10 @@ class TestLanesController:
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", "12345"),
                     ("display_name", "lane"),
@@ -215,8 +226,10 @@ class TestLanesController:
             response = alm_fixture.manager.admin_lanes_controller.lanes()
             assert MISSING_LANE.uri == response.uri
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", lane1.id),
                     ("display_name", "lane"),
@@ -236,8 +249,10 @@ class TestLanesController:
         parent = alm_fixture.ctrl.db.lane("parent")
         sibling = alm_fixture.ctrl.db.lane("sibling", parent=parent)
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("parent_id", parent.id),
                     ("display_name", "lane"),
@@ -274,8 +289,8 @@ class TestLanesController:
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library
-        ):
-            flask.request.form = ImmutableMultiDict(
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -292,8 +307,8 @@ class TestLanesController:
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library
-        ):
-            flask.request.form = ImmutableMultiDict(
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane"),
                     ("custom_list_ids", json.dumps([list.id])),
@@ -330,8 +345,10 @@ class TestLanesController:
         # are two works in the lane.
         assert 0 == lane.size
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("id", str(lane.id)),
                     ("display_name", "new name"),
@@ -353,8 +370,10 @@ class TestLanesController:
         """Default lanes only allow the display_name to be edited"""
         lane: Lane = alm_fixture.ctrl.db.lane("default")
         customlist, _ = alm_fixture.ctrl.db.customlist()
-        with alm_fixture.request_context_with_library_and_admin("/", method="POST"):
-            flask.request.form = ImmutableMultiDict(
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ) as ctx:
+            ctx.request.form = ImmutableMultiDict(
                 [
                     ("id", str(lane.id)),
                     ("parent_id", "12345"),
@@ -390,8 +409,9 @@ class TestLanesController:
             .count()
         )
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="DELETE", library=library
+        ):
             response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
@@ -426,8 +446,9 @@ class TestLanesController:
             .count()
         )
 
-        with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="DELETE", library=library
+        ):
             response = alm_fixture.manager.admin_lanes_controller.lane(lane.id)
             assert 200 == response.status_code
 
@@ -454,8 +475,9 @@ class TestLanesController:
 
         lane = alm_fixture.ctrl.db.lane("lane")
         library = alm_fixture.ctrl.db.library()
-        with alm_fixture.request_context_with_library_and_admin("/", method="DELETE"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", method="DELETE", library=library
+        ):
             pytest.raises(
                 AdminNotAuthorized,
                 alm_fixture.manager.admin_lanes_controller.lane,
@@ -526,8 +548,7 @@ class TestLanesController:
         library = alm_fixture.ctrl.db.library()
         old_lane = alm_fixture.ctrl.db.lane("old lane", library=library)
 
-        with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library  # type: ignore[attr-defined]
+        with alm_fixture.request_context_with_library_and_admin("/", library=library):
             pytest.raises(
                 AdminNotAuthorized,
                 alm_fixture.manager.admin_lanes_controller.reset,
@@ -570,9 +591,10 @@ class TestLanesController:
             {"id": parent1.id},
         ]
 
-        with alm_fixture.request_context_with_library_and_admin("/"):
-            flask.request.library = library  # type: ignore[attr-defined]
-            flask.request.data = json.dumps(new_order).encode()
+        with alm_fixture.request_context_with_library_and_admin(
+            "/", library=library
+        ) as ctx:
+            ctx.request.data = json.dumps(new_order).encode()
 
             pytest.raises(
                 AdminNotAuthorized,

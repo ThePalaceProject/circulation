@@ -6,7 +6,7 @@ import gzip
 from collections.abc import Callable
 from functools import wraps
 from io import BytesIO
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
 
 import flask
 from flask import Response, make_response, url_for
@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from palace import manager
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
+from palace.manager.api.util.flask import PalaceFlask, get_request_library
 from palace.manager.core.problem_details import INVALID_URN
 from palace.manager.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -22,9 +23,6 @@ from palace.manager.sqlalchemy.model.lane import Facets, Pagination
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
-
-if TYPE_CHECKING:
-    from palace.manager.api.util.flask import PalaceFlask
 
 
 def load_facets_from_request(
@@ -51,7 +49,7 @@ def load_facets_from_request(
     kwargs = base_class_constructor_kwargs or dict()
     get_arg = flask.request.args.get
     get_header = flask.request.headers.get
-    library = flask.request.library
+    library = get_request_library()
     facet_config = facet_config or library
     return base_class.from_request(
         library,

@@ -497,19 +497,21 @@ class TestBaseController:
             value = circulation_fixture.controller.library_for_request("not-a-library")
             assert LIBRARY_NOT_FOUND == value
 
-        with circulation_fixture.app.test_request_context("/"):
+        with circulation_fixture.app.test_request_context("/") as ctx:
             value = circulation_fixture.controller.library_for_request(
                 circulation_fixture.db.default_library().short_name
             )
             assert circulation_fixture.db.default_library() == value
-            assert circulation_fixture.db.default_library() == flask.request.library  # type: ignore
+            assert circulation_fixture.db.default_library() == getattr(
+                ctx.request, "library"
+            )
 
         # If you don't specify a library, the default library is used.
-        with circulation_fixture.app.test_request_context("/"):
+        with circulation_fixture.app.test_request_context("/") as ctx:
             value = circulation_fixture.controller.library_for_request(None)
             expect_default = Library.default(circulation_fixture.db.session)
             assert expect_default == value
-            assert expect_default == flask.request.library  # type: ignore
+            assert expect_default == getattr(ctx.request, "library")
 
     def test_load_lane(self, circulation_fixture: CirculationControllerFixture):
         # Verify that requests for specific lanes are mapped to

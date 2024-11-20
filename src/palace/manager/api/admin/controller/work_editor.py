@@ -27,6 +27,7 @@ from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
     REMOTE_INTEGRATION_FAILED,
 )
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE, genres
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -62,13 +63,14 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         :return: An OPDSEntryResponse
         """
-        self.require_librarian(flask.request.library)
+        library = get_request_library()
+        self.require_librarian(library)
 
-        work = self.load_work(flask.request.library, identifier_type, identifier)
+        work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
 
-        annotator = AdminAnnotator(self.circulation, flask.request.library)
+        annotator = AdminAnnotator(self.circulation, library)
 
         # single_entry returns an OPDSEntryResponse that will not be
         # cached, which is perfect. We want the admin interface
@@ -136,7 +138,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
     def edit(self, identifier_type, identifier):
         """Edit a work's metadata."""
-        self.require_librarian(flask.request.library)
+        library = get_request_library()
+        self.require_librarian(library)
 
         # TODO: It would be nice to use the metadata layer for this, but
         # this code handles empty values differently than other metadata
@@ -145,7 +148,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         # db so that it can overrule other data sources that set a value,
         # unlike other sources which set empty fields to None.
 
-        work = self.load_work(flask.request.library, identifier_type, identifier)
+        work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
 
@@ -372,7 +375,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
     ) -> Response | ProblemDetail:
         """Suppress a book at the level of a library."""
 
-        library: Library | None = getattr(flask.request, "library")
+        library: Library | None = get_request_library(default=None)
         if library is None:
             raise ProblemDetailException(LIBRARY_NOT_FOUND)
 
@@ -404,7 +407,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
     ) -> Response | ProblemDetail:
         """Remove a book suppression from a book at the level of a library"""
 
-        library: Library | None = getattr(flask.request, "library")
+        library: Library | None = get_request_library(default=None)
         if library is None:
             raise ProblemDetailException(LIBRARY_NOT_FOUND)
 
@@ -433,9 +436,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
     def refresh_metadata(self, identifier_type, identifier, provider=None):
         """Refresh the metadata for a book from the content server"""
-        self.require_librarian(flask.request.library)
+        library = get_request_library()
+        self.require_librarian(library)
 
-        work = self.load_work(flask.request.library, identifier_type, identifier)
+        work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
 
@@ -464,9 +468,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
     def classifications(self, identifier_type, identifier):
         """Return list of this work's classifications."""
-        self.require_librarian(flask.request.library)
+        library = get_request_library()
+        self.require_librarian(library)
 
-        work = self.load_work(flask.request.library, identifier_type, identifier)
+        work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
 
@@ -502,9 +507,10 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
     def edit_classifications(self, identifier_type, identifier):
         """Edit a work's audience, target age, fiction status, and genres."""
-        self.require_librarian(flask.request.library)
+        library = get_request_library()
+        self.require_librarian(library)
 
-        work = self.load_work(flask.request.library, identifier_type, identifier)
+        work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work
 
@@ -670,9 +676,8 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         return Response("", 200)
 
     def custom_lists(self, identifier_type, identifier):
-        self.require_librarian(flask.request.library)
-
-        library = flask.request.library
+        library = get_request_library()
+        self.require_librarian(library)
         work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
             return work

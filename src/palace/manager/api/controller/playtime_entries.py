@@ -14,11 +14,11 @@ from palace.manager.api.model.time_tracking import (
     PlaytimeEntriesPostResponse,
 )
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.query.playtime_entries import PlaytimeEntries
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
@@ -39,7 +39,7 @@ def resolve_loan_identifier(loan: Loan | None) -> str:
 
 class PlaytimeEntriesController(CirculationManagerController):
     def track_playtimes(self, collection_id, identifier_type, identifier_idn):
-        library: Library = flask.request.library
+        library = get_request_library()
         identifier = get_one(
             self._db, Identifier, type=identifier_type, identifier=identifier_idn
         )

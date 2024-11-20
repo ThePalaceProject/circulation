@@ -14,7 +14,6 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal, cast
 from unittest.mock import MagicMock, PropertyMock, patch
 
-import flask
 import pytest
 from _pytest._code import ExceptionInfo
 from flask import url_for
@@ -588,8 +587,8 @@ class TestAuthenticator:
         # This new library isn't in the authenticator.
         l3 = db.library(short_name="l3")
 
-        with app.test_request_context("/"):
-            flask.request.library = l3  # type:ignore
+        with app.test_request_context("/") as ctx:
+            setattr(ctx.request, "library", l3)
             assert LIBRARY_NOT_FOUND == auth.authenticated_patron(db.session, {})
             assert LIBRARY_NOT_FOUND == auth.create_authentication_document()
             assert LIBRARY_NOT_FOUND == auth.create_authentication_headers()
@@ -597,8 +596,8 @@ class TestAuthenticator:
             assert LIBRARY_NOT_FOUND == auth.create_bearer_token()
 
         # The other libraries are in the authenticator.
-        with app.test_request_context("/"):
-            flask.request.library = l1  # type:ignore
+        with app.test_request_context("/") as ctx:
+            setattr(ctx.request, "library", l1)
             assert "authenticated patron for l1" == auth.authenticated_patron(
                 db.session, {}
             )
@@ -613,8 +612,8 @@ class TestAuthenticator:
             assert "bearer token for l1" == auth.create_bearer_token()
             assert "decoded bearer token for l1" == auth.decode_bearer_token()
 
-        with app.test_request_context("/"):
-            flask.request.library = l2  # type:ignore
+        with app.test_request_context("/") as ctx:
+            setattr(ctx.request, "library", l2)
             assert "authenticated patron for l2" == auth.authenticated_patron(
                 db.session, {}
             )

@@ -20,6 +20,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.lanes import create_default_lanes
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
@@ -28,7 +29,7 @@ from palace.manager.sqlalchemy.util import create, get_one
 
 class LanesController(CirculationManagerController, AdminPermissionsControllerMixin):
     def lanes(self):
-        library = flask.request.library
+        library = get_request_library()
         self.require_librarian(library)
 
         if flask.request.method == "GET":
@@ -56,7 +57,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             return dict(lanes=lanes_for_parent(None))
 
         if flask.request.method == "POST":
-            self.require_library_manager(flask.request.library)
+            self.require_library_manager(get_request_library())
 
             id = flask.request.form.get("id")
             parent_id = flask.request.form.get("parent_id")
@@ -173,7 +174,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
 
     def lane(self, lane_identifier):
         if flask.request.method == "DELETE":
-            library = flask.request.library
+            library = get_request_library()
             self.require_library_manager(library)
 
             lane = get_one(self._db, Lane, id=lane_identifier, library=library)
@@ -192,7 +193,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             return Response(str(_("Deleted")), 200)
 
     def show_lane(self, lane_identifier):
-        library = flask.request.library
+        library = get_request_library()
         self.require_library_manager(library)
 
         lane = get_one(self._db, Lane, id=lane_identifier, library=library)
@@ -204,7 +205,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         return Response(str(_("Success")), 200)
 
     def hide_lane(self, lane_identifier):
-        library = flask.request.library
+        library = get_request_library()
         self.require_library_manager(library)
 
         lane = get_one(self._db, Lane, id=lane_identifier, library=library)
@@ -214,13 +215,14 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         return Response(str(_("Success")), 200)
 
     def reset(self):
-        self.require_library_manager(flask.request.library)
+        library = get_request_library()
+        self.require_library_manager(library)
 
-        create_default_lanes(self._db, flask.request.library)
+        create_default_lanes(self._db, library)
         return Response(str(_("Success")), 200)
 
     def change_order(self):
-        self.require_library_manager(flask.request.library)
+        self.require_library_manager(get_request_library())
 
         submitted_lanes = json.loads(flask.request.data)
 

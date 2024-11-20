@@ -7,6 +7,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
@@ -18,7 +19,7 @@ class AnalyticsController(CirculationManagerController):
         # a way to distinguish between different LicensePools for the
         # same book.
         if event_type in CirculationEvent.CLIENT_EVENTS:
-            library = flask.request.library
+            library = get_request_library()
             # Authentication on the AnalyticsController is optional,
             # so flask.request.patron may or may not be set.
             patron = getattr(flask.request, "patron", None)

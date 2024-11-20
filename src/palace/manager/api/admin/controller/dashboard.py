@@ -12,6 +12,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.local_analytics_exporter import LocalAnalyticsExporter
+from palace.manager.api.util.flask import get_request_library
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -29,7 +30,7 @@ class DashboardController(CirculationManagerController):
         return stats_function(admin, self._db)
 
     def circulation_events(self):
-        annotator = AdminAnnotator(self.circulation, flask.request.library)
+        annotator = AdminAnnotator(self.circulation, get_request_library())
         num = min(int(flask.request.args.get("num", "100")), 500)
 
         results = (
@@ -92,7 +93,7 @@ class DashboardController(CirculationManagerController):
         date_end_label = get_date("dateEnd")
         date_end = date_end_label + timedelta(days=1)
         locations = flask.request.args.get("locations", None)
-        library = getattr(flask.request, "library", None)
+        library = get_request_library(default=None)
         library_short_name = library.short_name if library else None
 
         analytics_exporter = analytics_exporter or LocalAnalyticsExporter()
