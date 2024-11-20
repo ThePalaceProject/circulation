@@ -507,7 +507,7 @@ class TestBaseController:
             )
 
         # If you don't specify a library, the default library is used.
-        with circulation_fixture.app.test_request_context("/"):
+        with circulation_fixture.app.test_request_context("/") as ctx:
             value = circulation_fixture.controller.library_for_request(None)
             expect_default = Library.default(circulation_fixture.db.session)
             assert expect_default == value
