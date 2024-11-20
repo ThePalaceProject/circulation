@@ -3,17 +3,13 @@
 OPDS import collections."""
 
 
-from webpub_manifest_parser.odl import ODLFeedParserFactory
-
 from palace.manager.api.odl.importer import OPDS2WithODLImporter
-from palace.manager.core.opds2_import import RWPMManifestParser
 from palace.manager.core.opds_schema import OPDS2WithODLSchemaValidation
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 import_script = RunCollectionMonitorScript(
     OPDS2WithODLSchemaValidation,
     import_class=OPDS2WithODLImporter,
-    parser=RWPMManifestParser(ODLFeedParserFactory()),
 )
 
 import_script.run()

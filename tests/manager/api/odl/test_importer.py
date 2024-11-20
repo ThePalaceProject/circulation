@@ -196,7 +196,7 @@ class TestOPDS2WithODLImporter:
         assert isinstance(huck_finn_failure, CoverageFailure)
         assert "9781234567897" == huck_finn_failure.obj.identifier
 
-        assert "required property title is missing" in huck_finn_failure.exception
+        assert "2 validation errors" in huck_finn_failure.exception
 
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_with_streaming(
@@ -895,7 +895,7 @@ class TestOPDS2WithODLImporter:
             # Two licenses expired
             assert sum(l.is_inactive for l in imported_pool.licenses) == 2
 
-    def test_parse_license_info(self):
+    def test_parse_license_info(self) -> None:
         """Ensure that OPDS2WithODLImporter correctly parses license information."""
 
         def license_info_dict() -> dict[str, Any]:
@@ -911,7 +911,7 @@ class TestOPDS2WithODLImporter:
         )
         license_dict = license_helper.dict
         parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+            json.dumps(license_dict), info_link, checkout_link
         )
         assert parsed.checkouts_available == 10
         assert parsed.checkouts_left == 4
@@ -925,7 +925,7 @@ class TestOPDS2WithODLImporter:
         license_dict.pop("identifier")
         assert (
             OPDS2WithODLImporter.parse_license_info(
-                license_dict, info_link, checkout_link
+                json.dumps(license_dict), info_link, checkout_link
             )
             is None
         )
@@ -933,32 +933,38 @@ class TestOPDS2WithODLImporter:
         # No status
         license_dict = license_info_dict()
         license_dict.pop("status")
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+        assert (
+            OPDS2WithODLImporter.parse_license_info(
+                json.dumps(license_dict), info_link, checkout_link
+            )
+            is None
         )
-        assert parsed.status == LicenseStatus.unavailable
 
         # Bad status
         license_dict = license_info_dict()
         license_dict["status"] = "bad"
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+        assert (
+            OPDS2WithODLImporter.parse_license_info(
+                json.dumps(license_dict), info_link, checkout_link
+            )
+            is None
         )
-        assert parsed.status == LicenseStatus.unavailable
 
         # No available
         license_dict = license_info_dict()
         license_dict["checkouts"].pop("available")
-        parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+        assert (
+            OPDS2WithODLImporter.parse_license_info(
+                json.dumps(license_dict), info_link, checkout_link
+            )
+            is None
         )
-        assert parsed.checkouts_available == 0
 
         # No concurrency
         license_dict = license_info_dict()
         license_dict["terms"].pop("concurrency")
         parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+            json.dumps(license_dict), info_link, checkout_link
         )
         assert parsed.terms_concurrency is None
 
@@ -966,7 +972,7 @@ class TestOPDS2WithODLImporter:
         license_dict = license_info_dict()
         license_dict["format"] = "single format"
         parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+            json.dumps(license_dict), info_link, checkout_link
         )
         assert parsed.content_types == ["single format"]
 
@@ -974,7 +980,7 @@ class TestOPDS2WithODLImporter:
         license_dict = license_info_dict()
         license_dict["format"] = ["format1", "format2"]
         parsed = OPDS2WithODLImporter.parse_license_info(
-            license_dict, info_link, checkout_link
+            json.dumps(license_dict), info_link, checkout_link
         )
         assert parsed.content_types == ["format1", "format2"]
 
@@ -995,22 +1001,26 @@ class TestOPDS2WithODLImporter:
         assert len(http.requests) == 1
         assert http.requests.pop() == "http://example.org/feed"
 
-        # 200 status - json decodes body and returns it
-        http.queue_response(200, content=json.dumps(["a", "b"]))
-        assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", http.do_get
-        ) == [
-            "a",
-            "b",
-        ]
+        # 200 status - directly returns response body
+        content = b"data"
+        http.queue_response(200, content=content)
+        assert (
+            OPDS2WithODLImporter.fetch_license_info(
+                "http://example.org/feed", http.do_get
+            )
+            == content
+        )
         assert len(http.requests) == 1
         assert http.requests.pop() == "http://example.org/feed"
 
-        # 201 status - json decodes body and returns it
-        http.queue_response(201, content=json.dumps({"test": "123"}))
-        assert OPDS2WithODLImporter.fetch_license_info(
-            "http://example.org/feed", http.do_get
-        ) == {"test": "123"}
+        # 201 status - directly returns response body
+        http.queue_response(201, content=content)
+        assert (
+            OPDS2WithODLImporter.fetch_license_info(
+                "http://example.org/feed", http.do_get
+            )
+            == content
+        )
         assert len(http.requests) == 1
         assert http.requests.pop() == "http://example.org/feed"
 

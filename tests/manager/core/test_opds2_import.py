@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from dateutil.tz import tzutc
 from requests import Response
-from webpub_manifest_parser.core.ast import Contributor as WebpubContributor
-from webpub_manifest_parser.opds2 import OPDS2FeedParserFactory
 
 from palace.manager.api.circulation import (
     CirculationAPI,
@@ -16,12 +14,7 @@ from palace.manager.api.circulation import (
     RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import CannotFulfill
-from palace.manager.core.opds2_import import (
-    OPDS2API,
-    OPDS2Importer,
-    OPDS2ImportMonitor,
-    RWPMManifestParser,
-)
+from palace.manager.core.opds2_import import OPDS2API, OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierType,
@@ -111,9 +104,7 @@ class OPDS2ImporterFixture:
             db.session, "OPDS 2.0 Data Source", autocreate=True
         )
         self.collection.data_source = self.data_source
-        self.importer = OPDS2Importer(
-            db.session, self.collection, RWPMManifestParser(OPDS2FeedParserFactory())
-        )
+        self.importer = OPDS2Importer(db.session, self.collection)
 
 
 @pytest.fixture
@@ -665,17 +656,9 @@ class TestOPDS2Importer(OPDS2Test):
         assert _extract_contributor_roles([], Contributor.Role.AUTHOR) == [
             Contributor.Role.AUTHOR
         ]
-        assert _extract_contributor_roles(None, Contributor.Role.AUTHOR) == [
-            Contributor.Role.AUTHOR
-        ]
-
-        # If the role is a string, it is converted to a list
-        assert _extract_contributor_roles(
-            Contributor.Role.ILLUSTRATOR, Contributor.Role.AUTHOR
-        ) == [Contributor.Role.ILLUSTRATOR]
 
         # If the role is unknown, the default is used
-        assert _extract_contributor_roles("invalid", Contributor.Role.AUTHOR) == [
+        assert _extract_contributor_roles(["invalid"], Contributor.Role.AUTHOR) == [
             Contributor.Role.AUTHOR
         ]
 
@@ -688,25 +671,62 @@ class TestOPDS2Importer(OPDS2Test):
         ) == [Contributor.Role.AUTHOR]
 
         # Role lookup is not case-sensitive
-        assert _extract_contributor_roles("aUtHoR", Contributor.Role.ILLUSTRATOR) == [
+        assert _extract_contributor_roles(["aUtHoR"], Contributor.Role.ILLUSTRATOR) == [
             Contributor.Role.AUTHOR
         ]
 
         # Roles can be looked up via marc codes
-        assert _extract_contributor_roles("AUT", Contributor.Role.ILLUSTRATOR) == [
+        assert _extract_contributor_roles(["AUT"], Contributor.Role.ILLUSTRATOR) == [
             Contributor.Role.AUTHOR
         ]
 
-    def test__extract_contributors(
+    def test_extract_next_links(
         self,
         opds2_importer_fixture: OPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
     ):
-        extract_contributors = opds2_importer_fixture.importer._extract_contributors
+        extract_next_links = opds2_importer_fixture.importer.extract_next_links
 
-        # If the contributor name is a blank string, ignore it. This shouldn't happen generally, but
-        # we see this coming in from some feeds.
-        contributor = WebpubContributor(name="", roles=["author"])
-        assert extract_contributors([contributor], Contributor.Role.ILLUSTRATOR) == []
+        # Bad feed
+        assert extract_next_links(b"garbage") == []
+
+        # No next links
+        assert extract_next_links(opds2_files_fixture.sample_data("feed.json")) == []
+
+        # One next link
+        assert extract_next_links(opds2_files_fixture.sample_data("feed2.json")) == [
+            "http://bookshelf-feed-demo.us-east-1.elasticbeanstalk.com/v1/publications?page=2&limit=100"
+        ]
+
+    def test_extract_last_update_dates(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+    ):
+        extract_last_update_dates = (
+            opds2_importer_fixture.importer.extract_last_update_dates
+        )
+
+        # Bad feed
+        assert extract_last_update_dates(b"garbage") == []
+
+        # Feed with last update dates
+        assert extract_last_update_dates(
+            opds2_files_fixture.sample_data("feed.json")
+        ) == [
+            (
+                "urn:isbn:978-3-16-148410-0",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "http://example.org/huckleberry-finn",
+                datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
+            ),
+            (
+                "urn:proquest.com/document-id/181639",
+                datetime.datetime(2022, 9, 12, 21, 4, tzinfo=datetime.timezone.utc),
+            ),
+        ]
 
 
 class Opds2ApiFixture:
@@ -924,7 +944,6 @@ class TestOPDS2ImportMonitor:
             db.session,
             collection,
             OPDS2Importer,
-            parser=RWPMManifestParser(OPDS2FeedParserFactory()),
         )
 
         ctx_manager = (
