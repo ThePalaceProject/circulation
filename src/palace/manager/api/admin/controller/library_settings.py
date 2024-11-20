@@ -59,10 +59,10 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
     def process_get(self) -> Response:
         libraries_response = []
         libraries = self._db.query(Library).order_by(Library.name).all()
+        admin = get_request_admin(default=None)
 
         for library in libraries:
             # Only include libraries this admin has librarian access to.
-            admin = get_request_admin(default=None)
             if not admin or not admin.is_librarian(library):
                 continue
 
