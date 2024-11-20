@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import flask
 from flask import Response
 
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
-from palace.manager.api.util.flask import get_request_library
+from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
@@ -21,8 +20,8 @@ class AnalyticsController(CirculationManagerController):
         if event_type in CirculationEvent.CLIENT_EVENTS:
             library = get_request_library()
             # Authentication on the AnalyticsController is optional,
-            # so flask.request.patron may or may not be set.
-            patron = getattr(flask.request, "patron", None)
+            # so we may not have a patron.
+            patron = get_request_patron(default=None)
             neighborhood = None
             if patron:
                 neighborhood = getattr(patron, "neighborhood", None)

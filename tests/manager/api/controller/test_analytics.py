@@ -1,4 +1,3 @@
-import flask
 import pytest
 
 from palace.manager.api.problem_details import INVALID_ANALYTICS_EVENT_TYPE
@@ -42,8 +41,8 @@ class TestAnalyticsController:
 
         patron = db.patron()
         patron.neighborhood = "Mars Grid 4810579"
-        with analytics_fixture.request_context_with_library("/"):
-            flask.request.patron = patron  # type: ignore
+        with analytics_fixture.request_context_with_library("/") as ctx:
+            setattr(ctx.request, "patron", patron)
             response = analytics_fixture.manager.analytics_controller.track_event(
                 analytics_fixture.identifier.type,
                 analytics_fixture.identifier.identifier,

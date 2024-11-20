@@ -14,7 +14,7 @@ from palace.manager.api.model.time_tracking import (
     PlaytimeEntriesPostResponse,
 )
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
-from palace.manager.api.util.flask import get_request_library
+from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.query.playtime_entries import PlaytimeEntries
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -77,7 +77,7 @@ class PlaytimeEntriesController(CirculationManagerController):
             .join(LicensePool)
             .where(
                 LicensePool.identifier == identifier,
-                Loan.patron == flask.request.patron,
+                Loan.patron == get_request_patron(),
                 Loan.start <= entry_max_start_time,
                 or_(Loan.end > entry_min_end_time, Loan.end == None),
             )

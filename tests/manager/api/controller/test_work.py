@@ -6,7 +6,6 @@ from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
 import feedparser
-import flask
 import pytest
 from flask import url_for
 
@@ -302,13 +301,13 @@ class TestWorkController:
     def test_permalink_does_not_return_fulfillment_links_for_authenticated_patrons_without_loans(
         self, work_fixture: WorkFixture
     ):
-        with work_fixture.request_context_with_library("/"):
+        with work_fixture.request_context_with_library("/") as ctx:
             # We have two patrons.
             patron_1 = work_fixture.db.patron()
             patron_2 = work_fixture.db.patron()
 
             # But the request was initiated by the first patron.
-            flask.request.patron = patron_1  # type: ignore
+            setattr(ctx.request, "patron", patron_1)
 
             identifier_type = Identifier.GUTENBERG_ID
             identifier = "1234567890"
@@ -349,13 +348,13 @@ class TestWorkController:
     def test_permalink_returns_fulfillment_links_for_authenticated_patrons_with_loans(
         self, work_fixture: WorkFixture
     ):
-        with work_fixture.request_context_with_library("/"):
+        with work_fixture.request_context_with_library("/") as ctx:
             # We have two patrons.
             patron_1 = work_fixture.db.patron()
             patron_2 = work_fixture.db.patron()
 
             # But the request was initiated by the first patron.
-            flask.request.patron = patron_1  # type: ignore
+            setattr(ctx.request, "patron", patron_1)
 
             identifier_type = Identifier.GUTENBERG_ID
             identifier = "1234567890"
@@ -399,7 +398,7 @@ class TestWorkController:
     ):
         auth = dict(Authorization=work_fixture.valid_auth)
 
-        with work_fixture.request_context_with_library("/", headers=auth):
+        with work_fixture.request_context_with_library("/", headers=auth) as ctx:
             content_link = "https://content"
 
             # We have two patrons.
@@ -409,7 +408,7 @@ class TestWorkController:
             patron_2 = work_fixture.db.patron()
 
             # But the request was initiated by the first patron.
-            flask.request.patron = patron_1  # type: ignore
+            setattr(ctx.request, "patron", patron_1)
 
             identifier_type = Identifier.GUTENBERG_ID
             identifier = "1234567890"

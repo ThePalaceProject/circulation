@@ -1,13 +1,13 @@
 import datetime
 import hashlib
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import flask
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.controller.playtime_entries import (
     MISSING_LOAN_IDENTIFIER,
+    PlaytimeEntriesController,
     resolve_loan_identifier,
 )
 from palace.manager.sqlalchemy.model.patron import Loan
@@ -15,16 +15,31 @@ from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.problem_detail import ProblemDetail
-from tests.fixtures.api_controller import CirculationControllerFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.flask import FlaskAppFixture
 
 
-def date_string(hour=None, minute=None):
-    now = utc_now()
-    if hour is not None:
-        now = now.replace(hour=hour)
-    if minute is not None:
-        now = now.replace(minute=minute)
-    return now.strftime("%Y-%m-%dT%H:%M:00+00:00")
+class PlaytimeEntriesControllerFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        mock_manager = MagicMock()
+        mock_manager._db = db.session
+        self.controller = PlaytimeEntriesController(mock_manager)
+
+    @staticmethod
+    def date_string(hour=None, minute=None):
+        now = utc_now()
+        if hour is not None:
+            now = now.replace(hour=hour)
+        if minute is not None:
+            now = now.replace(minute=minute)
+        return now.strftime("%Y-%m-%dT%H:%M:00+00:00")
+
+
+@pytest.fixture()
+def playtime_entries_controller_fixture(
+    db: DatabaseTransactionFixture,
+) -> PlaytimeEntriesControllerFixture:
+    return PlaytimeEntriesControllerFixture(db)
 
 
 class TestPlaytimeEntriesController:
@@ -36,9 +51,12 @@ class TestPlaytimeEntriesController:
         ],
     )
     def test_track_playtime(
-        self, circulation_fixture: CirculationControllerFixture, no_loan_end_date: bool
-    ):
-        db = circulation_fixture.db
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        playtime_entries_controller_fixture: PlaytimeEntriesControllerFixture,
+        no_loan_end_date: bool,
+    ) -> None:
         identifier = db.identifier()
         collection = db.default_collection()
         # Attach the identifier to the collection
@@ -50,7 +68,9 @@ class TestPlaytimeEntriesController:
         )
         patron = db.patron()
 
-        loan_exists_date_str = date_string(hour=12, minute=0)
+        loan_exists_date_str = playtime_entries_controller_fixture.date_string(
+            hour=12, minute=0
+        )
         inscope_loan_start = datetime.datetime.fromisoformat(loan_exists_date_str)
         inscope_loan_end = (
             None
@@ -75,7 +95,9 @@ class TestPlaytimeEntriesController:
                 },
                 {
                     "id": "tracking-id-1",
-                    "during_minute": date_string(hour=12, minute=1),
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=1
+                    ),
                     "seconds_played": 17,
                 },
                 {
@@ -85,11 +107,10 @@ class TestPlaytimeEntriesController:
                 },
             ]
         )
-        with circulation_fixture.request_context_with_library(
-            "/", method="POST", json=data
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", json=data, patron=patron, library=db.default_library()
         ):
-            flask.request.patron = patron  # type: ignore
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
 
@@ -115,7 +136,10 @@ class TestPlaytimeEntriesController:
             assert entry.collection == collection
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 12
-            assert entry.timestamp.isoformat() == date_string(hour=12, minute=0)
+            assert (
+                entry.timestamp.isoformat()
+                == playtime_entries_controller_fixture.date_string(hour=12, minute=0)
+            )
             assert entry.loan_identifier == expected_loan_identifier
 
             entry = get_one(db.session, PlaytimeEntry, tracking_id="tracking-id-1")
@@ -124,7 +148,10 @@ class TestPlaytimeEntriesController:
             assert entry.collection == collection
             assert entry.library == db.default_library()
             assert entry.total_seconds_played == 17
-            assert entry.timestamp.isoformat() == date_string(hour=12, minute=1)
+            assert (
+                entry.timestamp.isoformat()
+                == playtime_entries_controller_fixture.date_string(hour=12, minute=1)
+            )
             assert entry.loan_identifier == expected_loan_identifier
 
             # The very old entry does not get recorded
@@ -132,7 +159,7 @@ class TestPlaytimeEntriesController:
                 db.session, PlaytimeEntry, tracking_id="tracking-id-2"
             )
 
-    def test_resolve_loan_identifier(self):
+    def test_resolve_loan_identifier(self) -> None:
         no_loan = resolve_loan_identifier(loan=None)
         test_id = 1
         test_loan_identifier = resolve_loan_identifier(Loan(id=test_id))
@@ -143,9 +170,11 @@ class TestPlaytimeEntriesController:
         )
 
     def test_track_playtime_duplicate_id_ok(
-        self, circulation_fixture: CirculationControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        playtime_entries_controller_fixture: PlaytimeEntriesControllerFixture,
     ):
-        db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
         library = db.default_library()
@@ -163,7 +192,9 @@ class TestPlaytimeEntriesController:
         db.session.add(
             PlaytimeEntry(
                 tracking_id="tracking-id-0",
-                timestamp=date_string(hour=12, minute=0),
+                timestamp=playtime_entries_controller_fixture.date_string(
+                    hour=12, minute=0
+                ),
                 total_seconds_played=12,
                 identifier_id=identifier.id,
                 collection_id=collection.id,
@@ -179,21 +210,24 @@ class TestPlaytimeEntriesController:
             timeEntries=[
                 {
                     "id": "tracking-id-0",
-                    "during_minute": date_string(hour=12, minute=0),
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=0
+                    ),
                     "seconds_played": 12,
                 },
                 {
                     "id": "tracking-id-1",
-                    "during_minute": date_string(hour=12, minute=1),
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=1
+                    ),
                     "seconds_played": 12,
                 },
             ]
         )
-        with circulation_fixture.request_context_with_library(
-            "/", method="POST", json=data
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", json=data, library=library, patron=patron
         ):
-            flask.request.patron = patron  # type: ignore
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
 
@@ -210,9 +244,11 @@ class TestPlaytimeEntriesController:
             )
 
     def test_track_playtime_failure(
-        self, circulation_fixture: CirculationControllerFixture
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        playtime_entries_controller_fixture: PlaytimeEntriesControllerFixture,
     ):
-        db = circulation_fixture.db
         identifier = db.identifier()
         collection = db.default_collection()
         # Attach the identifier to the collection
@@ -228,23 +264,26 @@ class TestPlaytimeEntriesController:
             timeEntries=[
                 {
                     "id": "tracking-id-1",
-                    "during_minute": date_string(hour=12, minute=1),
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=1
+                    ),
                     "seconds_played": 12,
                 }
             ]
         )
-        with circulation_fixture.request_context_with_library(
-            "/", method="POST", json=data
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", json=data, patron=patron, library=db.default_library()
         ):
-            flask.request.patron = patron  # type: ignore
             with patch(
                 "palace.manager.core.query.playtime_entries.create"
             ) as mock_create:
                 mock_create.side_effect = IntegrityError(
                     "STATEMENT", {}, Exception("Fake Exception")
                 )
-                response = circulation_fixture.manager.playtime_entries.track_playtimes(
-                    collection.id, identifier.type, identifier.identifier
+                response = (
+                    playtime_entries_controller_fixture.controller.track_playtimes(
+                        collection.id, identifier.type, identifier.identifier
+                    )
                 )
 
             assert response.status_code == 207
@@ -255,20 +294,22 @@ class TestPlaytimeEntriesController:
                 dict(status=400, message="Fake Exception", id="tracking-id-1")
             ]
 
-    def test_api_validation(self, circulation_fixture: CirculationControllerFixture):
-        db = circulation_fixture.db
+    def test_api_validation(
+        self,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
+        playtime_entries_controller_fixture: PlaytimeEntriesControllerFixture,
+    ):
         identifier = db.identifier()
         collection = db.collection()
         library = db.default_library()
         patron = db.patron()
 
-        with circulation_fixture.request_context_with_library(
-            "/", method="POST", json={}
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", json={}, library=library, patron=patron
         ):
-            flask.request.patron = patron  # type: ignore
-
             # Bad identifier
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, "not-an-identifier"
             )
             assert isinstance(response, ProblemDetail)
@@ -279,7 +320,7 @@ class TestPlaytimeEntriesController:
             )
 
             # Bad collection
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 9088765, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
@@ -287,7 +328,7 @@ class TestPlaytimeEntriesController:
             assert response.detail == f"The collection 9088765 was not found."
 
             # Collection not in library
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
@@ -296,7 +337,7 @@ class TestPlaytimeEntriesController:
 
             # Identifier not part of collection
             collection.libraries.append(library)
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)
@@ -312,7 +353,7 @@ class TestPlaytimeEntriesController:
             )
 
             # Incorrect JSON format
-            response = circulation_fixture.manager.playtime_entries.track_playtimes(
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
             assert isinstance(response, ProblemDetail)

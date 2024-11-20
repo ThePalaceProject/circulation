@@ -1,66 +1,72 @@
-from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 from werkzeug.datastructures import Authorization
 
+from palace.manager.api.controller.patron_auth_token import PatronAuthTokenController
 from palace.manager.api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
-from tests.fixtures.api_controller import CirculationControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.services import ServicesFixture
-
-if TYPE_CHECKING:
-    from palace.manager.api.controller.patron_auth_token import (
-        PatronAuthTokenController,
-    )
+from tests.fixtures.flask import FlaskAppFixture
 
 
-class PatronAuthTokenControllerFixture(CirculationControllerFixture):
-    def __init__(
-        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-    ) -> None:
-        super().__init__(db, services_fixture)
-        self.controller: PatronAuthTokenController = self.manager.patron_auth_token
+class PatronAuthTokenControllerFixture:
+    def __init__(self, db: DatabaseTransactionFixture) -> None:
+        mock_manager = MagicMock()
+        mock_manager._db = db.session
+        self.controller = PatronAuthTokenController(mock_manager)
 
 
 @pytest.fixture(scope="function")
-def patron_auth_token_fixture(
-    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
-):
-    return PatronAuthTokenControllerFixture(db, services_fixture)
+def patron_auth_token_fixture(db: DatabaseTransactionFixture):
+    return PatronAuthTokenControllerFixture(db)
 
 
 class TestPatronAuthTokenController:
     def test_get_token(
-        self, patron_auth_token_fixture: PatronAuthTokenControllerFixture
+        self,
+        patron_auth_token_fixture: PatronAuthTokenControllerFixture,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        fxtr = patron_auth_token_fixture
-        db = fxtr.db
         patron = db.patron()
-        with fxtr.request_context_with_library("/") as ctx:
-            ctx.request.authorization = Authorization(
-                auth_type="Basic", data=dict(username="user", password="pass")
-            )
-            ctx.request.patron = patron
-            token = fxtr.controller.get_token()
+        with flask_app_fixture.test_request_context(
+            auth=Authorization(
+                auth_type="basic", data=dict(username="user", password="pass")
+            ),
+            patron=patron,
+        ):
+            token = patron_auth_token_fixture.controller.get_token()
             assert ("accessToken", "tokenType", "expiresIn") == tuple(token.keys())
             assert token["expiresIn"] == 3600
             assert token["tokenType"] == "Bearer"
 
     def test_get_token_errors(
-        self, patron_auth_token_fixture: PatronAuthTokenControllerFixture
+        self,
+        patron_auth_token_fixture: PatronAuthTokenControllerFixture,
+        db: DatabaseTransactionFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
-        fxtr = patron_auth_token_fixture
-        db = fxtr.db
         patron = db.patron()
-        with fxtr.request_context_with_library("/") as ctx:
-            ctx.request.authorization = Authorization(
-                auth_type="Bearer", token="Some-token"
+        with flask_app_fixture.test_request_context(
+            patron=patron, auth=Authorization(auth_type="bearer", token="Some-token")
+        ):
+            assert (
+                patron_auth_token_fixture.controller.get_token()
+                == PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
             )
-            ctx.request.patron = patron
-            assert fxtr.controller.get_token() == PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 
-            ctx.request.authorization = Authorization(
-                auth_type="Basic", data=dict(username="user", password="pass")
+        with flask_app_fixture.test_request_context(patron=patron):
+            assert (
+                patron_auth_token_fixture.controller.get_token()
+                == PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
             )
-            ctx.request.patron = None
-            assert fxtr.controller.get_token() == PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
+
+        with flask_app_fixture.test_request_context(
+            auth=Authorization(
+                auth_type="basic", data=dict(username="user", password="pass")
+            )
+        ):
+            assert (
+                patron_auth_token_fixture.controller.get_token()
+                == PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
+            )

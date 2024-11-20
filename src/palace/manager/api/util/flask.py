@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
@@ -102,6 +103,33 @@ def get_request_library(
     :return: The `Library` object from the request, or the default value if provided.
     """
     return get_request_var("library", Library, default=default)
+
+
+@overload
+def get_request_patron() -> Patron: ...
+
+
+@overload
+def get_request_patron(*, default: TDefault) -> Patron | TDefault: ...
+
+
+def get_request_patron(
+    *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
+) -> Patron | TDefault:
+    """
+    Retrieve the 'patron' attribute from the current Flask request object.
+
+    This attribute should be set by using the @requires_auth or @allows_auth decorator
+    on the route or by calling the BaseCirculationManagerController.authenticated_patron_from_request
+    method.
+
+    :param default: The default value to return if the 'patron' attribute is not set
+      or if there is no request context. If not provided, a `PalaceValueError` will be
+      raised if the attribute is missing or has an incorrect type.
+
+    :return: The `Patron` object from the request, or the default value if provided.
+    """
+    return get_request_var("patron", Patron, default=default)
 
 
 class PalaceFlask(flask.Flask):

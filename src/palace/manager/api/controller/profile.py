@@ -7,6 +7,7 @@ from palace.manager.api.authenticator import CirculationPatronProfileStorage
 from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
+from palace.manager.api.util.flask import get_request_patron
 from palace.manager.core.user_profile import ProfileController as CoreProfileController
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -21,7 +22,7 @@ class ProfileController(CirculationManagerController):
 
     def protocol(self):
         """Handle a UPMP request."""
-        patron = flask.request.patron
+        patron = get_request_patron()
         controller = self._controller(patron)
         if flask.request.method == "GET":
             result = controller.get()

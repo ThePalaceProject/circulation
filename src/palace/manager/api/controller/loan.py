@@ -23,7 +23,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
 )
-from palace.manager.api.util.flask import get_request_library
+from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
@@ -46,7 +46,7 @@ class LoanController(CirculationManagerController):
 
         :return: A Response containing an OPDS feed with up-to-date information.
         """
-        patron: Patron = flask.request.patron  # type: ignore[attr-defined]
+        patron: Patron = get_request_patron()
 
         try:
             # Parse the refresh query parameter as a boolean.
@@ -89,7 +89,7 @@ class LoanController(CirculationManagerController):
            "http://opds-spec.org/acquisition", which can be used to fetch the
            book or the license file.
         """
-        patron = flask.request.patron  # type: ignore[attr-defined]
+        patron = get_request_patron()
         library = get_request_library()
 
         header = self.authorization_header()
@@ -428,7 +428,7 @@ class LoanController(CirculationManagerController):
         return self.circulation.can_fulfill_without_loan(patron, pool, lpdm)
 
     def revoke(self, license_pool_id: int) -> OPDSEntryResponse | ProblemDetail:
-        patron = flask.request.patron  # type: ignore[attr-defined]
+        patron = get_request_patron()
         pool = self.load_licensepool(license_pool_id)
         if isinstance(pool, ProblemDetail):
             return pool
@@ -492,7 +492,7 @@ class LoanController(CirculationManagerController):
     def detail(
         self, identifier_type: str, identifier: str
     ) -> OPDSEntryResponse | ProblemDetail | None:
-        patron = flask.request.patron  # type: ignore[attr-defined]
+        patron = get_request_patron()
         library = get_request_library()
         pools = self.load_licensepools(library, identifier_type, identifier)
         if isinstance(pools, ProblemDetail):

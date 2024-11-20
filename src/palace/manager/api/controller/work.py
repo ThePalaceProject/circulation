@@ -17,7 +17,7 @@ from palace.manager.api.lanes import (
     SeriesLane,
 )
 from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
-from palace.manager.api.util.flask import get_request_library
+from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.metadata_layer import ContributorData
@@ -111,7 +111,7 @@ class WorkController(CirculationManagerController):
         if isinstance(work, ProblemDetail):
             return work
 
-        patron = flask.request.patron
+        patron = get_request_patron(default=None)
 
         if patron:
             pools = self.load_licensepools(library, identifier_type, identifier)

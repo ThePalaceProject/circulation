@@ -8,6 +8,7 @@ from palace.manager.api.controller.circulation_manager import (
 )
 from palace.manager.api.model.patron_auth import PatronAuthAccessToken
 from palace.manager.api.problem_details import PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
+from palace.manager.api.util.flask import get_request_patron
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetailException
 
@@ -15,11 +16,11 @@ from palace.manager.util.problem_detail import ProblemDetailException
 class PatronAuthTokenController(CirculationManagerController, LoggerMixin):
     def get_token(self):
         """Create a Patron Auth access token for an authenticated patron"""
-        patron = flask.request.patron
+        patron = get_request_patron(default=None)
         auth = flask.request.authorization
         token_expiry = 3600
 
-        if not patron or auth.type.lower() != "basic":
+        if patron is None or auth is None or auth.type.lower() != "basic":
             return PATRON_AUTH_ACCESS_TOKEN_NOT_POSSIBLE
 
         try:
