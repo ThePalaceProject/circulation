@@ -182,10 +182,18 @@ class TestJSONFormatter:
             assert request["method"] == "GET"
             assert "host" in request
             assert "query" not in request
-            assert "user-agent" not in request
+            assert "user_agent" not in request
+            assert "forwarded_for" not in request
 
         with flask_app_fixture.test_request_context(
-            "/test?query=string&foo=bar", method="POST", headers={"User-Agent": "UA"}
+            "/test?query=string&foo=bar",
+            method="POST",
+            headers=[
+                ("User-Agent", "UA"),
+                ("X-Forwarded-For", "xyz, abc"),
+                ("X-Forwarded-For", "123"),
+            ],
+            environ_base={"REMOTE_ADDR": "456"},
         ):
             data = json.loads(formatter.format(record))
             assert "request" in data
@@ -194,6 +202,7 @@ class TestJSONFormatter:
             assert request["method"] == "POST"
             assert request["query"] == "query=string&foo=bar"
             assert request["user_agent"] == "UA"
+            assert request["forwarded_for"] == ["xyz", "abc", "123", "456"]
 
         # If flask is not installed, the request data is not included in the log.
         with patch("palace.manager.service.logging.log.flask_request", None):

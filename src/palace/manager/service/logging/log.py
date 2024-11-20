@@ -99,6 +99,11 @@ class JSONFormatter(logging.Formatter):
                 data["request"]["query"] = flask_request.query_string.decode()
             if user_agent := flask_request.headers.get("User-Agent"):
                 data["request"]["user_agent"] = user_agent
+            if forwarded_for := flask_request.headers.get("X-Forwarded-For"):
+                forwarded_for_list = [ip.strip() for ip in forwarded_for.split(",")]
+                if final_address := flask_request.remote_addr:
+                    forwarded_for_list.append(final_address)
+                data["request"]["forwarded_for"] = forwarded_for_list
 
         # If we are running in uwsgi context, we include the worker id in the log
         if uwsgi:
