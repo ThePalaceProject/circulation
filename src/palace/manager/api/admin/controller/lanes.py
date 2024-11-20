@@ -215,9 +215,10 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         return Response(str(_("Success")), 200)
 
     def reset(self):
-        self.require_library_manager(get_request_library())
+        library = get_request_library()
+        self.require_library_manager(library)
 
-        create_default_lanes(self._db, get_request_library())
+        create_default_lanes(self._db, library)
         return Response(str(_("Success")), 200)
 
     def change_order(self):
