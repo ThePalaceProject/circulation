@@ -35,6 +35,23 @@ def get_request_var(
     *,
     default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven,
 ) -> TVar | TDefault:
+    """
+    Retrieve an attribute from the current Flask request object.
+
+    This helper function handles edge cases such as missing request context or unset attributes.
+    It ensures type checking and provides type hints for the expected attribute type.
+
+    :param name: The name of the attribute to retrieve.
+    :param var_cls: The expected type of the attribute.
+    :param default: The default value to return if the attribute is not set or if there is no request context.
+
+    :return: The attribute from the request object, or the default value if provided.
+
+    :raises PalaceValueError: If the attribute is not set or if the attribute type is incorrect,
+        and no default is provided.
+    :raises RuntimeError: If there is no request context and no default is provided.
+    """
+
     if default is not SentinelType.NotGiven and not flask.request:
         # We are not in a request context, so we can't get the variable
         # if we access it, it will raise an error, so we return the default
@@ -68,6 +85,22 @@ def get_request_library(*, default: TDefault) -> Library | TDefault: ...
 def get_request_library(
     *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
 ) -> Library | TDefault:
+    """
+    Retrieve the 'library' attribute from the current Flask request object.
+
+    This attribute should be set by using the @has_library or @allows_library decorator
+    on the route or by calling the BaseCirculationManagerController.library_for_request
+    method.
+
+    Note: You need to specify a default of None if you want to allow the library to be
+      None (for example if you are using the @allows_library decorator).
+
+    :param default: The default value to return if the 'library' attribute is not set.
+        If not provided, a `PalaceValueError` will be raised if the attribute is missing
+        or has an incorrect type.
+
+    :return: The `Library` object from the request, or the default value if provided.
+    """
     return get_request_var("library", Library, default=default)
 
 
