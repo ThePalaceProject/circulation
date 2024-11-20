@@ -756,6 +756,7 @@ class Identifier(Base, IdentifierConstants):
         rights_explanation=None,
         original_resource=None,
         transformation_settings=None,
+        db=None,
     ):
         """Create a link between this Identifier and a (potentially new)
         Resource.
@@ -769,7 +770,10 @@ class Identifier(Base, IdentifierConstants):
             Resource,
         )
 
-        _db = Session.object_session(self)
+        if not db:
+            _db = Session.object_session(self)
+        else:
+            _db = db
         # Find or create the Resource.
         if not href:
             href = Hyperlink.generic_uri(data_source, self, rel, content)

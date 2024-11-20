@@ -659,6 +659,7 @@ class LicensePool(Base):
         rights_explanation=None,
         original_resource=None,
         transformation_settings=None,
+        db=None,
     ):
         """Add a link between this LicensePool and a Resource.
 
@@ -689,6 +690,7 @@ class LicensePool(Base):
             rights_explanation,
             original_resource,
             transformation_settings,
+            db,
         )
 
     def needs_update(self):
