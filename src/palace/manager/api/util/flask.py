@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
@@ -102,6 +103,20 @@ def get_request_library(
     :return: The `Library` object from the request, or the default value if provided.
     """
     return get_request_var("library", Library, default=default)
+
+
+@overload
+def get_request_patron() -> Patron: ...
+
+
+@overload
+def get_request_patron(*, default: TDefault) -> Patron | TDefault: ...
+
+
+def get_request_patron(
+    *, default: TDefault | Literal[SentinelType.NotGiven] = SentinelType.NotGiven
+) -> Patron | TDefault:
+    return get_request_var("patron", Patron, default=default)
 
 
 class PalaceFlask(flask.Flask):

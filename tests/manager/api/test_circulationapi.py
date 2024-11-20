@@ -5,7 +5,6 @@ from datetime import timedelta
 from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
-import flask
 import pytest
 from flask import Flask
 from freezegun import freeze_time
@@ -994,10 +993,10 @@ class TestCirculationAPI:
 
         # Now let's check neighborhood gathering.
         p2.neighborhood = "Compton"
-        with app.test_request_context():
+        with app.test_request_context() as ctx:
             # Neighborhood is only gathered if we explicitly ask for
             # it.
-            flask.request.patron = p2  # type: ignore
+            setattr(ctx.request, "patron", p2)
             assert_event((p2, None, "event"), (l2, None, "event", None, p2))
             assert_event((p2, None, "event", False), (l2, None, "event", None, p2))
             assert_event((p2, None, "event", True), (l2, None, "event", "Compton", p2))
@@ -1006,10 +1005,10 @@ class TestCirculationAPI:
             # patron is not the patron who triggered the event.
             assert_event((p1, None, "event", True), (l1, None, "event", None, p1))
 
-        with app.test_request_context():
+        with app.test_request_context() as ctx:
             # Even if we ask for it, neighborhood is not gathered if
             # the data isn't available.
-            flask.request.patron = p1  # type: ignore
+            setattr(ctx.request, "patron", p1)
             assert_event((p1, None, "event", True), (l1, None, "event", None, p1))
 
         # Finally, remove the mock Analytics object entirely and

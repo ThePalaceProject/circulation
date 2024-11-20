@@ -11,6 +11,7 @@ from palace.manager.api.problem_details import (
     DEVICE_TOKEN_NOT_FOUND,
     DEVICE_TOKEN_TYPE_INVALID,
 )
+from palace.manager.api.util.flask import get_request_patron
 from palace.manager.sqlalchemy.model.devicetokens import (
     DeviceToken,
     DuplicateDeviceTokenError,
@@ -20,7 +21,7 @@ from palace.manager.sqlalchemy.model.devicetokens import (
 
 class DeviceTokensController(CirculationManagerController):
     def get_patron_device(self):
-        patron = flask.request.patron
+        patron = get_request_patron()
         device_token = flask.request.args["device_token"]
         token: DeviceToken = (
             self._db.query(DeviceToken)
@@ -35,7 +36,7 @@ class DeviceTokensController(CirculationManagerController):
         return dict(token_type=token.token_type, device_token=token.device_token), 200
 
     def create_patron_device(self):
-        patron = flask.request.patron
+        patron = get_request_patron()
         device_token = flask.request.json["device_token"]
         token_type = flask.request.json["token_type"]
 
@@ -49,7 +50,7 @@ class DeviceTokensController(CirculationManagerController):
         return "", 201
 
     def delete_patron_device(self):
-        patron = flask.request.patron
+        patron = get_request_patron()
         device_token = flask.request.json["device_token"]
         token_type = flask.request.json["token_type"]
 

@@ -12,6 +12,7 @@ from palace.manager.api.controller.circulation_manager import (
     CirculationManagerController,
 )
 from palace.manager.api.problem_details import NO_ANNOTATION
+from palace.manager.api.util.flask import get_request_patron
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.patron import Annotation
 from palace.manager.sqlalchemy.util import get_one
@@ -30,7 +31,7 @@ class AnnotationController(CirculationManagerController):
         if flask.request.method == "HEAD":
             return Response(status=200, headers=headers)
 
-        patron = flask.request.patron
+        patron = get_request_patron()
 
         if flask.request.method == "GET":
             headers["Link"] = [
@@ -78,7 +79,7 @@ class AnnotationController(CirculationManagerController):
         if flask.request.method == "HEAD":
             return Response(status=200, headers=headers)
 
-        patron = flask.request.patron
+        patron = get_request_patron()
 
         annotation = get_one(
             self._db, Annotation, patron=patron, id=annotation_id, active=True

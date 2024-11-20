@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import uuid
 
-import flask
 from flask import Response
 
-from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.api.util.flask import get_request_patron
 
 
 class PatronActivityHistoryController:
@@ -13,6 +12,6 @@ class PatronActivityHistoryController:
     def reset_statistics_uuid(self) -> Response:
         """Resets the patron's the statistics UUID that links the patron to past activity thus effectively erasing the
         link between activity history and patron."""
-        patron: Patron = flask.request.patron  # type: ignore [attr-defined]
+        patron = get_request_patron()
         patron.uuid = uuid.uuid4()
         return Response("UUID reset", 200)

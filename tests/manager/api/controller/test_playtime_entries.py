@@ -2,7 +2,6 @@ import datetime
 import hashlib
 from unittest.mock import patch
 
-import flask
 import pytest
 from sqlalchemy.exc import IntegrityError
 
@@ -87,8 +86,8 @@ class TestPlaytimeEntriesController:
         )
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
-        ):
-            flask.request.patron = patron  # type: ignore
+        ) as ctx:
+            setattr(ctx.request, "patron", patron)
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
@@ -191,8 +190,8 @@ class TestPlaytimeEntriesController:
         )
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
-        ):
-            flask.request.patron = patron  # type: ignore
+        ) as ctx:
+            setattr(ctx.request, "patron", patron)
             response = circulation_fixture.manager.playtime_entries.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
@@ -235,8 +234,8 @@ class TestPlaytimeEntriesController:
         )
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json=data
-        ):
-            flask.request.patron = patron  # type: ignore
+        ) as ctx:
+            setattr(ctx.request, "patron", patron)
             with patch(
                 "palace.manager.core.query.playtime_entries.create"
             ) as mock_create:
@@ -264,8 +263,8 @@ class TestPlaytimeEntriesController:
 
         with circulation_fixture.request_context_with_library(
             "/", method="POST", json={}
-        ):
-            flask.request.patron = patron  # type: ignore
+        ) as ctx:
+            setattr(ctx.request, "patron", patron)
 
             # Bad identifier
             response = circulation_fixture.manager.playtime_entries.track_playtimes(

@@ -97,8 +97,7 @@ class MockController(MockControllerMethod):
 
     def authenticated_patron_from_request(self):
         if self.authenticated:
-            patron = object()
-            flask.request.patron = self.AUTHENTICATED_PATRON
+            setattr(flask.request, "patron", self.AUTHENTICATED_PATRON)
             return self.AUTHENTICATED_PATRON
         else:
             return flask.Response(

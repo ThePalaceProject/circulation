@@ -12,6 +12,7 @@ from werkzeug.datastructures import ImmutableMultiDict
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -38,12 +39,14 @@ class FlaskAppFixture:
         *args: Any,
         admin: Admin | None = None,
         library: Library | None = None,
+        patron: Patron | None = None,
         **kwargs: Any,
     ) -> Generator[RequestContext]:
         with self.app.test_request_context(*args, **kwargs) as c:
             self.db.session.begin_nested()
             setattr(c.request, "library", library)
             setattr(c.request, "admin", admin)
+            setattr(c.request, "patron", patron)
             setattr(c.request, "form", ImmutableMultiDict())
             setattr(c.request, "files", ImmutableMultiDict())
             try:
