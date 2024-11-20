@@ -17,6 +17,7 @@ from palace.manager.api.admin.problem_details import (
     MISSING_PGCRYPTO_EXTENSION,
     UNKNOWN_ROLE,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
@@ -38,7 +39,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         highest_role: AdminRole | None = None
         has_auth = False
 
-        admin = getattr(flask.request, "admin", None)
+        admin = get_request_admin(default=None)
 
         if not admin:
             return None
@@ -61,7 +62,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         return highest_role if has_auth else None
 
     def process_get(self):
-        logged_in_admin: Admin | None = getattr(flask.request, "admin", None)
+        logged_in_admin = get_request_admin(default=None)
         if not logged_in_admin:
             return ADMIN_AUTH_NOT_CONFIGURED
 
@@ -271,7 +272,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         # which the user is submitting the form in order to create/edit.)
 
         if not settingUp:
-            user = flask.request.admin
+            user = get_request_admin()
 
             # System admin has all permissions.
             if user.is_system_admin():
@@ -336,7 +337,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             # There are no admins yet; the user and the new system admin are the same person.
             user = admin
         else:
-            user = flask.request.admin
+            user = get_request_admin()
 
         old_roles = admin.roles
         old_roles_set = {(role.role, role.library) for role in old_roles}
@@ -389,7 +390,7 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             # There are no admins yet; the user and the new system admin are the same person.
             user = admin
         else:
-            user: Admin = flask.request.admin  # type: ignore
+            user = get_request_admin()
 
         if password:
             # If the admin we're editing has a sitewide manager role, we've already verified

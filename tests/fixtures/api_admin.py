@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 
-import flask
 import pytest
 
 from palace.manager.api.admin.controller import setup_admin_controllers
@@ -40,10 +39,10 @@ class AdminControllerFixture:
         if "admin" in kwargs:
             admin = kwargs.pop("admin")
         with self.ctrl.app.test_request_context(route, *args, **kwargs) as c:
-            flask.request.form = {}
-            flask.request.files = {}
+            c.request.form = {}
+            c.request.files = {}
             self.ctrl.db.session.begin_nested()
-            flask.request.admin = admin
+            setattr(c.request, "admin", admin)
             try:
                 yield c
             finally:
@@ -55,10 +54,10 @@ class AdminControllerFixture:
         if "admin" in kwargs:
             admin = kwargs.pop("admin")
         with self.ctrl.request_context_with_library(route, *args, **kwargs) as c:
-            flask.request.form = {}
-            flask.request.files = {}
+            c.request.form = {}
+            c.request.files = {}
             self.ctrl.db.session.begin_nested()
-            flask.request.admin = admin
+            setattr(c.request, "admin", admin)
             try:
                 yield c
             finally:

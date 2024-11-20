@@ -15,6 +15,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_ADMIN_CREDENTIALS,
     INVALID_CSRF_TOKEN,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
@@ -45,6 +46,7 @@ class AdminController(LoggerMixin):
 
     def authenticated_admin_from_request(self):
         """Returns an authenticated admin or a problem detail."""
+        setattr(flask.request, "admin", None)
         if not self.admin_auth_providers:
             return ADMIN_AUTH_NOT_CONFIGURED
 
@@ -57,9 +59,8 @@ class AdminController(LoggerMixin):
             if not auth:
                 return ADMIN_AUTH_MECHANISM_NOT_CONFIGURED
             if admin:
-                flask.request.admin = admin
+                setattr(flask.request, "admin", admin)
                 return admin
-        flask.request.admin = None
         return INVALID_ADMIN_CREDENTIALS
 
     def authenticated_admin(self, admin_details) -> Admin:
@@ -119,21 +120,21 @@ class AdminPermissionsControllerMixin:
     """Mixin that provides methods for verifying an admin's roles."""
 
     def require_system_admin(self) -> None:
-        admin: Admin | None = getattr(flask.request, "admin", None)
+        admin = get_request_admin(default=None)
         if not admin or not admin.is_system_admin():
             raise AdminNotAuthorized()
 
     def require_sitewide_library_manager(self) -> None:
-        admin: Admin | None = getattr(flask.request, "admin", None)
+        admin = get_request_admin(default=None)
         if not admin or not admin.is_sitewide_library_manager():
             raise AdminNotAuthorized()
 
     def require_library_manager(self, library: Library) -> None:
-        admin: Admin | None = getattr(flask.request, "admin", None)
+        admin = get_request_admin(default=None)
         if not admin or not admin.is_library_manager(library):
             raise AdminNotAuthorized()
 
     def require_librarian(self, library: Library) -> None:
-        admin: Admin | None = getattr(flask.request, "admin", None)
+        admin = get_request_admin(default=None)
         if not admin or not admin.is_librarian(library):
             raise AdminNotAuthorized()

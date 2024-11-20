@@ -22,6 +22,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
     LIBRARY_SHORT_NAME_ALREADY_IN_USE,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.circulation_manager import CirculationManager
 from palace.manager.api.config import Configuration
 from palace.manager.api.lanes import create_default_lanes
@@ -61,7 +62,8 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
         for library in libraries:
             # Only include libraries this admin has librarian access to.
-            if not flask.request.admin or not flask.request.admin.is_librarian(library):  # type: ignore[attr-defined]
+            admin = get_request_admin(default=None)
+            if not admin or not admin.is_librarian(library):
                 continue
 
             settings = library.settings_dict

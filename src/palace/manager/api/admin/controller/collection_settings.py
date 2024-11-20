@@ -17,6 +17,7 @@ from palace.manager.api.admin.problem_details import (
     MISSING_SERVICE,
     PROTOCOL_DOES_NOT_SUPPORT_PARENTS,
 )
+from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.circulation import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
 from palace.manager.core.selftest import HasSelfTests
@@ -40,7 +41,7 @@ class CollectionSettingsController(
         self, service: IntegrationConfiguration
     ) -> dict[str, Any] | None:
         service_info = super().configured_service_info(service)
-        user = getattr(flask.request, "admin", None)
+        user = get_request_admin(default=None)
         if service_info:
             # Add 'marked_for_deletion' to the service info
             service_info["marked_for_deletion"] = service.collection.marked_for_deletion
@@ -60,7 +61,7 @@ class CollectionSettingsController(
         self, library_configuration: IntegrationLibraryConfiguration
     ) -> dict[str, Any] | None:
         library_info = super().configured_service_library_info(library_configuration)
-        user = getattr(flask.request, "admin", None)
+        user = get_request_admin(default=None)
         if library_info:
             if user and user.is_librarian(library_configuration.library):
                 return library_info
