@@ -21,9 +21,11 @@ from palace.manager.api.util.flask import get_request_library, get_request_patro
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.metadata_layer import ContributorData
+from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets, Pagination
+from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -96,7 +98,9 @@ class WorkController(CirculationManagerController):
             max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
         )
 
-    def permalink(self, identifier_type, identifier):
+    def permalink(
+        self, identifier_type: str, identifier: str
+    ) -> OPDSEntryResponse | ProblemDetail:
         """Serve an entry for a single book.
 
         This does not include any loan or hold-specific information for
@@ -127,14 +131,23 @@ class WorkController(CirculationManagerController):
             item = loan or hold
             pool = pool or pools[0]
 
-            return OPDSAcquisitionFeed.single_entry_loans_feed(
+            loans_feed = OPDSAcquisitionFeed.single_entry_loans_feed(
                 self.circulation, item or pool
             )
+            if loans_feed is None:
+                self.log.error(
+                    "Could not generate loans feed for %r and %r", item, pool
+                )
+                return INTERNAL_SERVER_ERROR
+            return loans_feed
         else:
             annotator = self.manager.annotator(lane=None)
-
+            single_entry = OPDSAcquisitionFeed.single_entry(work, annotator)
+            if single_entry is None:
+                # There was some problem generating the entry.
+                return NOT_FOUND_ON_REMOTE
             return OPDSAcquisitionFeed.entry_as_response(
-                OPDSAcquisitionFeed.single_entry(work, annotator),
+                single_entry,
                 max_age=OPDSFeed.DEFAULT_MAX_AGE,
             )
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Generator, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -558,15 +557,13 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if not annotator:
             annotator = LibraryLoanAndHoldAnnotator(circulation, None, library)
 
-        log = logging.getLogger(cls.__name__)
-
         # Sometimes the pool or work may be None
         # In those cases we have to protect against the exceptions
         try:
             work = license_pool.work or license_pool.presentation_edition.work
         except AttributeError as ex:
-            log.error(f"Error retrieving a Work Object {ex}")
-            log.error(
+            cls.logger().error(f"Error retrieving a Work Object {ex}")
+            cls.logger().error(
                 f"Error Data: {license_pool} | {license_pool and license_pool.presentation_edition}"
             )
             return NOT_FOUND_ON_REMOTE
@@ -608,7 +605,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     @classmethod
     def single_entry(
         cls,
-        work: Work | Edition | None,
+        work: Work | Edition,
         annotator: Annotator,
         even_if_no_license_pool: bool = False,
     ) -> WorkEntry | OPDSMessage | None:
@@ -621,10 +618,6 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             active_license_pool = None
             _work = active_edition.work  # We always need a work for an entry
         else:
-            if not work:
-                # We have a license pool but no work. Most likely we don't have
-                # metadata for this work yet.
-                return None
             _work = work
             active_license_pool = annotator.active_licensepool_for(work)
             if active_license_pool:
@@ -633,14 +626,16 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             elif work.presentation_edition:
                 active_edition = work.presentation_edition
                 identifier = active_edition.primary_identifier
+            else:
+                active_edition = None
 
         # There's no reason to present a book that has no active license pool.
         if not identifier:
-            logging.warning("%r HAS NO IDENTIFIER", work)
+            cls.logger().warning("%r HAS NO IDENTIFIER", work)
             return None
 
         if not active_license_pool and not even_if_no_license_pool:
-            logging.warning("NO ACTIVE LICENSE POOL FOR %r", work)
+            cls.logger().warning("NO ACTIVE LICENSE POOL FOR %r", work)
             return cls.error_message(
                 identifier,
                 403,
@@ -648,7 +643,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             )
 
         if not active_edition:
-            logging.warning("NO ACTIVE EDITION FOR %r", active_license_pool)
+            cls.logger().warning("NO ACTIVE EDITION FOR %r", active_license_pool)
             return cls.error_message(
                 identifier,
                 403,
@@ -660,9 +655,10 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 _work, active_license_pool, active_edition, identifier, annotator
             )
         except UnfulfillableWork as e:
-            logging.info(
+            cls.logger().info(
                 "Work %r is not fulfillable, refusing to create an <entry>.",
                 work,
+                exc_info=e,
             )
             return cls.error_message(
                 identifier,
@@ -670,7 +666,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 "I know about this work but can offer no way of fulfilling it.",
             )
         except Exception as e:
-            logging.error("Exception generating OPDS entry for %r", work, exc_info=e)
+            cls.logger().error(
+                "Exception generating OPDS entry for %r", work, exc_info=e
+            )
             return None
 
     @classmethod
@@ -939,8 +937,8 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
             return cls._create_entry(
                 _work, active_licensepool, edition, identifier, annotator
             )
-        except UnfulfillableWork as e:
-            logging.info(
+        except UnfulfillableWork:
+            cls.logger().info(
                 "Work %r is not fulfillable, refusing to create an <entry>.", _work
             )
             return cls.error_message(

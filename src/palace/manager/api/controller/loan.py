@@ -22,6 +22,7 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
+    NOT_FOUND_ON_REMOTE,
 )
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
@@ -480,6 +481,14 @@ class LoanController(CirculationManagerController):
             )
 
         work = pool.work
+        if not work:
+            # Somehow we just revoked a loan or hold for a LicensePool
+            # that has no Work. This shouldn't happen.
+            self.log.error(
+                "Revoked loan or hold for LicensePool %r which has no Work!",
+                pool,
+            )
+            return NOT_FOUND_ON_REMOTE
         annotator = self.manager.annotator(None)
         single_entry_feed = OPDSAcquisitionFeed.single_entry(work, annotator)
         if single_entry_feed is None:
