@@ -325,7 +325,6 @@ class TestFacets:
         selected = sorted(x[:2] for x in all_groups if x[-2] == True)
         assert [
             ("available", "all"),
-            ("collection", "full"),
             ("collectionName", "All"),
             ("distributor", "All"),
             ("order", "title"),
@@ -632,7 +631,6 @@ class TestFacets:
         headers: dict = {}
         facets = m(library, library, args.get, headers.get, worklist)
         assert default_order == facets.order
-        assert default_collection == facets.collection
         assert default_availability == facets.availability
         assert library == facets.library
 
@@ -670,15 +668,6 @@ class TestFacets:
             == invalid_availability.detail
         )
 
-        # Invalid collection
-        args = dict(collection="no such collection")
-        invalid_collection = m(library, library, args.get, headers.get, None)
-        assert INVALID_INPUT.uri == invalid_collection.uri
-        assert (
-            "I don't understand what 'no such collection' refers to."
-            == invalid_collection.detail
-        )
-
     def test_from_request_gets_available_facets_through_hook_methods(
         self, db: DatabaseTransactionFixture
     ):
@@ -714,7 +703,6 @@ class TestFacets:
         (
             order,
             available,
-            collection,
             distributor,
             collection_name,
         ) = Mock.available_facets_calls
@@ -722,7 +710,6 @@ class TestFacets:
         # the options for order, availability, and collection should be.
         assert (library, "order") == order
         assert (library, "available") == available
-        assert (library, "collection") == collection
         assert (library, "distributor") == distributor
         assert (library, "collectionName") == collection_name
 
@@ -761,7 +748,6 @@ class TestFacets:
             None,
             None,
             None,
-            None,
             entrypoint=AudiobooksEntryPoint,
         )
         filter = Filter()
@@ -771,7 +757,6 @@ class TestFacets:
         # Now test the subclass behavior.
         facets = Facets(
             db.default_library(),
-            "some collection",
             "some availability",
             order=Facets.ORDER_ADDED_TO_COLLECTION,
             distributor=DataSource.OVERDRIVE,
@@ -789,7 +774,6 @@ class TestFacets:
         # Availability and collection and distributor are propagated with no
         # validation.
         assert "some availability" == filter.availability
-        assert "some collection" == filter.subcollection
         assert [
             DataSource.lookup(db.session, DataSource.OVERDRIVE).id
         ] == filter.license_datasources
@@ -804,13 +788,13 @@ class TestFacets:
 
         # Specifying an invalid sort order doesn't cause a crash, but you
         # don't get a sort order.
-        facets = Facets(db.default_library(), None, None, "invalid order", None, None)
+        facets = Facets(db.default_library(), None, "invalid order", None, None)
         filter = Filter()
         facets.modify_search_filter(filter)
         assert None == filter.order
 
         facets = Facets(
-            db.default_library(), None, None, None, None, db.default_collection().name
+            db.default_library(), None, None, None, db.default_collection().name
         )
         filter = Filter()
         facets.modify_search_filter(filter)
@@ -856,7 +840,7 @@ class TestFacets:
             ),
             (Facets.AVAILABLE_NOT_NOW, [not_available]),
         ]:
-            facets = Facets(db.default_library(), None, availability, None, None, None)
+            facets = Facets(db.default_library(), availability, None, None, None)
             modified = facets.modify_database_query(db.session, qu)
             assert (availability, sorted(x.title for x in modified)) == (
                 availability,
@@ -2253,7 +2237,6 @@ class TestWorkList:
         wl.initialize(db.default_library(), languages=["eng"])
         facets = Facets(
             db.default_library(),
-            None,
             None,
             order=Facets.ORDER_TITLE,
             distributor=None,

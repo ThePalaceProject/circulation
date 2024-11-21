@@ -917,13 +917,12 @@ class TestCrawlableFacets:
         [
             order,
             availability,
-            collection,
             distributor,
             collectionName,
         ] = facets.enabled_facets
 
         # The default facets are the only ones enabled.
-        for facet in [order, availability, collection]:
+        for facet in [order, availability]:
             assert len(facet) == 1
 
         # Except for distributor and collectionName, which have the default

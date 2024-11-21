@@ -940,7 +940,6 @@ class TestExternalSearchWithWorks:
             facets = Facets(
                 transaction.default_library(),
                 None,
-                None,
                 order=Facets.ORDER_TITLE,
                 distributor=None,
                 collection_name=None,
@@ -1126,7 +1125,6 @@ class TestFacetFilters:
             facets = Facets(
                 transaction.default_library(),
                 availability,
-                collection,
                 order=Facets.ORDER_TITLE,
                 distributor=None,
                 collection_name=None,

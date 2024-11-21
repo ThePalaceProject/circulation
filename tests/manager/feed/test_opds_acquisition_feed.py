@@ -1137,7 +1137,7 @@ class TestEntrypointLinkInsertion:
         # The make_link function that was passed in calls
         # TestAnnotator.feed_url() when passed an EntryPoint. The
         # Facets object's other facet groups are propagated in this URL.
-        first_page_url = "http://wl/?available=all&collection=full&collectionName=All&distributor=All&entrypoint=Book&order=author"
+        first_page_url = "http://wl/?available=all&collectionName=All&distributor=All&entrypoint=Book&order=author"
         assert first_page_url == make_link(EbooksEntryPoint)
 
         # Pagination information is not propagated through entry point links
@@ -1209,7 +1209,7 @@ class TestEntrypointLinkInsertion:
 
         # The make_link function that was passed in calls
         # TestAnnotator.search_url() when passed an EntryPoint.
-        first_page_url = "http://localhost/default/search/?entrypoint=Book&order=relevance&available=all&collection=full&search_type=default"
+        first_page_url = "http://localhost/default/search/?entrypoint=Book&order=relevance&available=all&search_type=default"
         with app.test_request_context("/"):
             assert first_page_url == make_link(EbooksEntryPoint)
 

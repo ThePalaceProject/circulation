@@ -464,17 +464,15 @@ class TestLibraryAnnotator:
     def test_facet_url(self, annotator_fixture: LibraryAnnotatorFixture):
         # A regular Lane.
         facets = Facets.default(
-            annotator_fixture.db.default_library(), collection="main"
+            annotator_fixture.db.default_library(),
         )
         facet_url = annotator_fixture.annotator.facet_url(facets)
-        assert "collection=main" in facet_url
         assert str(annotator_fixture.lane.id) in facet_url
 
         # A QueryGeneratedLane.
         annotator_fixture.annotator.lane = annotator_fixture.contributor_lane
 
         facet_url_contributor = annotator_fixture.annotator.facet_url(facets)
-        assert "collection=main" in facet_url_contributor
         assert annotator_fixture.contributor_lane.ROUTE in facet_url_contributor
         assert (
             annotator_fixture.contributor_lane.contributor_key in facet_url_contributor

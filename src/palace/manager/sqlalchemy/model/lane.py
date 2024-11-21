@@ -687,7 +687,6 @@ class Facets(FacetsWithEntryPoint):
             )
 
         filter.availability = self.availability
-        filter.subcollection = self.collection
 
         # We can only have distributor and collection name facets if we have a library
         if self.library:
