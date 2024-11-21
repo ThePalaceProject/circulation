@@ -317,10 +317,10 @@ class TestFacets:
         all_groups = list(facets.facet_groups)
 
         # By default, there are 10 facet transitions: two groups of three
-        # and one group of two and 2 datasource groups and 2 for collection names
-        assert 12 == len(all_groups)
+        # and 2 datasource groups and 2 for collection names
+        assert 10 == len(all_groups)
 
-        # available=all, collection=full, and order=title are the selected
+        # available=all and order=title are the selected
         # facets.
         selected = sorted(x[:2] for x in all_groups if x[-2] == True)
         assert [
@@ -342,9 +342,7 @@ class TestFacets:
         library = db.default_library()
         self._configure_facets(library, test_enabled_facets, test_default_facets)
 
-        facets = Facets(
-            db.default_library(), None, None, Facets.ORDER_TITLE, None, None
-        )
+        facets = Facets(db.default_library(), None, Facets.ORDER_TITLE, None, None)
         all_groups = list(facets.facet_groups)
         # We have disabled almost all the facets, so the list of
         # facet transitions includes only two items.
@@ -707,7 +705,7 @@ class TestFacets:
             collection_name,
         ) = Mock.available_facets_calls
         # available_facets was called three times, to ask the Mock class what it thinks
-        # the options for order, availability, and collection should be.
+        # the options for order and availability should be.
         assert (library, "order") == order
         assert (library, "available") == available
         assert (library, "distributor") == distributor
@@ -718,13 +716,11 @@ class TestFacets:
         (
             order_d,
             available_d,
-            collection_d,
             distributor_d,
             collection_name_d,
         ) = Mock.default_facet_calls
         assert (library, "order") == order_d
         assert (library, "available") == available_d
-        assert (library, "collection") == collection_d
         assert (library, "distributor") == distributor_d
         assert (library, "collectionName") == collection_name_d
 

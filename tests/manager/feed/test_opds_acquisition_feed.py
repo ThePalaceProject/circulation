@@ -886,18 +886,11 @@ class TestOPDSAcquisitionFeed:
         annotator = MockAnnotator()
         facets = MockFacets()
 
-        # The only 5-tuple yielded by facet_groups was passed on to us.
-        # The link was run through MockAnnotator.facet_url(),
-        # and the human-readable titles were found using lookups.
-        #
-        # The other three 5-tuples were ignored since we don't know
+        # The 5-tuples were ignored since we don't know
         # how to generate human-readable titles for them.
-        [[url, facet, group, selected, is_default]] = MockFeed.facet_links(
-            annotator, facets
-        )
-        assert "url: try the featured collection instead" == url
-        assert selected
-        assert not is_default
+        links = MockFeed.facet_links(annotator, facets)
+
+        assert len([x for x in links]) == 0
 
     def test_active_loans_for_with_holds(
         self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor

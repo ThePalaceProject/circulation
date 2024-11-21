@@ -1157,12 +1157,6 @@ class TestFacetFilters:
             [data.horse, data.moby],
         )
 
-        # Show only featured-quality works.
-        expect(
-            Facets.AVAILABLE_ALL,
-            [data.becoming, data.moby],
-        )
-
 
 class TestSearchOrderData:
     a1: LicensePool
@@ -2612,7 +2606,6 @@ class TestQuery:
         # used to convert it to appropriate Opensearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
-            None,
             None,
             order=Facets.ORDER_AUTHOR,
             distributor=None,
