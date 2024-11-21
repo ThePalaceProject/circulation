@@ -155,6 +155,12 @@ class CirculationManagerController(BaseCirculationManagerController):
         if work is None:
             # We have no work for this license pool. Return a ProblemDetail
             # that will give a 404 status code.
+            self.log.warning(
+                "No work found for license pool %r %s/%s",
+                pools[0],
+                identifier_type,
+                identifier,
+            )
             return NOT_FOUND_ON_REMOTE
 
         if work and not work.age_appropriate_for_patron(self.request_patron):
