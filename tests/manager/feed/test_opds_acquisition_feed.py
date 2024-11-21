@@ -866,33 +866,6 @@ class TestOPDSAcquisitionFeed:
                 bunch that don't (which will be ignored).
                 """
 
-                # Real facet group, real facet
-                yield (
-                    Facets.COLLECTION_FACET_GROUP_NAME,
-                    Facets.COLLECTION_FULL,
-                    "try the featured collection instead",
-                    True,
-                    False,
-                )
-
-                # Real facet group, nonexistent facet
-                yield (
-                    Facets.COLLECTION_FACET_GROUP_NAME,
-                    "no such facet",
-                    "this facet does not exist",
-                    True,
-                    False,
-                )
-
-                # Nonexistent facet group, real facet
-                yield (
-                    "no such group",
-                    Facets.COLLECTION_FULL,
-                    "this facet exists but it's in a nonexistent group",
-                    True,
-                    False,
-                )
-
                 # Nonexistent facet group, nonexistent facet
                 yield (
                     "no such group",
@@ -923,8 +896,6 @@ class TestOPDSAcquisitionFeed:
             annotator, facets
         )
         assert "url: try the featured collection instead" == url
-        assert Facets.FACET_DISPLAY_TITLES[Facets.COLLECTION_FULL] == facet
-        assert Facets.GROUP_DISPLAY_TITLES[Facets.COLLECTION_FACET_GROUP_NAME] == group
         assert selected
         assert not is_default
 

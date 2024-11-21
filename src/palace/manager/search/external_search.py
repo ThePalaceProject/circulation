@@ -1832,14 +1832,6 @@ class Filter(SearchBase):
                 Bool(must=[not_open_access, licensed, not_available])
             )
 
-        if self.subcollection == FacetConstants.COLLECTION_FEATURED:
-            # Exclude books with a quality of less than the library's
-            # minimum featured quality.
-            range_query = self._match_range(
-                "quality", "gte", self.minimum_featured_quality
-            )
-            f = chain(f, Bool(must=range_query))
-
         if self.identifiers:
             # Check every identifier for a match.
             clauses = []
