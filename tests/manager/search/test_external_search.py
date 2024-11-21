@@ -1121,7 +1121,7 @@ class TestFacetFilters:
         data = self._populate_works(fixture)
         fixture.populate_search_index()
 
-        def expect(availability, collection, works):
+        def expect(availability, works):
             facets = Facets(
                 transaction.default_library(),
                 availability,
