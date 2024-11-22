@@ -65,7 +65,7 @@ class CustomList(Base):
     size = Column(Integer, nullable=False, default=0)
 
     entries: Mapped[list[CustomListEntry]] = relationship(
-        "CustomListEntry", backref="customlist", uselist=True
+        "CustomListEntry", back_populates="customlist", uselist=True
     )
 
     # List sharing mechanisms
@@ -364,6 +364,10 @@ class CustomListEntry(Base):
     __tablename__ = "customlistentries"
     id = Column(Integer, primary_key=True)
     list_id = Column(Integer, ForeignKey("customlists.id"), index=True)
+    customlist: Mapped[CustomList] = relationship(
+        "CustomList", back_populates="entries"
+    )
+
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
     featured = Column(Boolean, nullable=False, default=False)

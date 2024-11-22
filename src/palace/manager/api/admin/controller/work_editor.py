@@ -1,10 +1,14 @@
 import json
+from collections.abc import Mapping
+from typing import Any
 
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
+from pydantic import TypeAdapter, ValidationError
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
+from palace.manager.api.admin.model.work_editor import CustomListResponse
 from palace.manager.api.admin.problem_details import (
     EROTICA_FOR_ADULTS_ONLY,
     GENRE_NOT_FOUND,
@@ -30,6 +34,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE, genres
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
+from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.classification import (
@@ -46,6 +51,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
@@ -675,78 +681,100 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
 
         return Response("", 200)
 
-    def custom_lists(self, identifier_type, identifier):
+    @staticmethod
+    def _existing_custom_lists(library: Library, work: Work) -> list[CustomList]:
+        return [
+            entry.customlist
+            for entry in work.custom_list_entries
+            if entry.customlist and entry.customlist.library == library
+        ]
+
+    def _custom_lists_get(self, library: Library, work: Work) -> dict[str, Any]:
+        lists = [
+            CustomListResponse(id=cl.id, name=cl.name).api_dict()
+            for cl in self._existing_custom_lists(library, work)
+        ]
+        return dict(custom_lists=lists)
+
+    def _custom_lists_post(self, library: Library, work: Work) -> Response:
+        ta = TypeAdapter(list[CustomListResponse])
+        try:
+            lists = ta.validate_json(flask.request.form.get("lists", "[]", str))
+        except ValidationError as ex:
+            self.log.debug("Invalid custom list data: %s", ex)
+            raise ProblemDetailException(
+                INVALID_INPUT.detailed("Invalid form data", debug_message=str(ex))
+            )
+
+        staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+        affected_lanes = set()
+
+        # Remove entries for lists that were not in the submitted form.
+        submitted_ids = {l.id for l in lists}
+        for custom_list in self._existing_custom_lists(library, work):
+            if custom_list.id not in submitted_ids:
+                custom_list.remove_entry(work)
+                for lane in Lane.affected_by_customlist(custom_list):
+                    affected_lanes.add(lane)
+
+        # Add entries for any new lists.
+        for list_response in lists:
+            if list_response.id is not None:
+                custom_list_or_none = get_one(
+                    self._db,
+                    CustomList,
+                    id=list_response.id,
+                    name=list_response.name,
+                    library=library,
+                    data_source=staff_data_source,
+                )
+                if not custom_list_or_none:
+                    self._db.rollback()
+                    raise ProblemDetailException(
+                        MISSING_CUSTOM_LIST.detailed(
+                            _(
+                                'Could not find list "%(list_name)s"',
+                                list_name=list_response.name,
+                            )
+                        )
+                    )
+                custom_list = custom_list_or_none
+            else:
+                custom_list, __ = create(
+                    self._db,
+                    CustomList,
+                    name=list_response.name,
+                    data_source=staff_data_source,
+                    library=library,
+                )
+                custom_list.created = utc_now()
+            entry, was_new = custom_list.add_entry(work, featured=True)
+            if was_new:
+                for lane in Lane.affected_by_customlist(custom_list):
+                    affected_lanes.add(lane)
+
+        # If any list changes affected lanes, update their sizes.
+        # NOTE: This may not make a difference until the
+        # works are actually re-indexed.
+        for lane in affected_lanes:
+            lane.update_size(self._db, search_engine=self.search_engine)
+
+        return Response(str(_("Success")), 200)
+
+    def custom_lists(
+        self, identifier_type: str, identifier: str
+    ) -> Mapping[str, Any] | Response:
         library = get_request_library()
         self.require_librarian(library)
         work = self.load_work(library, identifier_type, identifier)
         if isinstance(work, ProblemDetail):
-            return work
-
-        staff_data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
+            raise ProblemDetailException(work)
 
         if flask.request.method == "GET":
-            lists = []
-            for entry in work.custom_list_entries:
-                list = entry.customlist
-                lists.append(dict(id=list.id, name=list.name))
-            return dict(custom_lists=lists)
+            return self._custom_lists_get(library, work)
 
-        if flask.request.method == "POST":
-            lists = flask.request.form.get("lists")
-            if lists:
-                lists = json.loads(lists)
-            else:
-                lists = []
+        elif flask.request.method == "POST":
+            return self._custom_lists_post(library, work)
 
-            affected_lanes = set()
-
-            # Remove entries for lists that were not in the submitted form.
-            submitted_ids = [l.get("id") for l in lists if l.get("id")]
-            for entry in work.custom_list_entries:
-                if entry.list_id not in submitted_ids:
-                    list = entry.customlist
-                    list.remove_entry(work)
-                    for lane in Lane.affected_by_customlist(list):
-                        affected_lanes.add(lane)
-
-            # Add entries for any new lists.
-            for list_info in lists:
-                id = list_info.get("id")
-                name = list_info.get("name")
-
-                if id:
-                    is_new = False
-                    list = get_one(
-                        self._db,
-                        CustomList,
-                        id=int(id),
-                        name=name,
-                        library=library,
-                        data_source=staff_data_source,
-                    )
-                    if not list:
-                        self._db.rollback()
-                        return MISSING_CUSTOM_LIST.detailed(
-                            _('Could not find list "%(list_name)s"', list_name=name)
-                        )
-                else:
-                    list, is_new = create(
-                        self._db,
-                        CustomList,
-                        name=name,
-                        data_source=staff_data_source,
-                        library=library,
-                    )
-                    list.created = utc_now()
-                entry, was_new = list.add_entry(work, featured=True)
-                if was_new:
-                    for lane in Lane.affected_by_customlist(list):
-                        affected_lanes.add(lane)
-
-            # If any list changes affected lanes, update their sizes.
-            # NOTE: This may not make a difference until the
-            # works are actually re-indexed.
-            for lane in affected_lanes:
-                lane.update_size(self._db, search_engine=self.search_engine)
-
-            return Response(str(_("Success")), 200)
+        else:
+            raise RuntimeError("Unsupported method")

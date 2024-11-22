@@ -7,7 +7,6 @@ import flask
 import pytest
 from werkzeug.datastructures import ImmutableMultiDict
 
-from palace.manager.api.admin.controller.custom_lists import CustomListsController
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.problem_details import (
     EROTICA_FOR_ADULTS_ONLY,
@@ -22,7 +21,7 @@ from palace.manager.api.admin.problem_details import (
     UNKNOWN_MEDIUM,
     UNKNOWN_ROLE,
 )
-from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
+from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, NO_LICENSES
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.constants import IdentifierType
@@ -43,7 +42,8 @@ from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
-from tests.mocks.flask import add_request_context
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.problem_detail import raises_problem_detail
 from tests.mocks.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
@@ -927,90 +927,183 @@ class TestWorkController:
                 lp.identifier.identifier,
             )
 
-    def test_custom_lists_get(self, work_fixture: WorkFixture):
-        staff_data_source = DataSource.lookup(
-            work_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
-        )
-        list, ignore = create(
-            work_fixture.ctrl.db.session,
+    def test_custom_lists_get(
+        self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        # Test with non-existent identifier.
+        with (
+            work_fixture.request_context_with_library_and_admin("/"),
+            raises_problem_detail(
+                pd=NO_LICENSES.detailed(
+                    "The item you're asking about (URI/http://non-existent-id) isn't in this collection."
+                )
+            ),
+        ):
+            work_fixture.manager.admin_work_controller.custom_lists(
+                IdentifierType.URI.value, "http://non-existent-id"
+            )
+
+        # Test normal case. Only custom lists for the current library are returned.
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        custom_list, ignore = create(
+            db.session,
             CustomList,
-            name=work_fixture.ctrl.db.fresh_str(),
-            library=work_fixture.ctrl.db.default_library(),
+            name=db.fresh_str(),
+            library=db.default_library(),
             data_source=staff_data_source,
         )
-        work = work_fixture.ctrl.db.work(with_license_pool=True)
-        list.add_entry(work)
+        other_library_custom_list, ignore = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=db.library(),
+            data_source=staff_data_source,
+        )
+        work = db.work(with_license_pool=True)
+        custom_list.add_entry(work)
+        other_library_custom_list.add_entry(work)
         identifier = work.presentation_edition.primary_identifier
 
         with work_fixture.request_context_with_library_and_admin("/"):
             response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
+            assert isinstance(response, dict)
             lists = response.get("custom_lists")
+            assert isinstance(lists, list)
             assert 1 == len(lists)
-            assert list.id == lists[0].get("id")
-            assert list.name == lists[0].get("name")
+            [custom_list_response] = lists
+            assert custom_list.id == custom_list_response.get("id")
+            assert custom_list.name == custom_list_response.get("name")
 
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.custom_lists,
+        # Test lack permissions.
+        work_fixture.admin.remove_role(AdminRole.LIBRARIAN, db.default_library())
+        with (
+            work_fixture.request_context_with_library_and_admin("/"),
+            pytest.raises(AdminNotAuthorized),
+        ):
+            work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type,
                 identifier.identifier,
             )
 
-    def test_custom_lists_edit_with_missing_list(self, work_fixture: WorkFixture):
-        work = work_fixture.ctrl.db.work(with_license_pool=True)
-        identifier = work.presentation_edition.primary_identifier
-
-        with work_fixture.request_context_with_library_and_admin("/", method="POST"):
-            form = ImmutableMultiDict(
-                [
-                    ("id", "4"),
-                    ("name", "name"),
-                ]
-            )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
-
-            response = work_fixture.manager.admin_custom_lists_controller.custom_lists()
-            assert MISSING_CUSTOM_LIST == response
-
-    def test_custom_lists_edit_success(self, work_fixture: WorkFixture):
-        staff_data_source = DataSource.lookup(
-            work_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
-        )
-        list, ignore = create(
-            work_fixture.ctrl.db.session,
+    def test_custom_lists_post(
+        self, work_fixture: WorkFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        staff_data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        custom_list, _ = create(
+            db.session,
             CustomList,
-            name=work_fixture.ctrl.db.fresh_str(),
-            library=work_fixture.ctrl.db.default_library(),
+            name=db.fresh_str(),
+            library=db.default_library(),
             data_source=staff_data_source,
         )
-        work = work_fixture.ctrl.db.work(with_license_pool=True)
+        work = db.work(with_license_pool=True)
         identifier = work.presentation_edition.primary_identifier
 
         # Create a Lane that depends on this CustomList for its membership.
-        lane = work_fixture.ctrl.db.lane()
-        lane.customlists.append(list)
+        lane = db.lane()
+        lane.customlists.append(custom_list)
         lane.size = 300
+
+        # Try adding the work to a list that doesn't exist.
+        deleted_custom_list, _ = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=db.default_library(),
+            data_source=staff_data_source,
+        )
+        deleted_list_id = deleted_custom_list.id
+        db.session.delete(deleted_custom_list)
+        with (
+            work_fixture.request_context_with_library_and_admin("/", method="POST"),
+            raises_problem_detail(
+                pd=MISSING_CUSTOM_LIST.detailed(
+                    'Could not find list "non-existent list"'
+                )
+            ),
+        ):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    (
+                        "lists",
+                        json.dumps(
+                            [{"name": "non-existent list", "id": deleted_list_id}]
+                        ),
+                    )
+                ]
+            )
+            work_fixture.manager.admin_work_controller.custom_lists(
+                identifier.type, identifier.identifier
+            )
+
+        # Try sending bad data
+        with (
+            work_fixture.request_context_with_library_and_admin("/", method="POST"),
+            raises_problem_detail(detail="Invalid form data"),
+        ):
+            flask.request.form = ImmutableMultiDict(
+                [("lists", json.dumps("Complete garbage 🗑️"))]
+            )
+            work_fixture.manager.admin_work_controller.custom_lists(
+                identifier.type, identifier.identifier
+            )
+
+        # Try adding work to a list that the library doesn't have access to.
+        other_libraries_list, _ = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=db.library(),
+            data_source=staff_data_source,
+        )
+        with (
+            work_fixture.request_context_with_library_and_admin("/", method="POST"),
+            raises_problem_detail(
+                pd=MISSING_CUSTOM_LIST.detailed(
+                    f'Could not find list "{other_libraries_list.name}"'
+                )
+            ),
+        ):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    (
+                        "lists",
+                        json.dumps(
+                            [
+                                {
+                                    "id": str(other_libraries_list.id),
+                                    "name": other_libraries_list.name,
+                                }
+                            ]
+                        ),
+                    )
+                ]
+            )
+            work_fixture.manager.admin_work_controller.custom_lists(
+                identifier.type, identifier.identifier
+            )
 
         # Add the list to the work.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
             flask.request.form = ImmutableMultiDict(
-                [("lists", json.dumps([{"id": str(list.id), "name": list.name}]))]
+                [
+                    (
+                        "lists",
+                        json.dumps(
+                            [{"id": str(custom_list.id), "name": custom_list.name}]
+                        ),
+                    )
+                ]
             )
             response = work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type, identifier.identifier
             )
             assert 200 == response.status_code
             assert 1 == len(work.custom_list_entries)
-            assert 1 == len(list.entries)
-            assert list == work.custom_list_entries[0].customlist
+            assert 1 == len(custom_list.entries)
+            assert custom_list == work.custom_list_entries[0].customlist
             assert True == work.custom_list_entries[0].featured
 
         # Now remove the work from the list.
@@ -1025,7 +1118,7 @@ class TestWorkController:
             )
         assert 200 == response.status_code
         assert 0 == len(work.custom_list_entries)
-        assert 0 == len(list.entries)
+        assert 0 == len(custom_list.entries)
 
         # Add a list that didn't exist before.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):
@@ -1038,24 +1131,23 @@ class TestWorkController:
         assert 200 == response.status_code
         assert 1 == len(work.custom_list_entries)
         new_list = CustomList.find(
-            work_fixture.ctrl.db.session,
+            db.session,
             "new list",
             staff_data_source,
-            work_fixture.ctrl.db.default_library(),
+            db.default_library(),
         )
         assert new_list == work.custom_list_entries[0].customlist
         assert True == work.custom_list_entries[0].featured
 
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/", method="POST"):
+        work_fixture.admin.remove_role(AdminRole.LIBRARIAN, db.default_library())
+        with (
+            work_fixture.request_context_with_library_and_admin("/", method="POST"),
+            pytest.raises(AdminNotAuthorized),
+        ):
             flask.request.form = ImmutableMultiDict(
                 [("lists", json.dumps([{"name": "another new list"}]))]
             )
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.custom_lists,
+            work_fixture.manager.admin_work_controller.custom_lists(
                 identifier.type,
                 identifier.identifier,
             )
