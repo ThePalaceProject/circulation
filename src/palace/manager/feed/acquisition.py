@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable, Generator, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Query, Session
 
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.entrypoint import EntryPoint
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.facets import FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.annotator.base import Annotator
@@ -68,7 +68,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         self._pagination = pagination
         super().__init__(title, url, precomposed_entries=precomposed_entries)
         for work in works:
-            entry = self.single_entry(work, self.annotator)
+            try:
+                entry = self.single_entry(work, self.annotator)
+            except PalaceValueError:
+                self.log.exception("Error creating entry for %r", work)
+                continue
             if isinstance(entry, WorkEntry):
                 self._feed.entries.append(entry)
 
@@ -537,10 +541,10 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: LibraryAnnotator | None = None,
         fulfillment: UrlFulfillment | None = None,
         **response_kwargs: Any,
-    ) -> OPDSEntryResponse | ProblemDetail | None:
+    ) -> OPDSEntryResponse | ProblemDetail:
         """A single entry as a standalone feed specific to a patron"""
         if not item:
-            raise ValueError("Argument 'item' must be non-empty")
+            raise PalaceValueError("Argument 'item' must be non-empty")
 
         if isinstance(item, LicensePool):
             license_pool = item
@@ -549,7 +553,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             license_pool = item.license_pool
             library = item.library
         else:
-            raise ValueError(
+            raise PalaceValueError(
                 "Argument 'item' must be an instance of {}, {}, or {} classes".format(
                     Loan, Hold, LicensePool
                 )
@@ -558,15 +562,13 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if not annotator:
             annotator = LibraryLoanAndHoldAnnotator(circulation, None, library)
 
-        log = logging.getLogger(cls.__name__)
-
         # Sometimes the pool or work may be None
         # In those cases we have to protect against the exceptions
         try:
             work = license_pool.work or license_pool.presentation_edition.work
         except AttributeError as ex:
-            log.error(f"Error retrieving a Work Object {ex}")
-            log.error(
+            cls.logger().error(f"Error retrieving a Work Object {ex}")
+            cls.logger().error(
                 f"Error Data: {license_pool} | {license_pool and license_pool.presentation_edition}"
             )
             return NOT_FOUND_ON_REMOTE
@@ -598,20 +600,18 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
-        if isinstance(entry, WorkEntry) and entry.computed:
-            return cls.entry_as_response(entry, **response_kwargs)
-        elif isinstance(entry, OPDSMessage):
-            return cls.entry_as_response(entry, max_age=0)
+        if isinstance(entry, OPDSMessage):
+            response_kwargs["max_age"] = 0
 
-        return None
+        return cls.entry_as_response(entry, **response_kwargs)
 
     @classmethod
     def single_entry(
         cls,
-        work: Work | Edition | None,
+        work: Work | Edition,
         annotator: Annotator,
         even_if_no_license_pool: bool = False,
-    ) -> WorkEntry | OPDSMessage | None:
+    ) -> WorkEntry | OPDSMessage:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         _work: Work
@@ -621,10 +621,6 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             active_license_pool = None
             _work = active_edition.work  # We always need a work for an entry
         else:
-            if not work:
-                # We have a license pool but no work. Most likely we don't have
-                # metadata for this work yet.
-                return None
             _work = work
             active_license_pool = annotator.active_licensepool_for(work)
             if active_license_pool:
@@ -633,14 +629,15 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             elif work.presentation_edition:
                 active_edition = work.presentation_edition
                 identifier = active_edition.primary_identifier
+            else:
+                active_edition = None
 
         # There's no reason to present a book that has no active license pool.
         if not identifier:
-            logging.warning("%r HAS NO IDENTIFIER", work)
-            return None
+            raise PalaceValueError(f"Work has no associated identifier: {work!r}")
 
         if not active_license_pool and not even_if_no_license_pool:
-            logging.warning("NO ACTIVE LICENSE POOL FOR %r", work)
+            cls.logger().warning("NO ACTIVE LICENSE POOL FOR %r", work)
             return cls.error_message(
                 identifier,
                 403,
@@ -648,7 +645,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             )
 
         if not active_edition:
-            logging.warning("NO ACTIVE EDITION FOR %r", active_license_pool)
+            cls.logger().warning("NO ACTIVE EDITION FOR %r", active_license_pool)
             return cls.error_message(
                 identifier,
                 403,
@@ -660,18 +657,16 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 _work, active_license_pool, active_edition, identifier, annotator
             )
         except UnfulfillableWork as e:
-            logging.info(
+            cls.logger().info(
                 "Work %r is not fulfillable, refusing to create an <entry>.",
                 work,
+                exc_info=e,
             )
             return cls.error_message(
                 identifier,
                 403,
                 "I know about this work but can offer no way of fulfilling it.",
             )
-        except Exception as e:
-            logging.error("Exception generating OPDS entry for %r", work, exc_info=e)
-            return None
 
     @classmethod
     @inject
@@ -939,8 +934,8 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
             return cls._create_entry(
                 _work, active_licensepool, edition, identifier, annotator
             )
-        except UnfulfillableWork as e:
-            logging.info(
+        except UnfulfillableWork:
+            cls.logger().info(
                 "Work %r is not fulfillable, refusing to create an <entry>.", _work
             )
             return cls.error_message(

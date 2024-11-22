@@ -14,6 +14,7 @@ from palace.manager.api.problem_details import (
     NO_LICENSES,
     NO_SUCH_LANE,
     NOT_AGE_APPROPRIATE,
+    NOT_FOUND_ON_REMOTE,
     REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.api.util.flask import get_request_library
@@ -35,6 +36,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util import first_or_default
 from palace.manager.util.problem_detail import ProblemDetail
 
 T = TypeVar("T", Loan, Hold)
@@ -147,9 +149,19 @@ class CirculationManagerController(BaseCirculationManagerController):
         if isinstance(pools, ProblemDetail):
             return pools
 
-        # We know there is at least one LicensePool, and all LicensePools
-        # for an Identifier have the same Work.
-        work: Work = pools[0].work
+        # We know there is at least one LicensePool. Find the first one with
+        # a work set on it.
+        work: Work | None = first_or_default([lp.work for lp in pools if lp.work])
+        if work is None:
+            # We have no work for this license pool. Return a ProblemDetail
+            # that will give a 404 status code.
+            self.log.warning(
+                "No work found for license pool %r %s/%s",
+                pools[0],
+                identifier_type,
+                identifier,
+            )
+            return NOT_FOUND_ON_REMOTE
 
         if work and not work.age_appropriate_for_patron(self.request_patron):
             # This work is not age-appropriate for the authenticated

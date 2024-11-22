@@ -24,6 +24,7 @@ from palace.manager.core.metadata_layer import ContributorData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets, Pagination
+from palace.manager.util.flask_util import OPDSEntryResponse
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -96,7 +97,9 @@ class WorkController(CirculationManagerController):
             max_age=lane.max_cache_age(), mime_types=flask.request.accept_mimetypes
         )
 
-    def permalink(self, identifier_type, identifier):
+    def permalink(
+        self, identifier_type: str, identifier: str
+    ) -> OPDSEntryResponse | ProblemDetail:
         """Serve an entry for a single book.
 
         This does not include any loan or hold-specific information for

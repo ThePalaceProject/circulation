@@ -3,7 +3,6 @@ from __future__ import annotations
 import flask
 from flask import Response
 from flask_babel import lazy_gettext as _
-from lxml import etree
 from pydantic import TypeAdapter
 from werkzeug import Response as wkResponse
 
@@ -22,10 +21,10 @@ from palace.manager.api.problem_details import (
     NO_ACTIVE_LOAN,
     NO_ACTIVE_LOAN_OR_HOLD,
     NO_LICENSES,
+    NOT_FOUND_ON_REMOTE,
 )
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
-from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.model.library import Library
@@ -35,7 +34,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.util.flask_util import OPDSEntryResponse
-from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
 
 
@@ -371,21 +369,8 @@ class LoanController(CirculationManagerController):
         ):
             # If this is a streaming delivery mechanism, create an OPDS entry
             # with a fulfillment link to the streaming reader url.
-            feed = OPDSAcquisitionFeed.single_entry_loans_feed(
+            return OPDSAcquisitionFeed.single_entry_loans_feed(
                 self.circulation, loan, fulfillment=fulfillment
-            )
-            if isinstance(feed, ProblemDetail):
-                # This should typically never happen, since we've gone through the entire fulfill workflow
-                # But for the sake of return-type completeness we are adding this here
-                return feed
-            if isinstance(feed, Response):
-                return feed
-            else:
-                content = etree.tostring(feed)
-            return Response(
-                response=content,
-                status=200,
-                content_type=OPDSFeed.ACQUISITION_FEED_TYPE,
             )
 
         try:
@@ -452,6 +437,14 @@ class LoanController(CirculationManagerController):
                 ),
                 status_code=404,
             )
+        work = pool.work
+        if not work:
+            # Somehow we have a loan or hold for a LicensePool that has no Work.
+            self.log.error(
+                "Can't revoke loan or hold for LicensePool %r which has no Work!",
+                pool,
+            )
+            return NOT_FOUND_ON_REMOTE
 
         header = self.authorization_header()
         credential = self.manager.auth.get_credential_from_header(header)
@@ -479,11 +472,8 @@ class LoanController(CirculationManagerController):
                 countdown=5,
             )
 
-        work = pool.work
         annotator = self.manager.annotator(None)
         single_entry_feed = OPDSAcquisitionFeed.single_entry(work, annotator)
-        if single_entry_feed is None:
-            return INTERNAL_SERVER_ERROR
         return OPDSAcquisitionFeed.entry_as_response(
             single_entry_feed,
             mime_types=flask.request.accept_mimetypes,

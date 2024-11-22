@@ -286,6 +286,8 @@ class TestWorkController:
 
     def test_permalink(self, work_fixture: WorkFixture):
         with work_fixture.request_context_with_library("/"):
+            assert work_fixture.identifier.type is not None
+            assert work_fixture.identifier.identifier is not None
             response = work_fixture.manager.work_controller.permalink(
                 work_fixture.identifier.type, work_fixture.identifier.identifier
             )

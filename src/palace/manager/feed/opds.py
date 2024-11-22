@@ -16,6 +16,7 @@ from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.opds_writer import OPDSMessage
 
 
@@ -37,7 +38,7 @@ def get_serializer(
     return OPDS1Version1Serializer()
 
 
-class BaseOPDSFeed(FeedInterface):
+class BaseOPDSFeed(FeedInterface, LoggerMixin):
     def __init__(
         self,
         title: str,
@@ -48,7 +49,6 @@ class BaseOPDSFeed(FeedInterface):
         self.title = title
         self._precomposed_entries = precomposed_entries or []
         self._feed = FeedData()
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def add_link(self, href: str, rel: str | None = None, **kwargs: Any) -> None:
         self._feed.add_link(href, rel=rel, **kwargs)
