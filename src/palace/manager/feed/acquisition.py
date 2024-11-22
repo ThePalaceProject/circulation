@@ -10,6 +10,7 @@ from sqlalchemy.orm import Query, Session
 
 from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.core.entrypoint import EntryPoint
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.facets import FacetConstants
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.annotator.base import Annotator
@@ -536,7 +537,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: LibraryAnnotator | None = None,
         fulfillment: UrlFulfillment | None = None,
         **response_kwargs: Any,
-    ) -> OPDSEntryResponse | ProblemDetail | None:
+    ) -> OPDSEntryResponse | ProblemDetail:
         """A single entry as a standalone feed specific to a patron"""
         if not item:
             raise ValueError("Argument 'item' must be non-empty")
@@ -599,8 +600,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             return cls.entry_as_response(entry, **response_kwargs)
         elif isinstance(entry, OPDSMessage):
             return cls.entry_as_response(entry, max_age=0)
-
-        return None
+        else:
+            raise ValueError("Entry is not an instance of WorkEntry or OPDSMessage")
 
     @classmethod
     def single_entry(
@@ -608,7 +609,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         work: Work | Edition,
         annotator: Annotator,
         even_if_no_license_pool: bool = False,
-    ) -> WorkEntry | OPDSMessage | None:
+    ) -> WorkEntry | OPDSMessage:
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         _work: Work
@@ -631,8 +632,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         # There's no reason to present a book that has no active license pool.
         if not identifier:
-            cls.logger().warning("%r HAS NO IDENTIFIER", work)
-            return None
+            raise PalaceValueError("Work has no identifier")
 
         if not active_license_pool and not even_if_no_license_pool:
             cls.logger().warning("NO ACTIVE LICENSE POOL FOR %r", work)
@@ -665,11 +665,6 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
                 403,
                 "I know about this work but can offer no way of fulfilling it.",
             )
-        except Exception as e:
-            cls.logger().error(
-                "Exception generating OPDS entry for %r", work, exc_info=e
-            )
-            return None
 
     @classmethod
     @inject

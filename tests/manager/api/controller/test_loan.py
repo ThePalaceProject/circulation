@@ -1183,6 +1183,32 @@ class TestLoanController:
         # Because of the error we did not queue up a sync_patron_activity_collection task
         sync_task.apply_async.assert_not_called()
 
+    def test_revoke_loan_licensepool_no_work(
+        self,
+        loan_fixture: LoanFixture,
+    ):
+        # Revoke loan where the license pool has no work
+        with (
+            loan_fixture.request_context_with_library(
+                "/", headers=dict(Authorization=loan_fixture.valid_auth)
+            ),
+            patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task,
+        ):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool)
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.loan_to(patron)
+            loan_fixture.pool.work = None
+            response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+
+        assert isinstance(response, ProblemDetail)
+        assert response == NOT_FOUND_ON_REMOTE
+
+        # Because of the error we did not queue up a sync_patron_activity_collection task
+        sync_task.apply_async.assert_not_called()
+
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
     )
