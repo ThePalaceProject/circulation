@@ -8,8 +8,8 @@ import pytest
 from attr import define
 from werkzeug.datastructures import ImmutableMultiDict
 
-from palace.manager.api.admin.controller.custom_lists import CustomListsController
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
+from palace.manager.api.admin.model.custom_lists import CustomListPostRequest
 from palace.manager.api.admin.problem_details import (
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
     CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
@@ -132,9 +132,7 @@ class TestCustomListsController:
                     ("name", "name"),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -162,9 +160,7 @@ class TestCustomListsController:
                     ("name", list.name),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -186,9 +182,7 @@ class TestCustomListsController:
                     ("name", list.name),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -218,9 +212,7 @@ class TestCustomListsController:
                     ("name", l1.name),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -235,9 +227,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([12345])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -257,9 +247,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             pytest.raises(
                 AdminNotAuthorized,
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
@@ -279,9 +267,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([collection.id])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
@@ -307,9 +293,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([collection.id])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
@@ -343,9 +327,7 @@ class TestCustomListsController:
                     ("auto_update", "True"),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
@@ -378,9 +360,7 @@ class TestCustomListsController:
                     ("auto_update_facets", json.dumps({})),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
@@ -410,9 +390,7 @@ class TestCustomListsController:
                     ("auto_update_facets", json.dumps({})),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
@@ -640,9 +618,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([c.id for c in new_collections])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             assert isinstance(list.id, int)
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
@@ -678,9 +654,7 @@ class TestCustomListsController:
                     ("auto_update_facets", json.dumps(update_facets)),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id
@@ -704,9 +678,7 @@ class TestCustomListsController:
                     ("collections", json.dumps([c.id for c in new_collections])),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             pytest.raises(
                 AdminNotAuthorized,
@@ -736,9 +708,7 @@ class TestCustomListsController:
                     ("auto_update_query", None),
                 ]
             )
-            add_request_context(
-                flask.request, CustomListsController.CustomListPostRequest, form=form
-            )
+            add_request_context(flask.request, CustomListPostRequest, form=form)
 
             response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
                 list.id

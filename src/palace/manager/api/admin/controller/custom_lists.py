@@ -9,6 +9,10 @@ from flask import Response, url_for
 from flask_babel import lazy_gettext as _
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
+from palace.manager.api.admin.model.custom_lists import (
+    CustomListPostRequest,
+    CustomListSharePostResponse,
+)
 from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
@@ -37,28 +41,13 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create, get_one
-from palace.manager.util.flask_util import CustomBaseModel, parse_multi_dict
+from palace.manager.util.flask_util import parse_multi_dict
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 
 class CustomListsController(
     CirculationManagerController, AdminPermissionsControllerMixin
 ):
-    class CustomListSharePostResponse(CustomBaseModel):
-        successes: int = 0
-        failures: int = 0
-
-    class CustomListPostRequest(CustomBaseModel):
-        name: str
-        id: int | None = None
-        entries: list[dict] = []
-        collections: list[int] = []
-        deletedEntries: list[dict] = []
-        # For auto updating lists
-        auto_update: bool = False
-        auto_update_query: dict | None = None
-        auto_update_facets: dict | None = None
-
     def _list_as_json(self, list: CustomList, is_owner=True) -> dict:
         """Transform a CustomList object into a response ready dict"""
         collections = []
@@ -98,7 +87,7 @@ class CustomListsController(
             return dict(custom_lists=custom_lists)
 
         if flask.request.method == "POST":
-            list_ = self.CustomListPostRequest.model_validate(
+            list_ = CustomListPostRequest.model_validate(
                 parse_multi_dict(flask.request.form)
             )
             return self._create_or_update_list(
@@ -359,7 +348,7 @@ class CustomListsController(
             )
 
         elif flask.request.method == "POST":
-            list_ = self.CustomListPostRequest.model_validate(
+            list_ = CustomListPostRequest.model_validate(
                 parse_multi_dict(flask.request.form)
             )
             return self._create_or_update_list(
@@ -456,7 +445,7 @@ class CustomListsController(
 
         self._db.commit()
         self.log.info(f"Done sharing customlist {customlist.name}")
-        return self.CustomListSharePostResponse(
+        return CustomListSharePostResponse(
             successes=len(successes), failures=len(failures)
         ).model_dump()
 
