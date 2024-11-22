@@ -135,6 +135,7 @@ class WorkController(CirculationManagerController):
             )
         else:
             annotator = self.manager.annotator(lane=None)
+
             return OPDSAcquisitionFeed.entry_as_response(
                 OPDSAcquisitionFeed.single_entry(work, annotator),
                 max_age=OPDSFeed.DEFAULT_MAX_AGE,

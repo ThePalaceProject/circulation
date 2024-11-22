@@ -17,6 +17,7 @@ from palace.manager.core.entrypoint import (
     EverythingEntryPoint,
     MediumEntryPoint,
 )
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.core.facets import FacetConstants
 from palace.manager.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from palace.manager.feed.annotator.base import Annotator
@@ -25,7 +26,6 @@ from palace.manager.feed.annotator.circulation import (
     CirculationManagerAnnotator,
     LibraryAnnotator,
 )
-from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
 from palace.manager.feed.annotator.verbose import VerboseAnnotator
 from palace.manager.feed.navigation import NavigationFeed
 from palace.manager.feed.opds import BaseOPDSFeed, UnfulfillableWork
@@ -45,6 +45,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 from tests.manager.feed.conftest import PatchedUrlFor
 
 
@@ -506,8 +507,8 @@ class TestOPDSAcquisitionFeed:
         work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].identifier = None
         work.presentation_edition.primary_identifier = None
-        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
-        assert entry == None
+        with pytest.raises(PalaceValueError, match="Work has no associated identifier"):
+            OPDSAcquisitionFeed.single_entry(work, Annotator())
 
     def test_error_when_work_has_no_licensepool(self, db: DatabaseTransactionFixture):
         session = db.session
@@ -532,25 +533,8 @@ class TestOPDSAcquisitionFeed:
         work = db.work(title="Hello, World!", with_license_pool=True)
         work.license_pools[0].presentation_edition = None
         work.presentation_edition = None
-        entry = OPDSAcquisitionFeed.single_entry(work, Annotator())
-        assert None == entry
-
-    def test_exception_during_entry_creation_is_not_reraised(
-        self, db: DatabaseTransactionFixture
-    ):
-        # This feed will raise an exception whenever it's asked
-        # to create an entry.
-        class DoomedFeed(OPDSAcquisitionFeed):
-            @classmethod
-            def _create_entry(cls, *args, **kwargs):
-                raise Exception("I'm doomed!")
-
-        work = db.work(with_open_access_download=True)
-
-        # But calling create_entry() doesn't raise an exception, it
-        # just returns None.
-        entry = DoomedFeed.single_entry(work, Annotator())
-        assert entry == None
+        with pytest.raises(PalaceValueError, match="Work has no associated identifier"):
+            OPDSAcquisitionFeed.single_entry(work, Annotator())
 
     def test_unfilfullable_work(self, db: DatabaseTransactionFixture):
         work = db.work(with_open_access_download=True)
@@ -929,15 +913,19 @@ class TestOPDSAcquisitionFeed:
         assert not is_default
 
     def test_active_loans_for_with_holds(
-        self, db: DatabaseTransactionFixture, patch_url_for: PatchedUrlFor
+        self,
+        db: DatabaseTransactionFixture,
+        patch_url_for: PatchedUrlFor,
+        services_fixture: ServicesFixture,
     ):
         patron = db.patron()
         work = db.work(with_license_pool=True)
         hold, _ = work.active_license_pool().on_hold_to(patron)
 
-        feed = OPDSAcquisitionFeed.active_loans_for(
-            None, patron, LibraryAnnotator(None, None, db.default_library())
-        )
+        with services_fixture.wired():
+            feed = OPDSAcquisitionFeed.active_loans_for(
+                None, patron, LibraryAnnotator(None, None, db.default_library())
+            )
         assert feed.annotator.active_holds_by_work == {work: hold}
 
     def test_single_entry_loans_feed_errors(self, db: DatabaseTransactionFixture):
@@ -969,16 +957,15 @@ class TestOPDSAcquisitionFeed:
         assert pool is not None
         loan, _ = pool.loan_to(patron)
 
-        with patch.object(OPDSAcquisitionFeed, "single_entry") as mock:
+        with (
+            patch.object(OPDSAcquisitionFeed, "single_entry") as mock,
+            pytest.raises(
+                PalaceValueError,
+                match="Entry is not an instance of WorkEntry or OPDSMessage",
+            ),
+        ):
             mock.return_value = None
-            response = OPDSAcquisitionFeed.single_entry_loans_feed(None, loan)
-
-        assert response == None
-        assert mock.call_count == 1
-        _work, annotator = mock.call_args[0]
-        assert isinstance(annotator, LibraryLoanAndHoldAnnotator)
-        assert _work == work
-        assert annotator.library == db.default_library()
+            OPDSAcquisitionFeed.single_entry_loans_feed(None, loan)
 
     def test_single_entry_with_edition(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)

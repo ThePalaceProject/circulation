@@ -68,7 +68,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         self._pagination = pagination
         super().__init__(title, url, precomposed_entries=precomposed_entries)
         for work in works:
-            entry = self.single_entry(work, self.annotator)
+            try:
+                entry = self.single_entry(work, self.annotator)
+            except PalaceValueError:
+                self.log.exception("Error creating entry for %r", work)
+                continue
             if isinstance(entry, WorkEntry):
                 self._feed.entries.append(entry)
 
@@ -540,7 +544,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
     ) -> OPDSEntryResponse | ProblemDetail:
         """A single entry as a standalone feed specific to a patron"""
         if not item:
-            raise ValueError("Argument 'item' must be non-empty")
+            raise PalaceValueError("Argument 'item' must be non-empty")
 
         if isinstance(item, LicensePool):
             license_pool = item
@@ -549,7 +553,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             license_pool = item.license_pool
             library = item.library
         else:
-            raise ValueError(
+            raise PalaceValueError(
                 "Argument 'item' must be an instance of {}, {}, or {} classes".format(
                     Loan, Hold, LicensePool
                 )
@@ -601,7 +605,9 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         elif isinstance(entry, OPDSMessage):
             return cls.entry_as_response(entry, max_age=0)
         else:
-            raise ValueError("Entry is not an instance of WorkEntry or OPDSMessage")
+            raise PalaceValueError(
+                "Entry is not an instance of WorkEntry or OPDSMessage"
+            )
 
     @classmethod
     def single_entry(
@@ -632,7 +638,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         # There's no reason to present a book that has no active license pool.
         if not identifier:
-            raise PalaceValueError("Work has no identifier")
+            raise PalaceValueError(f"Work has no associated identifier: {work!r}")
 
         if not active_license_pool and not even_if_no_license_pool:
             cls.logger().warning("NO ACTIVE LICENSE POOL FOR %r", work)
