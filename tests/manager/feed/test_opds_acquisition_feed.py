@@ -948,25 +948,6 @@ class TestOPDSAcquisitionFeed:
         assert isinstance(response, OPDSEntryResponse)
         assert response.status_code == 403
 
-    def test_single_entry_loans_feed_default_annotator(
-        self, db: DatabaseTransactionFixture
-    ):
-        patron = db.patron()
-        work = db.work(with_license_pool=True)
-        pool = work.active_license_pool()
-        assert pool is not None
-        loan, _ = pool.loan_to(patron)
-
-        with (
-            patch.object(OPDSAcquisitionFeed, "single_entry") as mock,
-            pytest.raises(
-                PalaceValueError,
-                match="Entry is not an instance of WorkEntry or OPDSMessage",
-            ),
-        ):
-            mock.return_value = None
-            OPDSAcquisitionFeed.single_entry_loans_feed(None, loan)
-
     def test_single_entry_with_edition(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
         annotator = object()

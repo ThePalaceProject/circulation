@@ -25,7 +25,6 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.celery.tasks.patron_activity import sync_patron_activity
-from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.model.library import Library
@@ -370,19 +369,9 @@ class LoanController(CirculationManagerController):
         ):
             # If this is a streaming delivery mechanism, create an OPDS entry
             # with a fulfillment link to the streaming reader url.
-            feed = OPDSAcquisitionFeed.single_entry_loans_feed(
+            return OPDSAcquisitionFeed.single_entry_loans_feed(
                 self.circulation, loan, fulfillment=fulfillment
             )
-            if isinstance(feed, ProblemDetail):
-                # This should typically never happen, since we've gone through the entire fulfill workflow
-                # But for the sake of return-type completeness we are adding this here
-                return feed
-            if isinstance(feed, Response):
-                return feed
-            else:
-                raise PalaceValueError(
-                    "Unexpected return type from OPDSAcquisitionFeed.single_entry_loans_feed"
-                )
 
         try:
             return fulfillment.response()

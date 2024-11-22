@@ -600,14 +600,10 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         entry = cls.single_entry(work, annotator, even_if_no_license_pool=True)
 
-        if isinstance(entry, WorkEntry) and entry.computed:
-            return cls.entry_as_response(entry, **response_kwargs)
-        elif isinstance(entry, OPDSMessage):
-            return cls.entry_as_response(entry, max_age=0)
-        else:
-            raise PalaceValueError(
-                "Entry is not an instance of WorkEntry or OPDSMessage"
-            )
+        if isinstance(entry, OPDSMessage):
+            response_kwargs["max_age"] = 0
+
+        return cls.entry_as_response(entry, **response_kwargs)
 
     @classmethod
     def single_entry(
