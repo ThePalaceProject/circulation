@@ -701,7 +701,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         try:
             lists = ta.validate_json(flask.request.form.get("lists", "[]", str))
         except ValidationError as ex:
-            self.log.debug("Invalid custom list data: %s", ex.json())
+            self.log.debug("Invalid custom list data: %s", ex)
             raise ProblemDetailException(
                 INVALID_INPUT.detailed("Invalid form data", debug_message=str(ex))
             )
