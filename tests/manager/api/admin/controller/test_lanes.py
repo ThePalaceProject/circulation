@@ -21,6 +21,7 @@ from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.problem_detail import raises_problem_detail
 
 
 class AdminLibraryManagerFixture(AdminControllerFixture):
@@ -188,9 +189,12 @@ class TestLanesController:
         lane2 = alm_fixture.ctrl.db.lane("lane2")
         lane1.customlists += [list]
 
-        with alm_fixture.request_context_with_library_and_admin(
-            "/", method="POST"
-        ) as ctx:
+        with (
+            alm_fixture.request_context_with_library_and_admin(
+                "/", method="POST"
+            ) as ctx,
+            raises_problem_detail(pd=LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS),
+        ):
             ctx.request.form = ImmutableMultiDict(
                 [
                     ("id", lane1.id),
@@ -198,20 +202,21 @@ class TestLanesController:
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.manager.admin_lanes_controller.lanes()
-            assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
+            alm_fixture.manager.admin_lanes_controller.lanes()
 
-        with alm_fixture.request_context_with_library_and_admin(
-            "/", method="POST"
-        ) as ctx:
+        with (
+            alm_fixture.request_context_with_library_and_admin(
+                "/", method="POST"
+            ) as ctx,
+            raises_problem_detail(pd=LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS),
+        ):
             ctx.request.form = ImmutableMultiDict(
                 [
                     ("display_name", "lane2"),
                     ("custom_list_ids", json.dumps([list.id])),
                 ]
             )
-            response = alm_fixture.manager.admin_lanes_controller.lanes()
-            assert LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS == response
+            alm_fixture.manager.admin_lanes_controller.lanes()
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST"
@@ -344,6 +349,10 @@ class TestLanesController:
         # search engine to update lane.size, and it will think there
         # are two works in the lane.
         assert 0 == lane.size
+
+        # We create a lane with the same name in a different library, this should not cause
+        # an error, as we only check for duplicate names within the same library.
+        alm_fixture.ctrl.db.lane("new name", library=alm_fixture.ctrl.db.library())
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST"
