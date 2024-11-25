@@ -274,15 +274,13 @@ class TestJSONFormatter:
         assert "external_identifier" not in request["patron"]
         assert "username" not in request["patron"]
 
-        # Patron data - missing authorization_identifier
-        patron = db.patron(external_identifier="123")
+        # Patron data - No information to include
+        patron.authorization_identifier = None
         with flask_app_fixture.test_request_context(patron=patron):
             data = json.loads(formatter.format(record))
         assert "request" in data
         request = data["request"]
-        assert "patron" in request
-        assert "authorization_identifier" not in request["patron"]
-        assert request["patron"]["external_identifier"] == "123"
+        assert "patron" not in request
 
         # Admin data
         admin, _ = get_one_or_create(db.session, Admin, email="test@email.com")

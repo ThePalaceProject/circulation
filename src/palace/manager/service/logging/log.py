@@ -124,16 +124,13 @@ class JSONFormatter(logging.Formatter):
 
                 if patron := get_request_patron(default=None):
                     patron_information = {}
-                    if patron.authorization_identifier:
-                        patron_information["authorization_identifier"] = (
-                            patron.authorization_identifier
-                        )
-                    if patron.username:
-                        patron_information["username"] = patron.username
-                    if patron.external_identifier:
-                        patron_information["external_identifier"] = (
-                            patron.external_identifier
-                        )
+                    for key in (
+                        "authorization_identifier",
+                        "username",
+                        "external_identifier",
+                    ):
+                        if value := getattr(patron, key, None):
+                            patron_information[key] = value
                     if patron_information:
                         data["request"]["patron"] = patron_information
 
