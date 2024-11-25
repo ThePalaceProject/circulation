@@ -31,6 +31,7 @@ from palace.manager.api.circulation_exceptions import (
     FulfilledOnIncompatiblePlatform,
     NoAcceptableFormat,
     NoAvailableCopies,
+    PatronAuthorizationFailedException,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
@@ -2130,6 +2131,40 @@ class TestOverdriveAPI:
         assert "false" == payload["password_required"]
         assert "[ignore]" == payload["password"]
 
+    def test_test_refresh_patron_access_token_failure(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        db = overdrive_api_fixture.db
+        patron = db.patron()
+        patron.authorization_identifier = "barcode"
+        credential = db.credential(patron=patron)
+
+        # Test with a real 400 response we've seen from overdrive
+        data, raw = overdrive_api_fixture.sample_json("patron_token_failed.json")
+        overdrive_api_fixture.api.access_token_response = MockRequestsResponse(
+            400, content=raw
+        )
+        with pytest.raises(
+            PatronAuthorizationFailedException, match="Invalid Library Card"
+        ):
+            overdrive_api_fixture.api.refresh_patron_access_token(
+                credential, patron, "a pin"
+            )
+
+        # Test with a fictional 403 response that doesn't contain valid json - we've never
+        # seen this come back from overdrive, this test is just to make sure we can handle
+        # unexpected responses back from OD API.
+        overdrive_api_fixture.api.access_token_response = MockRequestsResponse(
+            403, content="garbage { json"
+        )
+        with pytest.raises(
+            PatronAuthorizationFailedException,
+            match="Failed to authenticate with Overdrive",
+        ):
+            overdrive_api_fixture.api.refresh_patron_access_token(
+                credential, patron, "a pin"
+            )
+
     def test_refresh_patron_access_token_is_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
@@ -2148,7 +2183,10 @@ class TestOverdriveAPI:
         od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
         od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
         # but mock the request methods
-        od_api._do_post = MagicMock()
+        post_response, _ = overdrive_api_fixture.sample_json("patron_token.json")
+        od_api._do_post = MagicMock(
+            return_value=MockRequestsResponse(200, content=post_response)
+        )
         od_api._do_get = MagicMock()
         response_credential = od_api.refresh_patron_access_token(
             credential, patron, "a pin", is_fulfillment=True
