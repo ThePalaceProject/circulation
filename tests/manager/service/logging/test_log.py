@@ -7,10 +7,11 @@ import os
 import sys
 from collections.abc import Callable, Mapping
 from functools import partial
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, create_autospec, patch
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy.exc import SQLAlchemyError
 from watchtower import CloudWatchLogHandler
 
 from palace.manager.service.logging.configuration import LogLevel
@@ -21,6 +22,10 @@ from palace.manager.service.logging.log import (
     create_stream_handler,
     setup_logging,
 )
+from palace.manager.sqlalchemy.model.admin import Admin
+from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.util import get_one_or_create
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 
 
@@ -208,6 +213,94 @@ class TestJSONFormatter:
         with patch("palace.manager.service.logging.log.flask_request", None):
             data = json.loads(formatter.format(record))
             assert "request" not in data
+
+    def test_flask_request_palace_data(
+        self,
+        log_record: LogRecordCallable,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # Outside a Flask request context, the request data is not included in the log.
+        formatter = JSONFormatter()
+        record = log_record()
+
+        # No palace data included in the log
+        with flask_app_fixture.test_request_context():
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "library" not in request
+        assert "patron" not in request
+        assert "admin" not in request
+
+        # Library request data
+        library = db.library(short_name="Test", name="Official Library Of Test")
+        with flask_app_fixture.test_request_context(library=library):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "library" in request
+        assert request["library"]["uuid"] == str(library.uuid)
+        assert request["library"]["name"] == "Official Library Of Test"
+        assert request["library"]["short_name"] == "Test"
+
+        # Patron data - all information included
+        patron = db.patron()
+        patron.external_identifier = "external_identifier"
+        patron.authorization_identifier = "authorization_identifier"
+        patron.username = "username"
+        with flask_app_fixture.test_request_context(patron=patron):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "patron" in request
+        assert (
+            request["patron"]["authorization_identifier"] == "authorization_identifier"
+        )
+        assert request["patron"]["external_identifier"] == "external_identifier"
+        assert request["patron"]["username"] == "username"
+
+        # Patron data - missing username and external_identifier
+        patron.external_identifier = None
+        patron.username = None
+        with flask_app_fixture.test_request_context(patron=patron):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "patron" in request
+        assert (
+            request["patron"]["authorization_identifier"] == "authorization_identifier"
+        )
+        assert "external_identifier" not in request["patron"]
+        assert "username" not in request["patron"]
+
+        # Patron data - missing authorization_identifier
+        patron = db.patron(external_identifier="123")
+        with flask_app_fixture.test_request_context(patron=patron):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "patron" in request
+        assert "authorization_identifier" not in request["patron"]
+        assert request["patron"]["external_identifier"] == "123"
+
+        # Admin data
+        admin, _ = get_one_or_create(db.session, Admin, email="test@email.com")
+        with flask_app_fixture.test_request_context(admin=admin):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "admin" in request
+        assert request["admin"] == "test@email.com"
+
+        # Database session in a bad state, no data included in log
+        library = create_autospec(Library)
+        type(library).uuid = PropertyMock(side_effect=SQLAlchemyError())
+        with flask_app_fixture.test_request_context(library=library):
+            data = json.loads(formatter.format(record))
+        assert "request" in data
+        request = data["request"]
+        assert "library" not in request
 
     def test_uwsgi_worker(self, log_record: LogRecordCallable) -> None:
         # Outside a uwsgi context, the worker id is not included in the log.
