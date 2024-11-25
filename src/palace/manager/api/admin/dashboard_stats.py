@@ -129,9 +129,7 @@ class Statistics:
         all_collections = self._all_collections()
 
         for library in authorized_libraries:
-            library_collections = {
-                all_collections[c.id] for c in library.all_collections
-            }
+            library_collections = {all_collections[c.id] for c in library.collections}
             authorized_collections_by_library[library.short_name] = sorted(
                 library_collections, key=lambda c: c.id
             )
