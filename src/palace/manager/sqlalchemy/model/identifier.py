@@ -46,6 +46,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.summary import SummaryEvaluator
 
 if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.collection import Collection
     from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.patron import Annotation
     from palace.manager.sqlalchemy.model.resource import Hyperlink
@@ -240,6 +241,10 @@ class Identifier(Base, IdentifierConstants):
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
+    collections: Mapped[list[Collection]] = relationship(
+        "Collection", secondary="collections_identifiers", back_populates="catalog"
+    )
+
     equivalencies: Mapped[list[Equivalency]] = relationship(
         "Equivalency",
         foreign_keys="Equivalency.input_id",
@@ -272,7 +277,7 @@ class Identifier(Base, IdentifierConstants):
     # One Identifier may serve as the primary identifier for
     # several Editions.
     primarily_identifies: Mapped[list[Edition]] = relationship(
-        "Edition", backref="primary_identifier"
+        "Edition", back_populates="primary_identifier"
     )
 
     # One Identifier may serve as the identifier for many
@@ -286,29 +291,28 @@ class Identifier(Base, IdentifierConstants):
 
     # One Identifier may have many Links.
     links: Mapped[list[Hyperlink]] = relationship(
-        "Hyperlink", backref="identifier", uselist=True
+        "Hyperlink", back_populates="identifier", uselist=True
     )
 
     # One Identifier may be the subject of many Measurements.
     measurements: Mapped[list[Measurement]] = relationship(
-        "Measurement", backref="identifier"
+        "Measurement", back_populates="identifier"
     )
 
     # One Identifier may participate in many Classifications.
     classifications: Mapped[list[Classification]] = relationship(
-        "Classification", backref="identifier"
+        "Classification", back_populates="identifier"
     )
 
     # One identifier may participate in many Annotations.
     annotations: Mapped[list[Annotation]] = relationship(
-        "Annotation", backref="identifier"
+        "Annotation", back_populates="identifier"
     )
 
     # One Identifier can have many LicensePoolDeliveryMechanisms.
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
-        backref="identifier",
-        foreign_keys=lambda: [LicensePoolDeliveryMechanism.identifier_id],
+        back_populates="identifier",
     )
 
     # Type + identifier is unique.

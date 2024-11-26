@@ -97,11 +97,13 @@ class LibraryLoanAndHoldAnnotator(LibraryAnnotator):
         active_license_pool = entry.license_pool
         work = entry.work
         edition = work.presentation_edition
-        identifier = edition.primary_identifier
+        identifier = edition.primary_identifier if edition else None
         # Only OPDS for Distributors should get the time tracking link
         # And only if there is an active loan for the work
         if (
-            edition.medium == EditionConstants.AUDIO_MEDIUM
+            edition
+            and identifier
+            and edition.medium == EditionConstants.AUDIO_MEDIUM
             and active_license_pool
             and active_license_pool.should_track_playtime is True
             and work in self.active_loans_by_work

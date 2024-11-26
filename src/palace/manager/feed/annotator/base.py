@@ -236,9 +236,7 @@ class ToFeedEntry:
                 and work.summary.representation
                 and work.summary.representation.content
             ):
-                content = work.summary.representation.content
-                if isinstance(content, bytes):
-                    content = content.decode("utf-8")
+                content = work.summary.representation.content.decode("utf-8")
                 work.summary_text = content
                 summary = work.summary_text
         return summary

@@ -347,6 +347,9 @@ class CoverageRecord(Base, BaseCoverageRecord):
     # coverage has taken place. This is currently only applicable
     # for Metadata Wrangler coverage.
     collection_id = Column(Integer, ForeignKey("collections.id"), nullable=True)
+    collection: Mapped[Collection | None] = relationship(
+        "Collection", back_populates="coverage_records"
+    )
 
     __table_args__ = (
         Index(
