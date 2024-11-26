@@ -237,7 +237,7 @@ class Identifier(Base, IdentifierConstants):
     """A way of uniquely referring to a particular edition."""
 
     __tablename__ = "identifiers"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
@@ -674,12 +674,16 @@ class Identifier(Base, IdentifierConstants):
             input=self,
             output=identifier,
             on_multiple="interchangeable",
+            create_method_kwargs={
+                "strength": strength,
+            },
         )
-        eq.strength = strength
         if new:
             logging.info(
                 "Identifier equivalency: %r==%r p=%.2f", self, identifier, strength
             )
+        else:
+            eq.strength = strength
         return eq
 
     @classmethod
@@ -1124,19 +1128,21 @@ class Equivalency(Base):
 
     # 'input' is the ID that was used as input to the datasource.
     # 'output' is the output
-    id = Column(Integer, primary_key=True)
-    input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    input_id: Mapped[int] = Column(
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
     input: Mapped[Identifier] = relationship(
         "Identifier", foreign_keys=input_id, back_populates="equivalencies"
     )
-    output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    output_id: Mapped[int] = Column(Integer, ForeignKey("identifiers.id"), index=True)
     output: Mapped[Identifier] = relationship(
         "Identifier", foreign_keys=output_id, back_populates="inbound_equivalencies"
     )
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="id_equivalencies"
     )
 
@@ -1199,19 +1205,19 @@ class RecursiveEquivalencyCache(Base):
 
     __tablename__ = "recursiveequivalentscache"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # The "parent" or the start of the chain
     parent_identifier_id = Column(
         Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
     )
-    parent_identifier: Mapped[Identifier] = relationship(
+    parent_identifier: Mapped[Identifier | None] = relationship(
         "Identifier", foreign_keys=parent_identifier_id
     )
 
     # The identifier chained to the parent
     identifier_id = Column(Integer, ForeignKey("identifiers.id", ondelete="CASCADE"))
-    identifier: Mapped[Identifier] = relationship(
+    identifier: Mapped[Identifier | None] = relationship(
         "Identifier", foreign_keys=identifier_id
     )
 

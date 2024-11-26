@@ -64,7 +64,7 @@ class Library(Base, HasSessionCache):
 
     __tablename__ = "libraries"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # The human-readable name of this library. Used in the library's
     # Authentication for OPDS document.
@@ -72,7 +72,7 @@ class Library(Base, HasSessionCache):
 
     # A short name of this library, to use when identifying it in
     # scripts. e.g. "NYPL" for NYPL.
-    short_name = Column(Unicode, unique=True, nullable=False)
+    short_name: Mapped[str] = Column(Unicode, unique=True, nullable=False)
 
     # A UUID that uniquely identifies the library among all libraries
     # in the world. This is used to serve the library's Authentication
@@ -150,12 +150,12 @@ class Library(Base, HasSessionCache):
 
     # The library's public / private RSA key-pair.
     # The public key is stored in PEM format.
-    public_key = Column(Unicode, nullable=False)
+    public_key: Mapped[str] = Column(Unicode, nullable=False)
     # The private key is stored in DER binary format.
-    private_key = Column(LargeBinary, nullable=False)
+    private_key: Mapped[bytes] = Column(LargeBinary, nullable=False)
 
     # The libraries logo image, stored as a base64 encoded string.
-    logo: Mapped[LibraryLogo] = relationship(
+    logo: Mapped[LibraryLogo | None] = relationship(
         "LibraryLogo",
         back_populates="library",
         cascade="all, delete-orphan",
@@ -500,13 +500,15 @@ class LibraryLogo(Base):
     """
 
     __tablename__ = "libraries_logos"
-    library_id = Column(Integer, ForeignKey("libraries.id"), primary_key=True)
+    library_id: Mapped[int] = Column(
+        Integer, ForeignKey("libraries.id"), primary_key=True
+    )
     library: Mapped[Library] = relationship(
         "Library", back_populates="logo", uselist=False
     )
 
     # The logo stored as a base-64 encoded png.
-    content = Column(LargeBinary, nullable=False)
+    content: Mapped[bytes] = Column(LargeBinary, nullable=False)
 
     @property
     def data_url(self) -> str:

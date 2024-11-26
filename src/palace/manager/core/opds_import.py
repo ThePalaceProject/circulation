@@ -300,7 +300,7 @@ class BaseOPDSAPI(
         delivery_mechanism: LicensePoolDeliveryMechanism,
     ) -> RedirectFulfillment:
         requested_mechanism = delivery_mechanism.delivery_mechanism
-        fulfillment = None
+        rep = None
         for lpdm in licensepool.delivery_mechanisms:
             if (
                 lpdm.resource is None
@@ -313,15 +313,14 @@ class BaseOPDSAPI(
             if lpdm.delivery_mechanism == requested_mechanism:
                 # We found it! This is how the patron wants
                 # the book to be delivered.
-                fulfillment = lpdm
+                rep = lpdm.resource.representation
                 break
 
-        if not fulfillment:
+        if not rep:
             # There is just no way to fulfill this loan the way the
             # patron wants.
             raise FormatNotAvailable()
 
-        rep = fulfillment.resource.representation
         content_link = rep.public_url
         media_type = rep.media_type
 

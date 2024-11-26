@@ -725,7 +725,7 @@ class DatabaseTransactionFixture:
         unlimited_access=False,
     ):
         id = identifier_id or self.fresh_str()
-        source = DataSource.lookup(self.session, data_source_name)
+        source = DataSource.lookup(self.session, data_source_name, autocreate=True)
         wr = Edition.for_foreign_id(self.session, source, identifier_type, id)[0]
         if not title:
             title = self.fresh_str()

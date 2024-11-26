@@ -37,7 +37,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     """A source for information about books, and possibly the books themselves."""
 
     __tablename__ = "datasources"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
     offers_licenses = Column(Boolean, default=False)
     primary_identifier_type = Column(String, index=True)

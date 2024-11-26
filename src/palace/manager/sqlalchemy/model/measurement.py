@@ -710,7 +710,7 @@ class Measurement(Base):
         DataSourceConstants.LIBRARY_STAFF: [1, 5],
     }
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A Measurement is always associated with some Identifier.
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
@@ -719,7 +719,9 @@ class Measurement(Base):
     )
 
     # A Measurement always comes from some DataSource.
-    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source_id: Mapped[int] = Column(
+        Integer, ForeignKey("datasources.id"), index=True
+    )
     data_source: Mapped[DataSource] = relationship(
         "DataSource", back_populates="measurements"
     )

@@ -147,11 +147,6 @@ class TestExternalSearch:
         client.indices.refresh()
         end_to_end_search_fixture.expect_results([], "Moby")
 
-        # If we try to remove a work with no id, we log a warning
-        work_no_id = Work()
-        index.remove_work(work_no_id)
-        assert "Work has no ID" in caplog.text
-
     def test_add_document(
         self,
         end_to_end_search_fixture: EndToEndSearchFixture,

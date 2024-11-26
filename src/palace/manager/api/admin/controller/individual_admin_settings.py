@@ -418,7 +418,10 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
                     # libraries then they should not be able to change the password
                     for role in admin.roles:
                         if not user.is_library_manager(role.library):
-                            message = f"User is part of '{role.library.name}', you are not authorized to change their password."
+                            library_name = (
+                                role.library.name if role.library else "unknown"
+                            )
+                            message = f"User is part of '{library_name}', you are not authorized to change their password."
                             break
                     else:
                         can_change_pw = True

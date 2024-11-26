@@ -49,7 +49,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     """A Collection is a set of LicensePools obtained through some mechanism."""
 
     __tablename__ = "collections"
-    id = Column(Integer, primary_key=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
 
     DATA_SOURCE_NAME_SETTING = "data_source"
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
@@ -66,7 +66,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # designates the integration technique we will use to actually get
     # the metadata and licenses. Each Collection has a distinct
     # integration configuration.
-    integration_configuration_id = Column(
+    integration_configuration_id: Mapped[int] = Column(
         Integer,
         ForeignKey("integration_configurations.id"),
         unique=True,
@@ -147,7 +147,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         "CustomList", secondary="collections_customlists", back_populates="collections"
     )
 
-    export_marc_records = Column(Boolean, default=False, nullable=False)
+    export_marc_records: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to

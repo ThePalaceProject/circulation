@@ -47,7 +47,7 @@ def create_playtime_entries(
             total_seconds_played=entry.seconds_played,
             identifier_str=identifier.urn,
             collection_name=collection.name,
-            library_name=library.name,
+            library_name=library.name or "",
             loan_identifier=loan_identifier,
         )
         db.session.add(inserted)

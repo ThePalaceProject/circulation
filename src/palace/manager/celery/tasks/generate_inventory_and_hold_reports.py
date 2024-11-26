@@ -34,9 +34,6 @@ def eligible_integrations(
     """Subset a list of integrations to only those that are eligible for the inventory report."""
 
     def is_eligible(integration: IntegrationConfiguration) -> bool:
-        if integration.protocol is None:
-            return False
-
         settings_cls = registry[integration.protocol].settings_class()
         return issubclass(settings_cls, OPDSImporterSettings)
 

@@ -95,7 +95,7 @@ class Subject(Base):
         uri_lookup[v] = k
 
     __tablename__ = "subjects"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     # Type should be one of the constants in this class.
     type = Column(Unicode, index=True)
 
@@ -132,7 +132,7 @@ class Subject(Base):
 
     # Each Subject may claim affinity with one Genre.
     genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
-    genre: Mapped[Genre] = relationship("Genre", back_populates="subjects")
+    genre: Mapped[Genre | None] = relationship("Genre", back_populates="subjects")
 
     # A locked Subject has been reviewed by a human and software will
     # not mess with it without permission.
@@ -345,13 +345,15 @@ class Classification(Base):
     """The assignment of a Identifier to a Subject."""
 
     __tablename__ = "classifications"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
     identifier: Mapped[Identifier | None] = relationship(
         "Identifier", back_populates="classifications"
     )
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
-    subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
+    subject: Mapped[Subject | None] = relationship(
+        "Subject", back_populates="classifications"
+    )
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
     data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="classifications"
@@ -482,7 +484,7 @@ class Genre(Base, HasSessionCache):
     """
 
     __tablename__ = "genres"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     name = Column(Unicode, unique=True, index=True)
 
     # One Genre may have affinity with many Subjects.

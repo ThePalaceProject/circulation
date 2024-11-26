@@ -11,9 +11,9 @@ class SAMLFederation(Base):
 
     __tablename__ = "samlfederations"
 
-    id = Column(Integer, primary_key=True)
-    type = Column(String(256), nullable=False, unique=True)
-    idp_metadata_service_url = Column(String(2048), nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    type: Mapped[str] = Column(String(256), nullable=False, unique=True)
+    idp_metadata_service_url: Mapped[str] = Column(String(2048), nullable=False)
     last_updated_at = Column(DateTime(), nullable=True)
 
     certificate = Column(Text(), nullable=True)
@@ -81,14 +81,14 @@ class SAMLFederatedIdentityProvider(Base):
 
     __tablename__ = "samlfederatedidps"
 
-    id = Column(Integer, primary_key=True)
-    entity_id = Column(String(256), nullable=False)
-    display_name = Column(String(256), nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    entity_id: Mapped[str] = Column(String(256), nullable=False)
+    display_name: Mapped[str] = Column(String(256), nullable=False)
 
-    xml_metadata = Column(Text(), nullable=False)
+    xml_metadata: Mapped[str] = Column(Text(), nullable=False)
 
     federation_id = Column(Integer, ForeignKey("samlfederations.id"), index=True)
-    federation: Mapped[SAMLFederation] = relationship(
+    federation: Mapped[SAMLFederation | None] = relationship(
         "SAMLFederation",
         foreign_keys=federation_id,
         back_populates="identity_providers",

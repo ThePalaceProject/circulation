@@ -57,12 +57,13 @@ class Annotator(LoggerMixin):
         #  though they have different titles. We do not group editions of the same work in
         #  different languages, so we can't use those yet.
 
-        cls.add_title(record, edition)
-        cls.add_contributors(record, edition)
-        cls.add_publisher(record, edition)
-        cls.add_physical_description(record, edition)
+        if edition is not None:
+            cls.add_title(record, edition)
+            cls.add_contributors(record, edition)
+            cls.add_publisher(record, edition)
+            cls.add_physical_description(record, edition)
+            cls.add_series(record, edition)
         cls.add_audience(record, work)
-        cls.add_series(record, edition)
         cls.add_system_details(record)
         cls.add_ebooks_subject(record)
         cls.add_distributor(record, license_pool)
@@ -154,7 +155,11 @@ class Annotator(LoggerMixin):
 
     @classmethod
     def add_control_fields(
-        cls, record: Record, identifier: Identifier, pool: LicensePool, edition: Edition
+        cls,
+        record: Record,
+        identifier: Identifier,
+        pool: LicensePool,
+        edition: Edition | None,
     ) -> None:
         # Unique identifier for this record.
         record.add_field(Field(tag="001", data=identifier.urn))
@@ -180,7 +185,7 @@ class Annotator(LoggerMixin):
 
         # Field 008 (fixed-length data elements):
         data = utc_now().strftime("%y%m%d")
-        publication_date = edition.issued or edition.published
+        publication_date = (edition.issued or edition.published) if edition else None
         if publication_date:
             date_type = "s"  # single known date
             # Not using strftime because some years are pre-1900.
@@ -195,7 +200,7 @@ class Annotator(LoggerMixin):
         data += "xxu"
         data += "                 "
         language = "eng"
-        if edition.language:
+        if edition and edition.language:
             language = LanguageCodes.string_to_alpha_3(edition.language)
         data += language
         data += "  "

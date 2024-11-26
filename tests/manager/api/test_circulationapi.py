@@ -38,7 +38,7 @@ from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
-from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -1100,53 +1100,6 @@ def patron_activity_circulation_api(
 
 
 class TestPatronActivityCirculationAPI:
-    def test_sync_patron_activity_ignores_local_loan_with_no_identifier(
-        self,
-        db: DatabaseTransactionFixture,
-        patron_activity_circulation_api: PatronActivityCirculationAPIFixture,
-    ):
-        loan, _ = patron_activity_circulation_api.pool.loan_to(
-            patron_activity_circulation_api.patron
-        )
-        loan.start = patron_activity_circulation_api.yesterday
-        patron_activity_circulation_api.pool.identifier = None
-
-        # Verify that we can sync without crashing.
-        patron_activity_circulation_api.sync_patron_activity()
-
-        # The invalid loan was ignored and is still there.
-        loans = db.session.query(Loan).all()
-        assert [loan] == loans
-
-        # Even worse - the loan has no license pool!
-        loan.license_pool = None
-
-        # But we can still sync without crashing.
-        patron_activity_circulation_api.sync_patron_activity()
-
-    def test_sync_patron_activity_ignores_local_hold_with_no_identifier(
-        self,
-        db: DatabaseTransactionFixture,
-        patron_activity_circulation_api: PatronActivityCirculationAPIFixture,
-    ):
-        hold, _ = patron_activity_circulation_api.pool.on_hold_to(
-            patron_activity_circulation_api.patron
-        )
-        patron_activity_circulation_api.pool.identifier = None
-
-        # Verify that we can sync without crashing.
-        patron_activity_circulation_api.sync_patron_activity()
-
-        # The invalid hold was ignored and is still there.
-        holds = db.session.query(Hold).all()
-        assert [hold] == holds
-
-        # Even worse - the hold has no license pool!
-        hold.license_pool = None
-
-        # But we can still sync without crashing.
-        patron_activity_circulation_api.sync_patron_activity()
-
     def test_sync_patron_activity_with_old_local_loan_and_no_remote_loan_deletes_local_loan(
         self,
         db: DatabaseTransactionFixture,
