@@ -365,7 +365,7 @@ class CirculationManagerAnnotator(Annotator):
         updated: datetime.datetime | None = None,
     ) -> None:
         work = entry.work
-        identifier = entry.identifier or work.presentation_edition.primary_identifier
+        identifier = entry.identifier
         active_license_pool = entry.license_pool or self.active_licensepool_for(work)
         # If OpenSearch included a more accurate last_update_time,
         # use it instead of Work.last_update_time
@@ -875,7 +875,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             return
 
         work = entry.work
-        identifier = entry.identifier or work.presentation_edition.primary_identifier
+        identifier = entry.identifier
 
         permalink_uri, permalink_type = self.permalink_for(identifier)
         # TODO: Do not force OPDS types

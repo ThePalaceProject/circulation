@@ -129,13 +129,13 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     )
 
     catalog: Mapped[list[Identifier]] = relationship(
-        "Identifier", secondary="collections_identifiers", backref="collections"
+        "Identifier", secondary="collections_identifiers", back_populates="collections"
     )
 
     # A Collection can be associated with multiple CoverageRecords
     # for Identifiers in its catalog.
     coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", backref="collection", cascade="all"
+        "CoverageRecord", back_populates="collection", cascade="all"
     )
 
     # A collection may be associated with one or more custom lists.
@@ -144,7 +144,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # the list and they won't be added back, so the list doesn't
     # necessarily match the collection.
     customlists: Mapped[list[CustomList]] = relationship(
-        "CustomList", secondary="collections_customlists", backref="collections"
+        "CustomList", secondary="collections_customlists", back_populates="collections"
     )
 
     export_marc_records = Column(Boolean, default=False, nullable=False)

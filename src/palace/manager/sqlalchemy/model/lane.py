@@ -27,7 +27,6 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import (
     Mapped,
     aliased,
-    backref,
     contains_eager,
     joinedload,
     query,
@@ -2601,7 +2600,9 @@ class LaneGenre(Base):
     __tablename__ = "lanes_genres"
     id = Column(Integer, primary_key=True)
     lane_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=False)
+    lane: Mapped[Lane] = relationship("Lane", back_populates="lane_genres")
     genre_id = Column(Integer, ForeignKey("genres.id"), index=True, nullable=False)
+    genre: Mapped[Genre] = relationship(Genre, back_populates="lane_genres")
 
     # An inclusive relationship means that books classified under the
     # genre are included in the lane. An exclusive relationship means
@@ -2644,6 +2645,12 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     library: Mapped[Library] = relationship(Library, back_populates="lanes")
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
+    parent: Mapped[Lane | None] = relationship(
+        "Lane",
+        back_populates="sublanes",
+        remote_side=[id],
+    )
+
     priority = Column(Integer, index=True, nullable=False, default=0)
 
     # How many titles are in this lane? This is periodically
@@ -2657,7 +2664,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # A lane may have one parent lane and many sublanes.
     sublanes: Mapped[list[Lane]] = relationship(
         "Lane",
-        backref=backref("parent", remote_side=[id]),
+        back_populates="parent",
     )
 
     # A lane may have multiple associated LaneGenres. For most lanes,
@@ -2665,8 +2672,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     genres = association_proxy("lane_genres", "genre", creator=LaneGenre.from_genre)
     lane_genres: Mapped[list[LaneGenre]] = relationship(
         "LaneGenre",
-        foreign_keys="LaneGenre.lane_id",
-        backref="lane",
+        back_populates="lane",
         cascade="all, delete-orphan",
     )
 
@@ -2723,7 +2729,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # Only the books on these specific CustomLists will be shown.
     customlists: Mapped[list[CustomList]] = relationship(
-        "CustomList", secondary=lambda: lanes_customlists, backref="lane"  # type: ignore
+        "CustomList", secondary="lanes_customlists", back_populates="lane"
     )
 
     # This has no effect unless list_datasource_id or

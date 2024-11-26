@@ -1,13 +1,19 @@
 # CirculationEvent
-
+from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
+from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.licensing import LicensePool
 
 
 class CirculationEvent(Base):
@@ -25,6 +31,9 @@ class CirculationEvent(Base):
 
     # One LicensePool can have many circulation events.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool: Mapped[LicensePool | None] = relationship(
+        "LicensePool", back_populates="circulation_events"
+    )
 
     type = Column(String(32), index=True)
     start = Column(DateTime(timezone=True), index=True)
@@ -36,6 +45,9 @@ class CirculationEvent(Base):
     # The Library associated with the event, if it happened in the
     # context of a particular Library and we know which one.
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
+    library: Mapped[Library | None] = relationship(
+        "Library", back_populates="circulation_events"
+    )
 
     # The geographic location associated with the event. This string
     # may mean different things for different libraries. It might be a

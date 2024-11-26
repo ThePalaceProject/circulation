@@ -40,7 +40,7 @@ class Admin(Base, HasSessionCache):
 
     # An Admin may have many roles.
     roles: Mapped[list[AdminRole]] = relationship(
-        "AdminRole", backref="admin", cascade="all, delete-orphan", uselist=True
+        "AdminRole", back_populates="admin", cascade="all, delete-orphan", uselist=True
     )
 
     # Token age is max 30 minutes, in seconds
@@ -290,6 +290,7 @@ class AdminRole(Base, HasSessionCache):
 
     id = Column(Integer, primary_key=True)
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
+    admin: Mapped[Admin] = relationship("Admin", back_populates="roles")
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
     library: Mapped[Library] = relationship("Library", back_populates="adminroles")
     role = Column(Unicode, nullable=False, index=True)

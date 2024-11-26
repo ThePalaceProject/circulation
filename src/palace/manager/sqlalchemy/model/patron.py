@@ -37,6 +37,7 @@ from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.devicetokens import DeviceToken
+    from palace.manager.sqlalchemy.model.identifier import Identifier
     from palace.manager.sqlalchemy.model.lane import Lane
     from palace.manager.sqlalchemy.model.library import Library
     from palace.manager.sqlalchemy.model.licensing import (
@@ -190,7 +191,9 @@ class Patron(Base, RedisKeyMixin):
         "Credential", back_populates="patron", cascade="delete"
     )
 
-    device_tokens: list[DeviceToken]
+    device_tokens: Mapped[list[DeviceToken]] = relationship(
+        "DeviceToken", back_populates="patron", passive_deletes=True
+    )
 
     __table_args__ = (
         UniqueConstraint("library_id", "username"),
@@ -719,6 +722,10 @@ class Annotation(Base):
     patron: Mapped[Patron] = relationship("Patron", back_populates="annotations")
 
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier: Mapped[Identifier | None] = relationship(
+        "Identifier", back_populates="annotations"
+    )
+
     motivation = Column(Unicode, index=True)
     timestamp = Column(DateTime(timezone=True), index=True)
     active = Column(Boolean, default=True)

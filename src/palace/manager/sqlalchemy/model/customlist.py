@@ -31,6 +31,8 @@ from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
+    from palace.manager.sqlalchemy.model.edition import Edition
+    from palace.manager.sqlalchemy.model.lane import Lane
     from palace.manager.sqlalchemy.model.library import Library
 
 
@@ -43,7 +45,6 @@ class CustomList(Base):
     INIT = "init"
     UPDATED = "updated"
     REPOPULATE = "repopulate"
-    auto_update_status_enum = Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status")
 
     __tablename__ = "customlists"
     id = Column(Integer, primary_key=True)
@@ -59,6 +60,7 @@ class CustomList(Base):
     updated = Column(DateTime(timezone=True), index=True)
     responsible_party = Column(Unicode)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
+    library: Mapped[Library] = relationship("Library", back_populates="custom_lists")
 
     # How many titles are in this list? This is calculated and
     # cached when the list contents change.
@@ -80,11 +82,17 @@ class CustomList(Base):
     auto_update_query = Column(Unicode, nullable=True)  # holds json data
     auto_update_facets = Column(Unicode, nullable=True)  # holds json data
     auto_update_last_update = Column(DateTime, nullable=True)
-    auto_update_status: Mapped[str] = Column(auto_update_status_enum, default=INIT)  # type: ignore[assignment]
+    auto_update_status: Mapped[str] = Column(
+        Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status"), default=INIT
+    )
 
-    # Typing specific
-    collections: list[Collection]
-    library: Library
+    collections: Mapped[list[Collection]] = relationship(
+        "Collection", secondary="collections_customlists", back_populates="customlists"
+    )
+
+    lane: Mapped[list[Lane]] = relationship(
+        "Lane", secondary="lanes_customlists", back_populates="customlists"
+    )
 
     __table_args__ = (
         UniqueConstraint("data_source_id", "foreign_identifier"),
@@ -369,7 +377,15 @@ class CustomListEntry(Base):
     )
 
     edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
+    edition: Mapped[Edition | None] = relationship(
+        "Edition", back_populates="custom_list_entries"
+    )
+
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    work: Mapped[Work | None] = relationship(
+        "Work", back_populates="custom_list_entries"
+    )
+
     featured = Column(Boolean, nullable=False, default=False)
     annotation = Column(Unicode)
 

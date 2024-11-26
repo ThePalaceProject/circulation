@@ -212,7 +212,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         cls,
         work: Work,
         active_licensepool: LicensePool | None,
-        edition: Edition,
+        edition: Edition | None,
         identifier: Identifier,
         annotator: Annotator,
     ) -> WorkEntry:
@@ -926,10 +926,11 @@ class LookupAcquisitionFeed(OPDSAcquisitionFeed):
         if error_status:
             return cls.error_message(identifier, error_status, error_message or "")
 
-        if active_licensepool:
-            edition = active_licensepool.presentation_edition
-        else:
-            edition = _work.presentation_edition
+        edition = (
+            active_licensepool.presentation_edition
+            if active_licensepool
+            else _work.presentation_edition
+        )
         try:
             return cls._create_entry(
                 _work, active_licensepool, edition, identifier, annotator
