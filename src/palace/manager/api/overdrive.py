@@ -8,6 +8,7 @@ import logging
 import re
 import urllib.parse
 from collections.abc import Iterable
+from json import JSONDecodeError
 from threading import RLock
 from typing import Any, NamedTuple
 from urllib.parse import quote, urlsplit, urlunsplit
@@ -961,21 +962,36 @@ class OverdriveAPI(
             # refuse to issue a token.
             payload["password_required"] = "false"
             payload["password"] = "[ignore]"
-        response = self.token_post(
-            self.PATRON_TOKEN_ENDPOINT, payload, is_fulfillment=is_fulfillment
-        )
-        if response.status_code == 200:
-            self._update_credential(credential, response.json())
-        elif response.status_code == 400:
-            response = response.json()
-            message = response["error"]
-            error = response.get("error_description")
-            if error:
-                message += "/" + error
-            debug = message
-            if error == "Requested record not found":
-                debug = "The patron failed Overdrive's cross-check against the library's ILS."
-            raise PatronAuthorizationFailedException(message, debug)
+        try:
+            response = self.token_post(
+                self.PATRON_TOKEN_ENDPOINT,
+                payload,
+                is_fulfillment=is_fulfillment,
+                allowed_response_codes=["2xx"],
+            )
+        except BadResponseException as e:
+            try:
+                response_data = e.response.json()
+            except JSONDecodeError:
+                self.log.exception(
+                    f"Error parsing Overdrive response. "
+                    f"Status code: {e.response.status_code}. Response: {e.response.content}"
+                )
+                response_data = {}
+            error_code = response_data.get("error")
+            error_description = response_data.get(
+                "error_description", "Failed to authenticate with Overdrive"
+            )
+            debug_message = (
+                f"refresh_patron_access_token failed. Status code: '{e.response.status_code}'. "
+                f"Error: '{error_code}'. Description: '{error_description}'."
+            )
+            self.log.info(debug_message + f" Response: '{e.response.text}'")
+            raise PatronAuthorizationFailedException(
+                error_description, debug_message
+            ) from e
+
+        self._update_credential(credential, response.json())
         return credential
 
     def checkout(
