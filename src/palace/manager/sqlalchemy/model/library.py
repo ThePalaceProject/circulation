@@ -311,12 +311,6 @@ class Library(Base, HasSessionCache):
         integration_settings_update(LibrarySettings, self, new_settings, merge=True)
 
     @property
-    def all_collections(self) -> Generator[Collection]:
-        for collection in self.collections:
-            yield collection
-            yield from collection.parents
-
-    @property
     def entrypoints(self) -> Generator[type[EntryPoint] | None]:
         """The EntryPoints enabled for this library."""
         values = self.settings.enabled_entry_points
@@ -394,7 +388,7 @@ class Library(Base, HasSessionCache):
         from palace.manager.sqlalchemy.model.collection import Collection
 
         collection_ids = collection_ids or [
-            x.id for x in self.all_collections if x.id is not None
+            x.id for x in self.collections if x.id is not None
         ]
         return Collection.restrict_to_ready_deliverable_works(
             query,

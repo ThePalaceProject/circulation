@@ -98,14 +98,13 @@ class TestLibrary:
         db.session.flush()
         assert False == library.has_root_lanes
 
-    def test_all_collections(self, db: DatabaseTransactionFixture):
+    def test_collections(self, db: DatabaseTransactionFixture):
         library = db.default_library()
 
         parent = db.collection()
         db.default_collection().parent_id = parent.id
 
         assert [db.default_collection()] == library.collections
-        assert {db.default_collection(), parent} == set(library.all_collections)
 
     def test_estimated_holdings_by_language(self, db: DatabaseTransactionFixture):
         library = db.default_library()
