@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from dependency_injector.wiring import Provide, inject
@@ -450,19 +449,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             self._set_settings(
                 **{Collection.DATA_SOURCE_NAME_SETTING: new_datasource_name}
             )
-
-    @property
-    def parents(self) -> Generator[Collection]:
-        if not self.parent_id:
-            return None
-
-        _db = Session.object_session(self)
-        parent = Collection.by_id(_db, self.parent_id)
-        if parent is None:
-            return None
-
-        yield parent
-        yield from parent.parents
 
     @property
     def pools_with_no_delivery_mechanisms(self) -> Query[LicensePool]:

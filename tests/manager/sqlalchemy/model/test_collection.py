@@ -118,21 +118,6 @@ class TestCollection:
         c1.marked_for_deletion = True
         assert [test_collection] == Collection.by_protocol(db.session, overdrive).all()
 
-    def test_parents(self, example_collection_fixture: ExampleCollectionFixture):
-        db = example_collection_fixture.database_fixture
-
-        # Collections can return all their parents recursively.
-        c1 = db.collection()
-        assert [] == list(c1.parents)
-
-        c2 = db.collection()
-        c2.parent_id = c1.id
-        assert [c1] == list(c2.parents)
-
-        c3 = db.collection()
-        c3.parent_id = c2.id
-        assert [c2, c1] == list(c3.parents)
-
     def test_get_protocol(self, db: DatabaseTransactionFixture):
         test_collection = db.collection()
         integration = test_collection.integration_configuration
