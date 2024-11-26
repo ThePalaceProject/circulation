@@ -41,7 +41,7 @@ class TestLanesController:
     def test_lanes_get(self, alm_fixture: AdminLibraryManagerFixture):
         library = alm_fixture.ctrl.db.library()
         collection = alm_fixture.ctrl.db.collection()
-        collection.libraries.append(library)
+        collection.associated_libraries.append(library)
 
         english = alm_fixture.ctrl.db.lane(
             "English", library=library, languages=["eng"]

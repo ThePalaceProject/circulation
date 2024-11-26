@@ -1698,7 +1698,7 @@ class TestLoanController:
                 protocol=collection_protocol,
             )
 
-            collection.libraries.append(loan_fixture.db.default_library())
+            collection.associated_libraries.append(loan_fixture.db.default_library())
             if collection_default_loan_period:
                 loan_fixture.db.integration_library_configuration(
                     collection.integration_configuration,

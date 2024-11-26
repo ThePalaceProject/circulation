@@ -338,7 +338,9 @@ class Explain(IdentifierInputScript):
         self.write("Licensepool info:")
         if pool.collection:
             self.write(" Collection: %r" % pool.collection)
-            libraries = [library.name for library in pool.collection.libraries]
+            libraries = [
+                library.name for library in pool.collection.associated_libraries
+            ]
             if libraries:
                 self.write(" Available to libraries: %s" % ", ".join(libraries))
             else:

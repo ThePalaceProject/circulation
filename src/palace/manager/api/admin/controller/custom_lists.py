@@ -286,7 +286,7 @@ class CustomListsController(
             if not collection:
                 self._db.rollback()
                 return MISSING_COLLECTION
-            if list.library not in collection.libraries:
+            if list.library not in collection.associated_libraries:
                 self._db.rollback()
                 return COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY
             new_collections.append(collection)

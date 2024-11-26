@@ -137,7 +137,7 @@ class TestCollectionSettings:
         c3.parent = c2
 
         l1 = db.library(short_name="L1")
-        c3.libraries += [l1, db.default_library()]
+        c3.associated_libraries += [l1, db.default_library()]
         db.integration_library_configuration(
             c3.integration_configuration,
             l1,
@@ -534,7 +534,7 @@ class TestCollectionSettings:
         )
 
         # A library now has access to the collection.
-        assert collection.libraries == [l1]
+        assert collection.associated_libraries == [l1]
 
         # Additional settings were set on the collection.
         assert "1234" == collection.integration_configuration.settings_dict.get(
@@ -571,7 +571,7 @@ class TestCollectionSettings:
         assert OverdriveAPI.label() == collection.protocol
 
         # But the library has been removed.
-        assert collection.libraries == []
+        assert collection.associated_libraries == []
 
         # All settings for that library and collection have been deleted.
         assert collection.integration_configuration.library_configurations == []
@@ -704,7 +704,7 @@ class TestCollectionSettings:
         # when the connection between collection and library was deleted.
         assert isinstance(l1.id, int)
         assert collection.integration_configuration.for_library(l1.id) is None
-        assert [] == collection.libraries
+        assert [] == collection.associated_libraries
 
     def test_collection_delete(
         self,

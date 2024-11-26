@@ -160,7 +160,7 @@ class TestAdmin:
 
         # This collection is visible to libraries of its library.
         c2 = admin_fixture.db.collection()
-        c2.libraries += [admin_fixture.db.default_library()]
+        c2.associated_libraries += [admin_fixture.db.default_library()]
 
         # The admin has no roles yet.
         admin = admin_fixture.admin

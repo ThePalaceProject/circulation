@@ -51,7 +51,7 @@ class HasPatronSelfTests(HasSelfTests, ABC):
                 - a failure SelfTestResult when it cannot.
         """
         _db = Session.object_session(collection)
-        if not collection.libraries:
+        if not collection.associated_libraries:
             yield cls.test_failure(
                 "Acquiring test patron credentials.",
                 "Collection is not associated with any libraries.",
@@ -60,7 +60,7 @@ class HasPatronSelfTests(HasSelfTests, ABC):
             # Not strictly necessary, but makes it obvious that we won't do anything else.
             return
 
-        for library in collection.libraries:
+        for library in collection.associated_libraries:
             task = "Acquiring test patron credentials for library %s" % library.name
             try:
                 patron, password = cls._determine_self_test_patron(library, _db=_db)

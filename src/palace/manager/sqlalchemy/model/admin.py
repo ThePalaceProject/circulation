@@ -208,7 +208,7 @@ class Admin(Base, HasSessionCache):
     def can_see_collection(self, collection):
         if self.is_system_admin():
             return True
-        for library in collection.libraries:
+        for library in collection.associated_libraries:
             if self.is_librarian(library):
                 return True
         return False

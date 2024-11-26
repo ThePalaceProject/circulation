@@ -985,7 +985,7 @@ class TestCrawlableCollectionBasedLane:
         library = db.default_library()
         default_collection = db.default_collection()
         other_library_collection = db.collection()
-        other_library_collection.libraries.append(library)
+        other_library_collection.associated_libraries.append(library)
 
         # This collection is not associated with any library.
         unused_collection = db.collection()
@@ -1174,7 +1174,7 @@ class TestJackpotWorkList:
             "Test Overdrive Collection",
             protocol=OverdriveAPI,
         )
-        overdrive_collection.libraries.append(library)
+        overdrive_collection.associated_libraries.append(library)
 
         # Create another collection that is _not_ associated with this
         # library. It will not be used at all.

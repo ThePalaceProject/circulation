@@ -1428,7 +1428,7 @@ class TestOPDSImporter:
                     saml_wayfless_url_template="https://fsso.springer.com/saml/login?idp={idp}&targetUrl={targetUrl}",
                 ),
             )
-            collection.libraries.append(library)
+            collection.associated_libraries.append(library)
 
             imported_editions, pools, works, failures = OPDSImporter(
                 session, collection=collection

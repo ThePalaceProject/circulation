@@ -59,7 +59,7 @@ def test_job_run(
     collection = create_test_opds_collection(collection_name, data_source, db, library)
     library2 = db.library(short_name="test_library2")
     # add another library
-    collection.libraries.append(library2)
+    collection.associated_libraries.append(library2)
 
     # Configure test data we expect will not be picked up.
     create_test_opds_collection(
@@ -71,7 +71,7 @@ def test_job_run(
         name="Overdrive Test Collection",
     )
 
-    od_collection_not_to_include.libraries = [library]
+    od_collection_not_to_include.associated_libraries = [library]
 
     ds = collection.data_source
     assert ds
@@ -281,7 +281,7 @@ def create_test_opds_collection(
         data_source=data_source,
     )
     collection = db.collection(name=collection_name, settings=settings)
-    collection.libraries = [library]
+    collection.associated_libraries = [library]
     return collection
 
 

@@ -2618,7 +2618,7 @@ class TestWorkList:
 
         # Work1 now has 2 licensepools, one of which has availability
         alternate_collection = db.collection()
-        alternate_collection.libraries.append(db.default_library())
+        alternate_collection.associated_libraries.append(db.default_library())
         alternate_w1_lp: LicensePool = db.licensepool(
             w1.presentation_edition, collection=alternate_collection
         )
@@ -2705,7 +2705,7 @@ class TestWorkList:
 
         # Work1 now has 2 license pools, one of which has availability
         alternate_collection = db.collection()
-        alternate_collection.libraries.append(db.default_library())
+        alternate_collection.associated_libraries.append(db.default_library())
         alternate_w1_lp: LicensePool = db.licensepool(
             w1.presentation_edition, collection=alternate_collection
         )
@@ -2952,16 +2952,16 @@ class TestDatabaseBackedWorkList:
 
         # A DatabaseBackedWorkList will only find books licensed
         # through one of its collections.
-        db.default_collection().libraries = []
+        db.default_collection().associated_libraries = []
         collection = db.collection()
-        collection.libraries.append(db.default_library())
+        collection.associated_libraries.append(db.default_library())
         assert db.default_library().collections == [collection]
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
 
         # If a DatabaseBackedWorkList has no collections, it has no
         # books.
-        collection.libraries = []
+        collection.associated_libraries = []
         assert db.default_library().collections == []
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
@@ -4721,7 +4721,7 @@ class TestWorkListGroupsEndToEnd:
         decoy_library = db.library()
         another_library = db.library()
 
-        db.default_collection().libraries += [decoy_library, another_library]
+        db.default_collection().associated_libraries += [decoy_library, another_library]
 
         # Add a couple suppressed works, to make sure they don't show up in the results.
         globally_suppressed_work = db.work(

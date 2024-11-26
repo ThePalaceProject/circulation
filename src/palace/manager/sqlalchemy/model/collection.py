@@ -105,7 +105,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     # A Collection can provide books to many Libraries.
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
-    libraries: Mapped[list[Library]] = association_proxy(
+    associated_libraries: Mapped[list[Library]] = association_proxy(
         "integration_configuration", "libraries"
     )
 
@@ -563,7 +563,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         _db = Session.object_session(self)
 
         # Disassociate all libraries from this collection.
-        self.libraries.clear()
+        self.associated_libraries.clear()
 
         # Delete all the license pools. This should be the only part
         # of the application where LicensePools are permanently
