@@ -462,9 +462,9 @@ NO_CUSTOM_LISTS_FOR_LANE = pd(
 LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS = pd(
     "http://librarysimplified.org/terms/problem/lane-with-parent-and-display-name-already-exists",
     status_code=400,
-    title=_("Lane with parent and display name already exists"),
+    title=_("Lane with parent and display name already exists for this library"),
     detail=_(
-        "You cannot create a lane with the same parent and display name as an existing lane."
+        "You cannot create a lane with the same parent and display name as an existing lane within the same library."
     ),
 )
 

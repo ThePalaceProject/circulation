@@ -25,6 +25,7 @@ from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create, get_one
+from palace.manager.util.problem_detail import ProblemDetailException
 
 
 class LanesController(CirculationManagerController, AdminPermissionsControllerMixin):
@@ -92,12 +93,8 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                         return NO_CUSTOM_LISTS_FOR_LANE
 
                 if display_name != lane.display_name:
-                    old_lane = get_one(
-                        self._db, Lane, display_name=display_name, parent=lane.parent
-                    )
-                    if old_lane:
-                        return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
-                lane.display_name = display_name
+                    self._check_lane_name_unique(display_name, lane.parent, library)
+                    lane.display_name = display_name
             else:
                 if not custom_list_ids or len(custom_list_ids) == 0:
                     return NO_CUSTOM_LISTS_FOR_LANE
@@ -111,15 +108,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                                 "The specified parent lane does not exist, or is associated with a different library."
                             )
                         )
-                old_lane = get_one(
-                    self._db,
-                    Lane,
-                    display_name=display_name,
-                    parent=parent,
-                    library=library,
-                )
-                if old_lane:
-                    return LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
+                self._check_lane_name_unique(display_name, parent, library)
 
                 lane, is_new = create(
                     self._db,
@@ -191,6 +180,17 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
 
             delete_lane_and_sublanes(lane)
             return Response(str(_("Deleted")), 200)
+
+    def _check_lane_name_unique(
+        self, display_name: str, parent: Lane | None, library: Library
+    ) -> None:
+        lane_with_same_name = get_one(
+            self._db, Lane, display_name=display_name, parent=parent, library=library
+        )
+        if lane_with_same_name:
+            raise ProblemDetailException(
+                LANE_WITH_PARENT_AND_DISPLAY_NAME_ALREADY_EXISTS
+            )
 
     def show_lane(self, lane_identifier):
         library = get_request_library()
