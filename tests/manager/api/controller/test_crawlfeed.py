@@ -79,7 +79,7 @@ class TestCrawlableFeed:
         lane = kwargs.pop("worklist")
         assert isinstance(lane, CrawlableCollectionBasedLane)
         assert library.id == lane.library_id
-        assert [x.id for x in library.collections] == lane.collection_ids
+        assert [x.id for x in library.associated_collections] == lane.collection_ids
         assert {} == kwargs
 
     def test_crawlable_collection_feed(

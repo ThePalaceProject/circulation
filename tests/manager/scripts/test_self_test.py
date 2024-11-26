@@ -42,7 +42,7 @@ class TestRunSelfTestsScript:
         # The default library is the only one with a collection;
         # test_collection() was called on that collection.
         [(collection, api_map)] = script.tested
-        assert [collection] == library1.collections
+        assert [collection] == library1.associated_collections
 
         # The API lookup map passed into test_collection() is a LicenseProvidersRegistry.
         assert isinstance(api_map, LicenseProvidersRegistry)

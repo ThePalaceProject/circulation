@@ -384,7 +384,7 @@ class TestCollection:
 
         # It's gone.
         assert db.default_library() not in collection.associated_libraries
-        assert collection not in db.default_library().collections
+        assert collection not in db.default_library().associated_collections
 
         # The library-specific settings for that library have been deleted.
         library_config_ids = [
@@ -528,7 +528,7 @@ class TestCollection:
         assert collection not in db.session.query(Collection).all()
 
         # The default library now has no collections.
-        assert [] == db.default_library().collections
+        assert [] == db.default_library().associated_collections
 
         # The collection based coverage record got deleted
         assert db.session.query(CoverageRecord).get(record.id) == None

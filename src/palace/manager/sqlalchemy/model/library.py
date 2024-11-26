@@ -196,8 +196,8 @@ class Library(Base, HasSessionCache):
         return [CollectionInfoTuple(*row) for row in results]
 
     @property
-    def collections(self) -> Sequence[Collection]:
-        """Get the collections for this library"""
+    def associated_collections(self) -> Sequence[Collection]:
+        """Get all associated collections for this library."""
         _db = Session.object_session(self)
         return _db.scalars(self.collections_query()).all()
 
@@ -323,14 +323,14 @@ class Library(Base, HasSessionCache):
         """Look up the enabled facets for a given facet group."""
         if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
             enabled = []
-            for collection in self.collections:
+            for collection in self.associated_collections:
                 if collection.data_source and collection.data_source.name:
                     enabled.append(collection.data_source.name)
             return list(set(enabled))
 
         if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
             enabled = []
-            for collection in self.collections:
+            for collection in self.associated_collections:
                 if collection.name is not None:
                     enabled.append(collection.name)
             return enabled
@@ -388,7 +388,7 @@ class Library(Base, HasSessionCache):
         from palace.manager.sqlalchemy.model.collection import Collection
 
         collection_ids = collection_ids or [
-            x.id for x in self.collections if x.id is not None
+            x.id for x in self.associated_collections if x.id is not None
         ]
         return Collection.restrict_to_ready_deliverable_works(
             query,

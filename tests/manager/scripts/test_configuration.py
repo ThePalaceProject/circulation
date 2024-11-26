@@ -180,9 +180,9 @@ class TestConfigureCollectionScript:
         )
 
         # Two libraries now have access to the collection.
-        assert [collection] == l1.collections
-        assert [collection] == l2.collections
-        assert [] == l3.collections
+        assert [collection] == l1.associated_collections
+        assert [collection] == l2.associated_collections
+        assert [] == l3.associated_collections
 
         # One CollectionSetting was set on the collection, in addition
         # to url, username, and password.

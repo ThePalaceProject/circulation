@@ -114,7 +114,7 @@ class CustomListsController(
             .join(LicensePool, LicensePool.work_id == Work.id)
             .join(Collection, LicensePool.collection_id == Collection.id)
             .filter(LicensePool.identifier_id == identifier.id)
-            .filter(Collection.id.in_([c.id for c in library.collections]))
+            .filter(Collection.id.in_([c.id for c in library.associated_collections]))
         )
         work = query.one()
         return work

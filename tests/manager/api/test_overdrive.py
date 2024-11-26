@@ -2352,7 +2352,7 @@ class TestOverdriveAPICredentials:
         pin = "patron_pin"
 
         # clear out any collections added before we add ours
-        for collection in library.collections:
+        for collection in library.associated_collections:
             collection.associated_libraries = []
 
         # Distinct credentials for the two OverDrive collections in which our

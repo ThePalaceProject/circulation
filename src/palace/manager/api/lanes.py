@@ -1396,7 +1396,7 @@ class CrawlableCollectionBasedLane(CrawlableLane):
         if isinstance(library_or_collections, Library):
             # We're looking at all the collections in a given library.
             library = library_or_collections
-            collections = library.collections
+            collections = library.associated_collections
             identifier = library.name
         else:
             # We're looking at collections directly, without respect
@@ -1532,7 +1532,7 @@ class JackpotWorkList(WorkList):
         # Add one or more WorkLists for every collection in the
         # system, so that a client can test borrowing a book from
         # every collection.
-        for collection in sorted(library.collections, key=lambda x: x.name):
+        for collection in sorted(library.associated_collections, key=lambda x: x.name):
             for medium in Edition.FULFILLABLE_MEDIA:
                 # Give each Worklist a name that is distinctive
                 # and easy for a client to parse.

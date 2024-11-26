@@ -146,7 +146,7 @@ class MARCRecordController:
 
         if len(marc_files) == 0:
             # Are there any collections configured to export MARC records?
-            if any(c.export_marc_records for c in library.collections):
+            if any(c.export_marc_records for c in library.associated_collections):
                 return "<p>" + "MARC files aren't ready to download yet." + "</p>"
             else:
                 return (

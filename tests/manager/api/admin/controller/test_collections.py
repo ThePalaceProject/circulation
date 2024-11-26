@@ -114,7 +114,7 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ) -> None:
-        [c1] = db.default_library().collections
+        [c1] = db.default_library().associated_collections
 
         c2 = db.collection(
             name="Collection 2",
@@ -426,9 +426,9 @@ class TestCollectionSettings:
         )
 
         # Two libraries now have access to the collection.
-        assert [collection] == l1.collections
-        assert [collection] == l2.collections
-        assert [] == l3.collections
+        assert [collection] == l1.associated_collections
+        assert [collection] == l2.associated_collections
+        assert [] == l3.associated_collections
 
         # Additional settings were set on the collection.
         assert (
@@ -480,7 +480,7 @@ class TestCollectionSettings:
         assert "website_id" not in child.integration_configuration.settings_dict
 
         # One library has access to the collection.
-        assert [child] == l3.collections
+        assert [child] == l3.associated_collections
         assert isinstance(l3.id, int)
         l3_settings = child.integration_configuration.for_library(l3.id)
         assert l3_settings is not None

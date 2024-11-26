@@ -1831,7 +1831,7 @@ class TestWorkList:
         # The Collections associated with the WorkList are those associated
         # with the Library.
         assert set(wl.collection_ids) == {
-            x.id for x in db.default_library().collections
+            x.id for x in db.default_library().associated_collections
         }
 
         # The Genres associated with the WorkList are the ones passed
@@ -2955,14 +2955,14 @@ class TestDatabaseBackedWorkList:
         db.default_collection().associated_libraries = []
         collection = db.collection()
         collection.associated_libraries.append(db.default_library())
-        assert db.default_library().collections == [collection]
+        assert db.default_library().associated_collections == [collection]
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
 
         # If a DatabaseBackedWorkList has no collections, it has no
         # books.
         collection.associated_libraries = []
-        assert db.default_library().collections == []
+        assert db.default_library().associated_collections == []
         wl.initialize(db.default_library())
         assert 0 == wl.works_from_database(db.session).count()
 

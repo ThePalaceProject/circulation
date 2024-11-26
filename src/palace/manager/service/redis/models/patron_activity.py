@@ -379,7 +379,7 @@ class PatronActivity(LoggerMixin):
         patron activity sync. This indicates that the collection is ready to be
         synced.
         """
-        collections = patron.library.collections
+        collections = patron.library.associated_collections
         keys = [
             cls._get_key(redis_client, patron.id, collection.id)
             for collection in collections

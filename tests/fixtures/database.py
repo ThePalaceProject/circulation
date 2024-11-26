@@ -470,7 +470,7 @@ class DatabaseTransactionFixture:
         saves time.
         """
         if not self._default_collection:
-            self._default_collection = self.default_library().collections[0]
+            self._default_collection = self.default_library().associated_collections[0]
 
         return self._default_collection
 

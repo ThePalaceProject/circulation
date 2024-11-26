@@ -551,7 +551,7 @@ class NoveListAPI(
         :return: a list of Novelist objects to send
         """
         collectionList = []
-        for c in library.collections:
+        for c in library.associated_collections:
             collectionList.append(c.id)
 
         LEFT_OUTER_JOIN = True

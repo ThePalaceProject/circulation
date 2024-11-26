@@ -3414,7 +3414,7 @@ class TestFilter:
         # If the library has no collections, the collection filter
         # will filter everything out.
         transaction.default_collection().associated_libraries = []
-        assert transaction.default_library().collections == []
+        assert transaction.default_library().associated_collections == []
         library_filter = Filter(collections=transaction.default_library())
         assert [] == library_filter.collection_ids
 

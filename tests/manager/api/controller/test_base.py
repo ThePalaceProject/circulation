@@ -196,7 +196,7 @@ class TestBaseController:
     def test_load_licensepools(self, circulation_fixture: CirculationControllerFixture):
         # Here's a Library that has two Collections.
         library = circulation_fixture.library
-        [c1] = library.collections
+        [c1] = library.associated_collections
         c2 = circulation_fixture.db.collection()
         c2.associated_libraries.append(library)
 
