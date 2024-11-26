@@ -279,20 +279,8 @@ class HasSelfTests(LoggerMixin, ABC):
 
     @classmethod
     def load_self_test_results(
-        cls, integration: IntegrationConfiguration | None
-    ) -> dict[str, Any] | str | None:
-        if integration is None:
-            cls.logger().error(
-                "No IntegrationConfiguration was found. Self-test results could not be loaded."
-            )
-            return None
-
-        if not isinstance(integration.self_test_results, dict):
-            cls.logger().error(
-                "Self-test results were not stored as a dict. Self-test results could not be loaded."
-            )
-            return None
-
+        cls, integration: IntegrationConfiguration
+    ) -> dict[str, Any] | str:
         if integration.self_test_results == {}:
             # No self-test results have been stored yet.
             return "No results yet"

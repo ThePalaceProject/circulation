@@ -165,8 +165,6 @@ class EnkiAPI(
 
     def enki_library_id(self, library: Library) -> str | None:
         """Find the Enki library ID for the given library."""
-        if library.id is None:
-            return None
         settings = self.library_settings(library.id)
         if settings is None:
             return None

@@ -47,10 +47,10 @@ class CustomList(Base):
     REPOPULATE = "repopulate"
 
     __tablename__ = "customlists"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     primary_language = Column(Unicode, index=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="custom_lists"
     )
     foreign_identifier = Column(Unicode, index=True)
@@ -60,11 +60,13 @@ class CustomList(Base):
     updated = Column(DateTime(timezone=True), index=True)
     responsible_party = Column(Unicode)
     library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=True)
-    library: Mapped[Library] = relationship("Library", back_populates="custom_lists")
+    library: Mapped[Library | None] = relationship(
+        "Library", back_populates="custom_lists"
+    )
 
     # How many titles are in this list? This is calculated and
     # cached when the list contents change.
-    size = Column(Integer, nullable=False, default=0)
+    size: Mapped[int] = Column(Integer, nullable=False, default=0)
 
     entries: Mapped[list[CustomListEntry]] = relationship(
         "CustomListEntry", back_populates="customlist", uselist=True
@@ -370,9 +372,9 @@ customlist_sharedlibrary: Table = Table(
 
 class CustomListEntry(Base):
     __tablename__ = "customlistentries"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     list_id = Column(Integer, ForeignKey("customlists.id"), index=True)
-    customlist: Mapped[CustomList] = relationship(
+    customlist: Mapped[CustomList | None] = relationship(
         "CustomList", back_populates="entries"
     )
 
@@ -386,7 +388,7 @@ class CustomListEntry(Base):
         "Work", back_populates="custom_list_entries"
     )
 
-    featured = Column(Boolean, nullable=False, default=False)
+    featured: Mapped[bool] = Column(Boolean, nullable=False, default=False)
     annotation = Column(Unicode)
 
     # These two fields are for best-seller lists. Even after a book

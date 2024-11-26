@@ -67,7 +67,7 @@ class Resource(Base):
     # than a lousy cover we got from the Internet.
     MINIMUM_IMAGE_QUALITY = 0.25
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A URI that uniquely identifies this resource. Most of the time
     # this will be an HTTP URL, which is why we're calling it 'url',
@@ -106,7 +106,7 @@ class Resource(Base):
 
     # An archived Representation of this Resource.
     representation_id = Column(Integer, ForeignKey("representations.id"), index=True)
-    representation: Mapped[Representation] = relationship(
+    representation: Mapped[Representation | None] = relationship(
         "Representation", back_populates="resource", uselist=False
     )
 
@@ -129,7 +129,7 @@ class Resource(Base):
     )
 
     # A derivative resource may have one original.
-    derived_through: Mapped[ResourceTransformation] = relationship(
+    derived_through: Mapped[ResourceTransformation | None] = relationship(
         "ResourceTransformation",
         foreign_keys="ResourceTransformation.derivative_id",
         back_populates="derivative",
@@ -385,7 +385,7 @@ class ResourceTransformation(Base):
     __tablename__ = "resourcetransformations"
 
     # The derivative resource. A resource can only be derived from one other resource.
-    derivative_id = Column(
+    derivative_id: Mapped[int] = Column(
         Integer, ForeignKey("resources.id"), index=True, primary_key=True
     )
     derivative: Mapped[Resource] = relationship(
@@ -394,7 +394,7 @@ class ResourceTransformation(Base):
 
     # The original resource that was transformed into the derivative.
     original_id = Column(Integer, ForeignKey("resources.id"), index=True)
-    original: Mapped[Resource] = relationship(
+    original: Mapped[Resource | None] = relationship(
         "Resource", back_populates="transformations", foreign_keys=[original_id]
     )
 
@@ -407,25 +407,25 @@ class Hyperlink(Base, LinkRelations):
 
     __tablename__ = "hyperlinks"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A Hyperlink is always associated with some Identifier.
-    identifier_id = Column(
+    identifier_id: Mapped[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     identifier: Mapped[Identifier] = relationship("Identifier", back_populates="links")
 
     # The DataSource through which this link was discovered.
-    data_source_id = Column(
+    data_source_id: Mapped[int] = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship("DataSource", back_populates="links")
 
     # The link relation between the Identifier and the Resource.
-    rel = Column(Unicode, index=True, nullable=False)
+    rel: Mapped[str] = Column(Unicode, index=True, nullable=False)
 
     # The Resource on the other end of the link.
-    resource_id = Column(
+    resource_id: Mapped[int] = Column(
         Integer, ForeignKey("resources.id"), index=True, nullable=False
     )
     resource: Mapped[Resource] = relationship("Resource", back_populates="links")
@@ -477,7 +477,7 @@ class Representation(Base, MediaTypes):
     """
 
     __tablename__ = "representations"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # URL from which the representation was fetched.
     url = Column(Unicode, index=True)
@@ -485,7 +485,7 @@ class Representation(Base, MediaTypes):
     # The media type of the representation.
     media_type = Column(Unicode)
 
-    resource: Mapped[Resource] = relationship(
+    resource: Mapped[Resource | None] = relationship(
         "Resource", back_populates="representation", uselist=False
     )
 

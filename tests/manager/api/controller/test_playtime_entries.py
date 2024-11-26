@@ -201,7 +201,7 @@ class TestPlaytimeEntriesController:
                 library_id=library.id,
                 identifier_str=identifier.urn,
                 collection_name=collection.name,
-                library_name=library.name,
+                library_name=library.name or "",
                 loan_identifier=loan_identifier,
             )
         )

@@ -29,7 +29,6 @@ from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
 from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Facets, FeaturedFacets
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -46,18 +45,13 @@ from tests.fixtures.services import ServicesFixture
 
 
 class WorkFixture(CirculationControllerFixture):
-    lp: LicensePool
-    identifier: Identifier
-    datasource: DataSource
-    edition: Edition
-
     def __init__(
         self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
         super().__init__(db, services_fixture)
         [self.lp] = self.english_1.license_pools
         self.edition = self.lp.presentation_edition
-        self.datasource = self.lp.data_source.name  # type: ignore
+        self.datasource = self.lp.data_source.name
         self.identifier = self.lp.identifier
 
 

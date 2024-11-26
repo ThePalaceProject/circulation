@@ -626,9 +626,10 @@ class CirculationManagerAnnotator(Annotator):
         # LicensePoolDeliveryMechanism's Resource is the URL we should
         # send for download purposes. This will be the case unless we
         # previously mirrored that URL somewhere else.
-        href = lpdm.resource.url
+        resource = lpdm.resource
+        href = resource.url if resource else None
 
-        rep = lpdm.resource.representation
+        rep = resource.representation if resource else None
         if rep:
             if rep.media_type:
                 kw["type"] = rep.media_type

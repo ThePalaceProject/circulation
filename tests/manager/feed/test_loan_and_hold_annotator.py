@@ -9,7 +9,6 @@ from palace.manager.feed.types import WorkEntry, WorkEntryData
 from palace.manager.sqlalchemy.constants import EditionConstants, LinkRelations
 from palace.manager.sqlalchemy.model.lane import WorkList
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import ExternalSearchFixtureFake
@@ -113,14 +112,6 @@ class TestLibraryLoanAndHoldAnnotator:
         mock = MagicMock()
         # A loan without a pool
         annotator = LibraryLoanAndHoldAnnotator(mock, None, db.default_library())
-        loan = Loan()
-        loan.patron = db.patron()
-        not_found_result = OPDSAcquisitionFeed.single_entry_loans_feed(
-            mock,
-            loan,
-            annotator,
-        )
-        assert not_found_result == NOT_FOUND_ON_REMOTE
 
         work = db.work(with_license_pool=True)
         pool = get_one(db.session, LicensePool, work_id=work.id)

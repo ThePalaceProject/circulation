@@ -45,10 +45,7 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
 
     @staticmethod
     def get_secret_key(db: Session) -> str:
-        key = Key.get_key(db, KeyType.ADMIN_SECRET_KEY, raise_exception=True).value
-        # We know .value is a str because its a non-null column in the DB, so
-        # we use an ignore to tell mypy to trust us.
-        return key  # type: ignore[return-value]
+        return Key.get_key(db, KeyType.ADMIN_SECRET_KEY, raise_exception=True).value
 
     def sign_in_template(self, redirect):
         password_sign_in_url = url_for("password_auth")
@@ -108,13 +105,6 @@ class PasswordAdminAuthenticationProvider(AdminAuthenticationProvider, LoggerMix
 
     def send_reset_password_email(self, admin: Admin, reset_password_url: str) -> None:
         subject = f"{AdminClientConfig.APP_NAME} - Reset password email"
-        if admin.email is None:
-            # This should never happen, but if it does, we should log it.
-            self.log.error(
-                "Admin has no email address, cannot send reset password email."
-            )
-            return
-
         receivers = [admin.email]
 
         mail_text = render_template_string(

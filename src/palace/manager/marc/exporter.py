@@ -188,11 +188,6 @@ class MarcExporter(
             library = library_integration.library
             library_id = library.id
             library_short_name = library.short_name
-            if library_id is None or library_short_name is None:
-                cls.logger().warning(
-                    f"Library {library} is missing an ID or short name."
-                )
-                continue
             last_updated_time = cls._last_updated(session, library, collection)
             update_frequency = cls.settings_load(
                 library_integration.parent

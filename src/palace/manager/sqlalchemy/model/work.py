@@ -84,11 +84,15 @@ class WorkGenre(Base):
     """An assignment of a genre to a work."""
 
     __tablename__ = "workgenres"
-    id = Column(Integer, primary_key=True)
-    genre_id = Column(Integer, ForeignKey("genres.id"), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    genre_id: Mapped[int] = Column(
+        Integer, ForeignKey("genres.id"), index=True, nullable=False
+    )
     genre: Mapped[Genre] = relationship("Genre", back_populates="work_genres")
 
-    work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    work_id: Mapped[int] = Column(
+        Integer, ForeignKey("works.id"), index=True, nullable=False
+    )
     work: Mapped[Work] = relationship("Work", back_populates="work_genres")
 
     affinity = Column(Float, index=True, default=0)
@@ -142,7 +146,7 @@ class Work(Base, LoggerMixin):
     }
 
     __tablename__ = "works"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # One Work may have copies scattered across many LicensePools.
     license_pools: Mapped[list[LicensePool]] = relationship(
@@ -177,7 +181,7 @@ class Work(Base, LoggerMixin):
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id: Mapped[int] = Column(
+    summary_id: Mapped[int | None] = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
@@ -1890,6 +1894,7 @@ work_library_suppressions = Table(
 
 
 def add_work_to_customlists_for_collection(pool_or_work: LicensePool | Work) -> None:
+    work: Work | None
     if isinstance(pool_or_work, Work):
         work = pool_or_work
         pools = work.license_pools

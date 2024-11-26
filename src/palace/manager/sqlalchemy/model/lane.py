@@ -2537,22 +2537,26 @@ class LaneGenre(Base):
     """Relationship object between Lane and Genre."""
 
     __tablename__ = "lanes_genres"
-    id = Column(Integer, primary_key=True)
-    lane_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    lane_id: Mapped[int] = Column(
+        Integer, ForeignKey("lanes.id"), index=True, nullable=False
+    )
     lane: Mapped[Lane] = relationship("Lane", back_populates="lane_genres")
-    genre_id = Column(Integer, ForeignKey("genres.id"), index=True, nullable=False)
+    genre_id: Mapped[int] = Column(
+        Integer, ForeignKey("genres.id"), index=True, nullable=False
+    )
     genre: Mapped[Genre] = relationship(Genre, back_populates="lane_genres")
 
     # An inclusive relationship means that books classified under the
     # genre are included in the lane. An exclusive relationship means
     # that books classified under the genre are excluded, even if they
     # would otherwise be included.
-    inclusive = Column(Boolean, default=True, nullable=False)
+    inclusive: Mapped[bool] = Column(Boolean, default=True, nullable=False)
 
     # By default, this relationship applies not only to the genre
     # itself but to all of its subgenres. Setting recursive=false
     # means that only the genre itself is affected.
-    recursive = Column(Boolean, default=True, nullable=False)
+    recursive: Mapped[bool] = Column(Boolean, default=True, nullable=False)
 
     __table_args__ = (UniqueConstraint("lane_id", "genre_id"),)
 
@@ -2579,8 +2583,10 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     MAX_CACHE_AGE = 20 * 60
 
     __tablename__ = "lanes"
-    id = Column(Integer, primary_key=True)
-    library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    library_id: Mapped[int] = Column(
+        Integer, ForeignKey("libraries.id"), index=True, nullable=False
+    )
     library: Mapped[Library] = relationship(Library, back_populates="lanes")
 
     parent_id = Column(Integer, ForeignKey("lanes.id"), index=True, nullable=True)
@@ -2590,11 +2596,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         remote_side=[id],
     )
 
-    priority = Column(Integer, index=True, nullable=False, default=0)
+    priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
 
     # How many titles are in this lane? This is periodically
     # calculated and cached.
-    size = Column(Integer, nullable=False, default=0)
+    size: Mapped[int] = Column(Integer, nullable=False, default=0)
 
     # How many titles are in this lane when viewed through a specific
     # entry point? This is periodically calculated and cached.
@@ -2651,7 +2657,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     license_datasource_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
-    license_datasource: Mapped[DataSource] = relationship(
+    license_datasource: Mapped[DataSource | None] = relationship(
         "DataSource",
         back_populates="license_lanes",
         foreign_keys=[license_datasource_id],
@@ -2662,7 +2668,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     _list_datasource_id = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=True
     )
-    _list_datasource: Mapped[DataSource] = relationship(
+    _list_datasource: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="list_lanes", foreign_keys=[_list_datasource_id]
     )
 
@@ -2681,7 +2687,9 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     # If this is set to True, then a book will show up in a lane only
     # if it would _also_ show up in its parent lane.
-    inherit_parent_restrictions = Column(Boolean, default=True, nullable=False)
+    inherit_parent_restrictions: Mapped[bool] = Column(
+        Boolean, default=True, nullable=False
+    )
 
     # Patrons whose external type is in this list will be sent to this
     # lane when they ask for the root lane.
@@ -2696,11 +2704,13 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # one would want to see a big list containing everything, and b)
     # the sublanes are exhaustive of the Lane's content, so there's
     # nothing new to be seen by going into that big list.
-    include_self_in_grouped_feed = Column(Boolean, default=True, nullable=False)
+    include_self_in_grouped_feed: Mapped[bool] = Column(
+        Boolean, default=True, nullable=False
+    )
 
     # Only a visible lane will show up in the user interface.  The
     # admin interface can see all the lanes, visible or not.
-    _visible = Column("visible", Boolean, default=True, nullable=False)
+    _visible: Mapped[bool] = Column("visible", Boolean, default=True, nullable=False)
 
     __table_args__ = (UniqueConstraint("parent_id", "display_name"),)
 

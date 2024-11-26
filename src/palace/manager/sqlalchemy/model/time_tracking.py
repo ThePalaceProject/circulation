@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 class PlaytimeEntry(Base):
     __tablename__ = "playtime_entries"
 
-    id = Column(Integer, autoincrement=True, primary_key=True)
+    id: Mapped[int] = Column(Integer, autoincrement=True, primary_key=True)
 
     # Even if related objects are deleted, we keep our row.
     identifier_id = Column(
@@ -39,39 +39,38 @@ class PlaytimeEntry(Base):
         ForeignKey("identifiers.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
+    identifier: Mapped[Identifier | None] = relationship("Identifier", uselist=False)
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
+    collection: Mapped[Collection | None] = relationship("Collection", uselist=False)
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
     )
+    library: Mapped[Library | None] = relationship("Library", uselist=False)
     # Related objects can be deleted, so we keep string representation.
-    identifier_str = Column(String, nullable=False)
-    collection_name = Column(String, nullable=False)
-    library_name = Column(String, nullable=False)
+    identifier_str: Mapped[str] = Column(String, nullable=False)
+    collection_name: Mapped[str] = Column(String, nullable=False)
+    library_name: Mapped[str] = Column(String, nullable=False)
 
     timestamp: Mapped[datetime.datetime] = Column(
         DateTime(timezone=True), nullable=False
     )
-    total_seconds_played = Column(
+    total_seconds_played: Mapped[int] = Column(
         Integer,
         CheckConstraint(
             "total_seconds_played <= 60", name="max_total_seconds_played_constraint"
         ),
         nullable=False,
     )
-    tracking_id = Column(String(64), nullable=False)
+    tracking_id: Mapped[str] = Column(String(64), nullable=False)
     processed = Column(Boolean, default=False)
 
-    identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
-    collection: Mapped[Collection] = relationship("Collection", uselist=False)
-    library: Mapped[Library] = relationship("Library", uselist=False)
-
-    loan_identifier = Column(String(40), nullable=False)
+    loan_identifier: Mapped[str] = Column(String(40), nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -87,7 +86,7 @@ class PlaytimeEntry(Base):
 class PlaytimeSummary(Base):
     __tablename__ = "playtime_summaries"
 
-    id = Column(Integer, autoincrement=True, primary_key=True)
+    id: Mapped[int] = Column(Integer, autoincrement=True, primary_key=True)
 
     # Even if related objects are deleted, we keep our row.
     identifier_id = Column(
@@ -96,22 +95,25 @@ class PlaytimeSummary(Base):
         nullable=True,
         index=True,
     )
+    identifier: Mapped[Identifier | None] = relationship("Identifier", uselist=False)
     collection_id = Column(
         Integer,
         ForeignKey("collections.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
+    collection: Mapped[Collection | None] = relationship("Collection", uselist=False)
     library_id = Column(
         Integer,
         ForeignKey("libraries.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
+    library: Mapped[Library | None] = relationship("Library", uselist=False)
     # Related objects can be deleted, so we keep string representation.
-    identifier_str = Column(String, nullable=False)
-    collection_name = Column(String, nullable=False)
-    library_name = Column(String, nullable=False)
+    identifier_str: Mapped[str] = Column(String, nullable=False)
+    collection_name: Mapped[str] = Column(String, nullable=False)
+    library_name: Mapped[str] = Column(String, nullable=False)
 
     # This should be a per-minute datetime
     timestamp: Mapped[datetime.datetime] = Column(
@@ -127,11 +129,7 @@ class PlaytimeSummary(Base):
 
     title = Column(String)
     isbn = Column(String)
-    loan_identifier = Column(String(40), nullable=False)
-
-    identifier: Mapped[Identifier] = relationship("Identifier", uselist=False)
-    collection: Mapped[Collection] = relationship("Collection", uselist=False)
-    library: Mapped[Library] = relationship("Library", uselist=False)
+    loan_identifier: Mapped[str] = Column(String(40), nullable=False)
 
     __table_args__ = (
         UniqueConstraint(

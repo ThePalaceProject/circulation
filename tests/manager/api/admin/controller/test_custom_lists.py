@@ -1113,6 +1113,7 @@ class TestCustomListsController:
         custom_list, _ = admin_librarian_fixture.ctrl.db.customlist(
             data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
         )
+        custom_list.library = admin_librarian_fixture.ctrl.db.default_library()
         custom_list.add_entry(w1)
         custom_list.auto_update_enabled = True
         custom_list.auto_update_query = '{"query":"...."}'
@@ -1120,6 +1121,7 @@ class TestCustomListsController:
         admin_librarian_fixture.ctrl.db.session.commit()
 
         assert isinstance(custom_list.name, str)
+        assert custom_list.library is not None
         response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,

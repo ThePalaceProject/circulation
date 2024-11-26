@@ -25,10 +25,12 @@ class Announcement(Base):
 
     __tablename__ = "announcements"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    content = Column(Unicode, nullable=False)
-    start = Column(Date, nullable=False)
-    finish = Column(Date, nullable=False)
+    id: Mapped[uuid.UUID] = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    content: Mapped[str] = Column(Unicode, nullable=False)
+    start: Mapped[datetime.date] = Column(Date, nullable=False)
+    finish: Mapped[datetime.date] = Column(Date, nullable=False)
 
     # The Library associated with the announcement, announcements that should be shown to
     # all libraries will have a null library_id.
@@ -38,8 +40,7 @@ class Announcement(Base):
         index=True,
         nullable=True,
     )
-
-    library: Mapped[Library] = relationship(
+    library: Mapped[Library | None] = relationship(
         "Library", back_populates="library_announcements"
     )
 
@@ -107,7 +108,7 @@ class Announcement(Base):
             db.delete(existing_announcements[id])
 
         for id in announcements_to_update:
-            existing_announcements[id].update(new[id])  # type: ignore[index]
+            existing_announcements[id].update(new[id])
 
         for id in announcements_to_create:
             Announcement.from_data(db, new[id], library=library)

@@ -64,6 +64,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
+from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
@@ -238,6 +239,11 @@ class OPDS2WithODLApi(
             # but if it does, we log an error and continue on, so it doesn't stay on the patrons
             # bookshelf forever.
             self.log.error(f"Loan {loan.id} has no external identifier.")
+            return
+        if loan.license is None:
+            # We can't return a loan that doesn't have a license. This should never happen but if it does,
+            # we log an error and continue on, so it doesn't stay on the patrons bookshelf forever.
+            self.log.error(f"Loan {loan.id} has no license.")
             return
 
         doc = self._request_loan_status("GET", loan.external_identifier)
@@ -496,29 +502,33 @@ class OPDS2WithODLApi(
         return self._fulfill(loan, delivery_mechanism)
 
     @staticmethod
-    def _check_delivery_mechanism_available(
+    def _get_resource_for_delivery_mechanism(
         requested_delivery_mechanism: DeliveryMechanism, licensepool: LicensePool
-    ) -> None:
-        fulfillment = next(
+    ) -> Resource:
+        resource = next(
             (
-                lpdm
+                lpdm.resource
                 for lpdm in licensepool.delivery_mechanisms
                 if lpdm.delivery_mechanism == requested_delivery_mechanism
+                and lpdm.resource is not None
             ),
             None,
         )
-        if fulfillment is None:
+        if resource is None:
             raise FormatNotAvailable()
+        return resource
 
     def _unlimited_access_fulfill(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
         licensepool = loan.license_pool
-        self._check_delivery_mechanism_available(
+        resource = self._get_resource_for_delivery_mechanism(
             delivery_mechanism.delivery_mechanism, licensepool
         )
-        content_link = delivery_mechanism.resource.representation.public_url
-        content_type = delivery_mechanism.resource.representation.media_type
+        if resource.representation is None:
+            raise FormatNotAvailable()
+        content_link = resource.representation.public_url
+        content_type = resource.representation.media_type
         return RedirectFulfillment(content_link, content_type)
 
     def _license_fulfill(
@@ -571,7 +581,7 @@ class OPDS2WithODLApi(
         self, loan: Loan, delivery_mechanism: LicensePoolDeliveryMechanism
     ) -> Fulfillment:
         licensepool = loan.license_pool
-        self._check_delivery_mechanism_available(
+        resource = self._get_resource_for_delivery_mechanism(
             delivery_mechanism.delivery_mechanism, licensepool
         )
 
@@ -592,7 +602,7 @@ class OPDS2WithODLApi(
             token_type="Bearer",
             access_token=self._session_token.token,
             expires_in=(int((self._session_token.expires - utc_now()).total_seconds())),
-            location=delivery_mechanism.resource.url,
+            location=resource.url,
         )
 
         return DirectFulfillment(
