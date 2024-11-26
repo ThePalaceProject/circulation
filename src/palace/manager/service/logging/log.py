@@ -8,8 +8,11 @@ from collections.abc import Callable, Mapping, Sequence
 from logging import Handler
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from watchtower import CloudWatchLogHandler
 
+from palace.manager.api.admin.util.flask import get_request_admin
+from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.datetime_helpers import from_timestamp
 
@@ -109,6 +112,34 @@ class JSONFormatter(logging.Formatter):
                 forwarded_for_list.append(remote_addr)
             if forwarded_for_list:
                 data["request"]["forwarded_for"] = forwarded_for_list
+
+            # If we have Palace specific request data, we also want to include that in the log
+            try:
+                if library := get_request_library(default=None):
+                    data["request"]["library"] = {
+                        "uuid": library.uuid,
+                        "name": library.name,
+                        "short_name": library.short_name,
+                    }
+
+                if patron := get_request_patron(default=None):
+                    patron_information = {}
+                    for key in (
+                        "authorization_identifier",
+                        "username",
+                        "external_identifier",
+                    ):
+                        if value := getattr(patron, key, None):
+                            patron_information[key] = value
+                    if patron_information:
+                        data["request"]["patron"] = patron_information
+
+                if admin := get_request_admin(default=None):
+                    data["request"]["admin"] = admin.email
+            except SQLAlchemyError:
+                # All the Palace specific data are SQLAlchemy objects, so if we are logging errors
+                # when the database is in a bad state, we may not be able to access these objects.
+                pass
 
         # If we are running in uwsgi context, we include the worker id in the log
         if uwsgi:
