@@ -209,7 +209,7 @@ class TestLibraryLoanAndHoldAnnotator:
 
         # Annotate time tracking
         opds_for_distributors = db.collection(protocol=OPDSForDistributorsAPI)
-        opds_for_distributors.libraries.append(library)
+        opds_for_distributors.associated_libraries.append(library)
         work = db.work(with_license_pool=True, collection=opds_for_distributors)
         work.active_license_pool().should_track_playtime = True
         edition = work.presentation_edition

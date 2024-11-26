@@ -114,7 +114,7 @@ class TestReportController:
         collection = db.collection(
             protocol=OPDSAPI,
         )
-        collection.libraries = [library1, library2]
+        collection.associated_libraries = [library1, library2]
 
         def assert_and_clear_caplog(
             response: Response | ProblemDetail, email: str
@@ -179,7 +179,7 @@ class TestReportController:
         collection = db.collection(
             protocol=OPDSAPI,
         )
-        collection.libraries = [library1, library2]
+        collection.associated_libraries = [library1, library2]
 
         success_payload_dict = InventoryReportInfo(
             collections=[
@@ -291,7 +291,7 @@ class TestReportController:
 
         library = db.library()
         collection = db.collection(protocol=protocol, settings=settings)
-        collection.libraries = [library]
+        collection.associated_libraries = [library]
 
         if parent_settings:
             parent = db.collection(

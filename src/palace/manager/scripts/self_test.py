@@ -17,7 +17,7 @@ class RunSelfTestsScript(LibraryInputScript):
         for library in parsed.libraries:
             api_map = self.services.integration_registry.license_providers()
             self.out.write("Testing %s\n" % library.name)
-            for collection in library.collections:
+            for collection in library.associated_collections:
                 try:
                     self.test_collection(collection, api_map)
                 except Exception as e:

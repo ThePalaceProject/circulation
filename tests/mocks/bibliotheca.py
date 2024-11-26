@@ -23,8 +23,8 @@ class MockBibliothecaAPI(BibliothecaAPI):
             "password": "b",
             "external_account_id": "c",
         }
-        if library not in collection.libraries:
-            collection.libraries.append(library)
+        if library not in collection.associated_libraries:
+            collection.associated_libraries.append(library)
         return collection
 
     def __init__(self, _db, collection, *args, **kwargs):

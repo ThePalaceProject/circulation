@@ -215,8 +215,8 @@ class ConfigureCollectionScript(ConfigurationSettingScript):
                     if library_names:
                         message += " I only know about: %s" % library_names
                     raise ValueError(message)
-                if collection not in library.collections:
-                    collection.libraries.append(library)
+                if collection not in library.associated_collections:
+                    collection.associated_libraries.append(library)
         site_configuration_has_changed(_db)
         _db.commit()
         output.write("Configuration settings stored.\n")

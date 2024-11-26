@@ -3413,8 +3413,8 @@ class TestFilter:
 
         # If the library has no collections, the collection filter
         # will filter everything out.
-        transaction.default_collection().libraries = []
-        assert transaction.default_library().collections == []
+        transaction.default_collection().associated_libraries = []
+        assert transaction.default_library().associated_collections == []
         library_filter = Filter(collections=transaction.default_library())
         assert [] == library_filter.collection_ids
 
@@ -3651,7 +3651,7 @@ class TestFilter:
         # library.
         library2 = transaction.library()
         collection2 = transaction.collection()
-        collection2.libraries.append(library2)
+        collection2.associated_libraries.append(library2)
         for_other_library = WorkList()
         for_other_library.initialize(library2)
         for_default_library.append_child(for_other_library)

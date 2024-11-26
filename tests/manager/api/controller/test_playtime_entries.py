@@ -336,7 +336,7 @@ class TestPlaytimeEntriesController:
             assert response.detail == "Collection was not found in the Library."
 
             # Identifier not part of collection
-            collection.libraries.append(library)
+            collection.associated_libraries.append(library)
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )

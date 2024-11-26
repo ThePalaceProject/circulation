@@ -26,7 +26,7 @@ class TestMultipleLibraries:
                 external_account_id="http://url.com", data_source="OPDS"
             )
             OPDSAPI.settings_update(collection.integration_configuration, settings)
-            library.collections.append(collection)
+            library.associated_collections.append(collection)
             return collection
 
         controller_fixture.circulation_manager_setup(

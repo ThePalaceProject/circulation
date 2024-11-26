@@ -933,7 +933,7 @@ class TestCrawlableFacets:
         # Except for distributor and collectionName, which have the default
         # and data for each collection in the library.
         for facet in [distributor, collectionName]:
-            assert len(facet) == 1 + len(db.default_library().collections)
+            assert len(facet) == 1 + len(db.default_library().associated_collections)
 
     @pytest.mark.parametrize(
         "group_name, expected",
@@ -985,7 +985,7 @@ class TestCrawlableCollectionBasedLane:
         library = db.default_library()
         default_collection = db.default_collection()
         other_library_collection = db.collection()
-        other_library_collection.libraries.append(library)
+        other_library_collection.associated_libraries.append(library)
 
         # This collection is not associated with any library.
         unused_collection = db.collection()
@@ -994,7 +994,9 @@ class TestCrawlableCollectionBasedLane:
         lane = CrawlableCollectionBasedLane()
         lane.initialize(library)
         assert "Crawlable feed: %s" % library.name == lane.display_name
-        assert {x.id for x in library.collections} == set(lane.collection_ids)
+        assert {x.id for x in library.associated_collections} == set(
+            lane.collection_ids
+        )
 
         # A lane for specific collection, regardless of their library
         # affiliation.
@@ -1174,7 +1176,7 @@ class TestJackpotWorkList:
             "Test Overdrive Collection",
             protocol=OverdriveAPI,
         )
-        overdrive_collection.libraries.append(library)
+        overdrive_collection.associated_libraries.append(library)
 
         # Create another collection that is _not_ associated with this
         # library. It will not be used at all.

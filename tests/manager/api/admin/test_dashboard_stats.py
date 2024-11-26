@@ -323,7 +323,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
 
     default_library = db.library("Default Library", "default")
     default_collection = db.collection(name="Default Collection")
-    default_collection.libraries += [default_library]
+    default_collection.associated_libraries += [default_library]
 
     # default collection adds an OA title.
     _, _ = db.edition(
@@ -360,7 +360,7 @@ def test_stats_collections(admin_statistics_session: AdminStatisticsSessionFixtu
 
     c2 = db.collection()
     c3 = db.collection()
-    c3.libraries += [default_library]
+    c3.associated_libraries += [default_library]
 
     # c2 adds a 5/10 metered license title.
     edition, pool = db.edition(
@@ -627,7 +627,7 @@ def test_stats_parent_collection_permissions(
     child: Collection = db.collection()
     child.parent = parent
     library = db.library()
-    child.libraries.append(library)
+    child.associated_libraries.append(library)
     admin.add_role(AdminRole.LIBRARIAN, library)
 
     response = session.get_statistics()

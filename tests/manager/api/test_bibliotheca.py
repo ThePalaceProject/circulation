@@ -122,7 +122,7 @@ class TestBibliothecaAPI:
         # Collection -- one library with a default patron and one
         # without.
         no_default_patron = db.library()
-        bibliotheca_fixture.collection.libraries.append(no_default_patron)
+        bibliotheca_fixture.collection.associated_libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
         db.simple_auth_integration(with_default_patron)

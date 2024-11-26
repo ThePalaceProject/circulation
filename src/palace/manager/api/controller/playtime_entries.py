@@ -54,7 +54,7 @@ class PlaytimeEntriesController(CirculationManagerController):
                 f"The collection {collection_id} was not found."
             )
 
-        if collection not in library.collections:
+        if collection not in library.associated_collections:
             return INVALID_INPUT.detailed("Collection was not found in the Library.")
 
         if not identifier.licensed_through_collection(collection):

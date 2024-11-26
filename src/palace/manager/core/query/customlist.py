@@ -31,14 +31,14 @@ class CustomListQueries(LoggerMixin):
             f"Attempting to share customlist '{customlist.name}' with library '{library.name}'."
         )
         for collection in customlist.collections:
-            if collection not in library.collections:
+            if collection not in library.associated_collections:
                 log.info(
                     f"Unable to share customlist: Collection '{collection.name}' is missing from the library."
                 )
                 return CUSTOMLIST_SOURCE_COLLECTION_MISSING
 
         # All entries must be valid for the library
-        library_collection_ids = [c.id for c in library.collections]
+        library_collection_ids = [c.id for c in library.associated_collections]
         entry: CustomListEntry
         missing_work_id_count = 0
         for entry in customlist.entries:

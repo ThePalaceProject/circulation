@@ -658,7 +658,7 @@ class TestOverdriveAPI:
         # Collection -- one library with a default patron and one
         # without.
         no_default_patron = db.library()
-        overdrive_api_fixture.collection.libraries.append(no_default_patron)
+        overdrive_api_fixture.collection.associated_libraries.append(no_default_patron)
 
         with_default_patron = db.default_library()
         db.simple_auth_integration(with_default_patron)
@@ -2352,8 +2352,8 @@ class TestOverdriveAPICredentials:
         pin = "patron_pin"
 
         # clear out any collections added before we add ours
-        for collection in library.collections:
-            collection.libraries = []
+        for collection in library.associated_collections:
+            collection.associated_libraries = []
 
         # Distinct credentials for the two OverDrive collections in which our
         # library has membership.

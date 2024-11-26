@@ -1499,7 +1499,7 @@ class WorkList:
             self.library_id = library.id
             if self.collection_ids is None:
                 self.collection_ids = [
-                    collection.id for collection in library.collection_ids
+                    collection.id for collection in library.associated_collections_ids
                 ]
         self.display_name = display_name
         if genres:
@@ -2782,7 +2782,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     @property
     def collection_ids(self):
-        return [x.id for x in self.library.collections]
+        return [x.id for x in self.library.associated_collections]
 
     @property
     def children(self):

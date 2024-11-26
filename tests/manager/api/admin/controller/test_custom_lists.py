@@ -277,7 +277,9 @@ class TestCustomListsController:
     def test_custom_lists_create(self, admin_librarian_fixture: AdminLibrarianFixture):
         work = admin_librarian_fixture.ctrl.db.work(with_open_access_download=True)
         collection = admin_librarian_fixture.ctrl.db.collection()
-        collection.libraries = [admin_librarian_fixture.ctrl.db.default_library()]
+        collection.associated_libraries = [
+            admin_librarian_fixture.ctrl.db.default_library()
+        ]
 
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
@@ -595,9 +597,9 @@ class TestCustomListsController:
         ]
 
         c1 = admin_librarian_fixture.ctrl.db.collection()
-        c1.libraries = [admin_librarian_fixture.ctrl.db.default_library()]
+        c1.associated_libraries = [admin_librarian_fixture.ctrl.db.default_library()]
         c2 = admin_librarian_fixture.ctrl.db.collection()
-        c2.libraries = [admin_librarian_fixture.ctrl.db.default_library()]
+        c2.associated_libraries = [admin_librarian_fixture.ctrl.db.default_library()]
         list.collections = [c1]
         new_collections = [c2]
 
@@ -875,7 +877,7 @@ class TestCustomListsController:
         shared_with = admin_librarian_fixture.ctrl.db.library("shared_with")
         primary_library = admin_librarian_fixture.ctrl.db.library("primary")
         collection1 = admin_librarian_fixture.ctrl.db.collection("c1")
-        collection1.libraries.append(primary_library)
+        collection1.associated_libraries.append(primary_library)
 
         data_source = DataSource.lookup(
             admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
@@ -921,7 +923,7 @@ class TestCustomListsController:
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.libraries.append(s.shared_with)
+        s.collection1.associated_libraries.append(s.shared_with)
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
@@ -945,11 +947,11 @@ class TestCustomListsController:
             logging.INFO, "palace.manager.core.query.customlist.CustomListQueries"
         )
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.libraries.append(s.shared_with)
+        s.collection1.associated_libraries.append(s.shared_with)
 
         # Second collection with work in list
         collection2 = admin_librarian_fixture.ctrl.db.collection()
-        collection2.libraries.append(s.primary_library)
+        collection2.associated_libraries.append(s.primary_library)
         w = admin_librarian_fixture.ctrl.db.work(collection=collection2)
         s.list.add_entry(w)
 
@@ -973,7 +975,7 @@ class TestCustomListsController:
             logging.INFO, "palace.manager.core.query.customlist.CustomListQueries"
         )
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.libraries.append(s.shared_with)
+        s.collection1.associated_libraries.append(s.shared_with)
 
         w = admin_librarian_fixture.ctrl.db.work(collection=s.collection1)
         entry, ignore = s.list.add_entry(w)
@@ -1010,7 +1012,7 @@ class TestCustomListsController:
     def test_share_locally_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Does the GET method fetch shared lists"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.libraries.append(s.shared_with)
+        s.collection1.associated_libraries.append(s.shared_with)
 
         resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
         assert resp["successes"] == 1
@@ -1045,7 +1047,7 @@ class TestCustomListsController:
     def test_share_locally_delete(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Test the deleting of a lists shared status"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.libraries.append(s.shared_with)
+        s.collection1.associated_libraries.append(s.shared_with)
 
         resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
         assert resp["successes"] == 1

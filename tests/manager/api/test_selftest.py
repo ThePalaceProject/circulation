@@ -122,7 +122,7 @@ class TestHasPatronSelfTests:
 
         # This library has no default patron set up.
         no_default_patron = db.library()
-        collection.libraries.append(no_default_patron)
+        collection.associated_libraries.append(no_default_patron)
 
         # This library has a default patron set up.
         db.simple_auth_integration(db.default_library())

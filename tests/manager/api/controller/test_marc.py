@@ -169,7 +169,7 @@ class TestMARCRecordController:
         assert len(files) == 1
 
         # The collection is removed from the library, so it's not returned.
-        marc_record_controller_fixture.collection.libraries = []
+        marc_record_controller_fixture.collection.associated_libraries = []
 
         files = marc_record_controller_fixture.controller.get_files(
             marc_record_controller_fixture.db.session,
@@ -191,7 +191,7 @@ class TestMARCRecordController:
         # Create a second collection, with a full file and a delta.
         collection_2 = db.collection(name="Second Collection")
         collection_2.export_marc_records = True
-        collection_2.libraries = [marc_record_controller_fixture.library]
+        collection_2.associated_libraries = [marc_record_controller_fixture.library]
         marc_record_controller_fixture.file(collection=collection_2, created=now)
         marc_record_controller_fixture.file(
             collection=collection_2, created=now, since=last_week
@@ -200,13 +200,13 @@ class TestMARCRecordController:
         # Create a third collection that doesn't export MARC records.
         collection_3 = db.collection()
         collection_3.export_marc_records = False
-        collection_3.libraries = [marc_record_controller_fixture.library]
+        collection_3.associated_libraries = [marc_record_controller_fixture.library]
         marc_record_controller_fixture.file(collection=collection_3, created=now)
 
         # Create a fourth collection that doesn't belong to the library.
         collection_4 = db.collection()
         collection_4.export_marc_records = True
-        collection_4.libraries = []
+        collection_4.associated_libraries = []
         marc_record_controller_fixture.file(collection=collection_4, created=now)
 
         files = marc_record_controller_fixture.controller.get_files(

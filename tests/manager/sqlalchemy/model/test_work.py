@@ -1067,7 +1067,7 @@ class TestWork:
         # for the same Work.
         collection1 = db.default_collection()
         collection2 = db.collection()
-        collection2.libraries.append(db.default_library())
+        collection2.associated_libraries.append(db.default_library())
         pool2 = db.licensepool(edition=edition, collection=collection2)
         pool2.work_id = work.id
         pool2.licenses_available = 0
@@ -1905,8 +1905,8 @@ class TestWork:
         l2 = db.library()
         c1 = db.collection()
         c2 = db.collection()
-        c1.libraries = [l1]
-        c2.libraries = [l2]
+        c1.associated_libraries = [l1]
+        c2.associated_libraries = [l2]
         work: Work = db.work(presentation_edition=db.edition())
         lp1: LicensePool = db.licensepool(
             work.presentation_edition,

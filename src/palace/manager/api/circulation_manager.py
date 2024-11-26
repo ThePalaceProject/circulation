@@ -259,7 +259,7 @@ class CirculationManager(LoggerMixin):
             collections: set[Collection] = set()
             libraries_collections: dict[int | None, list[Collection]] = {}
             for library in libraries:
-                library_collections = library.collections
+                library_collections = library.associated_collections
                 collections.update(library_collections)
                 libraries_collections[library.id] = library_collections
 

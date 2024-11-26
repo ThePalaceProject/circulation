@@ -1419,8 +1419,10 @@ class TestLoanController:
 
         # We queued up a sync_patron_activity task to go sync the patrons information
         assert isinstance(patron, Patron)
-        assert sync_task.apply_async.call_count == len(patron.library.collections)
-        for library in patron.library.collections:
+        assert sync_task.apply_async.call_count == len(
+            patron.library.associated_collections
+        )
+        for library in patron.library.associated_collections:
             sync_task.apply_async.assert_any_call(
                 (library.id, patron.id, loan_fixture.valid_credentials["password"]),
             )
@@ -1698,7 +1700,7 @@ class TestLoanController:
                 protocol=collection_protocol,
             )
 
-            collection.libraries.append(loan_fixture.db.default_library())
+            collection.associated_libraries.append(loan_fixture.db.default_library())
             if collection_default_loan_period:
                 loan_fixture.db.integration_library_configuration(
                     collection.integration_configuration,

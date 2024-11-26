@@ -217,7 +217,7 @@ class TestCollection:
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
         library = db.default_library()
-        test_collection.libraries.append(library)
+        test_collection.associated_libraries.append(library)
 
         ebook = Edition.BOOK_MEDIUM
         audio = Edition.AUDIO_MEDIUM
@@ -307,7 +307,7 @@ class TestCollection:
         library.short_name = "only one"
 
         test_collection = example_collection_fixture.collection
-        test_collection.libraries.append(library)
+        test_collection.associated_libraries.append(library)
 
         data = test_collection.explain()
         assert [
@@ -363,9 +363,9 @@ class TestCollection:
         collection = db.default_collection()
 
         # It's associated with two different libraries.
-        assert db.default_library() in collection.libraries
+        assert db.default_library() in collection.associated_libraries
         other_library = db.library()
-        collection.libraries.append(other_library)
+        collection.associated_libraries.append(other_library)
 
         # It has an integration, which has some settings.
         integration = collection.integration_configuration
@@ -380,11 +380,11 @@ class TestCollection:
         other_library_settings.settings_dict = {"c": "d"}
 
         # Now, disassociate one of the libraries from the collection.
-        collection.libraries.remove(db.default_library())
+        collection.associated_libraries.remove(db.default_library())
 
         # It's gone.
-        assert db.default_library() not in collection.libraries
-        assert collection not in db.default_library().collections
+        assert db.default_library() not in collection.associated_libraries
+        assert collection not in db.default_library().associated_collections
 
         # The library-specific settings for that library have been deleted.
         library_config_ids = [
@@ -396,19 +396,19 @@ class TestCollection:
         assert db.default_library().id not in library_config_ids
 
         # But the library-specific settings for the other library are still there.
-        assert other_library in collection.libraries
+        assert other_library in collection.associated_libraries
         assert other_library.id in library_config_ids
         assert collection.integration_configuration.library_configurations[
             0
         ].settings_dict == {"c": "d"}
 
         # We now disassociate all libraries from the collection.
-        collection.libraries.clear()
+        collection.associated_libraries.clear()
 
         # All the library-specific settings have been deleted.
         assert collection.integration_configuration.library_configurations == []
         assert collection.integration_configuration.libraries == []
-        assert collection.libraries == []
+        assert collection.associated_libraries == []
 
         # The integration settings are still there.
         assert collection.integration_configuration.settings_dict == {"key": "value"}
@@ -470,7 +470,7 @@ class TestCollection:
         collection = db.default_collection()
 
         # It's associated with a library.
-        assert db.default_library() in collection.libraries
+        assert db.default_library() in collection.associated_libraries
 
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
@@ -528,7 +528,7 @@ class TestCollection:
         assert collection not in db.session.query(Collection).all()
 
         # The default library now has no collections.
-        assert [] == db.default_library().collections
+        assert [] == db.default_library().associated_collections
 
         # The collection based coverage record got deleted
         assert db.session.query(CoverageRecord).get(record.id) == None

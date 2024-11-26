@@ -422,7 +422,7 @@ class DatabaseTransactionFixture:
             protocol=OPDSAPI,
             settings=self.opds_settings(data_source="OPDS"),
         )
-        collection.libraries.append(library)
+        collection.associated_libraries.append(library)
         return library
 
     @classmethod
@@ -470,7 +470,7 @@ class DatabaseTransactionFixture:
         saves time.
         """
         if not self._default_collection:
-            self._default_collection = self.default_library().collections[0]
+            self._default_collection = self.default_library().associated_collections[0]
 
         return self._default_collection
 
@@ -606,8 +606,8 @@ class DatabaseTransactionFixture:
             collection.integration_configuration.settings_dict = settings
             flag_modified(collection.integration_configuration, "settings_dict")
 
-        if library and library not in collection.libraries:
-            collection.libraries.append(library)
+        if library and library not in collection.associated_libraries:
+            collection.associated_libraries.append(library)
         return collection
 
     def work(

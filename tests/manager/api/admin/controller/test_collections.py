@@ -114,7 +114,7 @@ class TestCollectionSettings:
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
     ) -> None:
-        [c1] = db.default_library().collections
+        [c1] = db.default_library().associated_collections
 
         c2 = db.collection(
             name="Collection 2",
@@ -137,7 +137,7 @@ class TestCollectionSettings:
         c3.parent = c2
 
         l1 = db.library(short_name="L1")
-        c3.libraries += [l1, db.default_library()]
+        c3.associated_libraries += [l1, db.default_library()]
         db.integration_library_configuration(
             c3.integration_configuration,
             l1,
@@ -426,9 +426,9 @@ class TestCollectionSettings:
         )
 
         # Two libraries now have access to the collection.
-        assert [collection] == l1.collections
-        assert [collection] == l2.collections
-        assert [] == l3.collections
+        assert [collection] == l1.associated_collections
+        assert [collection] == l2.associated_collections
+        assert [] == l3.associated_collections
 
         # Additional settings were set on the collection.
         assert (
@@ -480,7 +480,7 @@ class TestCollectionSettings:
         assert "website_id" not in child.integration_configuration.settings_dict
 
         # One library has access to the collection.
-        assert [child] == l3.collections
+        assert [child] == l3.associated_collections
         assert isinstance(l3.id, int)
         l3_settings = child.integration_configuration.for_library(l3.id)
         assert l3_settings is not None
@@ -534,7 +534,7 @@ class TestCollectionSettings:
         )
 
         # A library now has access to the collection.
-        assert collection.libraries == [l1]
+        assert collection.associated_libraries == [l1]
 
         # Additional settings were set on the collection.
         assert "1234" == collection.integration_configuration.settings_dict.get(
@@ -571,7 +571,7 @@ class TestCollectionSettings:
         assert OverdriveAPI.label() == collection.protocol
 
         # But the library has been removed.
-        assert collection.libraries == []
+        assert collection.associated_libraries == []
 
         # All settings for that library and collection have been deleted.
         assert collection.integration_configuration.library_configurations == []
@@ -704,7 +704,7 @@ class TestCollectionSettings:
         # when the connection between collection and library was deleted.
         assert isinstance(l1.id, int)
         assert collection.integration_configuration.for_library(l1.id) is None
-        assert [] == collection.libraries
+        assert [] == collection.associated_libraries
 
     def test_collection_delete(
         self,

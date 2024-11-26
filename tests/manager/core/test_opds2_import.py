@@ -99,7 +99,7 @@ class OPDS2ImporterFixture:
             ),
         )
         self.library = db.default_library()
-        self.collection.libraries.append(self.library)
+        self.collection.associated_libraries.append(self.library)
         self.data_source = DataSource.lookup(
             db.session, "OPDS 2.0 Data Source", autocreate=True
         )

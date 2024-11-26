@@ -38,9 +38,9 @@ class MarcExporterFixture:
         self.collection2 = db.collection()
         self.collection3 = db.collection()
 
-        self.collection1.libraries = [self.library1, self.library2]
-        self.collection2.libraries = [self.library1]
-        self.collection3.libraries = [self.library2]
+        self.collection1.associated_libraries = [self.library1, self.library2]
+        self.collection2.associated_libraries = [self.library1]
+        self.collection3.associated_libraries = [self.library2]
 
     def integration(self) -> IntegrationConfiguration:
         return self._db.integration_configuration(

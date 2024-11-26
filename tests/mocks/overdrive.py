@@ -63,8 +63,8 @@ class MockOverdriveAPI(OverdriveAPI):
             overdrive_client_secret=client_secret,
         )
         OverdriveAPI.settings_update(collection.integration_configuration, settings)
-        if library not in collection.libraries:
-            collection.libraries.append(library)
+        if library not in collection.associated_libraries:
+            collection.associated_libraries.append(library)
         library_settings = OverdriveLibrarySettings(
             ils_name=ils_name,
         )
