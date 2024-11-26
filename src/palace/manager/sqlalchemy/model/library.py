@@ -163,7 +163,7 @@ class Library(Base, HasSessionCache):
         uselist=False,
     )
 
-    def collections_query(self, base_query: Select | None = None) -> Select:
+    def _associated_collections_query(self, base_query: Select | None = None) -> Select:
         from palace.manager.sqlalchemy.model.collection import Collection
         from palace.manager.sqlalchemy.model.integration import (
             IntegrationConfiguration,
@@ -182,7 +182,7 @@ class Library(Base, HasSessionCache):
         )
 
     @property
-    def collection_ids(self) -> list[CollectionInfoTuple]:
+    def associated_collections_ids(self) -> list[CollectionInfoTuple]:
         """Get the collection ids for this library"""
         from palace.manager.sqlalchemy.model.collection import Collection
         from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -191,7 +191,7 @@ class Library(Base, HasSessionCache):
         query = select(Collection.id, IntegrationConfiguration.protocol).select_from(
             Collection
         )
-        query = self.collections_query(query)
+        query = self._associated_collections_query(query)
         results = _db.execute(query).all()
         return [CollectionInfoTuple(*row) for row in results]
 
@@ -199,7 +199,7 @@ class Library(Base, HasSessionCache):
     def associated_collections(self) -> Sequence[Collection]:
         """Get all associated collections for this library."""
         _db = Session.object_session(self)
-        return _db.scalars(self.collections_query()).all()
+        return _db.scalars(self._associated_collections_query()).all()
 
     # Cache of the libraries loaded settings object
     _settings: LibrarySettings | None
