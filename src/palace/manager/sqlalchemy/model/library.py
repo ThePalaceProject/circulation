@@ -120,7 +120,7 @@ class Library(Base, HasSessionCache):
     )
 
     # Any additional configuration information is stored as JSON on this column.
-    settings_dict: dict[str, Any] = Column(JSONB, nullable=False, default=dict)
+    settings_dict: Mapped[dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 
     # A Library may have many CirculationEvents
     circulation_events: Mapped[list[CirculationEvent]] = relationship(

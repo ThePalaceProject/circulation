@@ -278,13 +278,17 @@ class ConfigureLaneScript(ConfigurationSettingScript):
         id = args.id
         lane = get_one(_db, Lane, id=id)
         if not lane:
-            if args.library_short_name:
+            if args.library_short_name and args.display_name:
                 library = get_one(_db, Library, short_name=args.library_short_name)
                 if not library:
                     raise ValueError('No such library: "%s".' % args.library_short_name)
-                lane, is_new = create(_db, Lane, library=library)
+                lane, is_new = create(
+                    _db, Lane, library=library, display_name=args.display_name
+                )
             else:
-                raise ValueError("Library short name is required to create a new lane.")
+                raise ValueError(
+                    "Library short name and lane display name are required to create a new lane."
+                )
 
         if args.parent_id:
             lane.parent_id = args.parent_id

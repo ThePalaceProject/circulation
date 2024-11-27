@@ -1,8 +1,8 @@
 """Update database nullable constraints
 
-Revision ID: b1b08faa9811
+Revision ID: 9dafb82f1fac
 Revises: 272da5f400de
-Create Date: 2024-11-27 17:05:00.839954+00:00
+Create Date: 2024-11-27 17:21:28.727991+00:00
 
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "b1b08faa9811"
+revision = "9dafb82f1fac"
 down_revision = "272da5f400de"
 branch_labels = None
 depends_on = None
@@ -37,11 +37,27 @@ def upgrade() -> None:
     op.alter_column(
         "holds", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
     )
+    op.alter_column("lanes", "display_name", existing_type=sa.VARCHAR(), nullable=False)
     op.alter_column(
         "licensepools", "data_source_id", existing_type=sa.INTEGER(), nullable=False
     )
     op.alter_column(
         "licensepools", "identifier_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "licenses_owned", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "licenses_available", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "licenses_reserved", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools",
+        "patrons_in_hold_queue",
+        existing_type=sa.INTEGER(),
+        nullable=False,
     )
     op.alter_column(
         "licenses", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
@@ -69,11 +85,27 @@ def downgrade() -> None:
         "licenses", "license_pool_id", existing_type=sa.INTEGER(), nullable=True
     )
     op.alter_column(
+        "licensepools",
+        "patrons_in_hold_queue",
+        existing_type=sa.INTEGER(),
+        nullable=True,
+    )
+    op.alter_column(
+        "licensepools", "licenses_reserved", existing_type=sa.INTEGER(), nullable=True
+    )
+    op.alter_column(
+        "licensepools", "licenses_available", existing_type=sa.INTEGER(), nullable=True
+    )
+    op.alter_column(
+        "licensepools", "licenses_owned", existing_type=sa.INTEGER(), nullable=True
+    )
+    op.alter_column(
         "licensepools", "identifier_id", existing_type=sa.INTEGER(), nullable=True
     )
     op.alter_column(
         "licensepools", "data_source_id", existing_type=sa.INTEGER(), nullable=True
     )
+    op.alter_column("lanes", "display_name", existing_type=sa.VARCHAR(), nullable=True)
     op.alter_column(
         "holds", "license_pool_id", existing_type=sa.INTEGER(), nullable=True
     )
