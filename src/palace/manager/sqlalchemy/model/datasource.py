@@ -39,7 +39,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     __tablename__ = "datasources"
     id: Mapped[int] = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
-    offers_licenses = Column(Boolean, default=False)
+    offers_licenses: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     primary_identifier_type = Column(String, index=True)
     extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
 

@@ -68,7 +68,7 @@ class PlaytimeEntry(Base):
         nullable=False,
     )
     tracking_id: Mapped[str] = Column(String(64), nullable=False)
-    processed = Column(Boolean, default=False)
+    processed: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     loan_identifier: Mapped[str] = Column(String(40), nullable=False)
 
@@ -125,7 +125,7 @@ class PlaytimeSummary(Base):
         nullable=False,
     )
 
-    total_seconds_played = Column(Integer, default=0)
+    total_seconds_played: Mapped[int] = Column(Integer, default=0, nullable=False)
 
     title = Column(String)
     isbn = Column(String)

@@ -734,7 +734,7 @@ class Annotation(Base):
 
     motivation = Column(Unicode, index=True)
     timestamp = Column(DateTime(timezone=True), index=True)
-    active = Column(Boolean, default=True)
+    active: Mapped[bool] = Column(Boolean, default=True, nullable=False)
     content = Column(Unicode)
     target = Column(Unicode)
 

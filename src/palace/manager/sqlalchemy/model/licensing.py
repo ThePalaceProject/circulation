@@ -288,11 +288,13 @@ class LicensePool(Base):
     # associated with the same Work. This may happen if it's an
     # open-access LicensePool and a better-quality version of the same
     # book is available from another Open-Access source.
-    superceded = Column(Boolean, default=False)
+    superceded: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
-    suppressed = Column(Boolean, default=False, index=True)
+    suppressed: Mapped[bool] = Column(
+        Boolean, default=False, index=True, nullable=False
+    )
 
     # A textual description of a problem with this license pool
     # that caused us to suppress it.
@@ -1769,7 +1771,9 @@ class DeliveryMechanism(Base, HasSessionCache):
 
     # Can the Library Simplified client fulfill a book with this
     # content type and this DRM scheme?
-    default_client_can_fulfill = Column(Boolean, default=False, index=True)
+    default_client_can_fulfill: Mapped[bool] = Column(
+        Boolean, default=False, index=True, nullable=False
+    )
 
     # These are the media type/DRM scheme combos known to be supported
     # by the default Library Simplified client.

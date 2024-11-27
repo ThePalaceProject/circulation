@@ -735,7 +735,7 @@ class Measurement(Base):
 
     # How much weight should be assigned this measurement, relative to
     # other measurements of the same quantity from the same source.
-    weight = Column(Float, default=1)
+    weight: Mapped[float] = Column(Float, default=1, nullable=False)
 
     # When the measurement was taken
     taken_at = Column(DateTime(timezone=True), index=True)

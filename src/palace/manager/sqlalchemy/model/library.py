@@ -82,7 +82,9 @@ class Library(Base, HasSessionCache):
     # One, and only one, library may be the default. The default
     # library is the one chosen when an incoming request does not
     # designate a library.
-    _is_default = Column("is_default", Boolean, index=True, default=False)
+    _is_default: Mapped[bool] = Column(
+        "is_default", Boolean, index=True, default=False, nullable=False
+    )
 
     # The name of this library to use when signing short client tokens
     # for consumption by the library registry. e.g. "NYNYPL" for NYPL.
