@@ -1271,3 +1271,33 @@ class RecursiveEquivalencyCache(Base):
             results[parent_identifier] = equivalent.identifier
 
         return results
+
+
+def isbn_for_identifier(identifier: Identifier | None) -> str | None:
+    """Find the strongest ISBN match for the given identifier.
+
+    :param identifier: The identifier to match.
+    :return: The ISBN string associated with the identifier or None, if no match is found.
+    """
+    if identifier is None:
+        return None
+
+    if identifier.type == Identifier.ISBN:
+        return identifier.identifier
+
+    # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
+    # mechanism to find the next best one that is, if available.
+    db = Session.object_session(identifier)
+    eq_subquery = db.query(RecursiveEquivalencyCache.identifier_id).filter(
+        RecursiveEquivalencyCache.parent_identifier_id == identifier.id
+    )
+    equivalent_identifiers = (
+        db.query(Identifier)
+        .filter(Identifier.id.in_(eq_subquery))
+        .filter(Identifier.type == Identifier.ISBN)
+    )
+
+    return next(
+        map(lambda id_: id_.identifier, equivalent_identifiers),
+        None,
+    )

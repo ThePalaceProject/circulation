@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
@@ -17,10 +17,7 @@ from sqlalchemy.orm import Session, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import (
-    Identifier,
-    RecursiveEquivalencyCache,
-)
+from palace.manager.sqlalchemy.model.identifier import Identifier, isbn_for_identifier
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import minute_timestamp
 
@@ -215,7 +212,7 @@ class PlaytimeSummary(Base):
         if (not playtime.isbn or not playtime.title) and not identifier:
             identifier, _ = Identifier.parse_urn(_db, identifier_str, autocreate=False)
         if not playtime.isbn and identifier:
-            playtime.isbn = _isbn_for_identifier(identifier)
+            playtime.isbn = isbn_for_identifier(identifier)
         if not playtime.title and identifier:
             playtime.title = _title_for_identifier(identifier)
 
@@ -243,33 +240,3 @@ def _title_for_identifier(identifier: Identifier | None) -> str | None:
     ):
         return edition.title
     return None
-
-
-def _isbn_for_identifier(identifier: Identifier | None) -> str | None:
-    """Find the strongest ISBN match for the given identifier.
-
-    :param identifier: The identifier to match.
-    :return: The ISBN string associated with the identifier or None, if no match is found.
-    """
-    if identifier is None:
-        return None
-
-    if identifier.type == Identifier.ISBN:
-        return cast(str, identifier.identifier)
-
-    # If our identifier is not an ISBN itself, we'll use our Recursive Equivalency
-    # mechanism to find the next best one that is, if available.
-    db = Session.object_session(identifier)
-    eq_subquery = db.query(RecursiveEquivalencyCache.identifier_id).filter(
-        RecursiveEquivalencyCache.parent_identifier_id == identifier.id
-    )
-    equivalent_identifiers = (
-        db.query(Identifier)
-        .filter(Identifier.id.in_(eq_subquery))
-        .filter(Identifier.type == Identifier.ISBN)
-    )
-
-    return next(
-        map(lambda id_: id_.identifier, equivalent_identifiers),
-        None,
-    )
