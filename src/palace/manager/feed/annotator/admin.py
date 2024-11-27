@@ -46,7 +46,8 @@ class AdminAnnotator(LibraryAnnotator):
         # Find staff rating and add a tag for it.
         for measurement in identifier.measurements:
             if (
-                measurement.data_source.name == DataSource.LIBRARY_STAFF
+                measurement.data_source
+                and measurement.data_source.name == DataSource.LIBRARY_STAFF
                 and measurement.is_most_recent
                 and measurement.value is not None
             ):

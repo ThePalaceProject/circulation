@@ -85,7 +85,9 @@ class CustomList(Base):
     auto_update_facets = Column(Unicode, nullable=True)  # holds json data
     auto_update_last_update = Column(DateTime, nullable=True)
     auto_update_status: Mapped[str] = Column(
-        Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status"), default=INIT
+        Enum(INIT, UPDATED, REPOPULATE, name="auto_update_status"),
+        default=INIT,
+        nullable=False,
     )
 
     collections: Mapped[list[Collection]] = relationship(
