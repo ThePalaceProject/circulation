@@ -1149,7 +1149,7 @@ class Equivalency(Base):
     # How many distinct votes went into this assertion? This will let
     # us scale the change to the strength when additional votes come
     # in.
-    votes = Column(Integer, default=1)
+    votes: Mapped[int] = Column(Integer, default=1, nullable=False)
 
     # How strong is this assertion (-1..1)? A negative number is an
     # assertion that the two Identifiers do *not* identify the
@@ -1160,7 +1160,7 @@ class Equivalency(Base):
     # is not manipulated directly, but it gives us the ability to use
     # manual intervention to defuse large chunks of problematic code
     # without actually deleting the data.
-    enabled = Column(Boolean, default=True, index=True)
+    enabled: Mapped[bool] = Column(Boolean, default=True, index=True, nullable=False)
 
     def __repr__(self):
         r = "[%s ->\n %s\n source=%s strength=%.2f votes=%d)]" % (

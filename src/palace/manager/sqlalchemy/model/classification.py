@@ -136,11 +136,11 @@ class Subject(Base):
 
     # A locked Subject has been reviewed by a human and software will
     # not mess with it without permission.
-    locked = Column(Boolean, default=False, index=True)
+    locked: Mapped[bool] = Column(Boolean, default=False, index=True, nullable=False)
 
     # A checked Subject has been reviewed by software and will
     # not be checked again unless forced.
-    checked = Column(Boolean, default=False, index=True)
+    checked: Mapped[bool] = Column(Boolean, default=False, index=True, nullable=False)
 
     # One Subject may participate in many Classifications.
     classifications: Mapped[list[Classification]] = relationship(

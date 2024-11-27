@@ -143,12 +143,12 @@ class Resource(Base):
 
     # The average of human-entered values for the quality of this
     # resource.
-    voted_quality = Column(Float, default=float(0))
+    voted_quality: Mapped[float] = Column(Float, default=float(0), nullable=False)
 
     # How many votes contributed to the voted_quality value. This lets
     # us scale new votes proportionately while keeping only two pieces
     # of information.
-    votes_for_quality = Column(Integer, default=0)
+    votes_for_quality: Mapped[int] = Column(Integer, default=0, nullable=False)
 
     # A combination of the calculated quality value and the
     # human-entered quality value.
@@ -399,7 +399,9 @@ class ResourceTransformation(Base):
     )
 
     # The settings used for the transformation.
-    settings: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    settings: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
 
 class Hyperlink(Base, LinkRelations):

@@ -101,7 +101,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
     # useful for deleting large collections which can timeout when deleting.
-    marked_for_deletion = Column(Boolean, default=False)
+    marked_for_deletion: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # A Collection can provide books to many Libraries.
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies

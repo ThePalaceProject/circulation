@@ -95,7 +95,7 @@ class WorkGenre(Base):
     )
     work: Mapped[Work] = relationship("Work", back_populates="work_genres")
 
-    affinity = Column(Float, index=True, default=0)
+    affinity: Mapped[float] = Column(Float, index=True, default=0, nullable=False)
 
     @classmethod
     def from_genre(cls, genre):
@@ -229,7 +229,9 @@ class Work(Base, LoggerMixin):
     # This is set to True once all metadata and availability
     # information has been obtained for this Work. Until this is True,
     # the work will not show up in feeds.
-    presentation_ready = Column(Boolean, default=False, index=True)
+    presentation_ready: Mapped[bool] = Column(
+        Boolean, default=False, index=True, nullable=False
+    )
 
     # This is the last time we tried to make this work presentation ready.
     presentation_ready_attempt = Column(

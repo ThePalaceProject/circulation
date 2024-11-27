@@ -229,11 +229,11 @@ class TestConfigureLaneScript:
         script = ConfigureLaneScript()
 
         # No lane id but no library short name for creating it either.
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(
+            ValueError,
+            match="Library short name and lane display name are required to create a new lane",
+        ):
             script.do_run(db.session, [])
-        assert "Library short name is required to create a new lane" in str(
-            excinfo.value
-        )
 
         # Try to create a lane for a nonexistent library.
         with pytest.raises(ValueError) as excinfo:
