@@ -34,6 +34,7 @@ from palace.manager.sqlalchemy.model.lane import (
     SearchFacets,
     WorkList,
 )
+from palace.manager.util.flask_util import OPDSFeedResponse
 from palace.manager.util.problem_detail import ProblemDetail
 
 
@@ -243,7 +244,7 @@ class OPDSFeedController(CirculationManagerController):
 
     def _crawlable_feed(
         self, title, url, worklist, annotator=None, feed_class=OPDSAcquisitionFeed
-    ):
+    ) -> OPDSFeedResponse | ProblemDetail:
         """Helper method to create a crawlable feed.
 
         :param title: The title to use for the feed.
@@ -270,6 +271,8 @@ class OPDSFeedController(CirculationManagerController):
             worklist=worklist,
             base_class=CrawlableFacets,
         )
+        if isinstance(facets, ProblemDetail):
+            return facets
         annotator = annotator or self.manager.annotator(worklist, facets=facets)
 
         return feed_class.page(
