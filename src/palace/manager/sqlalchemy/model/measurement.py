@@ -719,10 +719,8 @@ class Measurement(Base):
     )
 
     # A Measurement always comes from some DataSource.
-    data_source_id: Mapped[int] = Column(
-        Integer, ForeignKey("datasources.id"), index=True
-    )
-    data_source: Mapped[DataSource] = relationship(
+    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="measurements"
     )
 

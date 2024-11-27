@@ -181,7 +181,7 @@ class Work(Base, LoggerMixin):
     target_age = Column(INT4RANGE, index=True)
     fiction = Column(Boolean, index=True)
 
-    summary_id: Mapped[int | None] = Column(
+    summary_id = Column(
         Integer,
         ForeignKey("resources.id", use_alter=True, name="fk_works_summary_id"),
         index=True,
