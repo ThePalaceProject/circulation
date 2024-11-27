@@ -237,7 +237,10 @@ class TestConfigureLaneScript:
 
         # Try to create a lane for a nonexistent library.
         with pytest.raises(ValueError) as excinfo:
-            script.do_run(db.session, ["--library-short-name=nosuchlibrary"])
+            script.do_run(
+                db.session,
+                ["--library-short-name=nosuchlibrary", "--display-name=name"],
+            )
         assert 'No such library: "nosuchlibrary".' in str(excinfo.value)
 
     def test_create_lane(self, db: DatabaseTransactionFixture):
