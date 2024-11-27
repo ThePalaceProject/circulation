@@ -2625,7 +2625,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # okay for this to be duplicated within a library, but it's not
     # okay to have two lanes with the same parent and the same display
     # name -- that would be confusing.
-    display_name: str = Column(Unicode)
+    display_name: Mapped[str] = Column(Unicode, nullable=False)
 
     # True = Fiction only
     # False = Nonfiction only

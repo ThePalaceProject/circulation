@@ -87,7 +87,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    parent: Collection = relationship(
+    parent: Mapped[Collection | None] = relationship(
         "Collection", remote_side=[id], back_populates="children"
     )
 

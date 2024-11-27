@@ -300,10 +300,12 @@ class LicensePool(Base):
 
     open_access = Column(Boolean, index=True)
     last_checked = Column(DateTime(timezone=True), index=True)
-    licenses_owned: int = Column(Integer, default=0, index=True)
-    licenses_available: int = Column(Integer, default=0, index=True)
-    licenses_reserved: int = Column(Integer, default=0)
-    patrons_in_hold_queue: int = Column(Integer, default=0)
+    licenses_owned: Mapped[int] = Column(Integer, default=0, index=True, nullable=False)
+    licenses_available: Mapped[int] = Column(
+        Integer, default=0, index=True, nullable=False
+    )
+    licenses_reserved: Mapped[int] = Column(Integer, default=0, nullable=False)
+    patrons_in_hold_queue: Mapped[int] = Column(Integer, default=0, nullable=False)
     should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # This lets us cache the work of figuring out the best open access
