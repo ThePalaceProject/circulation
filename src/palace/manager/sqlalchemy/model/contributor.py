@@ -60,7 +60,9 @@ class Contributor(Base):
     # provided by a publisher.
     biography = Column(Unicode)
 
-    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
     contributions: Mapped[list[Contribution]] = relationship(
         "Contribution", back_populates="contributor", uselist=True
