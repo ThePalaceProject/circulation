@@ -13,11 +13,8 @@ from alembic import op
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm.session import Session
 
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.time_tracking import (
-    _isbn_for_identifier,
-    _title_for_identifier,
-)
+from palace.manager.sqlalchemy.model.identifier import Identifier, isbn_for_identifier
+from palace.manager.sqlalchemy.model.time_tracking import _title_for_identifier
 from palace.manager.sqlalchemy.util import get_one
 
 # revision identifiers, used by Alembic.
@@ -231,7 +228,7 @@ def update_summary_isbn_and_title(session: Session) -> None:
 @cache
 def cached_isbn_lookup(identifier: Identifier) -> str | None:
     """Given an identifier, return its ISBN."""
-    return _isbn_for_identifier(identifier)
+    return isbn_for_identifier(identifier)
 
 
 @cache

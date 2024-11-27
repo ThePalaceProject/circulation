@@ -14,6 +14,7 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     ProQuestIdentifierParser,
     RecursiveEquivalencyCache,
+    isbn_for_identifier,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
@@ -859,6 +860,77 @@ class TestRecursiveEquivalencyCache:
             gutenberg_identifier: gutenberg_isbn,
             proquest_identfier: proquest_gutenberg,
         }
+
+    @pytest.mark.parametrize(
+        "id_key, equivalents, expected_isbn",
+        [
+            # If the identifier is an ISBN, we will not use an equivalency.
+            [
+                "i1",
+                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
+                "080442957X",
+            ],
+            [
+                "i2",
+                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
+                "9788175257665",
+            ],
+            ["i1", (("i1", "i2", 200),), "080442957X"],
+            ["i2", (("i2", "i1", 200),), "9788175257665"],
+            # If identifier is not an ISBN, but has an equivalency that is, use the strongest match.
+            [
+                "g2",
+                (("g1", "g2", 1), ("g2", "i1", 1), ("g1", "i2", 0.5)),
+                "080442957X",
+            ],
+            [
+                "g2",
+                (("g1", "g2", 1), ("g2", "i1", 0.5), ("g1", "i2", 1)),
+                "9788175257665",
+            ],
+            # If we don't find an equivalent ISBN identifier, then we should get None.
+            ["g2", (), None],
+            ["g1", (("g1", "g2", 1),), None],
+            # If identifier is None, expect default value.
+            [None, (), None],
+        ],
+    )
+    def test_isbn_for_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        id_key: str | None,
+        equivalents: tuple[tuple[str, str, int | float]],
+        expected_isbn: str,
+    ):
+        ids: dict[str, Identifier] = {
+            "i1": db.identifier(
+                identifier_type=Identifier.ISBN, foreign_id="080442957X"
+            ),
+            "i2": db.identifier(
+                identifier_type=Identifier.ISBN, foreign_id="9788175257665"
+            ),
+            "g1": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
+            "g2": db.identifier(identifier_type=Identifier.GUTENBERG_ID),
+        }
+        equivalencies = [
+            Equivalency(
+                input_id=ids[equivalent[0]].id,
+                output_id=ids[equivalent[1]].id,
+                strength=equivalent[2],
+            )
+            for equivalent in equivalents
+        ]
+        test_identifier: Identifier | None = ids[id_key] if id_key is not None else None
+        if test_identifier is not None:
+            test_identifier.equivalencies = equivalencies
+
+        # We're using the RecursiveEquivalencyCache, so must refresh it.
+        EquivalentIdentifiersCoverageProvider(db.session).run()
+
+        # Act
+        result = isbn_for_identifier(test_identifier)
+        # Assert
+        assert result == expected_isbn
 
 
 class TestProQuestIdentifierParser:
