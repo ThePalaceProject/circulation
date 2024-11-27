@@ -162,7 +162,9 @@ class Edition(Base, EditionConstants):
     cover_thumbnail_url = Column(Unicode)
 
     # Information kept in here probably won't be used.
-    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)

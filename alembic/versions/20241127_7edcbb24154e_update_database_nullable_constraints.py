@@ -18,6 +18,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # These columns had a default set, and were never null in our production database. So we
+    # update them to be non-nullable, so we are sure we won't have any null values in them.
     op.alter_column("annotations", "active", existing_type=sa.BOOLEAN(), nullable=False)
     op.alter_column(
         "collections", "marked_for_deletion", existing_type=sa.BOOLEAN(), nullable=False
@@ -42,38 +44,13 @@ def upgrade() -> None:
         existing_type=sa.BOOLEAN(),
         nullable=False,
     )
-    op.alter_column(
-        "editions", "data_source_id", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "editions", "primary_identifier_id", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "equivalents", "input_id", existing_type=sa.INTEGER(), nullable=False
-    )
     op.alter_column("equivalents", "votes", existing_type=sa.INTEGER(), nullable=False)
     op.alter_column(
         "equivalents", "enabled", existing_type=sa.BOOLEAN(), nullable=False
     )
-    op.alter_column(
-        "equivalentscoveragerecords",
-        "equivalency_id",
-        existing_type=sa.INTEGER(),
-        nullable=False,
-    )
-    op.alter_column("holds", "patron_id", existing_type=sa.INTEGER(), nullable=False)
-    op.alter_column(
-        "holds", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
-    )
     op.alter_column("lanes", "display_name", existing_type=sa.VARCHAR(), nullable=False)
     op.alter_column(
         "libraries", "is_default", existing_type=sa.BOOLEAN(), nullable=False
-    )
-    op.alter_column(
-        "licensepools", "data_source_id", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "licensepools", "identifier_id", existing_type=sa.INTEGER(), nullable=False
     )
     op.alter_column(
         "licensepools", "superceded", existing_type=sa.BOOLEAN(), nullable=False
@@ -95,13 +72,6 @@ def upgrade() -> None:
         "patrons_in_hold_queue",
         existing_type=sa.INTEGER(),
         nullable=False,
-    )
-    op.alter_column(
-        "licenses", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column("loans", "patron_id", existing_type=sa.INTEGER(), nullable=False)
-    op.alter_column(
-        "loans", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
     )
     op.alter_column(
         "measurements",
@@ -136,10 +106,6 @@ def upgrade() -> None:
     op.alter_column("subjects", "locked", existing_type=sa.BOOLEAN(), nullable=False)
     op.alter_column("subjects", "checked", existing_type=sa.BOOLEAN(), nullable=False)
     op.alter_column(
-        "workgenres", "genre_id", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column("workgenres", "work_id", existing_type=sa.INTEGER(), nullable=False)
-    op.alter_column(
         "workgenres",
         "affinity",
         existing_type=postgresql.DOUBLE_PRECISION(precision=53),
@@ -148,6 +114,46 @@ def upgrade() -> None:
     op.alter_column(
         "works", "presentation_ready", existing_type=sa.BOOLEAN(), nullable=False
     )
+
+    # These columns had nullable foreign keys, but they were never null in our production database.
+    # So we update them to be non-nullable, so we know that we will never get null values in the
+    # sqlalchemy relationship objects.
+    op.alter_column(
+        "editions", "data_source_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "editions", "primary_identifier_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "equivalents", "input_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "equivalentscoveragerecords",
+        "equivalency_id",
+        existing_type=sa.INTEGER(),
+        nullable=False,
+    )
+    op.alter_column("holds", "patron_id", existing_type=sa.INTEGER(), nullable=False)
+    op.alter_column(
+        "holds", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "data_source_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "identifier_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licenses", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column("loans", "patron_id", existing_type=sa.INTEGER(), nullable=False)
+    op.alter_column(
+        "loans", "license_pool_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "workgenres", "genre_id", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column("workgenres", "work_id", existing_type=sa.INTEGER(), nullable=False)
 
 
 def downgrade() -> None:
