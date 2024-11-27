@@ -674,16 +674,12 @@ class Identifier(Base, IdentifierConstants):
             input=self,
             output=identifier,
             on_multiple="interchangeable",
-            create_method_kwargs={
-                "strength": strength,
-            },
         )
+        eq.strength = strength
         if new:
             logging.info(
                 "Identifier equivalency: %r==%r p=%.2f", self, identifier, strength
             )
-        else:
-            eq.strength = strength
         return eq
 
     @classmethod

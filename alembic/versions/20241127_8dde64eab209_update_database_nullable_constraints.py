@@ -1,8 +1,8 @@
 """Update database nullable constraints
 
-Revision ID: 7edcbb24154e
+Revision ID: 8dde64eab209
 Revises: 272da5f400de
-Create Date: 2024-11-27 18:12:09.243827+00:00
+Create Date: 2024-11-27 19:04:42.562571+00:00
 
 """
 
@@ -11,18 +11,26 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "7edcbb24154e"
+revision = "8dde64eab209"
 down_revision = "272da5f400de"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # These columns had a default set, and were never null in our production database. So we
-    # update them to be non-nullable, so we are sure we won't have any null values in them.
+    # We add a nullable=False constraint to these columns because they previously had a
+    # non-null default value but still allowed null values. None of them actually contained
+    # null values in production, so setting the constraint ensures that nulls cannot be
+    # introduced in the future.
     op.alter_column("annotations", "active", existing_type=sa.BOOLEAN(), nullable=False)
     op.alter_column(
         "collections", "marked_for_deletion", existing_type=sa.BOOLEAN(), nullable=False
+    )
+    op.alter_column(
+        "contributors",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
+        nullable=False,
     )
     op.alter_column(
         "customlists", "auto_update_enabled", existing_type=sa.BOOLEAN(), nullable=False
@@ -39,16 +47,27 @@ def upgrade() -> None:
         "datasources", "offers_licenses", existing_type=sa.BOOLEAN(), nullable=False
     )
     op.alter_column(
+        "datasources",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
+        nullable=False,
+    )
+    op.alter_column(
         "deliverymechanisms",
         "default_client_can_fulfill",
         existing_type=sa.BOOLEAN(),
+        nullable=False,
+    )
+    op.alter_column(
+        "editions",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
         nullable=False,
     )
     op.alter_column("equivalents", "votes", existing_type=sa.INTEGER(), nullable=False)
     op.alter_column(
         "equivalents", "enabled", existing_type=sa.BOOLEAN(), nullable=False
     )
-    op.alter_column("lanes", "display_name", existing_type=sa.VARCHAR(), nullable=False)
     op.alter_column(
         "libraries", "is_default", existing_type=sa.BOOLEAN(), nullable=False
     )
@@ -57,21 +76,6 @@ def upgrade() -> None:
     )
     op.alter_column(
         "licensepools", "suppressed", existing_type=sa.BOOLEAN(), nullable=False
-    )
-    op.alter_column(
-        "licensepools", "licenses_owned", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "licensepools", "licenses_available", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "licensepools", "licenses_reserved", existing_type=sa.INTEGER(), nullable=False
-    )
-    op.alter_column(
-        "licensepools",
-        "patrons_in_hold_queue",
-        existing_type=sa.INTEGER(),
-        nullable=False,
     )
     op.alter_column(
         "measurements",
@@ -115,9 +119,28 @@ def upgrade() -> None:
         "works", "presentation_ready", existing_type=sa.BOOLEAN(), nullable=False
     )
 
-    # These columns had nullable foreign keys, but they were never null in our production database.
-    # So we update them to be non-nullable, so we know that we will never get null values in the
-    # sqlalchemy relationship objects.
+    # These columns previously had type hints indicating they were not nullable, but the database
+    # schema allowed null values. We set the nullable=False constraint to match the type hint.
+    op.alter_column("lanes", "display_name", existing_type=sa.VARCHAR(), nullable=False)
+    op.alter_column(
+        "licensepools", "licenses_owned", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "licenses_available", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools", "licenses_reserved", existing_type=sa.INTEGER(), nullable=False
+    )
+    op.alter_column(
+        "licensepools",
+        "patrons_in_hold_queue",
+        existing_type=sa.INTEGER(),
+        nullable=False,
+    )
+
+    # These columns had foreign key constraints that allowed null values. After verifying that they
+    # are never null in production, we set the nullable=False constraint to ensure that SQLAlchemy
+    # relationships will always return an object, rather than None.
     op.alter_column(
         "editions", "data_source_id", existing_type=sa.INTEGER(), nullable=False
     )
@@ -254,6 +277,12 @@ def downgrade() -> None:
         "equivalents", "input_id", existing_type=sa.INTEGER(), nullable=True
     )
     op.alter_column(
+        "editions",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
+        nullable=True,
+    )
+    op.alter_column(
         "editions", "primary_identifier_id", existing_type=sa.INTEGER(), nullable=True
     )
     op.alter_column(
@@ -263,6 +292,12 @@ def downgrade() -> None:
         "deliverymechanisms",
         "default_client_can_fulfill",
         existing_type=sa.BOOLEAN(),
+        nullable=True,
+    )
+    op.alter_column(
+        "datasources",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
         nullable=True,
     )
     op.alter_column(
@@ -278,6 +313,12 @@ def downgrade() -> None:
     )
     op.alter_column(
         "customlists", "auto_update_enabled", existing_type=sa.BOOLEAN(), nullable=True
+    )
+    op.alter_column(
+        "contributors",
+        "extra",
+        existing_type=postgresql.JSON(astext_type=sa.Text()),
+        nullable=True,
     )
     op.alter_column(
         "collections", "marked_for_deletion", existing_type=sa.BOOLEAN(), nullable=True
