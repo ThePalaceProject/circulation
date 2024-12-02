@@ -940,7 +940,6 @@ class TestExternalSearchWithWorks:
             facets = Facets(
                 transaction.default_library(),
                 None,
-                None,
                 order=Facets.ORDER_TITLE,
                 distributor=None,
                 collection_name=None,
@@ -988,7 +987,6 @@ class TestExternalSearchWithWorks:
         facets = SearchFacets
         by_author_facet = facets(
             library=transaction.default_library(),
-            collection=facets.COLLECTION_FULL,
             availability=facets.AVAILABLE_ALL,
             order=facets.ORDER_AUTHOR,
         )
@@ -996,7 +994,6 @@ class TestExternalSearchWithWorks:
 
         by_title_facet = facets(
             library=transaction.default_library(),
-            collection=facets.COLLECTION_FULL,
             availability=facets.AVAILABLE_ALL,
             order=facets.ORDER_TITLE,
         )
@@ -1124,11 +1121,10 @@ class TestFacetFilters:
         data = self._populate_works(fixture)
         fixture.populate_search_index()
 
-        def expect(availability, collection, works):
+        def expect(availability, works):
             facets = Facets(
                 transaction.default_library(),
                 availability,
-                collection,
                 order=Facets.ORDER_TITLE,
                 distributor=None,
                 collection_name=None,
@@ -1137,7 +1133,6 @@ class TestFacetFilters:
 
         # Get all the books in alphabetical order by title.
         expect(
-            Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             [
                 data.becoming,
@@ -1149,26 +1144,17 @@ class TestFacetFilters:
 
         # Show only works that can be borrowed right now.
         expect(
-            Facets.COLLECTION_FULL,
             Facets.AVAILABLE_NOW,
             [data.horse, data.moby, data.duck],
         )
 
         # Show only works that can *not* be borrowed right now.
-        expect(Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, [data.becoming])
+        expect(Facets.AVAILABLE_NOT_NOW, [data.becoming])
 
         # Show only open-access works.
         expect(
-            Facets.COLLECTION_FULL,
             Facets.AVAILABLE_OPEN_ACCESS,
             [data.horse, data.moby],
-        )
-
-        # Show only featured-quality works.
-        expect(
-            Facets.COLLECTION_FEATURED,
-            Facets.AVAILABLE_ALL,
-            [data.becoming, data.moby],
         )
 
 
@@ -1401,7 +1387,6 @@ class TestSearchOrder:
             expect = fixture.expect_results
             facets = Facets(
                 transaction.default_library(),
-                Facets.COLLECTION_FULL,
                 Facets.AVAILABLE_ALL,
                 order=sort_field,
                 distributor=None,
@@ -2524,25 +2509,8 @@ class TestQuery:
             # Return the rest to be verified in a test-specific way.
             return built
 
-        # When using the 'featured' collection...
-        built = from_facets(Facets.COLLECTION_FEATURED, None, None, None, None)
-
-        # There is no nested filter.
-        assert [] == built.nested_filter_calls
-
-        # A non-nested filter is applied on the 'quality' field.
-        [quality_filter] = built._query.filter
-        quality_range = Filter._match_range(
-            "quality",
-            "gte",
-            db.default_library().settings.minimum_featured_quality,
-        )
-        assert Q("bool", must=[quality_range], must_not=[RESEARCH]) == quality_filter
-
         # When using the AVAILABLE_OPEN_ACCESS availability restriction...
-        built = from_facets(
-            Facets.COLLECTION_FULL, Facets.AVAILABLE_OPEN_ACCESS, None, None, None
-        )
+        built = from_facets(Facets.AVAILABLE_OPEN_ACCESS, None, None, None)
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
@@ -2555,9 +2523,7 @@ class TestQuery:
         assert nested_filter.to_dict() == {"bool": {"filter": [open_access]}}
 
         # When using the AVAILABLE_NOW restriction...
-        built = from_facets(
-            Facets.COLLECTION_FULL, Facets.AVAILABLE_NOW, None, None, None
-        )
+        built = from_facets(Facets.AVAILABLE_NOW, None, None, None)
 
         # An additional nested filter is applied.
         [available_now] = built.nested_filter_calls
@@ -2582,9 +2548,7 @@ class TestQuery:
         }
 
         # When using the AVAILABLE_NOT_NOW restriction...
-        built = from_facets(
-            Facets.COLLECTION_FULL, Facets.AVAILABLE_NOT_NOW, None, None, None
-        )
+        built = from_facets(Facets.AVAILABLE_NOT_NOW, None, None, None)
 
         # An additional nested filter is applied.
         [not_available_now] = built.nested_filter_calls
@@ -2608,7 +2572,6 @@ class TestQuery:
         # Distributor builds
         _id = DataSource.lookup(db.session, DataSource.OVERDRIVE).id
         built = from_facets(
-            Facets.COLLECTION_FULL,
             Facets.AVAILABLE_ALL,
             None,
             DataSource.OVERDRIVE,
@@ -2622,9 +2585,7 @@ class TestQuery:
 
         # Collection Name builds
         collection = db.default_collection()
-        built = from_facets(
-            Facets.COLLECTION_FULL, Facets.AVAILABLE_ALL, None, None, collection.name
-        )
+        built = from_facets(Facets.AVAILABLE_ALL, None, None, collection.name)
         [collection_only] = built.nested_filter_calls
         nested_filter = collection_only["query"]
         assert nested_filter.to_dict() == {
@@ -2645,7 +2606,6 @@ class TestQuery:
         # used to convert it to appropriate Opensearch syntax, and
         # the MockSearch object is modified appropriately.
         built = from_facets(
-            None,
             None,
             order=Facets.ORDER_AUTHOR,
             distributor=None,

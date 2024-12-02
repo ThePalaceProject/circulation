@@ -234,35 +234,7 @@ class LibrarySettings(BaseSettings):
             skip=True,
         ),
     )
-    facets_enabled_collection: list[str] = FormField(
-        FacetConstants.DEFAULT_ENABLED_FACETS[
-            FacetConstants.COLLECTION_FACET_GROUP_NAME
-        ],
-        form=LibraryConfFormItem(
-            label="Allow patrons to filter collection to",
-            type=ConfigurationFormItemType.MENU,
-            options={
-                facet: FacetConstants.FACET_DISPLAY_TITLES[facet]
-                for facet in FacetConstants.COLLECTION_FACETS
-            },
-            category="Lanes & Filters",
-            paired="facets_default_collection",
-            level=Level.SYS_ADMIN_OR_MANAGER,
-        ),
-    )
-    facets_default_collection: str = FormField(
-        FacetConstants.COLLECTION_FULL,
-        form=LibraryConfFormItem(
-            label="Default Collection",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                facet: FacetConstants.FACET_DISPLAY_TITLES[facet]
-                for facet in FacetConstants.COLLECTION_FACETS
-            },
-            category="Lanes & Filters",
-            skip=True,
-        ),
-    )
+
     library_description: str | None = FormField(
         None,
         form=LibraryConfFormItem(

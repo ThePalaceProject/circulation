@@ -395,18 +395,6 @@ class Facets(FacetsWithEntryPoint):
                 400,
             )
 
-        g = Facets.COLLECTION_FACET_GROUP_NAME
-        collection = get_argument(g, cls.default_facet(config, g))
-        collection_facets = cls.available_facets(config, g)
-        if collection and not collection in collection_facets:
-            return INVALID_INPUT.detailed(
-                _(
-                    "I don't understand what '%(collection)s' refers to.",
-                    collection=collection,
-                ),
-                400,
-            )
-
         g = Facets.DISTRIBUTOR_FACETS_GROUP_NAME
         distributor = get_argument(g, cls.default_facet(config, g))
         distributor_facets = cls.available_facets(config, g)
@@ -442,7 +430,6 @@ class Facets(FacetsWithEntryPoint):
         enabled = {
             Facets.ORDER_FACET_GROUP_NAME: order_facets,
             Facets.AVAILABILITY_FACET_GROUP_NAME: availability_facets,
-            Facets.COLLECTION_FACET_GROUP_NAME: collection_facets,
             Facets.DISTRIBUTOR_FACETS_GROUP_NAME: distributor_facets,
             Facets.COLLECTION_NAME_FACETS_GROUP_NAME: collection_name_facets,
         }
@@ -450,7 +437,6 @@ class Facets(FacetsWithEntryPoint):
         return dict(
             order=order,
             availability=availability,
-            collection=collection,
             distributor=distributor,
             collection_name=collection_name,
             enabled_facets=enabled,
@@ -482,7 +468,6 @@ class Facets(FacetsWithEntryPoint):
     def __init__(
         self,
         library,
-        collection,
         availability,
         order,
         distributor,
@@ -495,17 +480,11 @@ class Facets(FacetsWithEntryPoint):
     ):
         """Constructor.
 
-        :param collection: This is not a Collection object; it's a value for
-        the 'collection' facet, e.g. 'main' or 'featured'.
-
         :param entrypoint: An EntryPoint class. The 'entry point'
         facet group is configured on a per-WorkList basis rather than
         a per-library basis.
         """
         super().__init__(entrypoint, entrypoint_is_default, **constructor_kwargs)
-        collection = collection or self.default_facet(
-            library, self.COLLECTION_FACET_GROUP_NAME
-        )
         availability = availability or self.default_facet(
             library, self.AVAILABILITY_FACET_GROUP_NAME
         )
@@ -530,7 +509,6 @@ class Facets(FacetsWithEntryPoint):
             availability = self.AVAILABLE_NOW
 
         self.library = library
-        self.collection = collection
         self.availability = availability
         self.order = order
         self.distributor = distributor or self.default_facet(
@@ -548,7 +526,6 @@ class Facets(FacetsWithEntryPoint):
 
     def navigate(
         self,
-        collection=None,
         availability=None,
         order=None,
         entrypoint=None,
@@ -558,7 +535,6 @@ class Facets(FacetsWithEntryPoint):
         """Create a slightly different Facets object from this one."""
         return self.__class__(
             library=self.library,
-            collection=collection or self.collection,
             availability=availability or self.availability,
             order=order or self.order,
             distributor=distributor or self.distributor,
@@ -574,8 +550,6 @@ class Facets(FacetsWithEntryPoint):
             yield (self.ORDER_FACET_GROUP_NAME, self.order)
         if self.availability:
             yield (self.AVAILABILITY_FACET_GROUP_NAME, self.availability)
-        if self.collection:
-            yield (self.COLLECTION_FACET_GROUP_NAME, self.collection)
         if self.distributor:
             yield (self.DISTRIBUTOR_FACETS_GROUP_NAME, self.distributor)
         if self.collection_name:
@@ -595,7 +569,6 @@ class Facets(FacetsWithEntryPoint):
             facet_types = [
                 self.ORDER_FACET_GROUP_NAME,
                 self.AVAILABILITY_FACET_GROUP_NAME,
-                self.COLLECTION_FACET_GROUP_NAME,
                 self.DISTRIBUTOR_FACETS_GROUP_NAME,
                 self.COLLECTION_NAME_FACETS_GROUP_NAME,
             ]
@@ -606,7 +579,6 @@ class Facets(FacetsWithEntryPoint):
             for group_name in (
                 Facets.ORDER_FACET_GROUP_NAME,
                 Facets.AVAILABILITY_FACET_GROUP_NAME,
-                Facets.COLLECTION_FACET_GROUP_NAME,
                 Facets.DISTRIBUTOR_FACETS_GROUP_NAME,
                 Facets.COLLECTION_NAME_FACETS_GROUP_NAME,
             ):
@@ -625,7 +597,6 @@ class Facets(FacetsWithEntryPoint):
         (
             order_facets,
             availability_facets,
-            collection_facets,
             distributor_facets,
             collection_name_facets,
         ) = self.enabled_facets
@@ -673,23 +644,6 @@ class Facets(FacetsWithEntryPoint):
             for facet in availability_facets:
                 yield dy(facet)
 
-        # Next, the collection facets.
-        def dy(new_value):
-            group = self.COLLECTION_FACET_GROUP_NAME
-            current_value = self.collection
-            facets = self.navigate(collection=new_value)
-            return (
-                group,
-                new_value,
-                facets,
-                new_value == current_value,
-                is_default_facet(facets, new_value, group),
-            )
-
-        if len(collection_facets) > 1:
-            for facet in collection_facets:
-                yield dy(facet)
-
         if len(distributor_facets) > 1:
             for facet in distributor_facets:
                 group = self.DISTRIBUTOR_FACETS_GROUP_NAME
@@ -732,7 +686,6 @@ class Facets(FacetsWithEntryPoint):
             )
 
         filter.availability = self.availability
-        filter.subcollection = self.collection
 
         # We can only have distributor and collection name facets if we have a library
         if self.library:
@@ -795,16 +748,6 @@ class Facets(FacetsWithEntryPoint):
             )
 
         qu = qu.filter(availability_clause)
-
-        if self.collection == self.COLLECTION_FULL:
-            # Include everything.
-            pass
-        elif self.collection == self.COLLECTION_FEATURED:
-            # Exclude books with a quality of less than the library's
-            # minimum featured quality.
-            qu = qu.filter(
-                Work.quality >= self.library.settings.minimum_featured_quality
-            )
 
         return qu
 
@@ -1010,7 +953,6 @@ class SearchFacets(Facets):
         # usage, a Library will be provided via
         # SearchFacets.from_request.
         kwargs.setdefault("library", None)
-        kwargs.setdefault("collection", None)
         kwargs.setdefault("availability", None)
         kwargs.setdefault("distributor", None)
         kwargs.setdefault("collection_name", None)
@@ -1042,13 +984,10 @@ class SearchFacets(Facets):
     def default_facet(cls, ignore, group_name):
         """The default facet settings for SearchFacets are hard-coded.
 
-        By default, we will search the full collection and all
+        By default, we will search all
         availabilities, and order by match quality rather than any
         bibliographic field.
         """
-        if group_name == cls.COLLECTION_FACET_GROUP_NAME:
-            return cls.COLLECTION_FULL
-
         if group_name == cls.AVAILABILITY_FACET_GROUP_NAME:
             return cls.AVAILABLE_ALL
 
@@ -2977,7 +2916,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         for entrypoint in EntryPoint.ENTRY_POINTS:
             facets = DatabaseBackedFacets(
                 library,
-                FacetConstants.COLLECTION_FULL,
                 FacetConstants.AVAILABLE_ALL,
                 order=FacetConstants.ORDER_WORK_ID,
                 distributor=FacetConstants.DISTRIBUTOR_ALL,

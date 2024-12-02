@@ -8,15 +8,6 @@ class FacetConstants:
     ENTRY_POINT_REL = "http://librarysimplified.org/terms/rel/entrypoint"
     ENTRY_POINT_FACET_GROUP_NAME = "entrypoint"
 
-    # Subset the collection, roughly, by quality.
-    COLLECTION_FACET_GROUP_NAME = "collection"
-    COLLECTION_FULL = "full"
-    COLLECTION_FEATURED = "featured"
-    COLLECTION_FACETS = [
-        COLLECTION_FULL,
-        COLLECTION_FEATURED,
-    ]
-
     # Subset the collection by availability.
     AVAILABILITY_FACET_GROUP_NAME = "available"
     AVAILABLE_NOW = "now"
@@ -63,7 +54,6 @@ class FacetConstants:
     COLLECTION_NAME_ALL = "All"
 
     FACETS_BY_GROUP = {
-        COLLECTION_FACET_GROUP_NAME: COLLECTION_FACETS,
         AVAILABILITY_FACET_GROUP_NAME: AVAILABILITY_FACETS,
         ORDER_FACET_GROUP_NAME: ORDER_FACETS,
     }
@@ -71,7 +61,6 @@ class FacetConstants:
     GROUP_DISPLAY_TITLES = {
         ORDER_FACET_GROUP_NAME: _("Sort by"),
         AVAILABILITY_FACET_GROUP_NAME: _("Availability"),
-        COLLECTION_FACET_GROUP_NAME: _("Collection"),
         DISTRIBUTOR_FACETS_GROUP_NAME: _("Distributor"),
         COLLECTION_NAME_FACETS_GROUP_NAME: _("Collection Name"),
     }
@@ -79,7 +68,6 @@ class FacetConstants:
     GROUP_DESCRIPTIONS = {
         ORDER_FACET_GROUP_NAME: _("Allow patrons to sort by"),
         AVAILABILITY_FACET_GROUP_NAME: _("Allow patrons to filter availability to"),
-        COLLECTION_FACET_GROUP_NAME: _("Allow patrons to filter collection to"),
         DISTRIBUTOR_FACETS_GROUP_NAME: _("Allow patrons to filter by distributor"),
         COLLECTION_NAME_FACETS_GROUP_NAME: _(
             "Allow patrons to filter by collection name"
@@ -96,8 +84,6 @@ class FacetConstants:
         AVAILABLE_NOW: _("Available now"),
         AVAILABLE_ALL: _("All"),
         AVAILABLE_OPEN_ACCESS: _("Yours to keep"),
-        COLLECTION_FULL: _("Everything"),
-        COLLECTION_FEATURED: _("Popular Books"),
     }
 
     # For titles generated based on some runtime value
@@ -115,7 +101,6 @@ class FacetConstants:
             AVAILABLE_NOW,
             AVAILABLE_OPEN_ACCESS,
         ],
-        COLLECTION_FACET_GROUP_NAME: [COLLECTION_FULL, COLLECTION_FEATURED],
         DISTRIBUTOR_FACETS_GROUP_NAME: [DISTRIBUTOR_ALL],
         COLLECTION_NAME_FACETS_GROUP_NAME: [COLLECTION_NAME_ALL],
     }
@@ -125,7 +110,6 @@ class FacetConstants:
     DEFAULT_FACET = {
         ORDER_FACET_GROUP_NAME: ORDER_AUTHOR,
         AVAILABILITY_FACET_GROUP_NAME: AVAILABLE_ALL,
-        COLLECTION_FACET_GROUP_NAME: COLLECTION_FULL,
         DISTRIBUTOR_FACETS_GROUP_NAME: DISTRIBUTOR_ALL,
         COLLECTION_NAME_FACETS_GROUP_NAME: COLLECTION_NAME_ALL,
     }
