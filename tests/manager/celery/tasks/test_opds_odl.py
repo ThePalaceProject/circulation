@@ -16,6 +16,7 @@ from palace.manager.celery.tasks.opds_odl import (
     recalculate_holds_for_licensepool,
     remove_expired_holds,
     remove_expired_holds_for_collection,
+    remove_expired_holds_for_collection_task,
 )
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -149,12 +150,11 @@ def test_remove_expired_holds_for_collection(
         select(func.count()).select_from(LicensePool)
     ).one()
 
-    analytics = opds_task_fixture.services.analytics_fixture.analytics_mock
-
     # Remove the expired holds
     assert collection.id is not None
-    removed = remove_expired_holds_for_collection(
-        db.session, collection.id, analytics=analytics
+    removed, events = remove_expired_holds_for_collection(
+        db.session,
+        collection.id,
     )
 
     # Assert that the correct holds were removed
@@ -175,10 +175,9 @@ def test_remove_expired_holds_for_collection(
     assert pools_before == pools_after
 
     # verify that the correct analytics calls were made
-    call_args_list = analytics.collect_event.call_args_list
-    assert len(call_args_list) == 10
-    for call_args in call_args_list:
-        assert call_args.kwargs["event_type"] == CirculationEvent.CM_HOLD_EXPIRED
+    assert len(events) == 10
+    for event in events:
+        assert event["event_type"] == CirculationEvent.CM_HOLD_EXPIRED
 
 
 def test_licensepools_with_holds(
@@ -228,7 +227,7 @@ def test_recalculate_holds_for_licensepool(
 
     analytics = opds_task_fixture.services.analytics_fixture.analytics_mock
     # Recalculate the hold queue
-    recalculate_holds_for_licensepool(pool, timedelta(days=5), analytics=analytics)
+    recalculate_holds_for_licensepool(pool, timedelta(days=5))
 
     current_holds = pool.get_active_holds()
     assert len(current_holds) == 20
@@ -239,7 +238,7 @@ def test_recalculate_holds_for_licensepool(
     license1.checkouts_available = 1
     license2.checkouts_available = 2
     reservation_time = timedelta(days=5)
-    recalculate_holds_for_licensepool(pool, reservation_time, analytics)
+    _, events = recalculate_holds_for_licensepool(pool, reservation_time)
 
     assert pool.licenses_reserved == 3
     assert pool.licenses_available == 0
@@ -268,18 +267,37 @@ def test_recalculate_holds_for_licensepool(
         )
         assert hold.start and expected_start and hold.start >= expected_start
 
-    # verify that the correct analytics calls were made
-    call_args_list = analytics.collect_event.call_args_list
-    assert len(call_args_list) == 3
-    for call_args in call_args_list:
-        assert (
-            call_args.kwargs["event_type"]
-            == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
-        )
+    # verify that the correct analytics events were returned
+    assert len(events) == 3
+    for event in events:
+        assert event["event_type"] == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
+
+
+def test_remove_expired_holds_for_collection(
+    celery_fixture: CeleryFixture,
+    db: DatabaseTransactionFixture,
+    opds_task_fixture: OpdsTaskFixture,
+):
+    collection1 = db.collection(protocol=OPDS2WithODLApi)
+
+    expired_holds1, non_expired_holds1 = opds_task_fixture.holds(collection1)
+
+    # Remove the expired holds
+    remove_expired_holds_for_collection_task.delay(collection1.id).wait()
+
+    assert len(
+        opds_task_fixture.services.analytics_fixture.analytics_mock.method_calls
+    ) == len(expired_holds1)
+
+    current_holds = {h.id for h in db.session.scalars(select(Hold))}
+    assert expired_holds1.isdisjoint(current_holds)
+
+    assert non_expired_holds1.issubset(current_holds)
 
 
 def test_remove_expired_holds(
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
     db: DatabaseTransactionFixture,
     opds_task_fixture: OpdsTaskFixture,
 ):
@@ -287,23 +305,13 @@ def test_remove_expired_holds(
     collection2 = db.collection(protocol=OPDS2WithODLApi)
     decoy_collection = db.collection(protocol=OverdriveAPI)
 
-    expired_holds1, non_expired_holds1 = opds_task_fixture.holds(collection1)
-    expired_holds2, non_expired_holds2 = opds_task_fixture.holds(collection2)
-    decoy_expired_holds, decoy_non_expired_holds = opds_task_fixture.holds(
-        decoy_collection
+    with patch.object(opds_odl, "remove_expired_holds_for_collection") as mock_remove:
+        remove_expired_holds.delay().wait()
+
+    assert mock_remove.delay.call_count == 2
+    mock_remove.delay.assert_has_calls(
+        [call(collection1.id), call(collection2.id)], any_order=True
     )
-
-    # Remove the expired holds
-    remove_expired_holds.delay().wait()
-
-    current_holds = {h.id for h in db.session.scalars(select(Hold))}
-    assert expired_holds1.isdisjoint(current_holds)
-    assert expired_holds2.isdisjoint(current_holds)
-
-    assert decoy_non_expired_holds.issubset(current_holds)
-    assert decoy_expired_holds.issubset(current_holds)
-    assert non_expired_holds1.issubset(current_holds)
-    assert non_expired_holds2.issubset(current_holds)
 
 
 def test_recalculate_hold_queue(

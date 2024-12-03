@@ -15,6 +15,10 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         OPDSForDistributorsAPI.label(),
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(args, kwargs)
+        self._events_to_be_logged = []
+
     @property
     def where_clause(self):
         """We never want to automatically reap loans or holds for situations
@@ -45,20 +49,24 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
 
-    def post_delete(self, row: Loan | Hold) -> None:
+    def delete(self, row) -> None:
         ce = CirculationEvent
-        event_type = (
-            CirculationEvent.CM_LOAN_EXPIRED
-            if isinstance(row, Loan)
-            else CirculationEvent.CM_HOLD_EXPIRED
-        )
-
-        self.services.analytics.collect_event(
+        event_type = ce.CM_LOAN_EXPIRED if isinstance(row, Loan) else ce.CM_HOLD_EXPIRED
+        event = dict(
             library=row.library,
             license_pool=row.license_pool,
             event_type=event_type,
             patron=row.patron,
         )
+        super().delete(row)
+        self.events_to_be_logged.append(event)
+
+    def after_commit(self) -> None:
+        super().after_commit()
+        copy_of_list = list(self._events_to_be_logged)
+        for event in copy_of_list:
+            self.services.analytics.collect_event(**event)
+            self._events_to_be_logged.remove(event)
 
 
 class LoanReaper(LoanlikeReaperMonitor):
