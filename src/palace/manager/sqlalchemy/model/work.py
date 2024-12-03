@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections import Counter
 from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
+from functools import cache
 from typing import TYPE_CHECKING, Any, cast
 
 import opensearchpy
@@ -609,11 +611,21 @@ class Work(Base, LoggerMixin):
 
         other_work.calculate_presentation()
 
-    def set_summary(self, resource):
+    @classmethod
+    @cache
+    def _xml_text_sanitization_regex(cls) -> re.Pattern[str]:
+        # Source: https://stackoverflow.com/questions/8733233/filtering-out-certain-bytes-in-python
+        return re.compile(
+            r"[^\u0020-\uD7FF\u0009\u000A\u000D\uE000-\uFFFD\U00010000-\U0010FFFF]+"
+        )
+
+    def set_summary(self, resource: Resource) -> None:
         self.summary = resource
-        # TODO: clean up the content
         if resource and resource.representation:
-            self.summary_text = resource.representation.unicode_content
+            # Make sure that the summary text only contains characters that are XML compatible.
+            self.summary_text = self._xml_text_sanitization_regex().sub(
+                "", resource.representation.unicode_content
+            )
         else:
             self.summary_text = ""
         WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.SUMMARY_OPERATION)

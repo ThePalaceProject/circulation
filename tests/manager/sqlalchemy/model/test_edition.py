@@ -403,20 +403,32 @@ class TestEdition:
         work = db.work(presentation_edition=e)
         overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
 
-        # Set the work's summmary.
+        # Set the work's summary.
         l1, new = pool.add_link(
             Hyperlink.DESCRIPTION, None, overdrive, "text/plain", "F"
         )
         work.set_summary(l1.resource)
 
-        assert l1.resource == work.summary
-        assert "F" == work.summary_text
+        assert work.summary == l1.resource
+        assert work.summary_text == "F"
+
+        # Set the work's summary to a string that contains characters that cannot be
+        # represented in XML.
+        l2, new = pool.add_link(
+            Hyperlink.DESCRIPTION,
+            None,
+            overdrive,
+            "text/plain",
+            "\u0000💣ü🔥\u0001\u000C",
+        )
+        work.set_summary(l2.resource)
+        assert work.summary_text == "💣ü🔥"
 
         # Remove the summary.
         work.set_summary(None)
 
-        assert None == work.summary
-        assert "" == work.summary_text
+        assert work.summary is None
+        assert work.summary_text == ""
 
     def test_calculate_evaluate_summary_quality_with_privileged_data_sources(
         self, db: DatabaseTransactionFixture
