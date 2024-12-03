@@ -404,7 +404,7 @@ class TestPatronData:
         )
         authenticated_by_weird_identifier.apply(patron)
         assert "1234" == patron.authorization_identifier
-        assert None == patron.last_external_sync
+        assert patron.last_external_sync is None
 
     def test_get_or_create_patron(
         self, patron_data: PatronData, db: DatabaseTransactionFixture
@@ -419,7 +419,7 @@ class TestPatronData:
         )
         assert patron.authorization_identifier == "2"
         assert default_library == patron.library
-        assert is_new == True
+        assert is_new is True
         assert analytics.last_event_type == CirculationEvent.NEW_PATRON
         assert analytics.count == 1
 
@@ -436,7 +436,7 @@ class TestPatronData:
             db.session, default_library.id, analytics
         )
         assert patron.authorization_identifier == "2"
-        assert is_new == False
+        assert is_new is False
         assert patron.neighborhood == "Achewood"
         assert analytics.count == 1
 
