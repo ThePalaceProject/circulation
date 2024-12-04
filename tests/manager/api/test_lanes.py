@@ -736,7 +736,6 @@ class TestRecommendationLane:
         )
         overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, Facets)
-        assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
         assert Facets.ORDER_AUTHOR == overview.order
 
@@ -814,7 +813,6 @@ class TestSeriesLane:
         lane = SeriesLane(lane_fixture.db.default_library(), "Alrighty Then")
         overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, SeriesFacets)
-        assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
         assert Facets.ORDER_SERIES_POSITION == overview.order
 
@@ -902,7 +900,6 @@ class TestContributorLane:
         )
         overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, ContributorFacets)
-        assert Facets.COLLECTION_FULL == overview.collection
         assert Facets.AVAILABLE_ALL == overview.availability
         assert Facets.ORDER_TITLE == overview.order
 
@@ -913,7 +910,6 @@ class TestContributorLane:
 class TestCrawlableFacets:
     def test_default(self, db: DatabaseTransactionFixture):
         facets = CrawlableFacets.default(db.default_library())
-        assert facets.collection == CrawlableFacets.COLLECTION_FULL
         assert facets.availability == CrawlableFacets.AVAILABLE_ALL
         assert facets.order == CrawlableFacets.ORDER_LAST_UPDATE
         assert facets.order_ascending is False
@@ -921,13 +917,12 @@ class TestCrawlableFacets:
         [
             order,
             availability,
-            collection,
             distributor,
             collectionName,
         ] = facets.enabled_facets
 
         # The default facets are the only ones enabled.
-        for facet in [order, availability, collection]:
+        for facet in [order, availability]:
             assert len(facet) == 1
 
         # Except for distributor and collectionName, which have the default
@@ -940,7 +935,6 @@ class TestCrawlableFacets:
         [
             (Facets.ORDER_FACET_GROUP_NAME, Facets.ORDER_LAST_UPDATE),
             (Facets.AVAILABILITY_FACET_GROUP_NAME, Facets.AVAILABLE_ALL),
-            (Facets.COLLECTION_FACET_GROUP_NAME, Facets.COLLECTION_FULL),
             (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, Facets.DISTRIBUTOR_ALL),
             (Facets.COLLECTION_NAME_FACETS_GROUP_NAME, Facets.COLLECTION_NAME_ALL),
         ],
@@ -953,7 +947,6 @@ class TestCrawlableFacets:
         [
             (Facets.ORDER_FACET_GROUP_NAME, [Facets.ORDER_LAST_UPDATE]),
             (Facets.AVAILABILITY_FACET_GROUP_NAME, [Facets.AVAILABLE_ALL]),
-            (Facets.COLLECTION_FACET_GROUP_NAME, [Facets.COLLECTION_FULL]),
             (Facets.DISTRIBUTOR_FACETS_GROUP_NAME, [Facets.DISTRIBUTOR_ALL, "foo"]),
             (
                 Facets.COLLECTION_NAME_FACETS_GROUP_NAME,
@@ -1126,13 +1119,9 @@ class TestJackpotFacets:
         # For other facet groups, the class defers to the Facets
         # superclass. (But this doesn't matter because it's not relevant
         # to the creation of jackpot feeds.)
-        for group in (
-            Facets.COLLECTION_FACET_GROUP_NAME,
-            Facets.ORDER_FACET_GROUP_NAME,
-        ):
-            assert m(db.default_library(), group) == Facets.default_facet(
-                db.default_library(), group
-            )
+        assert m(
+            db.default_library(), Facets.ORDER_FACET_GROUP_NAME
+        ) == Facets.default_facet(db.default_library(), Facets.ORDER_FACET_GROUP_NAME)
 
     def test_available_facets(self, db: DatabaseTransactionFixture):
         # A JackpotFacets object always has the same availability
@@ -1150,10 +1139,7 @@ class TestJackpotFacets:
         # For other facet groups, the class defers to the Facets
         # superclass. (But this doesn't matter because it's not relevant
         # to the creation of jackpot feeds.)
-        for group in (
-            Facets.COLLECTION_FACET_GROUP_NAME,
-            Facets.ORDER_FACET_GROUP_NAME,
-        ):
+        for group in (Facets.ORDER_FACET_GROUP_NAME,):
             assert m(db.default_library(), group) == Facets.available_facets(
                 db.default_library(), group
             )

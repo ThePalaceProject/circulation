@@ -1,7 +1,7 @@
 import json
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import feedparser
 from flask import url_for
@@ -13,7 +13,11 @@ from palace.manager.api.lanes import (
     CrawlableFacets,
     DynamicLane,
 )
-from palace.manager.api.problem_details import NO_SUCH_COLLECTION, NO_SUCH_LIST
+from palace.manager.api.problem_details import (
+    NO_SUCH_COLLECTION,
+    NO_SUCH_LANE,
+    NO_SUCH_LIST,
+)
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import CirculationManagerAnnotator
@@ -225,6 +229,21 @@ class TestCrawlableFeed:
         in_kwargs = dict(
             title="Lane title", url="Lane URL", worklist=mock_lane, feed_class=MockFeed
         )
+
+        # Lane that cannot be accessed -> problem detail
+        inaccessible_lane = MockLane()
+        inaccessible_lane.accessible_to = create_autospec(
+            mock_lane.accessible_to, return_value=False
+        )
+        with circulation_fixture.request_context_with_library("/"):
+            response = circulation_fixture.manager.opds_feeds._crawlable_feed(
+                title="Lane title",
+                url="Lane URL",
+                worklist=inaccessible_lane,
+                feed_class=MockFeed,
+            )
+            assert isinstance(response, ProblemDetail)
+            assert NO_SUCH_LANE.uri == response.uri
 
         # Bad pagination data -> problem detail
         with circulation_fixture.app.test_request_context("/?size=a"):

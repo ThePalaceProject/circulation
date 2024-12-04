@@ -3489,13 +3489,13 @@ yaml = ["pyyaml (>=6.0.1)"]
 
 [[package]]
 name = "pyfakefs"
-version = "5.7.1"
+version = "5.7.2"
 description = "pyfakefs implements a fake file system that mocks the Python file system modules."
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pyfakefs-5.7.1-py3-none-any.whl", hash = "sha256:6503ffe7f401701cf974b502311f926da2b0657a72244a6ba36e985ceb3dd783"},
-    {file = "pyfakefs-5.7.1.tar.gz", hash = "sha256:24774c632f3b67ea26fd56b08115ba7c339d5cd65655410bca8572d73a1ae9a4"},
+    {file = "pyfakefs-5.7.2-py3-none-any.whl", hash = "sha256:e1527b0e8e4b33be52f0b024ca1deb269c73eecd68457c6b0bf608d6dab12ebd"},
+    {file = "pyfakefs-5.7.2.tar.gz", hash = "sha256:40da84175c5af8d9c4f3b31800b8edc4af1e74a212671dd658b21cc881c60000"},
 ]
 
 [[package]]
@@ -3692,13 +3692,13 @@ files = [
 
 [[package]]
 name = "pytest"
-version = "8.3.3"
+version = "8.3.4"
 description = "pytest: simple powerful testing with Python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "pytest-8.3.3-py3-none-any.whl", hash = "sha256:a6853c7375b2663155079443d2e45de913a911a11d669df02a50814944db57b2"},
-    {file = "pytest-8.3.3.tar.gz", hash = "sha256:70b98107bd648308a7952b06e6ca9a50bc660be218d53c257cc1fc94fda10181"},
+    {file = "pytest-8.3.4-py3-none-any.whl", hash = "sha256:50e16d954148559c9a74109af1eaf0c945ba2d8f30f0a3d3335edde19788b6f6"},
+    {file = "pytest-8.3.4.tar.gz", hash = "sha256:965370d062bce11e73868e0335abac31b4d3de0e82f4007408d242b4f8610761"},
 ]
 
 [package.dependencies]

@@ -850,33 +850,6 @@ class TestOPDSAcquisitionFeed:
                 bunch that don't (which will be ignored).
                 """
 
-                # Real facet group, real facet
-                yield (
-                    Facets.COLLECTION_FACET_GROUP_NAME,
-                    Facets.COLLECTION_FULL,
-                    "try the featured collection instead",
-                    True,
-                    False,
-                )
-
-                # Real facet group, nonexistent facet
-                yield (
-                    Facets.COLLECTION_FACET_GROUP_NAME,
-                    "no such facet",
-                    "this facet does not exist",
-                    True,
-                    False,
-                )
-
-                # Nonexistent facet group, real facet
-                yield (
-                    "no such group",
-                    Facets.COLLECTION_FULL,
-                    "this facet exists but it's in a nonexistent group",
-                    True,
-                    False,
-                )
-
                 # Nonexistent facet group, nonexistent facet
                 yield (
                     "no such group",
@@ -897,20 +870,11 @@ class TestOPDSAcquisitionFeed:
         annotator = MockAnnotator()
         facets = MockFacets()
 
-        # The only 5-tuple yielded by facet_groups was passed on to us.
-        # The link was run through MockAnnotator.facet_url(),
-        # and the human-readable titles were found using lookups.
-        #
-        # The other three 5-tuples were ignored since we don't know
+        # The 5-tuples were ignored since we don't know
         # how to generate human-readable titles for them.
-        [[url, facet, group, selected, is_default]] = MockFeed.facet_links(
-            annotator, facets
-        )
-        assert "url: try the featured collection instead" == url
-        assert Facets.FACET_DISPLAY_TITLES[Facets.COLLECTION_FULL] == facet
-        assert Facets.GROUP_DISPLAY_TITLES[Facets.COLLECTION_FACET_GROUP_NAME] == group
-        assert selected
-        assert not is_default
+        links = MockFeed.facet_links(annotator, facets)
+
+        assert len([x for x in links]) == 0
 
     def test_active_loans_for_with_holds(
         self,
@@ -1134,7 +1098,7 @@ class TestEntrypointLinkInsertion:
         # The make_link function that was passed in calls
         # TestAnnotator.feed_url() when passed an EntryPoint. The
         # Facets object's other facet groups are propagated in this URL.
-        first_page_url = "http://wl/?available=all&collection=full&collectionName=All&distributor=All&entrypoint=Book&order=author"
+        first_page_url = "http://wl/?available=all&collectionName=All&distributor=All&entrypoint=Book&order=author"
         assert first_page_url == make_link(EbooksEntryPoint)
 
         # Pagination information is not propagated through entry point links
@@ -1206,7 +1170,7 @@ class TestEntrypointLinkInsertion:
 
         # The make_link function that was passed in calls
         # TestAnnotator.search_url() when passed an EntryPoint.
-        first_page_url = "http://localhost/default/search/?entrypoint=Book&order=relevance&available=all&collection=full&search_type=default"
+        first_page_url = "http://localhost/default/search/?entrypoint=Book&order=relevance&available=all&search_type=default"
         with app.test_request_context("/"):
             assert first_page_url == make_link(EbooksEntryPoint)
 

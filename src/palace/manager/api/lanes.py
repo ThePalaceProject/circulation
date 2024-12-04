@@ -1087,7 +1087,6 @@ class RecommendationLane(WorkBasedLane):
         # the best recommendations are in the front.
         return Facets.default(
             self.get_library(_db),
-            collection=facets.COLLECTION_FULL,
             availability=facets.AVAILABLE_ALL,
             entrypoint=facets.entrypoint,
         )
@@ -1157,7 +1156,6 @@ class SeriesLane(DynamicLane):
         """
         return SeriesFacets.default(
             self.get_library(_db),
-            collection=facets.COLLECTION_FULL,
             availability=facets.AVAILABLE_ALL,
             entrypoint=facets.entrypoint,
         )
@@ -1225,7 +1223,6 @@ class ContributorLane(DynamicLane):
         """
         return ContributorFacets.default(
             self.get_library(_db),
-            collection=facets.COLLECTION_FULL,
             availability=facets.AVAILABLE_ALL,
             entrypoint=facets.entrypoint,
         )
@@ -1354,7 +1351,6 @@ class CrawlableFacets(Facets):
     SETTINGS = {
         Facets.ORDER_FACET_GROUP_NAME: Facets.ORDER_LAST_UPDATE,
         Facets.AVAILABILITY_FACET_GROUP_NAME: Facets.AVAILABLE_ALL,
-        Facets.COLLECTION_FACET_GROUP_NAME: Facets.COLLECTION_FULL,
         Facets.DISTRIBUTOR_FACETS_GROUP_NAME: Facets.DISTRIBUTOR_ALL,
         Facets.COLLECTION_NAME_FACETS_GROUP_NAME: Facets.COLLECTION_NAME_ALL,
     }
