@@ -334,9 +334,6 @@ class TestLoans:
         loan, is_new = pool.loan_to(patron)
         assert db.default_library() == loan.library
 
-        loan.patron = None
-        assert None == loan.library
-
         patron.library = db.library()
         loan.patron = patron
         assert patron.library == loan.library

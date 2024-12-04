@@ -65,12 +65,8 @@ class LoanAndHoldMixin:
         return None
 
     @property
-    def library(self) -> Library | None:
-        """Try to find the corresponding library for this Loan/Hold."""
-        if self.patron:
-            return self.patron.library
-        # If this Loan/Hold belongs to an external patron, there may be no library.
-        return None
+    def library(self) -> Library:
+        return self.patron.library
 
 
 class Patron(Base, RedisKeyMixin):
@@ -519,7 +515,7 @@ class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
     id = Column(Integer, primary_key=True)
 
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
     patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
     # A Loan is always associated with a LicensePool.
@@ -569,7 +565,7 @@ class Hold(Base, LoanAndHoldMixin):
 
     __tablename__ = "holds"
     id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="holds"

@@ -129,18 +129,18 @@ class TestCirculationAPI:
         # The Loan looks good.
         assert loaninfo.identifier == loan.license_pool.identifier.identifier
         assert circulation_api.patron == loan.patron
-        assert None == hold
-        assert True == is_new
+        assert hold is None
+        assert is_new == True
         assert loaninfo.external_identifier == loan.external_identifier
 
         # An analytics event was created.
-        assert 1 == circulation_api.analytics.count
-        assert CirculationEvent.CM_CHECKOUT == circulation_api.analytics.event_type
+        assert circulation_api.analytics.count == 1
+        assert circulation_api.analytics.last_event_type == CirculationEvent.CM_CHECKOUT
 
         # Try to 'borrow' the same book again.
         circulation_api.remote.queue_checkout(AlreadyCheckedOut())
         loan, hold, is_new = self.borrow(circulation_api)
-        assert False == is_new
+        assert is_new == False
         assert loaninfo.external_identifier == loan.external_identifier
 
         # Since the loan already existed, no new analytics event was
@@ -150,18 +150,18 @@ class TestCirculationAPI:
         # Now try to renew the book.
         circulation_api.remote.queue_checkout(loaninfo)
         loan, hold, is_new = self.borrow(circulation_api)
-        assert False == is_new
+        assert is_new == False
 
         # Renewals are counted as loans, since from an accounting
         # perspective they _are_ loans.
-        assert 2 == circulation_api.analytics.count
+        assert circulation_api.analytics.count == 2
 
         # Loans of open-access books go through a different code
         # path, but they count as loans nonetheless.
         circulation_api.pool.open_access = True
         circulation_api.remote.queue_checkout(loaninfo)
         loan, hold, is_new = self.borrow(circulation_api)
-        assert 3 == circulation_api.analytics.count
+        assert circulation_api.analytics.count == 3
 
     @freeze_time()
     def test_attempt_borrow_with_existing_remote_loan(
@@ -357,21 +357,51 @@ class TestCirculationAPI:
         # The Hold looks good.
         assert holdinfo.identifier == hold.license_pool.identifier.identifier
         assert circulation_api.patron == hold.patron
-        assert None == loan
-        assert True == is_new
+        assert loan is None
+        assert is_new == True
 
         # An analytics event was created.
         assert 1 == circulation_api.analytics.count
-        assert CirculationEvent.CM_HOLD_PLACE == circulation_api.analytics.event_type
+        assert (
+            circulation_api.analytics.last_event_type == CirculationEvent.CM_HOLD_PLACE
+        )
 
         # Try to 'borrow' the same book again.
         circulation_api.remote.queue_checkout(AlreadyOnHold())
         loan, hold, is_new = self.borrow(circulation_api)
-        assert False == is_new
+        assert is_new == False
 
         # Since the hold already existed, no new analytics event was
         # sent.
-        assert 1 == circulation_api.analytics.count
+        assert circulation_api.analytics.count == 1
+
+    def test_hold_is_ready_converts_to_loan_on_borrow(
+        self, circulation_api: CirculationAPIFixture
+    ):
+        now = utc_now()
+        loaninfo = LoanInfo.from_license_pool(
+            circulation_api.pool,
+            start_date=now,
+            end_date=now + timedelta(seconds=3600),
+            external_identifier=circulation_api.db.fresh_str(),
+        )
+        circulation_api.remote.queue_checkout(loaninfo)
+        circulation_api.pool.on_hold_to(patron=circulation_api.patron, position=0)
+        loan, hold, is_new = self.borrow(circulation_api)
+
+        # The Hold is gone and there is a new loan.
+        assert loan is not None
+        assert hold is None
+        assert is_new is True
+
+        assert circulation_api.analytics.count == 2
+        # A hold converted analytics event was recorded
+        assert (
+            circulation_api.analytics.event_types[0]
+            == CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN
+        )
+        # A check event was recorded
+        assert circulation_api.analytics.event_types[1] == CirculationEvent.CM_CHECKOUT
 
     def test_borrow_with_expired_card_fails(
         self, circulation_api: CirculationAPIFixture
@@ -808,11 +838,11 @@ class TestCirculationAPI:
         )
 
         # The fulfillment looks good.
-        assert fulfillment == result
+        assert result == fulfillment
 
         # An analytics event was created.
-        assert 1 == circulation_api.analytics.count
-        assert CirculationEvent.CM_FULFILL == circulation_api.analytics.event_type
+        assert circulation_api.analytics.count == 1
+        assert circulation_api.analytics.last_event_type == CirculationEvent.CM_FULFILL
 
     def test_fulfill_without_loan(self, circulation_api: CirculationAPIFixture):
         # By default, a title cannot be fulfilled unless there is an active
@@ -852,11 +882,11 @@ class TestCirculationAPI:
         result = circulation_api.circulation.revoke_loan(
             circulation_api.patron, "1234", circulation_api.pool
         )
-        assert True == result
+        assert result == True
 
         # An analytics event was created.
-        assert 1 == circulation_api.analytics.count
-        assert CirculationEvent.CM_CHECKIN == circulation_api.analytics.event_type
+        assert circulation_api.analytics.count == 1
+        assert circulation_api.analytics.last_event_type == CirculationEvent.CM_CHECKIN
 
     @pytest.mark.parametrize("open_access", [True, False])
     def test_release_hold(self, circulation_api: CirculationAPIFixture, open_access):
@@ -868,11 +898,14 @@ class TestCirculationAPI:
         result = circulation_api.circulation.release_hold(
             circulation_api.patron, "1234", circulation_api.pool
         )
-        assert True == result
+        assert result == True
 
         # An analytics event was created.
-        assert 1 == circulation_api.analytics.count
-        assert CirculationEvent.CM_HOLD_RELEASE == circulation_api.analytics.event_type
+        assert circulation_api.analytics.count == 1
+        assert (
+            circulation_api.analytics.last_event_type
+            == CirculationEvent.CM_HOLD_RELEASE
+        )
 
     def test__collect_event(self, circulation_api: CirculationAPIFixture):
         # Test the _collect_event method, which gathers information
