@@ -1,7 +1,7 @@
 """Update database nullable constraints
 
 Revision ID: 8dde64eab209
-Revises: 272da5f400de
+Revises: c3458e1ef9aa
 Create Date: 2024-11-27 19:04:42.562571+00:00
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "8dde64eab209"
-down_revision = "272da5f400de"
+down_revision = "c3458e1ef9aa"
 branch_labels = None
 depends_on = None
 
