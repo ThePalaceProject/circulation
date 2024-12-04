@@ -16,7 +16,7 @@ class LoanlikeReaperMonitor(ReaperMonitor):
     ]
 
     def __init__(self, *args, **kwargs):
-        super().__init__(args, kwargs)
+        super().__init__(*args, **kwargs)
         self._events_to_be_logged = []
 
     @property
@@ -59,7 +59,7 @@ class LoanlikeReaperMonitor(ReaperMonitor):
             patron=row.patron,
         )
         super().delete(row)
-        self.events_to_be_logged.append(event)
+        self._events_to_be_logged.append(event)
 
     def after_commit(self) -> None:
         super().after_commit()
