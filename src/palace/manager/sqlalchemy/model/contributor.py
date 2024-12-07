@@ -32,7 +32,7 @@ class Contributor(Base):
     """Someone (usually human) who contributes to books."""
 
     __tablename__ = "contributors"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # Standard identifiers for this contributor.
     lc = Column(Unicode, index=True)
@@ -60,7 +60,9 @@ class Contributor(Base):
     # provided by a publisher.
     biography = Column(Unicode)
 
-    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
     contributions: Mapped[list[Contribution]] = relationship(
         "Contribution", back_populates="contributor", uselist=True
@@ -483,12 +485,14 @@ class Contribution(Base):
     """A contribution made by a Contributor to a Edition."""
 
     __tablename__ = "contributions"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     edition: Mapped[Edition] = relationship("Edition", back_populates="contributions")
-    edition_id = Column(Integer, ForeignKey("editions.id"), index=True, nullable=False)
+    edition_id: Mapped[int] = Column(
+        Integer, ForeignKey("editions.id"), index=True, nullable=False
+    )
 
-    contributor_id = Column(
+    contributor_id: Mapped[int] = Column(
         Integer, ForeignKey("contributors.id"), index=True, nullable=False
     )
     contributor: Mapped[Contributor] = relationship(

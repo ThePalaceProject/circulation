@@ -37,11 +37,13 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     """A source for information about books, and possibly the books themselves."""
 
     __tablename__ = "datasources"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
-    offers_licenses = Column(Boolean, default=False)
+    offers_licenses: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     primary_identifier_type = Column(String, index=True)
-    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
     # One DataSource can generate many Editions.
     editions: Mapped[list[Edition]] = relationship(

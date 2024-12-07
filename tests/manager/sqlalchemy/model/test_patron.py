@@ -312,9 +312,6 @@ class TestLoans:
         loan, is_new = pool.loan_to(patron)
         assert work == loan.work
 
-        loan.license_pool = None
-        assert None == loan.work
-
         # If pool.work is None but pool.edition.work is valid, we use that.
         loan.license_pool = pool
         pool.work = None
@@ -333,9 +330,6 @@ class TestLoans:
 
         loan, is_new = pool.loan_to(patron)
         assert db.default_library() == loan.library
-
-        loan.patron = None
-        assert None == loan.library
 
         patron.library = db.library()
         loan.patron = patron
@@ -479,7 +473,7 @@ class TestPatron:
         assert len(db.session.query(Annotation).all()) == 1
 
         # Give the patron a credential and check that it has been created
-        credential, is_new = create(db.session, Credential, patron=patron)
+        credential = db.credential(patron=patron)
         assert [credential] == patron.credentials
         assert len(db.session.query(Credential).all()) == 1
 

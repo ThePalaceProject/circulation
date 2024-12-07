@@ -49,7 +49,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     """A Collection is a set of LicensePools obtained through some mechanism."""
 
     __tablename__ = "collections"
-    id = Column(Integer, primary_key=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
 
     DATA_SOURCE_NAME_SETTING = "data_source"
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
@@ -66,7 +66,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # designates the integration technique we will use to actually get
     # the metadata and licenses. Each Collection has a distinct
     # integration configuration.
-    integration_configuration_id = Column(
+    integration_configuration_id: Mapped[int] = Column(
         Integer,
         ForeignKey("integration_configurations.id"),
         unique=True,
@@ -87,7 +87,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # secret as the Overdrive collection, but it has a distinct
     # external_account_id.
     parent_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    parent: Collection = relationship(
+    parent: Mapped[Collection | None] = relationship(
         "Collection", remote_side=[id], back_populates="children"
     )
 
@@ -101,7 +101,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     # When deleting a collection, this flag is set to True so that the deletion
     # script can take care of deleting it in the background. This is
     # useful for deleting large collections which can timeout when deleting.
-    marked_for_deletion = Column(Boolean, default=False)
+    marked_for_deletion: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # A Collection can provide books to many Libraries.
     # https://docs.sqlalchemy.org/en/14/orm/extensions/associationproxy.html#composite-association-proxies
@@ -147,7 +147,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         "CustomList", secondary="collections_customlists", back_populates="collections"
     )
 
-    export_marc_records = Column(Boolean, default=False, nullable=False)
+    export_marc_records: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # Most data sources offer different catalogs to different
     # libraries.  Data sources in this list offer the same catalog to

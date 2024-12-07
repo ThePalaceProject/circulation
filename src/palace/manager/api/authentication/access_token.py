@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from jwcrypto import jwe, jwk
 
@@ -80,7 +80,7 @@ class PatronJWEAccessTokenProvider(LoggerMixin):
             plaintext=jwe.json_encode(dict(id=patron.id, pwd=password)),
             protected=dict(
                 alg="dir",
-                kid=uuid_encode(cast(uuid.UUID, key.id)),
+                kid=uuid_encode(key.id),
                 typ="JWE",
                 enc="A128CBC-HS256",
                 cty=cls.CTY,

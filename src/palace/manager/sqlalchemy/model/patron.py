@@ -56,8 +56,6 @@ class LoanAndHoldMixin:
     def work(self) -> Work | None:
         """Try to find the corresponding work for this Loan/Hold."""
         license_pool = self.license_pool
-        if not license_pool:
-            return None
         if license_pool.work:
             return license_pool.work
         if license_pool.presentation_edition and license_pool.presentation_edition.work:
@@ -65,22 +63,21 @@ class LoanAndHoldMixin:
         return None
 
     @property
-    def library(self) -> Library | None:
-        """Try to find the corresponding library for this Loan/Hold."""
-        if self.patron:
-            return self.patron.library
-        # If this Loan/Hold belongs to an external patron, there may be no library.
-        return None
+    def library(self) -> Library:
+        """The corresponding library for this Loan/Hold."""
+        return self.patron.library
 
 
 class Patron(Base, RedisKeyMixin):
     __tablename__ = "patrons"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # Each patron is the patron _of_ one particular library.  An
     # individual human being may patronize multiple libraries, but
     # they will have a different patron account at each one.
-    library_id = Column(Integer, ForeignKey("libraries.id"), index=True, nullable=False)
+    library_id: Mapped[int] = Column(
+        Integer, ForeignKey("libraries.id"), index=True, nullable=False
+    )
     library: Mapped[Library] = relationship("Library", back_populates="patrons")
 
     # The patron's permanent unique identifier in an external library
@@ -113,7 +110,9 @@ class Patron(Base, RedisKeyMixin):
     # in a way that allows users to disassociate their patron info
     # with account activity at any time.  When this UUID is reset it effectively
     # dissociates any patron activity history with this patron.
-    uuid = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
+    uuid: Mapped[uuid.UUID] = Column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4
+    )
 
     # The last time this record was synced up with an external library
     # system such as an ILS.
@@ -517,13 +516,17 @@ Index("ix_patron_library_id_username", Patron.library_id, Patron.username)
 
 class Loan(Base, LoanAndHoldMixin):
     __tablename__ = "loans"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id: Mapped[int] = Column(
+        Integer, ForeignKey("patrons.id"), index=True, nullable=False
+    )
     patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
     # A Loan is always associated with a LicensePool.
-    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool_id: Mapped[int] = Column(
+        Integer, ForeignKey("licensepools.id"), index=True, nullable=False
+    )
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="loans"
     )
@@ -531,7 +534,7 @@ class Loan(Base, LoanAndHoldMixin):
     # It may also be associated with an individual License if the source
     # provides information about individual licenses.
     license_id = Column(Integer, ForeignKey("licenses.id"), index=True, nullable=True)
-    license: Mapped[License] = relationship("License", back_populates="loans")
+    license: Mapped[License | None] = relationship("License", back_populates="loans")
 
     fulfillment_id = Column(Integer, ForeignKey("licensepooldeliveries.id"))
     fulfillment: Mapped[LicensePoolDeliveryMechanism | None] = relationship(
@@ -568,9 +571,16 @@ class Hold(Base, LoanAndHoldMixin):
     """A patron is in line to check out a book."""
 
     __tablename__ = "holds"
-    id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
-    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    patron_id: Mapped[int] = Column(
+        Integer, ForeignKey("patrons.id"), index=True, nullable=False
+    )
+    patron: Mapped[Patron] = relationship(
+        "Patron", back_populates="holds", lazy="joined"
+    )
+    license_pool_id: Mapped[int] = Column(
+        Integer, ForeignKey("licensepools.id"), index=True, nullable=False
+    )
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="holds"
     )
@@ -578,10 +588,6 @@ class Hold(Base, LoanAndHoldMixin):
     end = Column(DateTime(timezone=True), index=True)
     position = Column(Integer, index=True)
     patron_last_notified = Column(DateTime, nullable=True)
-
-    patron: Mapped[Patron] = relationship(
-        "Patron", back_populates="holds", lazy="joined"
-    )
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Hold) or self.id is None or other.id is None:
@@ -717,7 +723,7 @@ class Annotation(Base):
     ]
 
     __tablename__ = "annotations"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
     patron: Mapped[Patron] = relationship("Patron", back_populates="annotations")
 
@@ -728,7 +734,7 @@ class Annotation(Base):
 
     motivation = Column(Unicode, index=True)
     timestamp = Column(DateTime(timezone=True), index=True)
-    active = Column(Boolean, default=True)
+    active: Mapped[bool] = Column(Boolean, default=True, nullable=False)
     content = Column(Unicode)
     target = Column(Unicode)
 

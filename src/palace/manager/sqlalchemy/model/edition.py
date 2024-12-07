@@ -52,9 +52,11 @@ class Edition(Base, EditionConstants):
     """
 
     __tablename__ = "editions"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
-    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source_id: Mapped[int] = Column(
+        Integer, ForeignKey("datasources.id"), index=True, nullable=False
+    )
     data_source: Mapped[DataSource] = relationship(
         "DataSource", back_populates="editions"
     )
@@ -85,14 +87,16 @@ class Edition(Base, EditionConstants):
     # identifier--the one used by its data source to identify
     # it. Through the Equivalency class, it is associated with a
     # (probably huge) number of other identifiers.
-    primary_identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    primary_identifier_id = Column(
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
     primary_identifier: Mapped[Identifier] = relationship(
         "Identifier", back_populates="primarily_identifies"
     )
 
     # An Edition may be the presentation edition for a single Work. If it's not
     # a presentation edition for a work, work will be None.
-    work: Mapped[Work] = relationship(
+    work: Mapped[Work | None] = relationship(
         "Work", uselist=False, back_populates="presentation_edition"
     )
 
@@ -158,7 +162,9 @@ class Edition(Base, EditionConstants):
     cover_thumbnail_url = Column(Unicode)
 
     # Information kept in here probably won't be used.
-    extra: Mapped[dict[str, str]] = Column(MutableDict.as_mutable(JSON), default={})
+    extra: Mapped[dict[str, str]] = Column(
+        MutableDict.as_mutable(JSON), default={}, nullable=False
+    )
 
     def __repr__(self):
         id_repr = repr(self.primary_identifier)

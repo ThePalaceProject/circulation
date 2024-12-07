@@ -121,10 +121,10 @@ class Timestamp(Base):
     )
 
     # Unique ID
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # Name of the service.
-    service = Column(String(255), index=True, nullable=False)
+    service: Mapped[str] = Column(String(255), index=True, nullable=False)
 
     # Type of the service -- monitor, coverage provider, or script.
     # If the service type does not fit into these categories, this field
@@ -136,7 +136,7 @@ class Timestamp(Base):
     collection_id = Column(
         Integer, ForeignKey("collections.id"), index=True, nullable=True
     )
-    collection: Mapped[Collection] = relationship(
+    collection: Mapped[Collection | None] = relationship(
         "Collection", back_populates="timestamps"
     )
 
@@ -324,16 +324,16 @@ class CoverageRecord(Base, BaseCoverageRecord):
     REPAIR_SORT_NAME_OPERATION = "repair-sort-name"
     METADATA_UPLOAD_OPERATION = "metadata-upload"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Mapped[Identifier] = relationship(
+    identifier: Mapped[Identifier | None] = relationship(
         "Identifier", back_populates="coverage_records"
     )
 
     # If applicable, this is the ID of the data source that took the
     # Identifier as input.
     data_source_id = Column(Integer, ForeignKey("datasources.id"))
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="coverage_records"
     )
     operation = Column(String(255), default=None)
@@ -623,9 +623,9 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
     SUMMARY_OPERATION = "summary"
     QUALITY_OPERATION = "quality"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
-    work: Mapped[Work] = relationship("Work", back_populates="coverage_records")
+    work: Mapped[Work | None] = relationship("Work", back_populates="coverage_records")
     operation = Column(String(255), index=True, default=None)
 
     timestamp = Column(DateTime(timezone=True), index=True)
@@ -775,10 +775,13 @@ class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
 
     __tablename__ = "equivalentscoveragerecords"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
-    equivalency_id = Column(
-        Integer, ForeignKey("equivalents.id", ondelete="CASCADE"), index=True
+    equivalency_id: Mapped[int] = Column(
+        Integer,
+        ForeignKey("equivalents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     equivalency: Mapped[Equivalency] = relationship(
         "Equivalency", foreign_keys=equivalency_id

@@ -32,8 +32,8 @@ from palace.manager.util.problem_detail import ProblemDetail
 class Admin(Base, HasSessionCache):
     __tablename__ = "admins"
 
-    id = Column(Integer, primary_key=True)
-    email = Column(Unicode, unique=True, nullable=False)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    email: Mapped[str] = Column(Unicode, unique=True, nullable=False)
 
     # Admins can also log in with a local password.
     password_hashed = Column(Unicode, index=True)
@@ -288,12 +288,16 @@ class Admin(Base, HasSessionCache):
 class AdminRole(Base, HasSessionCache):
     __tablename__ = "adminroles"
 
-    id = Column(Integer, primary_key=True)
-    admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False, index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    admin_id: Mapped[int] = Column(
+        Integer, ForeignKey("admins.id"), nullable=False, index=True
+    )
     admin: Mapped[Admin] = relationship("Admin", back_populates="roles")
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
-    library: Mapped[Library] = relationship("Library", back_populates="adminroles")
-    role = Column(Unicode, nullable=False, index=True)
+    library: Mapped[Library | None] = relationship(
+        "Library", back_populates="adminroles"
+    )
+    role: Mapped[str] = Column(Unicode, nullable=False, index=True)
 
     __table_args__ = (UniqueConstraint("admin_id", "library_id", "role"),)
 

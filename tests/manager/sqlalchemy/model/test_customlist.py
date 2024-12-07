@@ -283,6 +283,7 @@ class TestCustomList:
         assert 2 == custom_list.size
 
         # The editon's work has been scheduled for reindexing.
+        assert first.work is not None
         assert work_queue_indexing.is_queued(first.work, clear=True)
 
         # An entry is also removed if any of its equivalent editions

@@ -31,6 +31,7 @@ from palace.manager.sqlalchemy.model.work import (
     work_library_suppressions,
 )
 from palace.manager.sqlalchemy.util import (
+    create,
     get_one_or_create,
     numericrange_to_tuple,
     tuple_to_numericrange,
@@ -3090,28 +3091,21 @@ class TestWorkConsolidation:
             excinfo.value
         )
 
-    def test_licensepool_without_identifier_gets_no_work(
-        self, db: DatabaseTransactionFixture
-    ):
-        work = db.work(with_license_pool=True)
-        [lp] = work.license_pools
-        lp.identifier = None
-
-        # Even if the LicensePool had a work before, it gets removed.
-        assert (None, False) == lp.calculate_work()
-        assert None == lp.work
-
     def test_licensepool_without_presentation_edition_gets_no_work(
         self, db: DatabaseTransactionFixture
     ):
-        work = db.work(with_license_pool=True)
-        [lp] = work.license_pools
-
-        # This LicensePool has no presentation edition and no way of
-        # getting one.
-        lp.presentation_edition = None
-        lp.identifier.primarily_identifies = []
+        data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        identifier = db.identifier()
+        work, _ = create(db.session, Work)
+        lp, _ = create(
+            db.session,
+            LicensePool,
+            identifier=identifier,
+            collection=db.default_collection(),
+            data_source=data_source,
+            work=work,
+        )
 
         # Even if the LicensePool had a work before, it gets removed.
-        assert (None, False) == lp.calculate_work()
-        assert None == lp.work
+        assert lp.calculate_work() == (None, False)
+        assert lp.work is None

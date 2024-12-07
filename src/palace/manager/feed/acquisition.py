@@ -564,14 +564,11 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
 
         # Sometimes the pool or work may be None
         # In those cases we have to protect against the exceptions
-        try:
-            work = license_pool.work or license_pool.presentation_edition.work
-        except AttributeError as ex:
-            cls.logger().error(f"Error retrieving a Work Object {ex}")
-            cls.logger().error(
-                f"Error Data: {license_pool} | {license_pool and license_pool.presentation_edition}"
-            )
-            return NOT_FOUND_ON_REMOTE
+        work: Work | None = None
+        if license_pool.work:
+            work = license_pool.work
+        elif license_pool.presentation_edition:
+            work = license_pool.presentation_edition.work
 
         if not work:
             return NOT_FOUND_ON_REMOTE
@@ -615,11 +612,17 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         """Turn a work into an annotated work entry for an acquisition feed."""
         identifier = None
         _work: Work
+        active_edition: Edition | None
         if isinstance(work, Edition):
             active_edition = work
             identifier = active_edition.primary_identifier
             active_license_pool = None
-            _work = active_edition.work  # We always need a work for an entry
+            if active_edition.work is None:
+                # We always need a work for an entry
+                raise PalaceValueError(
+                    f"Edition has no associated work: {active_edition!r}"
+                )
+            _work = active_edition.work
         else:
             _work = work
             active_license_pool = annotator.active_licensepool_for(work)

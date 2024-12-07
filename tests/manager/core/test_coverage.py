@@ -1715,6 +1715,7 @@ class TestCollectionCoverageProvider:
         # that just had to create a LicensePool using an
         # INTERNAL_PROCESSING DataSource rather than the DataSource
         # associated with the CoverageProvider.
+        db.session.delete(pool)
         identifier2 = db.identifier()
         identifier.licensed_through = []
         collection2 = db.collection()

@@ -1054,12 +1054,8 @@ class TestCustomListsController:
 
         # First, we are shared with a library which uses the list
         # so we cannot delete the share status
-        lane_with_shared, _ = create(
-            admin_librarian_fixture.ctrl.db.session,
-            Lane,
-            library_id=s.shared_with.id,
-            customlists=[s.list],
-        )
+        lane_with_shared = admin_librarian_fixture.ctrl.db.lane(library=s.shared_with)
+        lane_with_shared.customlists = [s.list]
 
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE", library=s.primary_library
@@ -1090,12 +1086,10 @@ class TestCustomListsController:
         resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
         assert resp["successes"] == 1
 
-        lane_with_primary, _ = create(
-            admin_librarian_fixture.ctrl.db.session,
-            Lane,
-            library_id=s.primary_library.id,
-            customlists=[s.list],
+        lane_with_primary = admin_librarian_fixture.ctrl.db.lane(
+            library=s.primary_library,
         )
+        lane_with_primary.customlists = [s.list]
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE", library=s.primary_library
         ):
@@ -1113,6 +1107,7 @@ class TestCustomListsController:
         custom_list, _ = admin_librarian_fixture.ctrl.db.customlist(
             data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
         )
+        custom_list.library = admin_librarian_fixture.ctrl.db.default_library()
         custom_list.add_entry(w1)
         custom_list.auto_update_enabled = True
         custom_list.auto_update_query = '{"query":"...."}'
@@ -1120,6 +1115,7 @@ class TestCustomListsController:
         admin_librarian_fixture.ctrl.db.session.commit()
 
         assert isinstance(custom_list.name, str)
+        assert custom_list.library is not None
         response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,

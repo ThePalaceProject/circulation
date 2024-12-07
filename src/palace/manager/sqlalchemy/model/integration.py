@@ -29,20 +29,20 @@ class IntegrationConfiguration(Base):
     """
 
     __tablename__ = "integration_configurations"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # The protocol is used to load the correct implementation class for
     # this integration. It is looked up in the IntegrationRegistry.
-    protocol = Column(Unicode, nullable=False)
+    protocol: Mapped[str] = Column(Unicode, nullable=False)
 
     # The goal of the integration is used to differentiate between the
     # different types of integrations. For example, a goal of "authentication"
     # would be used for an authentication provider.
-    goal = Column(SQLAlchemyEnum(Goals), nullable=False, index=True)
+    goal: Mapped[Goals] = Column(SQLAlchemyEnum(Goals), nullable=False, index=True)
 
     # A unique name for this integration. This is primarily
     # used to identify integrations from command-line scripts.
-    name = Column(Unicode, nullable=False, unique=True)
+    name: Mapped[str] = Column(Unicode, nullable=False, unique=True)
 
     # The configuration settings for this integration. Stored as json.
     settings_dict: Mapped[dict[str, Any]] = Column(
@@ -68,7 +68,9 @@ class IntegrationConfiguration(Base):
         flag_modified(self, "context")
 
     # Self test results, stored as json.
-    self_test_results = Column(JSONB, nullable=False, default=dict)
+    self_test_results: Mapped[dict[str, Any]] = Column(
+        JSONB, nullable=False, default=dict
+    )
 
     library_configurations: Mapped[list[IntegrationLibraryConfiguration]] = (
         relationship(
@@ -102,8 +104,6 @@ class IntegrationConfiguration(Base):
 
         db = Session.object_session(self)
         if isinstance(library, Library):
-            if library.id is None:
-                return None
             library_id = library.id
         else:
             library_id = library
@@ -187,7 +187,7 @@ class IntegrationLibraryConfiguration(Base):
 
     # The IntegrationConfiguration this library configuration is
     # associated with.
-    parent_id = Column(
+    parent_id: Mapped[int] = Column(
         Integer,
         ForeignKey("integration_configurations.id", ondelete="CASCADE"),
         primary_key=True,
@@ -198,7 +198,7 @@ class IntegrationLibraryConfiguration(Base):
     )
 
     # The library this integration is associated with.
-    library_id = Column(
+    library_id: Mapped[int] = Column(
         Integer,
         ForeignKey("libraries.id", ondelete="CASCADE"),
         primary_key=True,

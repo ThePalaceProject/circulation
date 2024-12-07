@@ -1087,28 +1087,6 @@ class TestLibraryAnnotator:
         ]
         assert "/annotations" in annotations_link["href"]
 
-    def test_active_loan_feed_ignores_inconsistent_local_data(
-        self, annotator_fixture: LibraryAnnotatorFixture
-    ):
-        patron = annotator_fixture.db.patron()
-
-        work1 = annotator_fixture.db.work(language="eng", with_license_pool=True)
-        loan, ignore = work1.license_pools[0].loan_to(patron)
-        work2 = annotator_fixture.db.work(language="eng", with_license_pool=True)
-        hold, ignore = work2.license_pools[0].on_hold_to(patron)
-
-        # Uh-oh, our local loan data is bad.
-        loan.license_pool.identifier = None
-
-        # Our local hold data is also bad.
-        hold.license_pool = None
-
-        # We can still get a feed...
-        feed_obj = OPDSAcquisitionFeed.active_loans_for(None, patron).as_response()
-
-        # ...but it's empty.
-        assert "<entry>" not in str(feed_obj)
-
     def test_acquisition_feed_includes_license_information(
         self, annotator_fixture: LibraryAnnotatorFixture
     ):

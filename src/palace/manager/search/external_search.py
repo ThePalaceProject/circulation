@@ -214,9 +214,6 @@ class ExternalSearchIndex(LoggerMixin):
     def remove_work(self, work: Work | int) -> None:
         """Remove the search document for `work` from the search index."""
         if isinstance(work, Work):
-            if work.id is None:
-                self.log.warning("Work has no ID, unable to remove. %r", work)
-                return
             work = work.id
 
         self._search_service.index_remove_document(doc_id=work)

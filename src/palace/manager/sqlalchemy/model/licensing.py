@@ -130,7 +130,7 @@ class License(Base, LicenseFunctions):
     """
 
     __tablename__ = "licenses"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     identifier = Column(Unicode)
     checkout_url = Column(Unicode)
@@ -149,7 +149,9 @@ class License(Base, LicenseFunctions):
     terms_concurrency = Column(Integer)
 
     # A License belongs to one LicensePool.
-    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
+    license_pool_id: Mapped[int] = Column(
+        Integer, ForeignKey("licensepools.id"), index=True, nullable=False
+    )
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="licenses"
     )
@@ -215,27 +217,31 @@ class LicensePool(Base):
     UNLIMITED_ACCESS = -1
 
     __tablename__ = "licensepools"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A LicensePool may be associated with a Work. (If it's not, no one
     # can check it out.)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
-    work: Mapped[Work] = relationship("Work", back_populates="license_pools")
+    work: Mapped[Work | None] = relationship("Work", back_populates="license_pools")
 
     # Each LicensePool is associated with one DataSource and one
     # Identifier.
-    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
+    data_source_id: Mapped[int] = Column(
+        Integer, ForeignKey("datasources.id"), index=True, nullable=False
+    )
     data_source: Mapped[DataSource] = relationship(
         "DataSource", back_populates="license_pools", lazy="joined"
     )
 
-    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    identifier_id: Mapped[int] = Column(
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
     identifier: Mapped[Identifier] = relationship(
         "Identifier", back_populates="licensed_through", lazy="joined"
     )
 
     # Each LicensePool belongs to one Collection.
-    collection_id = Column(
+    collection_id: Mapped[int] = Column(
         Integer, ForeignKey("collections.id"), index=True, nullable=False
     )
 
@@ -246,7 +252,7 @@ class LicensePool(Base):
     # Each LicensePool has an Edition which contains the metadata used
     # to describe this book.
     presentation_edition_id = Column(Integer, ForeignKey("editions.id"), index=True)
-    presentation_edition: Mapped[Edition] = relationship(
+    presentation_edition: Mapped[Edition | None] = relationship(
         "Edition", back_populates="is_presentation_for"
     )
 
@@ -282,11 +288,13 @@ class LicensePool(Base):
     # associated with the same Work. This may happen if it's an
     # open-access LicensePool and a better-quality version of the same
     # book is available from another Open-Access source.
-    superceded = Column(Boolean, default=False)
+    superceded: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # A LicensePool that seemingly looks fine may be manually suppressed
     # to be temporarily or permanently removed from the collection.
-    suppressed = Column(Boolean, default=False, index=True)
+    suppressed: Mapped[bool] = Column(
+        Boolean, default=False, index=True, nullable=False
+    )
 
     # A textual description of a problem with this license pool
     # that caused us to suppress it.
@@ -294,11 +302,13 @@ class LicensePool(Base):
 
     open_access = Column(Boolean, index=True)
     last_checked = Column(DateTime(timezone=True), index=True)
-    licenses_owned: int = Column(Integer, default=0, index=True)
-    licenses_available: int = Column(Integer, default=0, index=True)
-    licenses_reserved: int = Column(Integer, default=0)
-    patrons_in_hold_queue: int = Column(Integer, default=0)
-    should_track_playtime = Column(Boolean, default=False, nullable=False)
+    licenses_owned: Mapped[int] = Column(Integer, default=0, index=True, nullable=False)
+    licenses_available: Mapped[int] = Column(
+        Integer, default=0, index=True, nullable=False
+    )
+    licenses_reserved: Mapped[int] = Column(Integer, default=0, nullable=False)
+    patrons_in_hold_queue: Mapped[int] = Column(Integer, default=0, nullable=False)
+    should_track_playtime: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
     # This lets us cache the work of figuring out the best open access
     # link for this LicensePool.
@@ -1203,11 +1213,6 @@ class LicensePool(Base):
         """
         from palace.manager.sqlalchemy.model.work import Work
 
-        if not self.identifier:
-            # A LicensePool with no Identifier should never have a Work.
-            self.work = None
-            return None, False
-
         if known_edition:
             presentation_edition = known_edition
         else:
@@ -1503,23 +1508,23 @@ class LicensePoolDeliveryMechanism(Base):
 
     __tablename__ = "licensepooldeliveries"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
-    data_source_id = Column(
+    data_source_id: Mapped[int] = Column(
         Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
     data_source: Mapped[DataSource] = relationship(
         "DataSource", back_populates="delivery_mechanisms"
     )
 
-    identifier_id = Column(
+    identifier_id: Mapped[int] = Column(
         Integer, ForeignKey("identifiers.id"), index=True, nullable=False
     )
     identifier: Mapped[Identifier] = relationship(
         "Identifier", back_populates="delivery_mechanisms"
     )
 
-    delivery_mechanism_id = Column(
+    delivery_mechanism_id: Mapped[int] = Column(
         Integer, ForeignKey("deliverymechanisms.id"), index=True, nullable=False
     )
     delivery_mechanism: Mapped[DeliveryMechanism] = relationship(
@@ -1528,7 +1533,7 @@ class LicensePoolDeliveryMechanism(Base):
     )
 
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
-    resource: Mapped[Resource] = relationship(
+    resource: Mapped[Resource | None] = relationship(
         "Resource", back_populates="licensepooldeliverymechanisms"
     )
 
@@ -1760,13 +1765,15 @@ class DeliveryMechanism(Base, HasSessionCache):
     }
 
     __tablename__ = "deliverymechanisms"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     content_type = Column(String)
     drm_scheme = Column(String)
 
     # Can the Library Simplified client fulfill a book with this
     # content type and this DRM scheme?
-    default_client_can_fulfill = Column(Boolean, default=False, index=True)
+    default_client_can_fulfill: Mapped[bool] = Column(
+        Boolean, default=False, index=True, nullable=False
+    )
 
     # These are the media type/DRM scheme combos known to be supported
     # by the default Library Simplified client.
@@ -2036,7 +2043,7 @@ class RightsStatus(Base):
     }
 
     __tablename__ = "rightsstatus"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A URI unique to the license. This may be a URL (e.g. Creative
     # Commons)

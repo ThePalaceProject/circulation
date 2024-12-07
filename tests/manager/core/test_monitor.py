@@ -854,7 +854,7 @@ class TestWorkSweepMonitors:
         w4.presentation_ready = True
 
         w2.presentation_ready = False
-        w3.presentation_ready = None
+        w3.presentation_ready = False
 
         # Two Collections, each with one book.
         c1 = db.collection()
