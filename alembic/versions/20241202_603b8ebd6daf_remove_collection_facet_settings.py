@@ -18,10 +18,8 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     conn.execute(
-        "UPDATE integration_library_configurations set settings = settings::jsonb - 'facets_enabled_collection'"
-    )
-    conn.execute(
-        "UPDATE integration_library_configurations set settings = settings::jsonb - 'facets_default_collection'"
+        "UPDATE libraries set settings_dict = "
+        "settings_dict - array['facets_enabled_collection', 'facets_default_collection']"
     )
 
 
