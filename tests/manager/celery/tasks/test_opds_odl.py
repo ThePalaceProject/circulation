@@ -273,7 +273,7 @@ def test_recalculate_holds_for_licensepool(
         assert event["event_type"] == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
 
 
-def test_remove_expired_holds_for_collection(
+def test_remove_expired_holds_for_collection_task(
     celery_fixture: CeleryFixture,
     db: DatabaseTransactionFixture,
     opds_task_fixture: OpdsTaskFixture,
@@ -305,7 +305,9 @@ def test_remove_expired_holds(
     collection2 = db.collection(protocol=OPDS2WithODLApi)
     decoy_collection = db.collection(protocol=OverdriveAPI)
 
-    with patch.object(opds_odl, "remove_expired_holds_for_collection") as mock_remove:
+    with patch.object(
+        opds_odl, "remove_expired_holds_for_collection_task"
+    ) as mock_remove:
         remove_expired_holds.delay().wait()
 
     assert mock_remove.delay.call_count == 2
