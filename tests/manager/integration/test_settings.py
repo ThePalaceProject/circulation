@@ -299,8 +299,9 @@ class TestBaseSettings:
         assert form == []
 
         class BadAdditionalSettings(BaseSettings):
-            # This should be a dict, but we handle it gracefully
-            _additional_form_fields = 1
+            # This should be a dict, but we handle it gracefully. We ignore the
+            # type error here because we are testing for it.
+            _additional_form_fields = 1  # type: ignore[assignment]
 
         form = BadAdditionalSettings().configuration_form(MagicMock())
         assert form == []
