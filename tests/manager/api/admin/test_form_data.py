@@ -30,6 +30,22 @@ class MockSettings(BaseSettings):
             label="Field 3",
         ),
     )
+    field4: str | None = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Date field",
+            type=ConfigurationFormItemType.DATE,
+            description="A date.",
+        ),
+    )
+    field5: str | None = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Another date field",
+            type=ConfigurationFormItemType.DATE,
+            description="Another date.",
+        ),
+    )
 
 
 def test_get_settings():
@@ -41,9 +57,13 @@ def test_get_settings():
             ("field2_value3", "blah blah"),
             ("field2_value4", "blah blah blah"),
             ("field3", "value5"),
+            ("field4", "2024-10-23"),
+            ("field5", ""),
         ]
     )
     settings = ProcessFormData.get_settings(MockSettings, data)
     assert settings.field1 == ["value1", "value2"]
     assert settings.field2 == ["value3", "value4"]
     assert settings.field3 == "value5"
+    assert settings.field4 == "2024-10-23"
+    assert settings.field5 is None
