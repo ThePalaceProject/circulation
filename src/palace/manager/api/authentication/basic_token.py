@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from flask import url_for
 from sqlalchemy.orm import Session
@@ -48,7 +48,7 @@ class BasicTokenAuthenticationProvider(
         basic_provider: BasicAuthenticationProvider,
     ):
         self._db = _db
-        self.library_id = cast(int, library.id)
+        self.library_id = library.id
         # An access token provider is a companion authentication to the basic providers
         self.basic_provider = basic_provider
 

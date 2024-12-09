@@ -25,15 +25,15 @@ class Credential(Base):
     """A place to store credentials for external services."""
 
     __tablename__ = "credentials"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="credentials"
     )
     patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
-    patron: Mapped[Patron] = relationship("Patron", back_populates="credentials")
+    patron: Mapped[Patron | None] = relationship("Patron", back_populates="credentials")
     collection_id = Column(Integer, ForeignKey("collections.id"), index=True)
-    collection: Mapped[Collection] = relationship(
+    collection: Mapped[Collection | None] = relationship(
         "Collection", back_populates="credentials"
     )
     type = Column(String(255), index=True)

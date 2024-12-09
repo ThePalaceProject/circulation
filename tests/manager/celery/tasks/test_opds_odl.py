@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from typing import cast
 from unittest.mock import call, patch
 
 import pytest
@@ -96,9 +95,7 @@ class OpdsTaskFixture:
             for idx in range(10)
         }
 
-        return cast(set[int], expired_holds), cast(
-            set[int], ready_non_expired_holds | not_ready_non_expired_holds
-        )
+        return expired_holds, ready_non_expired_holds | not_ready_non_expired_holds
 
     def pool_with_licenses(
         self, collection: Collection, num_licenses: int = 2, available: bool = False

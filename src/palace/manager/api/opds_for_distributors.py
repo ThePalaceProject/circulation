@@ -306,6 +306,8 @@ class OPDSForDistributorsAPI(
         # Find the acquisition link with the right media type.
         url = None
         for link in links:
+            if link.resource.representation is None:
+                continue
             media_type = link.resource.representation.media_type
             if (
                 link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION

@@ -8,7 +8,7 @@ from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as SaEnum
 from sqlalchemy import Unicode, delete, select
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Mapped, Session
 from typing_extensions import Self
 
 from palace.manager.sqlalchemy.model.base import Base
@@ -26,12 +26,14 @@ class KeyType(Enum):
 class Key(Base):
     __tablename__ = "keys"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    created = Column(
+    id: Mapped[uuid.UUID] = Column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    created: Mapped[datetime.datetime] = Column(
         DateTime(timezone=True), index=True, nullable=False, default=utc_now
     )
-    value = Column(Unicode, nullable=False)
-    type = Column(SaEnum(KeyType), nullable=False, index=True)
+    value: Mapped[str] = Column(Unicode, nullable=False)
+    type: Mapped[KeyType] = Column(SaEnum(KeyType), nullable=False, index=True)
 
     def __repr__(self) -> str:
         return f"<Key id={self.id} created={self.created} type={self.type}>"

@@ -710,7 +710,7 @@ class Measurement(Base):
         DataSourceConstants.LIBRARY_STAFF: [1, 5],
     }
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # A Measurement is always associated with some Identifier.
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
@@ -720,7 +720,7 @@ class Measurement(Base):
 
     # A Measurement always comes from some DataSource.
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="measurements"
     )
 
@@ -735,7 +735,7 @@ class Measurement(Base):
 
     # How much weight should be assigned this measurement, relative to
     # other measurements of the same quantity from the same source.
-    weight = Column(Float, default=1)
+    weight: Mapped[float] = Column(Float, default=1, nullable=False)
 
     # When the measurement was taken
     taken_at = Column(DateTime(timezone=True), index=True)

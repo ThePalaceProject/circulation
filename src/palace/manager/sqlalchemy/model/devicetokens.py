@@ -25,8 +25,8 @@ class DeviceToken(Base):
 
     __tablename__ = "devicetokens"
 
-    id = Column("id", Integer, primary_key=True)
-    patron_id = Column(
+    id: Mapped[int] = Column("id", Integer, primary_key=True)
+    patron_id: Mapped[int] = Column(
         Integer,
         ForeignKey("patrons.id", ondelete="CASCADE", name="devicetokens_patron_fkey"),
         index=True,
@@ -34,12 +34,14 @@ class DeviceToken(Base):
     )
     patron: Mapped[Patron] = relationship("Patron", back_populates="device_tokens")
 
-    token_type_enum = Enum(
-        DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS, name="token_types"
+    token_type: Mapped[str] = Column(
+        Enum(
+            DeviceTokenTypes.FCM_ANDROID, DeviceTokenTypes.FCM_IOS, name="token_types"
+        ),
+        nullable=False,
     )
-    token_type = Column(token_type_enum, nullable=False)
 
-    device_token = Column(Unicode, nullable=False, index=True)
+    device_token: Mapped[str] = Column(Unicode, nullable=False, index=True)
 
     __table_args__ = (
         Index(

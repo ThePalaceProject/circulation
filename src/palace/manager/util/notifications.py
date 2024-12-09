@@ -112,11 +112,15 @@ class PushNotifications(LoggerMixin):
         - Which patron and make the loans api request with the right authentication"""
         url = self.base_url
         edition = loan.license_pool.presentation_edition
+        if edition is None:
+            self.log.error(
+                f"Failed to send loan expiry notification because the edition is missing for "
+                f"loan '{loan.id}', patron '{loan.patron.authorization_identifier}', lp '{loan.license_pool.id}'"
+            )
+            return []
+
         identifier = loan.license_pool.identifier
         library = loan.library
-        # It shouldn't be possible to get here for a loan without a library, but for mypy
-        # and safety we will assert it anyway
-        assert library is not None
         library_short_name = library.short_name
         library_name = library.name
         title = f"Only {days_to_expiry} {'days' if days_to_expiry != 1 else 'day'} left on your loan!"

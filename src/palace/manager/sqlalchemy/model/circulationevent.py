@@ -27,7 +27,7 @@ class CirculationEvent(Base):
     # Used to explicitly tag an event as happening at an unknown time.
     NO_DATE = object()
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # One LicensePool can have many circulation events.
     license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)

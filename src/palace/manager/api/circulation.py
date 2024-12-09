@@ -603,8 +603,6 @@ class BaseCirculationAPI(
 
     @property
     def collection(self) -> Collection | None:
-        if self.collection_id is None:
-            return None
         return Collection.by_id(self._db, id=self.collection_id)
 
     @classmethod
@@ -889,8 +887,6 @@ class CirculationAPI(LoggerMixin):
 
     @property
     def library(self) -> Library | None:
-        if self.library_id is None:
-            return None
         return Library.by_id(self._db, self.library_id)
 
     def api_for_license_pool(

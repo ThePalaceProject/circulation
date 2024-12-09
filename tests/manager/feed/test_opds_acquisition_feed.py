@@ -41,6 +41,8 @@ from palace.manager.sqlalchemy.model.lane import (
 )
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
@@ -504,9 +506,7 @@ class TestOPDSAcquisitionFeed:
 
         # We cannot create an OPDS entry for a Work that cannot be associated
         # with an Identifier.
-        work = db.work(title="Hello, World!", with_license_pool=True)
-        work.license_pools[0].identifier = None
-        work.presentation_edition.primary_identifier = None
+        work, _ = create(db.session, Work)
         with pytest.raises(PalaceValueError, match="Work has no associated identifier"):
             OPDSAcquisitionFeed.single_entry(work, Annotator())
 

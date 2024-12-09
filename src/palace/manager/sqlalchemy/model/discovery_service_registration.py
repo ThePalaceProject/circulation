@@ -34,12 +34,12 @@ class DiscoveryServiceRegistration(Base):
 
     __tablename__ = "discovery_service_registrations"
 
-    status = Column(
+    status: Mapped[RegistrationStatus] = Column(
         AlchemyEnum(RegistrationStatus),
         default=RegistrationStatus.FAILURE,
         nullable=False,
     )
-    stage = Column(
+    stage: Mapped[RegistrationStage] = Column(
         AlchemyEnum(RegistrationStage),
         default=RegistrationStage.TESTING,
         nullable=False,
@@ -50,7 +50,7 @@ class DiscoveryServiceRegistration(Base):
     shared_secret = Column(Unicode)
 
     # The IntegrationConfiguration this registration is associated with.
-    integration_id = Column(
+    integration_id: Mapped[int] = Column(
         Integer,
         ForeignKey("integration_configurations.id", ondelete="CASCADE"),
         nullable=False,
@@ -61,7 +61,7 @@ class DiscoveryServiceRegistration(Base):
     )
 
     # The Library this registration is associated with.
-    library_id = Column(
+    library_id: Mapped[int] = Column(
         Integer,
         ForeignKey("libraries.id", ondelete="CASCADE"),
         nullable=False,

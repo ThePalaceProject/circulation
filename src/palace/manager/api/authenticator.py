@@ -6,7 +6,6 @@ import logging
 import sys
 from abc import ABC
 from collections.abc import Iterable
-from typing import cast
 
 import flask
 import jwt
@@ -139,11 +138,6 @@ class Authenticator(LoggerMixin):
             log_method=self.log.debug, message_prefix="populate_authenticators"
         ):
             for library in libraries:
-                if library.short_name is None:
-                    self.log.error(
-                        f"Library {library.name} ({library.id}) has no short name."
-                    )
-                    continue
                 self.library_authenticators[library.short_name] = (
                     LibraryAuthenticator.from_config(_db, library, analytics)
                 )
@@ -262,9 +256,11 @@ class LibraryAuthenticator(LoggerMixin):
         )
 
         self.saml_providers_by_name = {}
-        self.bearer_token_signing_secret = bearer_token_signing_secret or cast(
-            str,
-            Key.get_key(_db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True).value,
+        self.bearer_token_signing_secret = (
+            bearer_token_signing_secret
+            or Key.get_key(
+                _db, KeyType.BEARER_TOKEN_SIGNING, raise_exception=True
+            ).value
         )
         self.initialization_exceptions: dict[
             tuple[int | None, int | None], Exception
@@ -307,8 +303,6 @@ class LibraryAuthenticator(LoggerMixin):
 
     @property
     def library(self) -> Library | None:
-        if self.library_id is None:
-            return None
         return Library.by_id(self._db, self.library_id)
 
     def register_provider(
@@ -350,8 +344,8 @@ class LibraryAuthenticator(LoggerMixin):
             settings = impl_cls.settings_load(integration.parent)
             library_settings = impl_cls.library_settings_load(integration)
             provider = impl_cls(
-                self.library_id,  # type: ignore[arg-type]
-                integration.parent_id,  # type: ignore[arg-type]
+                self.library_id,
+                integration.parent_id,
                 settings,
                 library_settings,
                 analytics,

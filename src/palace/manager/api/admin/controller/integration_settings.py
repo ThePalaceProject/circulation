@@ -98,15 +98,6 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """This is the default implementation for getting details about a configured integration.
          It can be overridden by implementations that need to add additional information to the
         service info dict that gets returned to the admin UI."""
-
-        if service.goal is None:
-            # We should never get here, since we only query for services with a goal, and goal
-            # is a required field, but for mypy and safety, we check for it anyway.
-            self.log.warning(
-                f"IntegrationConfiguration {service.name}({service.id}) has no goal set. Skipping."
-            )
-            return None
-
         if service.protocol is None or service.protocol not in self.registry:
             self.log.warning(
                 f"Unknown protocol: {service.protocol} for goal {self.registry.goal}"

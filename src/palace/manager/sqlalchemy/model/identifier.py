@@ -237,7 +237,7 @@ class Identifier(Base, IdentifierConstants):
     """A way of uniquely referring to a particular edition."""
 
     __tablename__ = "identifiers"
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
     type = Column(String(64), index=True)
     identifier = Column(String, index=True)
 
@@ -1124,26 +1124,28 @@ class Equivalency(Base):
 
     # 'input' is the ID that was used as input to the datasource.
     # 'output' is the output
-    id = Column(Integer, primary_key=True)
-    input_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
+    input_id: Mapped[int] = Column(
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
     input: Mapped[Identifier] = relationship(
         "Identifier", foreign_keys=input_id, back_populates="equivalencies"
     )
-    output_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
+    output_id: Mapped[int] = Column(Integer, ForeignKey("identifiers.id"), index=True)
     output: Mapped[Identifier] = relationship(
         "Identifier", foreign_keys=output_id, back_populates="inbound_equivalencies"
     )
 
     # Who says?
     data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource] = relationship(
+    data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="id_equivalencies"
     )
 
     # How many distinct votes went into this assertion? This will let
     # us scale the change to the strength when additional votes come
     # in.
-    votes = Column(Integer, default=1)
+    votes: Mapped[int] = Column(Integer, default=1, nullable=False)
 
     # How strong is this assertion (-1..1)? A negative number is an
     # assertion that the two Identifiers do *not* identify the
@@ -1154,7 +1156,7 @@ class Equivalency(Base):
     # is not manipulated directly, but it gives us the ability to use
     # manual intervention to defuse large chunks of problematic code
     # without actually deleting the data.
-    enabled = Column(Boolean, default=True, index=True)
+    enabled: Mapped[bool] = Column(Boolean, default=True, index=True, nullable=False)
 
     def __repr__(self):
         r = "[%s ->\n %s\n source=%s strength=%.2f votes=%d)]" % (
@@ -1199,19 +1201,19 @@ class RecursiveEquivalencyCache(Base):
 
     __tablename__ = "recursiveequivalentscache"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = Column(Integer, primary_key=True)
 
     # The "parent" or the start of the chain
     parent_identifier_id = Column(
         Integer, ForeignKey("identifiers.id", ondelete="CASCADE")
     )
-    parent_identifier: Mapped[Identifier] = relationship(
+    parent_identifier: Mapped[Identifier | None] = relationship(
         "Identifier", foreign_keys=parent_identifier_id
     )
 
     # The identifier chained to the parent
     identifier_id = Column(Integer, ForeignKey("identifiers.id", ondelete="CASCADE"))
-    identifier: Mapped[Identifier] = relationship(
+    identifier: Mapped[Identifier | None] = relationship(
         "Identifier", foreign_keys=identifier_id
     )
 
