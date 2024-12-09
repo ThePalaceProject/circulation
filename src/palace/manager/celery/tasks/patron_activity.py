@@ -83,7 +83,7 @@ def sync_patron_activity(
                 return
             except (RemoteIntegrationException, StaleDataError) as e:
                 # This may have been a transient network error with the remote integration or some data
-                # changed while we were processing the sync. Retry the task.
+                # changed while we were processing the sync. Attempt to retry.
                 retries = task.request.retries
                 if retries < task.max_retries:
                     wait_time = exponential_backoff(retries)
