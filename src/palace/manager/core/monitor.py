@@ -885,10 +885,16 @@ class ReaperMonitor(Monitor):
                 self.delete(i)
                 rows_deleted += 1
             self._db.commit()
+
+            self.after_commit()
+
             count = qu.count()
         return TimestampData(achievements="Items deleted: %d" % rows_deleted)
 
-    def delete(self, row):
+    def after_commit(self) -> None:
+        return None
+
+    def delete(self, row) -> None:
         """Delete a row from the database.
 
         CAUTION: If you override this method such that it doesn't

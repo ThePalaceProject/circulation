@@ -404,7 +404,7 @@ class TestPatronData:
         )
         authenticated_by_weird_identifier.apply(patron)
         assert "1234" == patron.authorization_identifier
-        assert None == patron.last_external_sync
+        assert patron.last_external_sync is None
 
     def test_get_or_create_patron(
         self, patron_data: PatronData, db: DatabaseTransactionFixture
@@ -417,15 +417,15 @@ class TestPatronData:
         patron, is_new = patron_data.get_or_create_patron(
             db.session, default_library.id, analytics
         )
-        assert "2" == patron.authorization_identifier
+        assert patron.authorization_identifier == "2"
         assert default_library == patron.library
-        assert True == is_new
-        assert CirculationEvent.NEW_PATRON == analytics.event_type
-        assert 1 == analytics.count
+        assert is_new is True
+        assert analytics.last_event_type == CirculationEvent.NEW_PATRON
+        assert analytics.count == 1
 
         # Patron.neighborhood was set, even though there is no
         # value and that's not a database field.
-        assert None == patron.neighborhood
+        assert patron.neighborhood is None
 
         # Set a neighborhood and try again.
         patron_data.neighborhood = "Achewood"
@@ -435,15 +435,14 @@ class TestPatronData:
         patron, is_new = patron_data.get_or_create_patron(
             db.session, default_library.id, analytics
         )
-        assert "2" == patron.authorization_identifier
-        assert False == is_new
-        assert "Achewood" == patron.neighborhood
-        assert 1 == analytics.count
+        assert patron.authorization_identifier == "2"
+        assert is_new is False
+        assert patron.neighborhood == "Achewood"
+        assert analytics.count == 1
 
     def test_to_response_parameters(self, patron_data: PatronData):
         params = patron_data.to_response_parameters
         assert dict(name="4") == params
-
         patron_data.personal_name = None
         params = patron_data.to_response_parameters
         assert dict() == params
