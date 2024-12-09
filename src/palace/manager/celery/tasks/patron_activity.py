@@ -1,4 +1,5 @@
 from celery import shared_task
+from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.circulation import PatronActivityCirculationAPI
 from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
@@ -80,8 +81,9 @@ def sync_patron_activity(
                     "Marking patron activity as failed."
                 )
                 return
-            except RemoteIntegrationException as e:
-                # This may have been a transient network error with the remote integration. Attempt to retry.
+            except (RemoteIntegrationException, StaleDataError) as e:
+                # This may have been a transient network error with the remote integration or some data
+                # changed while we were processing the sync. Retry the task.
                 retries = task.request.retries
                 if retries < task.max_retries:
                     wait_time = exponential_backoff(retries)

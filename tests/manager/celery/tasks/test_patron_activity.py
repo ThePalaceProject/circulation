@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.api.circulation import HoldInfo, LoanInfo
 from palace.manager.api.circulation_exceptions import PatronAuthorizationFailedException
@@ -150,9 +151,20 @@ class TestSyncPatronActivity:
         )
 
     @patch("palace.manager.celery.tasks.patron_activity.exponential_backoff")
-    def test_remote_integration_exception(
+    @pytest.mark.parametrize(
+        "exception",
+        [
+            pytest.param(StaleDataError(), id="StaleDataError"),
+            pytest.param(
+                RemoteIntegrationException("http://test.com", "boom!"),
+                id="RemoteIntegrationException",
+            ),
+        ],
+    )
+    def test_retried_exception(
         self,
         mock_backoff: MagicMock,
+        exception: Exception,
         sync_task_fixture: SyncTaskFixture,
         caplog: pytest.LogCaptureFixture,
     ):
@@ -161,7 +173,7 @@ class TestSyncPatronActivity:
 
         mock_activity = create_autospec(
             sync_task_fixture.mock_collection_api.patron_activity,
-            side_effect=RemoteIntegrationException("http://test.com", "boom!"),
+            side_effect=exception,
         )
         sync_task_fixture.mock_collection_api.patron_activity = mock_activity
 
