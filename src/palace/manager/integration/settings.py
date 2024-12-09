@@ -374,10 +374,12 @@ class BaseSettings(BaseModel, LoggerMixin):
                 )
             )
 
-        for key, additional_field in cls.__private_attributes__[
+        additional_fields: Any = cls.__private_attributes__[
             "_additional_form_fields"
-        ].default.items():
-            config.append(additional_field.to_dict(db, key))
+        ].default
+        if isinstance(additional_fields, dict):
+            for key, additional_field in additional_fields.items():
+                config.append(additional_field.to_dict(db, key))
 
         # Sort by weight then return only the settings
         config.sort(key=lambda x: x[0])
