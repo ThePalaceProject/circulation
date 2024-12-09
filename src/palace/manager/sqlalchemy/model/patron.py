@@ -571,7 +571,6 @@ class Hold(Base, LoanAndHoldMixin):
     """A patron is in line to check out a book."""
 
     __tablename__ = "holds"
-<<<<<<< HEAD
     id: Mapped[int] = Column(Integer, primary_key=True)
     patron_id: Mapped[int] = Column(
         Integer, ForeignKey("patrons.id"), index=True, nullable=False
@@ -582,11 +581,6 @@ class Hold(Base, LoanAndHoldMixin):
     license_pool_id: Mapped[int] = Column(
         Integer, ForeignKey("licensepools.id"), index=True, nullable=False
     )
-=======
-    id = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True, nullable=False)
-    license_pool_id = Column(Integer, ForeignKey("licensepools.id"), index=True)
->>>>>>> 0e3659672 (Make loan.patron_id and hold.patron_id fields non-nullable.)
     license_pool: Mapped[LicensePool] = relationship(
         "LicensePool", back_populates="holds"
     )
