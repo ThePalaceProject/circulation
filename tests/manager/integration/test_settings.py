@@ -1,8 +1,5 @@
-import dataclasses
 import logging
-from copy import deepcopy
 from functools import partial
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,7 +12,6 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
-    FormFieldInfo,
     SettingsValidationError,
 )
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
@@ -87,26 +83,13 @@ class BaseSettingsFixture:
             "required": False,
         }
         self.mock_db = MagicMock(spec=Session)
-        self._original_model_fields = MockSettings.model_fields
-        MockSettings.model_fields = deepcopy(self._original_model_fields)
         self.settings = partial(MockSettings, number=1)
-
-    def update_form(self, name: str, **kwargs: Any) -> None:
-        model_field = MockSettings.model_fields[name]
-        assert isinstance(model_field, FormFieldInfo)
-        model_field.form = dataclasses.replace(model_field.form, **kwargs)
-
-    def cleanup(self) -> None:
-        MockSettings.model_fields = self._original_model_fields
 
 
 @pytest.fixture
 def base_settings_fixture():
     fixture = BaseSettingsFixture()
-    try:
-        yield fixture
-    finally:
-        fixture.cleanup()
+    yield fixture
 
 
 class TestBaseSettings:
@@ -247,24 +230,40 @@ class TestBaseSettings:
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
         # Make sure that the configuration form is sorted by weight
-        base_settings_fixture.update_form("test", weight=100)
-        base_settings_fixture.update_form("number", weight=1)
-        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
-        assert form == [
-            base_settings_fixture.with_alias_config_dict,
-            base_settings_fixture.number_config_dict,
-            base_settings_fixture.test_config_dict,
-        ]
+        class WeightedMockSettings(BaseSettings):
+            string: str | None = FormField(
+                "test",
+                form=ConfigurationFormItem(
+                    label="Test", description="Test description", weight=100
+                ),
+            )
+            number: PositiveInt = FormField(
+                12,
+                form=ConfigurationFormItem(
+                    label="Number", description="Number description", weight=1
+                ),
+            )
+
+        [item1, item2] = WeightedMockSettings().configuration_form(
+            base_settings_fixture.mock_db
+        )
+        assert item1["key"] == "number"
+        assert item2["key"] == "string"
 
     def test_configuration_form_options(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
-        base_settings_fixture.update_form(
-            "test",
-            options={"option1": "Option 1", "option2": "Option 2"},
-            type=ConfigurationFormItemType.SELECT,
-        )
-        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
+        class OptionsMockSettings(BaseSettings):
+            test: str = FormField(
+                "test",
+                form=ConfigurationFormItem(
+                    label="Test",
+                    options={"option1": "Option 1", "option2": "Option 2"},
+                    type=ConfigurationFormItemType.SELECT,
+                ),
+            )
+
+        form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
         assert form[0]["options"] == [
             {"key": "option1", "label": "Option 1"},
             {"key": "option2", "label": "Option 2"},
@@ -275,12 +274,50 @@ class TestBaseSettings:
     ) -> None:
         options_callable = MagicMock(return_value={"xyz": "ABC"})
 
-        base_settings_fixture.update_form(
-            "test", options=options_callable, type=ConfigurationFormItemType.SELECT
-        )
-        form = MockSettings.configuration_form(base_settings_fixture.mock_db)
+        class OptionsMockSettings(BaseSettings):
+            test: str = FormField(
+                "test",
+                form=ConfigurationFormItem(
+                    label="Test",
+                    options=options_callable,
+                    type=ConfigurationFormItemType.SELECT,
+                ),
+            )
+
+        options_callable.assert_not_called()
+        form = OptionsMockSettings().configuration_form(base_settings_fixture.mock_db)
 
         options_callable.assert_called_once_with(base_settings_fixture.mock_db)
         assert form[0]["options"] == [
             {"key": "xyz", "label": "ABC"},
+        ]
+
+    def test_additional_form_fields(self) -> None:
+        class NoAdditionalSettings(BaseSettings): ...
+
+        form = NoAdditionalSettings().configuration_form(MagicMock())
+        assert form == []
+
+        class BadAdditionalSettings(BaseSettings):
+            # This should be a dict, but we handle it gracefully
+            _additional_form_fields = 1
+
+        form = BadAdditionalSettings().configuration_form(MagicMock())
+        assert form == []
+
+        class AdditionalSettings(BaseSettings):
+            _additional_form_fields = {
+                "test": ConfigurationFormItem(
+                    label="Test",
+                    type=ConfigurationFormItemType.TEXT,
+                )
+            }
+
+        form = AdditionalSettings().configuration_form(MagicMock())
+        assert form == [
+            {
+                "key": "test",
+                "label": "Test",
+                "required": False,
+            }
         ]
