@@ -1278,7 +1278,10 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
         edition, _ = metadata.edition(self._db)
 
         metadata.apply(
-            edition, collection=self.collection, replace=self.replacement_policy
+            edition,
+            collection=self.collection,
+            replace=self.replacement_policy,
+            db=self._db,
         )
 
 
