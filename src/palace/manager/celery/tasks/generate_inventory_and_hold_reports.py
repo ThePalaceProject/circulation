@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import tempfile
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from palace.manager.service.email.email import SendEmailCallable
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
+from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.integration import (
     IntegrationConfiguration,
     IntegrationLibraryConfiguration,
@@ -71,14 +73,14 @@ class GenerateInventoryAndHoldsReportsJob(Job):
         email_address: str,
         send_email: SendEmailCallable,
         registry: LicenseProvidersRegistry,
-        delete_attachments: bool = True,
+        s3_service: S3Service,
     ):
         super().__init__(session_maker)
         self.library_id = library_id
         self.email_address = email_address
-        self.delete_attachments = delete_attachments
         self.send_email = send_email
         self.registry = registry
+        self.s3_service = s3_service
 
     def run(self) -> None:
         with self.transaction() as session:
@@ -113,9 +115,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 "integration_ids": tuple(integration_ids),
             }
 
-            with tempfile.NamedTemporaryFile(
-                delete=self.delete_attachments
-            ) as report_zip:
+            with tempfile.NamedTemporaryFile() as report_zip:
                 zip_path = Path(report_zip.name)
 
                 with (
@@ -148,13 +148,34 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                             arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
                         )
 
+                    reports_path = "inventory_and_holds"
+                    expiration_in_days = 30
+                    self.s3_service.update_bucket_expiration_rule(
+                        prefix=f"{reports_path}/", expiration_in_days=expiration_in_days
+                    )
+
+                    with zip_path.open(
+                        "rb",
+                    ) as binary_stream:
+                        uid = uuid.uuid4()
+                        key = (
+                            f"{reports_path}/{library.short_name}/"
+                            f"inventory-and-holds-for-library-{file_name_modifier}-{uid}.zip"
+                        )
+                        self.s3_service.store_stream(
+                            key,
+                            binary_stream,
+                            content_type="application/zip",
+                        )
+
+                    s3_file_link = self.s3_service.generate_url(key)
                     self.send_email(
                         subject=f"Inventory and Holds Reports {current_time}",
                         receivers=[self.email_address],
-                        text="",
-                        attachments={
-                            f"palace-inventory-and-holds-reports-for-{file_name_modifier}.zip": zip_path
-                        },
+                        text=(
+                            f"Download Report here -> {s3_file_link} \n\n"
+                            f"This report will be available for download for {expiration_in_days} days."
+                        ),
                     )
 
                     self.log.debug(f"Zip file written to {zip_path}")
@@ -331,4 +352,5 @@ def generate_inventory_and_hold_reports(
         email_address=email_address,
         send_email=task.services.email.send_email,
         registry=task.services.integration_registry.license_providers(),
+        s3_service=task.services.storage.public(),
     ).run()
