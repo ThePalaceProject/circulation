@@ -225,6 +225,84 @@ class TestS3Service:
         with pytest.raises(RuntimeError):
             upload.upload_part(b"foo")
 
+    def _configuration(self, prefix, expiration):
+        return {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": expiration,
+                    },
+                    "ID": f"expiration_on_{prefix}",
+                    "Prefix": prefix,
+                    "Filter": {"Prefix": prefix},
+                    "Status": "Enabled",
+                }
+            ]
+        }
+
+    def test_update_bucket_expiration_rule_not_previously_set(
+        self, s3_service_fixture: S3ServiceFixture
+    ):
+        service = s3_service_fixture.service()
+        prefix = "prefix/"
+        expiration_in_days = 10
+
+        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.return_value = (
+            None
+        )
+        service.update_bucket_expiration_rule(
+            prefix=prefix, expiration_in_days=expiration_in_days
+        )
+        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.assert_called_once()
+        put_config_method = (
+            s3_service_fixture.mock_s3_client.put_bucket_lifecycle_configuration
+        )
+        put_config_method.assert_called_once_with(
+            Bucket="bucket",
+            LifecycleConfiguration=self._configuration(prefix, expiration_in_days),
+        )
+
+    def test_update_bucket_expiration_rule_previously_set_unchanged(
+        self, s3_service_fixture: S3ServiceFixture
+    ):
+        service = s3_service_fixture.service()
+        prefix = "prefix/"
+        expiration_in_days = 10
+
+        get_bucket_lifecycle_config = (
+            s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration
+        )
+        get_bucket_lifecycle_config.return_value = self._configuration(
+            prefix, expiration_in_days
+        )
+        service.update_bucket_expiration_rule(
+            prefix=prefix, expiration_in_days=expiration_in_days
+        )
+        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.assert_called_once()
+        s3_service_fixture.mock_s3_client.put_bucket_lifecycle_configuration.assert_not_called()
+
+    def test_update_bucket_expiration_rule_previously_set_changed(
+        self, s3_service_fixture: S3ServiceFixture
+    ):
+        service = s3_service_fixture.service()
+        prefix = "prefix/"
+        expiration_in_days = 10
+        get_lifecycle = (
+            s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration
+        )
+        get_lifecycle.return_value = self._configuration(prefix, 12)
+        service.update_bucket_expiration_rule(
+            prefix=prefix, expiration_in_days=expiration_in_days
+        )
+        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.assert_called_once()
+        put_config_method = (
+            s3_service_fixture.mock_s3_client.put_bucket_lifecycle_configuration
+        )
+        put_config_method.assert_called_once_with(
+            Bucket="bucket",
+            LifecycleConfiguration=self._configuration(prefix, expiration_in_days),
+        )
+
 
 @pytest.mark.minio
 class TestS3ServiceIntegration:
