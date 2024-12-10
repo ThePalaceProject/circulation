@@ -245,7 +245,9 @@ class S3Service(LoggerMixin):
             UploadId=upload_id,
         )
 
-    def update_bucket_expiration_rule(self, prefix: str, expiration_in_days: int = 30):
+    def update_bucket_expiration_rule(
+        self, prefix: str, expiration_in_days: int = 30
+    ) -> None:
         """
         Update the expiration lifecycle policy rule if it exists and has changed.  If
         it does not already exist, add one.
@@ -253,11 +255,6 @@ class S3Service(LoggerMixin):
         rule_name = f"expiration_on_{prefix}"
         bucket = self.bucket
         configuration = self.client.get_bucket_lifecycle_configuration(Bucket=bucket)
-        if not configuration:
-            configuration = {}
-
-        if "Rules" not in configuration:
-            configuration["Rules"] = []
 
         rules_list = configuration["Rules"]
         for rule in rules_list:
@@ -292,15 +289,15 @@ class S3Service(LoggerMixin):
 
         try:
             policy_status = self.client.put_bucket_lifecycle_configuration(
-                Bucket=bucket, LifecycleConfiguration=configuration
+                Bucket=bucket, LifecycleConfiguration={"Rules": rules_list}  # type: ignore[typeddict-item]
             )
 
             self.log.info(
-                f"Updated configuration for {bucket}: "
+                f"Updated bucket lifecycle configuration for {bucket}: "
                 f"configuration={configuration}, "
                 f"status = {policy_status}"
             )
         except ClientError as e:
             self.log.error(
-                f"Unable to apply bucket policy to {self.bucket} . \nReason:{e}"
+                f"Unable to apply bucket lifecycle configuration for {self.bucket}. \nReason:{e}"
             )

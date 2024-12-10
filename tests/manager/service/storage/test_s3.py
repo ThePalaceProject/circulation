@@ -247,9 +247,9 @@ class TestS3Service:
         prefix = "prefix/"
         expiration_in_days = 10
 
-        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.return_value = (
-            None
-        )
+        s3_service_fixture.mock_s3_client.get_bucket_lifecycle_configuration.return_value = {
+            "Rules": []
+        }
         service.update_bucket_expiration_rule(
             prefix=prefix, expiration_in_days=expiration_in_days
         )
