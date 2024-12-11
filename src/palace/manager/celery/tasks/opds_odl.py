@@ -1,6 +1,5 @@
 import datetime
 from dataclasses import dataclass
-from typing import Any
 
 from celery import shared_task
 from sqlalchemy import delete, select
@@ -45,7 +44,7 @@ def remove_expired_holds_for_collection(
     )
 
     expired_holds = db.scalars(select_query).all()
-    expired_hold_events: list[dict[str, Any]] = []
+    expired_hold_events: list[CirculationEventData] = []
     for hold in expired_holds:
         expired_hold_events.append(
             CirculationEventData(
@@ -118,7 +117,7 @@ def recalculate_holds_for_licensepool(
     waiting = holds[reserved:]
     updated = 0
 
-    events: list[dict[str, Any]] = []
+    events: list[CirculationEventData] = []
 
     # These holds have a copy reserved for them.
     for hold in ready:
