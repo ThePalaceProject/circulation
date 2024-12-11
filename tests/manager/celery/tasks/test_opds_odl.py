@@ -152,7 +152,7 @@ def test_remove_expired_holds_for_collection(
 
     # Remove the expired holds
     assert collection.id is not None
-    removed, events = remove_expired_holds_for_collection(
+    events = remove_expired_holds_for_collection(
         db.session,
         collection.id,
     )
@@ -165,8 +165,6 @@ def test_remove_expired_holds_for_collection(
     assert decoy_non_expired_holds.issubset(current_holds)
     assert decoy_expired_holds.issubset(current_holds)
 
-    assert removed == 10
-
     pools_after = db.session.scalars(
         select(func.count()).select_from(LicensePool)
     ).one()
@@ -177,7 +175,8 @@ def test_remove_expired_holds_for_collection(
     # verify that the correct analytics calls were made
     assert len(events) == 10
     for event in events:
-        assert event["event_type"] == CirculationEvent.CM_HOLD_EXPIRED
+        assert event.event_type == CirculationEvent.CM_HOLD_EXPIRED
+        assert event.library == db.default_library()
 
 
 def test_licensepools_with_holds(
@@ -270,7 +269,7 @@ def test_recalculate_holds_for_licensepool(
     # verify that the correct analytics events were returned
     assert len(events) == 3
     for event in events:
-        assert event["event_type"] == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
+        assert event.event_type == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
 
 
 def test_remove_expired_holds_for_collection_task(
