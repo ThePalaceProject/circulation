@@ -1585,8 +1585,8 @@ class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]
                 checkout_format == self.api.AXISNOW or checkout_format == "Blio"
             ):
                 # If we didn't explicitly ask for a format, ignore any AxisNow or Blio formats, since
-                # we can't fulfill them. If we add AxisNow and Blio support in the future, we will need
-                # to drop this line.
+                # we can't fulfill them. If we add AxisNow and Blio support in the future, we can remove
+                # this check.
                 return None
 
             fulfillment: Fulfillment | None
