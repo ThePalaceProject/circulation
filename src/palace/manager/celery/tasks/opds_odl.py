@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import dataclass
 
 from celery import shared_task
 from sqlalchemy import delete, select
@@ -7,35 +8,63 @@ from sqlalchemy.orm import Session
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.celery.task import Task
+from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
-from palace.manager.sqlalchemy.model.patron import Hold
+from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.util.datetime_helpers import utc_now
 
 
-def remove_expired_holds_for_collection(db: Session, collection_id: int) -> int:
+@dataclass
+class CirculationEventData:
+    library: Library
+    license_pool: LicensePool
+    event_type: str
+    patron: Patron
+
+
+def remove_expired_holds_for_collection(
+    db: Session,
+    collection_id: int,
+) -> list[CirculationEventData]:
     """
     Remove expired holds from the database for this collection.
     """
+
+    select_query = select(Hold).where(
+        Hold.position == 0,
+        Hold.end < utc_now(),
+        Hold.license_pool_id == LicensePool.id,
+        LicensePool.collection_id == collection_id,
+    )
+
+    expired_holds = db.scalars(select_query).all()
+    expired_hold_events: list[CirculationEventData] = []
+    for hold in expired_holds:
+        expired_hold_events.append(
+            CirculationEventData(
+                library=hold.library,
+                license_pool=hold.license_pool,
+                event_type=CirculationEvent.CM_HOLD_EXPIRED,
+                patron=hold.patron,
+            )
+        )
+
+    # delete the holds
     query = (
         delete(Hold)
-        .where(
-            Hold.position == 0,
-            Hold.end < utc_now(),
-            Hold.license_pool_id == LicensePool.id,
-            LicensePool.collection_id == collection_id,
-        )
+        .where(Hold.id.in_(h.id for h in expired_holds))
         .execution_options(synchronize_session="fetch")
     )
-    result = db.execute(query)
-    # We need the type ignores here because result doesn't always have
-    # a rowcount, but the sqlalchemy docs swear it will in the case of
-    # a delete statement.
-    # https://docs.sqlalchemy.org/en/20/tutorial/data_update.html#getting-affected-row-count-from-update-delete
-    return result.rowcount  # type: ignore[attr-defined,no-any-return]
+
+    db.execute(query)
+
+    return expired_hold_events
 
 
 def licensepool_ids_with_holds(
@@ -74,7 +103,7 @@ def lock_licenses(license_pool: LicensePool) -> None:
 def recalculate_holds_for_licensepool(
     license_pool: LicensePool,
     reservation_period: datetime.timedelta,
-) -> int:
+) -> tuple[int, list[CirculationEventData]]:
     # We take out row level locks on all the licenses and holds for this license pool, so that
     # everything is in a consistent state while we update the hold queue. This means we should be
     # quickly committing the transaction, to avoid contention or deadlocks.
@@ -88,6 +117,8 @@ def recalculate_holds_for_licensepool(
     waiting = holds[reserved:]
     updated = 0
 
+    events: list[CirculationEventData] = []
+
     # These holds have a copy reserved for them.
     for hold in ready:
         # If this hold isn't already in position 0, the hold just became available.
@@ -96,6 +127,14 @@ def recalculate_holds_for_licensepool(
             hold.position = 0
             hold.end = utc_now() + reservation_period
             updated += 1
+            events.append(
+                CirculationEventData(
+                    library=hold.library,
+                    license_pool=hold.license_pool,
+                    event_type=CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT,
+                    patron=hold.patron,
+                )
+            )
 
     # Update the position for the remaining holds.
     for idx, hold in enumerate(waiting):
@@ -105,13 +144,35 @@ def recalculate_holds_for_licensepool(
             hold.end = None
             updated += 1
 
-    return updated
+    return updated, events
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def remove_expired_holds_for_collection_task(task: Task, collection_id: int) -> None:
+    """
+    A shared task for removing expired holds from the database for a collection
+    """
+    analytics = task.services.analytics.analytics()
+
+    with task.transaction() as session:
+        collection = Collection.by_id(session, collection_id)
+        events = remove_expired_holds_for_collection(
+            session,
+            collection_id,
+        )
+
+        collection_name = None if not collection else collection.name
+        task.log.info(
+            f"Removed {len(events)} expired holds for collection {collection_name} ({collection_id})."
+        )
+
+    collect_events(task, events, analytics)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def remove_expired_holds(task: Task) -> None:
     """
-    Remove expired holds from the database.
+    Issue remove expired hold tasks for eligible collections
     """
     registry = task.services.integration_registry.license_providers()
     protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
@@ -122,11 +183,7 @@ def remove_expired_holds(task: Task) -> None:
             if collection.id is not None
         ]
     for collection_id, collection_name in collections:
-        with task.transaction() as session:
-            removed = remove_expired_holds_for_collection(session, collection_id)
-            task.log.info(
-                f"Removed {removed} expired holds for collection {collection_name} ({collection_id})."
-            )
+        remove_expired_holds_for_collection_task.delay(collection_id)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -151,6 +208,27 @@ def _redis_lock_recalculate_holds(client: Redis, collection_id: int) -> RedisLoc
     )
 
 
+def collect_events(
+    task: Task, events: list[CirculationEventData], analytics: Analytics
+) -> None:
+    """
+    Collect events after successful database is commit and any row locks are removed.
+    We perform this operation outside after completed the transaction to ensure that any row locks
+    are held for the shortest possible duration in case writing to the s3 analytics provider is slow.
+    """
+    with task.session() as session:
+        for e in events:
+            session.refresh(e.library)
+            session.refresh(e.license_pool)
+            session.refresh(e.patron)
+            analytics.collect_event(
+                event_type=e.event_type,
+                library=e.library,
+                license_pool=e.license_pool,
+                patron=e.patron,
+            )
+
+
 @shared_task(queue=QueueNames.default, bind=True)
 def recalculate_hold_queue_collection(
     task: Task, collection_id: int, batch_size: int = 100, after_id: int | None = None
@@ -159,6 +237,7 @@ def recalculate_hold_queue_collection(
     Recalculate the hold queue for a collection.
     """
     lock = _redis_lock_recalculate_holds(task.services.redis.client(), collection_id)
+    analytics = task.services.analytics.analytics()
     with lock.lock() as locked:
         if not locked:
             task.log.info(
@@ -200,8 +279,10 @@ def recalculate_hold_queue_collection(
                         f"Skipping license pool {license_pool_id} because it no longer exists."
                     )
                     continue
-                updated = recalculate_holds_for_licensepool(
-                    license_pool, reservation_period
+
+                updated, events = recalculate_holds_for_licensepool(
+                    license_pool,
+                    reservation_period,
                 )
                 edition = license_pool.presentation_edition
                 title = edition.title if edition else None
@@ -210,6 +291,8 @@ def recalculate_hold_queue_collection(
                     f"Updated hold queue for license pool {license_pool_id} ({title} by {author}). "
                     f"{updated} holds out of date."
                 )
+
+            collect_events(task, events, analytics)
 
     if len(license_pool_ids) == batch_size:
         # We are done this batch, but there is probably more work to do, we queue up the next batch.

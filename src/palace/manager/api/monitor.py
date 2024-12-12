@@ -2,6 +2,7 @@ from sqlalchemy import and_, or_
 
 from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
 from palace.manager.core.monitor import ReaperMonitor
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -13,6 +14,10 @@ class LoanlikeReaperMonitor(ReaperMonitor):
     SOURCE_OF_TRUTH_PROTOCOLS = [
         OPDSForDistributorsAPI.label(),
     ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._events_to_be_logged = []
 
     @property
     def where_clause(self):
@@ -43,6 +48,25 @@ class LoanlikeReaperMonitor(ReaperMonitor):
             .filter(source_of_truth)
         )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
+
+    def delete(self, row) -> None:
+        ce = CirculationEvent
+        event_type = ce.CM_LOAN_EXPIRED if isinstance(row, Loan) else ce.CM_HOLD_EXPIRED
+        event = dict(
+            library=row.library,
+            license_pool=row.license_pool,
+            event_type=event_type,
+            patron=row.patron,
+        )
+        super().delete(row)
+        self._events_to_be_logged.append(event)
+
+    def after_commit(self) -> None:
+        super().after_commit()
+        copy_of_list = list(self._events_to_be_logged)
+        for event in copy_of_list:
+            self.services.analytics.collect_event(**event)
+            self._events_to_be_logged.remove(event)
 
 
 class LoanReaper(LoanlikeReaperMonitor):
