@@ -1568,6 +1568,9 @@ class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]
 
         info: AxisLoanInfo | HoldInfo | None = None
         if checked_out:
+            checkout_format = self.text_of_optional_subtag(
+                availability, "axis:checkoutFormat", ns
+            )
             start_date = self._xpath1_date(availability, "axis:checkoutStartDate", ns)
             end_date = self._xpath1_date(availability, "axis:checkoutEndDate", ns)
             download_url = self.text_of_optional_subtag(
@@ -1577,6 +1580,14 @@ class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]
                 self.text_of_optional_subtag(availability, "axis:transactionID", ns)
                 or ""
             )
+
+            if not self.internal_format and (
+                checkout_format == self.api.AXISNOW or checkout_format == "Blio"
+            ):
+                # If we didn't explicitly ask for a format, ignore any AxisNow or Blio formats, since
+                # we can't fulfill them. If we add AxisNow and Blio support in the future, we will need
+                # to drop this line.
+                return None
 
             fulfillment: Fulfillment | None
             if download_url and self.internal_format != self.api.AXISNOW:

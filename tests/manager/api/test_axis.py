@@ -485,7 +485,7 @@ class TestAxis360API:
         pytest.raises(NoActiveLoan, fulfill)
 
         # If an ebook is checked out and we're not asking for it to be
-        # fulfilled through AxisNow, we get a Axis360AcsFulfillment
+        # fulfilled through Adobe DRM, we get a Axis360AcsFulfillment
         # object with a content link.
         data = axis360.sample_data("availability_with_loan_and_hold.xml")
         axis360.api.queue_response(200, content=data)
@@ -550,6 +550,12 @@ class TestAxis360API:
         assert isinstance(hold1, HoldInfo)
         assert isinstance(hold2, HoldInfo)
         assert isinstance(loan, LoanInfo)
+
+        # If the activity includes something with a Blio format, it is not included in the results.
+        data = axis360.sample_data("availability_with_axisnow_fulfillment.xml")
+        axis360.api.queue_response(200, content=data)
+        results = axis360.api.patron_activity(patron, "pin")
+        assert len(results) == 0
 
     def test_update_licensepools_for_identifiers(self, axis360: Axis360Fixture):
         class Mock(MockAxis360API):
