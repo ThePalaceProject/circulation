@@ -198,6 +198,7 @@ class Axis360API(
     # The name Axis 360 gives to its web interface. We use it as the
     # name for the underlying access control system.
     AXISNOW = "AxisNow"
+    BLIO = "Blio"
 
     delivery_mechanism_to_internal_format = {
         (epub, no_drm): "ePub",
@@ -980,9 +981,9 @@ class StatusResponseParser(Axis360Parser[tuple[int, str]]):
 
 class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], LoggerMixin):
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
-        "Blio": None,  # Legacy format, handled the same way as AxisNow
+        Axis360API.BLIO: None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
-        "AxisNow": None,  # Handled specially, for ebooks only.
+        Axis360API.AXISNOW: None,  # Handled specially, for ebooks only.
         "ePub": (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
         "PDF": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
     }
@@ -1226,7 +1227,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
             informal_name = format_tag.text
             seen_formats.append(informal_name)
 
-            if informal_name == "Blio":
+            if informal_name == Axis360API.BLIO:
                 # We will be adding an AxisNow FormatData.
                 blio_seen = True
                 continue
@@ -1568,6 +1569,9 @@ class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]
 
         info: AxisLoanInfo | HoldInfo | None = None
         if checked_out:
+            # When the item is checked out, it can be locked to a particular DRM format. So even though
+            # the item supports other formats, it can only be fulfilled in the format that was checked out.
+            # This format is returned in the checkoutFormat tag.
             checkout_format = self.text_of_optional_subtag(
                 availability, "axis:checkoutFormat", ns
             )
@@ -1582,7 +1586,7 @@ class AvailabilityResponseParser(XMLResponseParser[Union[AxisLoanInfo, HoldInfo]
             )
 
             if not self.internal_format and (
-                checkout_format == self.api.AXISNOW or checkout_format == "Blio"
+                checkout_format == self.api.AXISNOW or checkout_format == self.api.BLIO
             ):
                 # If we didn't explicitly ask for a format, ignore any AxisNow or Blio formats, since
                 # we can't fulfill them. If we add AxisNow and Blio support in the future, we can remove
