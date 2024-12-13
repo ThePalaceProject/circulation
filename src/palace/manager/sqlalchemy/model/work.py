@@ -1192,7 +1192,7 @@ class Work(Base, LoggerMixin):
         # associated with a loan, were a loan to be issued right
         # now.
         active_license_pool = None
-        collections = [] if not library else [c for c in library.associated_collections]
+        collections = [] if not library else [c for c in library.active_collections]
         for p in self.license_pools:
             if collections and p.collection not in collections:
                 continue

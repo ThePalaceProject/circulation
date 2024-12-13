@@ -273,7 +273,7 @@ class TestMARCRecordController:
 
         response = marc_record_controller_fixture.controller.download_page()
         html = marc_record_controller_fixture.get_response_html(response)
-        assert "No collections are configured to export MARC records" in html
+        assert "No active collections are configured to export MARC records" in html
 
     def test_download_page_with_exporter_but_no_files(
         self, marc_record_controller_fixture: MARCRecordControllerFixture

@@ -2731,7 +2731,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     @property
     def collection_ids(self):
-        return [x.id for x in self.library.associated_collections]
+        return [x.id for x in self.library.active_collections]
 
     @property
     def children(self):

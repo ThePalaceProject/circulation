@@ -31,7 +31,7 @@ class AdminSearchController(AdminController):
         - Subject
         """
         library = get_request_library()
-        collection_ids = [coll.id for coll in library.associated_collections if coll.id]
+        collection_ids = [coll.id for coll in library.active_collections if coll.id]
         return self._search_field_values_cached(collection_ids)
 
     @classmethod

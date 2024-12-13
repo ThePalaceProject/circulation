@@ -474,11 +474,14 @@ class WhereAreMyBooksScript(CollectionInputScript):
         self.out("Checking library %s", library.name)
 
         # Make sure it has collections.
-        if not library.associated_collections:
-            self.out(" This library has no collections -- that's a problem.")
+        if not (associated_collections := set(library.associated_collections)):
+            self.out(" This library has no associated collections -- that's a problem.")
+        elif not (active_collections := set(library.active_collections)):
+            self.out(" This library has no active collections -- that's a problem.")
         else:
-            for collection in library.associated_collections:
-                self.out(" Associated with collection %s.", collection.name)
+            for collection in associated_collections:
+                active = collection in active_collections
+                self.out(f" Associated with collection {collection.name} ({active=}).")
 
         # Make sure it has lanes.
         if not library.lanes:

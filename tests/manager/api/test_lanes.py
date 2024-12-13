@@ -1008,9 +1008,7 @@ class TestCrawlableCollectionBasedLane:
         lane = CrawlableCollectionBasedLane()
         lane.initialize(library)
         assert "Crawlable feed: %s" % library.name == lane.display_name
-        assert {x.id for x in library.associated_collections} == set(
-            lane.collection_ids
-        )
+        assert {x.id for x in library.active_collections} == set(lane.collection_ids)
 
         # A lane for specific collection, regardless of their library
         # affiliation.

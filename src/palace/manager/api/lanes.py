@@ -11,6 +11,7 @@ from palace.manager.core.classifier import (
     fiction_genres,
     nonfiction_genres,
 )
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -1386,15 +1387,15 @@ class CrawlableCollectionBasedLane(CrawlableLane):
     LIBRARY_ROUTE = "crawlable_library_feed"
     COLLECTION_ROUTE = "crawlable_collection_feed"
 
-    def initialize(self, library_or_collections):
+    def initialize(self, library_or_collections: Library | list[Collection]):  # type: ignore[override]
         self.collection_feed = False
 
         if isinstance(library_or_collections, Library):
-            # We're looking at all the collections in a given library.
+            # We're looking at only the active collections for the given library.
             library = library_or_collections
-            collections = library.associated_collections
+            collections = library.active_collections
             identifier = library.name
-        else:
+        elif isinstance(library_or_collections, list):
             # We're looking at collections directly, without respect
             # to the libraries that might use them.
             library = None
@@ -1525,9 +1526,9 @@ class JackpotWorkList(WorkList):
         # a client might need to run.
         self.children = []
 
-        # Add one or more WorkLists for every collection in the
-        # system, so that a client can test borrowing a book from
-        # every collection.
+        # Add one or more WorkLists for every active collection for the
+        # library, so that a client can test borrowing a book from
+        # any of them.
         for collection in sorted(library.associated_collections, key=lambda x: x.name):
             for medium in Edition.FULFILLABLE_MEDIA:
                 # Give each Worklist a name that is distinctive

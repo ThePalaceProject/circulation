@@ -260,7 +260,10 @@ class TestWhereAreMyBooksScript:
 
         checking, has_collection, has_lanes = script.output
         assert ("Checking library %s", [library.name]) == checking
-        assert (" Associated with collection %s.", [collection.name]) == has_collection
+        assert (
+            has_collection
+            == f" Associated with collection {collection.name} (active=True)."
+        )
         assert (" Associated with %s lanes.", [1]) == has_lanes
 
         # This library has no collections and no lanes.
@@ -269,7 +272,10 @@ class TestWhereAreMyBooksScript:
         script.check_library(library2)
         checking, no_collection, no_lanes = script.output
         assert ("Checking library %s", [library2.name]) == checking
-        assert " This library has no collections -- that's a problem." == no_collection
+        assert (
+            no_collection
+            == " This library has no associated collections -- that's a problem."
+        )
         assert " This library has no lanes -- that's a problem." == no_lanes
 
     @staticmethod
