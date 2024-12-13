@@ -1,6 +1,10 @@
+import datetime
+
 import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
+from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
+from palace.manager.integration.base import integration_settings_update
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -199,3 +203,83 @@ hidden_content_types='[]'
         # Test with a properly formatted settings dict.
         library2 = db.library()
         assert library2.settings.website == "http://library.com"
+
+
+class TestLibraryCollections:
+    # TODO: Pydantic and FreezeGun don't play well together, so we'll use
+    #  dates well into the past and into the future to avoid any flakiness.
+    @pytest.mark.parametrize(
+        "activation_date, expiration_date, expect_active",
+        (
+            pytest.param(None, None, True, id="no start/end dates"),
+            pytest.param(None, datetime.date(2222, 8, 31), True, id="no start date"),
+            pytest.param(datetime.date(1960, 8, 1), None, True, id="no end date"),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(2222, 8, 31),
+                True,
+                id="both dates",
+            ),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(1961, 8, 15),
+                False,
+                id="ends before today",
+            ),
+            pytest.param(
+                datetime.date(2222, 9, 1),
+                None,
+                False,
+                id="starts after today",
+            ),
+        ),
+    )
+    def test_active_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        activation_date: datetime.date | None,
+        expiration_date: datetime.date | None,
+        expect_active: bool,
+    ):
+        library = db.default_library()
+
+        # Collection subscription settings.
+        subscription_test_settings = (
+            {"subscription_activation_date": activation_date} if activation_date else {}
+        ) | (
+            {"subscription_expiration_date": expiration_date} if expiration_date else {}
+        )
+
+        # Our library is associated with two collections, one of which
+        # might have subscription settings.
+        forever_collection = db.default_collection()
+        subscription_collection = db.collection(
+            name="Collection with subscription", protocol=OPDSAPI, library=library
+        )
+
+        # It's associated with two different libraries.
+        assert forever_collection in library.associated_collections
+        assert subscription_collection in library.associated_collections
+
+        # Initially there are no subscription settings for `collection2`.
+        c2integration = subscription_collection.integration_configuration
+        initial_settings = c2integration.settings_dict
+        assert "subscription_activation_date" not in initial_settings
+        assert "subscription_expiration_date" not in initial_settings
+
+        # And without subscription settings, both collections are active by default.
+        assert forever_collection in library.active_collections
+        assert subscription_collection in library.active_collections
+
+        # Now we apply the settings for the second collection.
+        integration_settings_update(
+            OPDSImporterSettings, c2integration, subscription_test_settings, merge=True
+        )
+
+        # Now both collections are still associated with the library...
+        assert forever_collection in library.associated_collections
+        assert subscription_collection in library.associated_collections
+        # ... and the first collection is still active for the library, ....
+        assert forever_collection in library.active_collections
+        # ... and the second collection is active when we expect it to be.
+        assert (subscription_collection in library.active_collections) == expect_active
