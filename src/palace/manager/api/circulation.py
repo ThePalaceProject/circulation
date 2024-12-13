@@ -5,7 +5,7 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Literal, TypeVar
+from typing import Literal, Optional, TypeVar
 
 import flask
 import requests
@@ -564,7 +564,9 @@ class BaseCirculationApiSettings(BaseSettings):
         )
     }
 
-    subscription_activation_date: str | None = FormField(
+    # TODO: Using `Optional[datetime.date]` here because Pydantic does not
+    #  currently handle the annotation of `datetime.date | None` properly.
+    subscription_activation_date: Optional[datetime.date] = FormField(
         default=None,
         form=ConfigurationFormItem(
             label=_("Collection Subscription Activation Date"),
@@ -577,7 +579,7 @@ class BaseCirculationApiSettings(BaseSettings):
             required=False,
         ),
     )
-    subscription_expiration_date: str | None = FormField(
+    subscription_expiration_date: Optional[datetime.date] = FormField(
         default=None,
         form=ConfigurationFormItem(
             label=_("Collection Subscription Expiration Date"),
