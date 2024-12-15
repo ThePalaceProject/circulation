@@ -416,7 +416,7 @@ class DatabaseTransactionFixture:
         self._session = SessionManager.session_from_connection(database.connection)
         self._transaction = database.connection.begin_nested()
 
-    def _make_default_library_with_collections(self) -> None:
+    def make_default_library_with_collections(self) -> None:
         """Ensure that the default library exists in the given database."""
         library = self.library("default", "default")
         collection = self.collection(
@@ -489,14 +489,14 @@ class DatabaseTransactionFixture:
         saves time.
         """
         if not self._default_collection:
-            self._make_default_library_with_collections()
+            self.make_default_library_with_collections()
 
         return self._default_collection
 
     def default_inactive_collection(self) -> Collection:
         """An inactive Collection that will only be created once throughout a given test."""
         if not self._default_inactive_collection:
-            self._make_default_library_with_collections()
+            self.make_default_library_with_collections()
 
         return self._default_inactive_collection
 
@@ -507,7 +507,7 @@ class DatabaseTransactionFixture:
         the default library.
         """
         if not self._default_library:
-            self._make_default_library_with_collections()
+            self.make_default_library_with_collections()
 
         return self._default_library
 
