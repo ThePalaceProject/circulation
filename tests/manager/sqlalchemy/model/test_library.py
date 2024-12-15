@@ -250,36 +250,50 @@ class TestLibraryCollections:
             {"subscription_expiration_date": expiration_date} if expiration_date else {}
         )
 
-        # Our library is associated with two collections, one of which
-        # might have subscription settings.
+        # Our library is associated with three collections, one of whose
+        # subscriptions settings we're testing.
         forever_collection = db.default_collection()
-        subscription_collection = db.collection(
-            name="Collection with subscription", protocol=OPDSAPI, library=library
+        never_collection = db.default_inactive_collection()
+        test_collection = db.collection(
+            name="Test Collection", protocol=OPDSAPI, library=library
         )
 
-        # It's associated with two different libraries.
-        assert forever_collection in library.associated_collections
-        assert subscription_collection in library.associated_collections
+        assert set(library.associated_collections) == {
+            forever_collection,
+            never_collection,
+            test_collection,
+        }
 
-        # Initially there are no subscription settings for `collection2`.
-        c2integration = subscription_collection.integration_configuration
-        initial_settings = c2integration.settings_dict
+        # Initially there are no subscription settings for the test collection.
+        test_integration = test_collection.integration_configuration
+        initial_settings = test_integration.settings_dict
         assert "subscription_activation_date" not in initial_settings
         assert "subscription_expiration_date" not in initial_settings
 
-        # And without subscription settings, both collections are active by default.
+        # And without subscription settings, the collections is active by default.
         assert forever_collection in library.active_collections
-        assert subscription_collection in library.active_collections
+        assert test_collection in library.active_collections
 
-        # Now we apply the settings for the second collection.
+        # The "never" collection is inactive, as it always should be.
+        assert never_collection not in library.active_collections
+
+        # Now we apply the settings for the test collection.
         integration_settings_update(
-            OPDSImporterSettings, c2integration, subscription_test_settings, merge=True
+            OPDSImporterSettings,
+            test_integration,
+            subscription_test_settings,
+            merge=True,
         )
 
-        # Now both collections are still associated with the library...
-        assert forever_collection in library.associated_collections
-        assert subscription_collection in library.associated_collections
-        # ... and the first collection is still active for the library, ....
+        # All collections are still associated with the library,...
+        assert set(library.associated_collections) == {
+            forever_collection,
+            never_collection,
+            test_collection,
+        }
+        # ... and the forever collection is still active for the library, ....
         assert forever_collection in library.active_collections
-        # ... and the second collection is active when we expect it to be.
-        assert (subscription_collection in library.active_collections) == expect_active
+        # ... and the "never" collection is still inactive for the library, ....
+        assert never_collection not in library.active_collections
+        # ... the test collection is only active when we expect it to be.
+        assert (test_collection in library.active_collections) == expect_active
