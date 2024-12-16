@@ -210,7 +210,6 @@ def test_job_run(
 
     job.run()
 
-    mock_s3.update_bucket_expiration_rule.assert_called_once()
     mock_s3.generate_url.assert_called_once()
     send_email_mock.assert_called_once()
     kwargs = send_email_mock.call_args.kwargs
@@ -319,7 +318,6 @@ def test_generate_inventory_and_hold_reports_task(
     services_fixture.email_fixture.mock_emailer.send.assert_called_once()
 
     mock_s3_service.store_stream.assert_called_once()
-    mock_s3_service.update_bucket_expiration_rule.assert_called_once()
     mock_s3_service.generate_url.assert_called_once()
 
     assert (

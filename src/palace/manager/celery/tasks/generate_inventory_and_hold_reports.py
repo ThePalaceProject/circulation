@@ -148,25 +148,16 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                             arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
                         )
 
-                    reports_path = "inventory_and_holds"
-                    expiration_in_days = 30
-                    self.s3_service.update_bucket_expiration_rule(
-                        prefix=f"{reports_path}/", expiration_in_days=expiration_in_days
+                    uid = uuid.uuid4()
+                    key = (
+                        f"inventory_and_holds/{library.short_name}/"
+                        f"inventory-and-holds-for-library-{file_name_modifier}-{uid}.zip"
                     )
-
-                    with zip_path.open(
-                        "rb",
-                    ) as binary_stream:
-                        uid = uuid.uuid4()
-                        key = (
-                            f"{reports_path}/{library.short_name}/"
-                            f"inventory-and-holds-for-library-{file_name_modifier}-{uid}.zip"
-                        )
-                        self.s3_service.store_stream(
-                            key,
-                            binary_stream,
-                            content_type="application/zip",
-                        )
+                    self.s3_service.store_stream(
+                        key,
+                        report_zip,  # type: ignore[arg-type]
+                        content_type="application/zip",
+                    )
 
                     s3_file_link = self.s3_service.generate_url(key)
                     self.send_email(
@@ -174,7 +165,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                         receivers=[self.email_address],
                         text=(
                             f"Download Report here -> {s3_file_link} \n\n"
-                            f"This report will be available for download for {expiration_in_days} days."
+                            f"This report will be available for download for 30 days."
                         ),
                     )
 
