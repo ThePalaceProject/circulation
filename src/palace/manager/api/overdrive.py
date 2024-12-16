@@ -1741,7 +1741,7 @@ class OverdriveAPI(
         edition, ignore = self._edition(licensepool)
 
         replace = ReplacementPolicy.from_license_source(self._db)
-        metadata.apply(edition, self.collection, replace=replace)
+        metadata.apply(edition, self.collection, replace=replace, db=self._db)
 
     def update_licensepool(self, book_id):
         """Update availability information for a single book.

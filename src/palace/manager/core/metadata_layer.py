@@ -962,6 +962,7 @@ class CirculationData:
                     data_source=data_source,
                     media_type=link.media_type,
                     content=link.content,
+                    db=_db,
                 )
                 link_objects[link] = link_obj
 
@@ -1436,6 +1437,7 @@ class Metadata:
         replace_formats=False,
         replace_rights=False,
         force=False,
+        db=None,
     ):
         """Apply this metadata to the given edition.
 
@@ -1445,8 +1447,10 @@ class Metadata:
             New: If contributors changed, this is now considered a core change,
             so work.simple_opds_feed refresh can be triggered.
         """
-        _db = Session.object_session(edition)
-
+        if not db:
+            _db = Session.object_session(edition)
+        else:
+            _db = db
         # If summary, subjects, or measurements change, then any Work
         # associated with this edition will need a full presentation
         # recalculation.
@@ -1637,6 +1641,7 @@ class Metadata:
                     rights_explanation=link.rights_explanation,
                     original_resource=original_resource,
                     transformation_settings=link.transformation_settings,
+                    db=_db,
                 )
                 if link.rel in self.REL_REQUIRES_NEW_PRESENTATION_EDITION:
                     work_requires_new_presentation_edition = True
@@ -1717,7 +1722,7 @@ class Metadata:
             elif link.thumbnail:
                 # We need to make sure that its thumbnail exists locally and
                 # is associated with the original image.
-                self.make_thumbnail(data_source, link, link_obj)
+                self.make_thumbnail(_db, data_source, link, link_obj)
 
         # Make sure the work we just did shows up.
         made_changes = edition.calculate_presentation(
@@ -1757,7 +1762,7 @@ class Metadata:
 
         return edition, work_requires_new_presentation_edition
 
-    def make_thumbnail(self, data_source, link, link_obj):
+    def make_thumbnail(self, _db, data_source, link, link_obj):
         """Make sure a Hyperlink representing an image is connected
         to its thumbnail.
         """
@@ -1782,6 +1787,7 @@ class Metadata:
             data_source=data_source,
             media_type=thumbnail.media_type,
             content=thumbnail.content,
+            db=_db,
         )
         # And make sure the thumbnail knows it's a thumbnail of the main
         # image.
