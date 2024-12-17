@@ -3,8 +3,8 @@ import io
 import os
 import zipfile
 from datetime import timedelta
-from typing import IO
-from unittest.mock import create_autospec
+from typing import IO, BinaryIO
+from unittest.mock import MagicMock, create_autospec
 
 from pytest import LogCaptureFixture
 from sqlalchemy.orm import sessionmaker
@@ -40,12 +40,16 @@ def test_job_run(
     send_email_mock = create_autospec(
         services_fixture.services.email.container.send_email
     )
+
+    mock_s3 = MagicMock()
+
     GenerateInventoryAndHoldsReportsJob(
         mock_session_maker,
         library_id=1,
         email_address=email,
         send_email=send_email_mock,
         registry=services_fixture.services.integration_registry.license_providers(),
+        s3_service=mock_s3,
     ).run()
     assert (
         f"Cannot generate inventory and holds report for library (id=1): library not found."
@@ -187,19 +191,31 @@ def test_job_run(
         library.id,
         email_address=email,
         send_email=send_email_mock,
-        delete_attachments=False,
         registry=services_fixture.services.integration_registry.license_providers(),
+        s3_service=mock_s3,
     )
 
+    reports_zip = "test_zip"
+
+    def store_stream_mock(
+        key: str,
+        stream: BinaryIO,
+        content_type: str | None = None,
+    ):
+
+        with open(reports_zip, "wb") as file:
+            file.write(stream.read())
+
+    mock_s3.store_stream = store_stream_mock
+
     job.run()
+
+    mock_s3.generate_url.assert_called_once()
     send_email_mock.assert_called_once()
     kwargs = send_email_mock.call_args.kwargs
     assert kwargs["receivers"] == [email]
     assert "Inventory and Holds Reports" in kwargs["subject"]
-    attachments: dict = kwargs["attachments"]
-
-    assert len(attachments) == 1
-    reports_zip = list(attachments.values())[0]
+    assert "This report will be available for download for 30 days." in kwargs["text"]
     try:
         with zipfile.ZipFile(reports_zip, mode="r") as archive:
             entry_list = archive.namelist()
@@ -290,11 +306,20 @@ def test_generate_inventory_and_hold_reports_task(
     services_fixture: ServicesFixture,
     celery_fixture: CeleryFixture,
 ):
+
+    mock_s3_service = MagicMock()
+    mock_s3_service.generate_url.return_value = "http://test"
+    services_fixture.services.storage.public.override(mock_s3_service)
+
     library = db.library(short_name="test_library")
     # there must be at least one opds collection associated with the library for this to work
     create_test_opds_collection("c1", "d1", db, library)
     generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
     services_fixture.email_fixture.mock_emailer.send.assert_called_once()
+
+    mock_s3_service.store_stream.assert_called_once()
+    mock_s3_service.generate_url.assert_called_once()
+
     assert (
         "Inventory and Holds Reports"
         in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["subject"]
@@ -302,3 +327,11 @@ def test_generate_inventory_and_hold_reports_task(
     assert services_fixture.email_fixture.mock_emailer.send.call_args.kwargs[
         "receivers"
     ] == ["test@email"]
+    assert (
+        "Download Report here -> http://test"
+        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["text"]
+    )
+    assert (
+        "This report will be available for download for 30 days."
+        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["text"]
+    )

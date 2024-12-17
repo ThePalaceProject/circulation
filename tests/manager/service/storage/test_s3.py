@@ -225,6 +225,21 @@ class TestS3Service:
         with pytest.raises(RuntimeError):
             upload.upload_part(b"foo")
 
+    def _configuration(self, prefix, expiration):
+        return {
+            "Rules": [
+                {
+                    "Expiration": {
+                        "Days": expiration,
+                    },
+                    "ID": f"expiration_on_{prefix}",
+                    "Prefix": prefix,
+                    "Filter": {"Prefix": prefix},
+                    "Status": "Enabled",
+                }
+            ]
+        }
+
 
 @pytest.mark.minio
 class TestS3ServiceIntegration:
