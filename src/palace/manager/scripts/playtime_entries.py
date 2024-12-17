@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timedelta
@@ -18,6 +19,7 @@ from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
+from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
 
@@ -182,17 +184,17 @@ class PlaytimeEntriesEmailReportsScript(Script):
 
         email_subject = f"{subject_prefix}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
         reporting_name_with_no_spaces = reporting_name.replace(" ", "_") + "-"
-        attachment_extension = "csv"
-        attachment_name = (
+        link_extension = "csv"
+        linked_file_name = (
             f"playtime-summary-{reporting_name_with_no_spaces}"
-            f"{formatted_start_date}-{formatted_until_date}.{attachment_extension}"
+            f"{formatted_start_date}-{formatted_until_date}.{link_extension}"
         )
 
         # Write to a temporary file so we don't overflow the memory
         with TemporaryFile(
             "w+",
             prefix=f"playtimereport{formatted_until_date}",
-            suffix=attachment_extension,
+            suffix=link_extension,
         ) as temp:
             # Write the data as a CSV
             writer = csv.writer(temp)
@@ -207,12 +209,30 @@ class PlaytimeEntriesEmailReportsScript(Script):
             recipient = os.environ.get(
                 Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE
             )
+
             if recipient:
+                uid = uuid.uuid4()
+                key = (
+                    f"{S3Service.CM_REPORT_PREFIX}/{reporting_name}/"
+                    f"{linked_file_name}"
+                )
+
+                s3_service = self.services.storage.public()
+                s3_service.store_stream(
+                    key,
+                    temp,
+                    content_type="text/csv",
+                )
+
+                s3_file_link = s3_service.generate_url(key)
+
                 self.services.email.send_email(
                     subject=email_subject,
                     receivers=[recipient],
-                    text="",
-                    attachments={attachment_name: temp.read()},
+                    text=(
+                        f"Download Report here -> {s3_file_link} \n\n"
+                        f"This report will be available for download for 30 days."
+                    ),
                 )
             else:
                 self.log.error("No reporting email found, logging complete report.")
