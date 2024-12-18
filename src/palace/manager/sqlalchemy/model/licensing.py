@@ -24,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, lazyload, relationship
 from sqlalchemy.orm.session import Session
 
+from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -1079,13 +1080,27 @@ class LicensePool(Base):
     ) -> tuple[Loan, bool]:
         _db = Session.object_session(patron)
         kwargs = dict(start=start or utc_now(), end=end)
-        loan, is_new = get_one_or_create(
-            _db,
-            Loan,
-            patron=patron,
-            license_pool=self,
-            create_method_kwargs=kwargs,
-        )
+
+        # We can make new loans on active collections, but not on inactive ones.
+        # But we can look up already-existing loans on inactive collections.
+        if self.collection.is_active:
+            loan, is_new = get_one_or_create(
+                _db,
+                Loan,
+                patron=patron,
+                license_pool=self,
+                create_method_kwargs=kwargs,
+            )
+        else:
+            loan = get_one(
+                _db,
+                Loan,
+                patron=patron,
+                license_pool=self,
+            )
+            if not loan:
+                raise CannotLoan("Cannot create a new loan on an inactive collection.")
+            is_new = False
 
         if fulfillment:
             loan.fulfillment = fulfillment
@@ -1108,8 +1123,17 @@ class LicensePool(Base):
         if not patron.library.settings.allow_holds:
             raise PolicyException("Holds are disabled for this library.")
         start = start or utc_now()
-        hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
-        hold.update(start, end, position)
+
+        # We can create new holds on active collections, but not on inactive ones.
+        # But we can look up already-existing holds in inactive collections.
+        if self.collection.is_active:
+            hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
+            hold.update(start, end, position)
+        else:
+            hold = get_one(_db, Hold, patron=patron, license_pool=self)
+            if not hold:
+                raise CannotHold("Cannot create a new hold on an inactive collection.")
+            new = False
         return hold, new
 
     class _LicensePriority(IntEnum):

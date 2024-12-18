@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, Query, aliased, mapper, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
@@ -277,9 +278,18 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
         return qu
 
-    @staticmethod
+    @property
+    def is_active(self) -> bool:
+        """Return True if the collection is active, False otherwise."""
+        active_query = self.active_collections_filter(sa_select=select(count())).where(
+            Collection.id == self.id
+        )
+        _db = Session.object_session(self)
+        return _db.execute(active_query).scalar() > 0
+
+    @classmethod
     def active_collections_filter(
-        *, sa_select: Select | None = None, today: datetime.date | None = None
+        cls, *, sa_select: Select | None = None, today: datetime.date | None = None
     ) -> Select:
         """Filter to select from only collections that are considered active.
 
@@ -294,33 +304,49 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         sa_select = sa_select if sa_select is not None else select()
         if today is None:
             today = datetime.date.today()
-        return (
-            sa_select.select_from(Collection)
-            .join(IntegrationConfiguration)
-            .where(
-                or_(
-                    not_(
-                        IntegrationConfiguration.settings_dict.has_key(
-                            "subscription_activation_date"
-                        )
-                    ),
-                    IntegrationConfiguration.settings_dict[
+        return cls._filter_active_collections(
+            sa_select=(sa_select.select_from(Collection).join(IntegrationConfiguration))
+        )
+
+    @staticmethod
+    def _filter_active_collections(
+        *, sa_select: Select, today: datetime.date | None = None
+    ) -> Select:
+        """Constrain to only active collections.
+
+        A collection is considered active if it either:
+            - has no activation/expiration settings; or
+            - meets the criteria specified by the activation/expiration settings.
+
+        :param sa_select: A SQLAlchemy Select object.
+        :param today: The date to use as the current date. Defaults to today.
+        :return: A filtered SQLAlchemy Select object.
+        """
+        if today is None:
+            today = datetime.date.today()
+        return sa_select.where(
+            or_(
+                not_(
+                    IntegrationConfiguration.settings_dict.has_key(
                         "subscription_activation_date"
-                    ].astext.cast(Date)
-                    <= today,
+                    )
                 ),
-                or_(
-                    not_(
-                        IntegrationConfiguration.settings_dict.has_key(
-                            "subscription_expiration_date"
-                        )
-                    ),
-                    IntegrationConfiguration.settings_dict[
+                IntegrationConfiguration.settings_dict[
+                    "subscription_activation_date"
+                ].astext.cast(Date)
+                <= today,
+            ),
+            or_(
+                not_(
+                    IntegrationConfiguration.settings_dict.has_key(
                         "subscription_expiration_date"
-                    ].astext.cast(Date)
-                    >= today,
+                    )
                 ),
-            )
+                IntegrationConfiguration.settings_dict[
+                    "subscription_expiration_date"
+                ].astext.cast(Date)
+                >= today,
+            ),
         )
 
     @property

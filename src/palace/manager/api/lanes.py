@@ -1529,7 +1529,7 @@ class JackpotWorkList(WorkList):
         # Add one or more WorkLists for every active collection for the
         # library, so that a client can test borrowing a book from
         # any of them.
-        for collection in sorted(library.associated_collections, key=lambda x: x.name):
+        for collection in sorted(library.active_collections, key=lambda x: x.name):
             for medium in Edition.FULFILLABLE_MEDIA:
                 # Give each Worklist a name that is distinctive
                 # and easy for a client to parse.

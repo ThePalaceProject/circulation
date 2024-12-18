@@ -428,11 +428,8 @@ class DatabaseTransactionFixture:
         inactive_collection = self.collection(
             "Default Inactive Collection",
             protocol=OPDSAPI,
-            settings=self.opds_settings(
-                data_source="OPDS",
-                subscription_activation_date=datetime.date(2000, 12, 31),
-                subscription_expiration_date=datetime.date(1999, 1, 1),
-            ),
+            settings=self.opds_settings(data_source="OPDS"),
+            inactive=True,
         )
         inactive_collection.associated_libraries.append(library)
 
@@ -607,6 +604,7 @@ class DatabaseTransactionFixture:
         protocol: type[BaseCirculationAPI[Any, Any]] | str = OPDSAPI,
         settings: BaseCirculationApiSettings | dict[str, Any] | None = None,
         library: Library | None = None,
+        inactive: bool = False,
     ) -> Collection:
         name = name or self.fresh_str()
         protocol_str = (
@@ -634,7 +632,22 @@ class DatabaseTransactionFixture:
 
         if library and library not in collection.associated_libraries:
             collection.associated_libraries.append(library)
+
+        if inactive:
+            self.make_collection_inactive(collection)
         return collection
+
+    @staticmethod
+    def make_collection_inactive(collection: Collection):
+        """Make a collection inactive using some settings that will make it so."""
+        collection.integration_configuration.settings_dict.update(
+            {
+                "subscription_activation_date": datetime.date(2000, 12, 31),
+                "subscription_expiration_date": datetime.date(1999, 1, 1),
+            }
+        )
+        flag_modified(collection.integration_configuration, "settings_dict")
+        assert not collection.is_active
 
     def work(
         self,

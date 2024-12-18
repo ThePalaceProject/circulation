@@ -915,22 +915,39 @@ class TestCrawlableFacets:
             pytest.param("distributor", "distributor2", 2, id="different_distributor"),
         ),
     )
+    @pytest.mark.parametrize(
+        "is_inactive, expected_collection_count",
+        (
+            pytest.param(True, 2, id="inactive"),
+            pytest.param(False, 3, id="active"),
+        ),
+    )
     def test_default(
         self,
         db: DatabaseTransactionFixture,
         c1_distributor: str,
         c2_distributor: str,
         expected_distributor_count: int,
+        is_inactive: bool,
+        expected_collection_count: int,
     ):
         library = db.library()
+        # The first two collections are always active, ...
         c1 = db.collection(
-            library=library, settings=db.opds_settings(data_source=c1_distributor)
+            library=library, settings=db.opds_settings(data_source=c1_distributor),
         )
+        # ... but, this one may be inactive.
         c2 = db.collection(
-            library=library, settings=db.opds_settings(data_source=c2_distributor)
+            library=library, settings=db.opds_settings(data_source=c2_distributor),
+        )
+        # The third collection always has the same distributor as the first
+        # one, but it may be inactive.
+        c3 = db.collection(
+            library=library, settings=db.opds_settings(data_source=c1_distributor), inactive=is_inactive
         )
 
         facets = CrawlableFacets.default(library)
+
         assert facets.availability == CrawlableFacets.AVAILABLE_ALL
         assert facets.order == CrawlableFacets.ORDER_LAST_UPDATE
         assert facets.order_ascending is False
@@ -949,7 +966,7 @@ class TestCrawlableFacets:
         # Except for distributor and collectionName, which have the default
         # along with their unique values among each collection in the library.
         assert len(distributor) == 1 + expected_distributor_count
-        assert len(collectionName) == 1 + len(library.associated_collections)
+        assert len(collectionName) == 1 + expected_collection_count
 
     @pytest.mark.parametrize(
         "group_name, expected",
@@ -1173,9 +1190,9 @@ class TestJackpotWorkList:
         # Add some stuff to the default library to make sure we
         # test everything.
 
-        # The default library comes with a collection whose data
-        # source is unspecified. Make another one whose data source _is_
-        # specified.
+        # The default library comes with an active collection whose data
+        # source is unspecified (there is also an inactive one). Make
+        # another one whose data source _is_ specified.
         library = db.default_library()
         overdrive_collection = db.collection(
             "Test Overdrive Collection",
