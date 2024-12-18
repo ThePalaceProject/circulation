@@ -213,7 +213,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
             if recipient:
                 uid = uuid.uuid4()
                 key = (
-                    f"{S3Service.CM_REPORT_PREFIX}/{reporting_name}/"
+                    f"{S3Service.DOWNLOADS_PREFIX}/{reporting_name}/"
                     f"{linked_file_name}"
                 )
 
