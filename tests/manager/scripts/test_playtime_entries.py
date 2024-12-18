@@ -25,7 +25,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import datetime_utc, previous_months, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.services import ServicesEmailFixture
+from tests.fixtures.services import ServicesEmailFixture, ServicesFixture
 
 
 def create_playtime_entries(
@@ -533,6 +533,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         self,
         db: DatabaseTransactionFixture,
         services_email_fixture: ServicesEmailFixture,
+        services_fixture: ServicesFixture,
     ):
         identifier = db.identifier()
         collection = db.default_collection()
@@ -663,6 +664,11 @@ class TestPlaytimeEntriesEmailReportsScript:
         )
 
         reporting_name = "test cm"
+
+        mock_s3_service = MagicMock()
+        mock_s3_service.generate_url.return_value = "http://test"
+        services_fixture.services.storage.public.override(mock_s3_service)
+
         with (
             patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,
             patch(
@@ -799,15 +805,15 @@ class TestPlaytimeEntriesEmailReportsScript:
         # verify the number of unique loans
         assert len(loan_identifiers) == sum([x.args[0][7] for x in call_args[1:]])
         assert services_email_fixture.mock_emailer.send.call_count == 1
+        mock_s3_service.store_stream.assert_called_once()
+        mock_s3_service.generate_url.assert_called_once()
         assert services_email_fixture.mock_emailer.send.call_args == call(
             subject=f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
             sender=services_email_fixture.sender_email,
             receivers=["reporting@test.email"],
-            text="",
+            text="Download Report here -> http://test \n\nThis report will be available for download for 30 days.",
             html=None,
-            attachments={
-                f"playtime-summary-{reporting_name.replace(' ', '_')}-{cutoff}-{until}.csv": ""
-            },  # Mock objects do not write data
+            attachments=None,
         )
 
     def test_no_reporting_email(self, db: DatabaseTransactionFixture):

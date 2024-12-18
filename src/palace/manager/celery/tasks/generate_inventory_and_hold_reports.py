@@ -150,7 +150,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
 
                     uid = uuid.uuid4()
                     key = (
-                        f"inventory_and_holds/{library.short_name}/"
+                        f"{S3Service.DOWNLOADS_PREFIX}/inventory_and_holds/{library.short_name}/"
                         f"inventory-and-holds-for-library-{file_name_modifier}-{uid}.zip"
                     )
                     self.s3_service.store_stream(
