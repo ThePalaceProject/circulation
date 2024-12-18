@@ -996,6 +996,7 @@ class CirculationData:
                 format.drm_scheme,
                 format.rights_uri or self.default_rights_uri,
                 resource,
+                db=_db,
             )
             new_lpdms.append(lpdm)
 

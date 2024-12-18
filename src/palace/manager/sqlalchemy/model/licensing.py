@@ -1557,6 +1557,7 @@ class LicensePoolDeliveryMechanism(Base):
         drm_scheme,
         rights_uri,
         resource=None,
+        db=None,
     ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
         certain format.
@@ -1571,7 +1572,12 @@ class LicensePoolDeliveryMechanism(Base):
         :param resource: A Resource representing the book itself in
             a freely redistributable form.
         """
-        _db = Session.object_session(data_source)
+
+        if db:
+            _db = db
+        else:
+            _db = Session.object_session(data_source)
+
         delivery_mechanism, ignore = DeliveryMechanism.lookup(
             _db, content_type, drm_scheme
         )

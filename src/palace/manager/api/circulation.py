@@ -184,6 +184,7 @@ class DeliveryMechanismInfo(CirculationInfo):
             self.drm_scheme,
             self.rights_uri,
             self.resource,
+            db=_db,
         )
         loan.fulfillment = lpdm
         return lpdm
