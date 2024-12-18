@@ -908,8 +908,29 @@ class TestContributorLane:
 
 
 class TestCrawlableFacets:
-    def test_default(self, db: DatabaseTransactionFixture):
-        facets = CrawlableFacets.default(db.default_library())
+    @pytest.mark.parametrize(
+        "c1_distributor, c2_distributor, expected_distributor_count",
+        (
+            pytest.param("distributor", "distributor", 1, id="same_distributor"),
+            pytest.param("distributor", "distributor2", 2, id="different_distributor"),
+        ),
+    )
+    def test_default(
+        self,
+        db: DatabaseTransactionFixture,
+        c1_distributor: str,
+        c2_distributor: str,
+        expected_distributor_count: int,
+    ):
+        library = db.library()
+        c1 = db.collection(
+            library=library, settings=db.opds_settings(data_source=c1_distributor)
+        )
+        c2 = db.collection(
+            library=library, settings=db.opds_settings(data_source=c2_distributor)
+        )
+
+        facets = CrawlableFacets.default(library)
         assert facets.availability == CrawlableFacets.AVAILABLE_ALL
         assert facets.order == CrawlableFacets.ORDER_LAST_UPDATE
         assert facets.order_ascending is False
@@ -926,9 +947,9 @@ class TestCrawlableFacets:
             assert len(facet) == 1
 
         # Except for distributor and collectionName, which have the default
-        # and data for each collection in the library.
-        for facet in [distributor, collectionName]:
-            assert len(facet) == 1 + len(db.default_library().associated_collections)
+        # along with their unique values among each collection in the library.
+        assert len(distributor) == 1 + expected_distributor_count
+        assert len(collectionName) == 1 + len(library.associated_collections)
 
     @pytest.mark.parametrize(
         "group_name, expected",
