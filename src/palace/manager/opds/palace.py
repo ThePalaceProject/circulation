@@ -50,8 +50,12 @@ class WorkExample(BaseOpdsModel):
         ]
     """
 
-    type: PublicationTypes | None = Field(None, alias="@type")
-    book_format: BookFormat | None = Field(None, alias="schema:bookFormat")
+    # TODO: I believe that type should be a PublicationType, and bookFormat should be
+    #   a BookFormat, but we are seeing failures on some items coming in due to this,
+    #   so we need to confirm with DeMarque what we should be expecting here, before
+    #   switching the types.
+    type: str | None = Field(None, alias="@type")
+    book_format: str | None = Field(None, alias="schema:bookFormat")
     isbn: str | None = Field(None, alias="schema:isbn")
 
 
