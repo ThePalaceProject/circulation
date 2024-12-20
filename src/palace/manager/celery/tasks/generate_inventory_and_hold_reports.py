@@ -28,6 +28,7 @@ from palace.manager.sqlalchemy.model.integration import (
 )
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
+from palace.manager.util.uuid import uuid_encode
 
 
 def eligible_integrations(
@@ -148,7 +149,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                             arcname=f"palace-inventory-report-for-library-{file_name_modifier}.csv",
                         )
 
-                    uid = uuid.uuid4()
+                    uid = uuid_encode(uuid.uuid4())
                     key = (
                         f"{S3Service.DOWNLOADS_PREFIX}/inventory_and_holds/{library.short_name}/"
                         f"inventory-and-holds-for-library-{file_name_modifier}-{uid}.zip"
