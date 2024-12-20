@@ -186,9 +186,10 @@ class PlaytimeEntriesEmailReportsScript(Script):
         email_subject = f"{subject_prefix}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
         reporting_name_with_no_spaces = reporting_name.replace(" ", "_") + "-"
         link_extension = "csv"
+        uid = uuid.uuid4()
         linked_file_name = (
             f"playtime-summary-{reporting_name_with_no_spaces}"
-            f"{formatted_start_date}-{formatted_until_date}.{link_extension}"
+            f"{formatted_start_date}-{formatted_until_date}-{uid}.{link_extension}"
         )
 
         # Write to a temporary file so we don't overflow the memory
@@ -210,7 +211,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
             )
 
             if recipient:
-                uid = uuid.uuid4()
                 key = (
                     f"{S3Service.DOWNLOADS_PREFIX}/{reporting_name}/"
                     f"{linked_file_name}"
