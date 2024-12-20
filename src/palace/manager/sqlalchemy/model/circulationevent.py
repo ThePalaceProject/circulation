@@ -35,7 +35,7 @@ class CirculationEvent(Base):
         "LicensePool", back_populates="circulation_events"
     )
 
-    type = Column(String(32), index=True)
+    type = Column(String(50), index=True)
     start = Column(DateTime(timezone=True), index=True)
     end = Column(DateTime(timezone=True))
     old_value = Column(Integer)
