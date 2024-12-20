@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import tempfile
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timedelta
-from tempfile import TemporaryFile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
@@ -191,7 +192,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
         )
 
         # Write to a temporary file so we don't overflow the memory
-        with TemporaryFile(
+        with tempfile.NamedTemporaryFile(
             "w+",
             prefix=f"playtimereport{formatted_until_date}",
             suffix=link_extension,
@@ -204,8 +205,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 records=self._fetch_report_records(start=start, until=until),
             )
 
-            # Rewind the file and send the report email
-            temp.seek(0)
             recipient = os.environ.get(
                 Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE
             )
@@ -217,12 +216,18 @@ class PlaytimeEntriesEmailReportsScript(Script):
                     f"{linked_file_name}"
                 )
 
-                s3_service = self.services.storage.public()
-                s3_service.store_stream(
-                    key,
-                    temp,
-                    content_type="text/csv",
-                )
+                # The only way I could get S3 to accept the stream was by
+                # reopening it as a binary stream: otherwise it was a failing on
+                # a "Strings must be encoded before hashing" error from s3.
+                with Path(temp.name).open(
+                    "rb",
+                ) as binary_stream:
+                    s3_service = self.services.storage.public()
+                    s3_service.store_stream(
+                        key,
+                        binary_stream,
+                        content_type="text/csv",
+                    )
 
                 s3_file_link = s3_service.generate_url(key)
 
@@ -236,6 +241,7 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 )
             else:
                 self.log.error("No reporting email found, logging complete report.")
+                temp.seek(0)
                 self.log.warning(temp.read())
 
     def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
