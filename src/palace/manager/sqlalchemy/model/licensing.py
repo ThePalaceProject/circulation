@@ -1656,16 +1656,12 @@ class LicensePoolDeliveryMechanism(Base):
         pools = list(self.license_pools)
         _db.delete(self)
 
-        # TODO: We need to explicitly commit here so that
-        # LicensePool.delivery_mechanisms gets updated. It would be
-        # better if we didn't have to do this, but I haven't been able
-        # to get LicensePool.delivery_mechanisms to notice that it's
-        # out of date.
-        _db.commit()
-
-        # The deletion of a LicensePoolDeliveryMechanism might affect
-        # the open-access status of its associated LicensePools.
         for pool in pools:
+            # We need to expire pool here otherwise the delivery_mechanisms
+            # will contain a stale reference to the deleted licensepooldeliverymechanism
+            _db.expire(pool)
+            # The deletion of a LicensePoolDeliveryMechanism might affect
+            # the open-access status of its associated LicensePools.
             pool.set_open_access_status()
 
     def set_rights_status(self, uri):
