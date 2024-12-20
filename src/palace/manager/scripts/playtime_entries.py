@@ -23,6 +23,7 @@ from palace.manager.scripts.base import Script
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
+from palace.manager.util.uuid import uuid_encode
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Query
@@ -186,9 +187,10 @@ class PlaytimeEntriesEmailReportsScript(Script):
         email_subject = f"{subject_prefix}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
         reporting_name_with_no_spaces = reporting_name.replace(" ", "_") + "-"
         link_extension = "csv"
+        uid = uuid_encode(uuid.uuid4())
         linked_file_name = (
             f"playtime-summary-{reporting_name_with_no_spaces}"
-            f"{formatted_start_date}-{formatted_until_date}.{link_extension}"
+            f"{formatted_start_date}-{formatted_until_date}-{uid}.{link_extension}"
         )
 
         # Write to a temporary file so we don't overflow the memory
@@ -210,7 +212,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
             )
 
             if recipient:
-                uid = uuid.uuid4()
                 key = (
                     f"{S3Service.DOWNLOADS_PREFIX}/{reporting_name}/"
                     f"{linked_file_name}"
