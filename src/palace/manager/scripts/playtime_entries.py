@@ -207,6 +207,9 @@ class PlaytimeEntriesEmailReportsScript(Script):
                 records=self._fetch_report_records(start=start, until=until),
             )
 
+            # Rewind report
+            temp.seek(0)
+
             recipient = os.environ.get(
                 Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE
             )
