@@ -487,6 +487,7 @@ class DatabaseTransactionFixture:
         """
         if not self._default_collection:
             self.make_default_library_with_collections()
+            assert self._default_collection is not None
 
         return self._default_collection
 
@@ -494,6 +495,7 @@ class DatabaseTransactionFixture:
         """An inactive Collection that will only be created once throughout a given test."""
         if not self._default_inactive_collection:
             self.make_default_library_with_collections()
+            assert self._default_inactive_collection is not None
 
         return self._default_inactive_collection
 
@@ -505,6 +507,7 @@ class DatabaseTransactionFixture:
         """
         if not self._default_library:
             self.make_default_library_with_collections()
+            assert self._default_library is not None
 
         return self._default_library
 

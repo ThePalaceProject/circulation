@@ -285,7 +285,8 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             Collection.id == self.id
         )
         _db = Session.object_session(self)
-        return _db.execute(active_query).scalar() > 0
+        count_ = _db.execute(active_query).scalar()
+        return False if count_ is None else count_ > 0
 
     @classmethod
     def active_collections_filter(

@@ -1092,14 +1092,15 @@ class LicensePool(Base):
                 create_method_kwargs=kwargs,
             )
         else:
-            loan = get_one(
+            _loan: Loan | None = get_one(
                 _db,
                 Loan,
                 patron=patron,
                 license_pool=self,
             )
-            if not loan:
+            if not _loan:
                 raise CannotLoan("Cannot create a new loan on an inactive collection.")
+            loan = _loan
             is_new = False
 
         if fulfillment:
@@ -1130,9 +1131,10 @@ class LicensePool(Base):
             hold, new = get_one_or_create(_db, Hold, patron=patron, license_pool=self)
             hold.update(start, end, position)
         else:
-            hold = get_one(_db, Hold, patron=patron, license_pool=self)
-            if not hold:
+            _hold = get_one(_db, Hold, patron=patron, license_pool=self)
+            if not _hold:
                 raise CannotHold("Cannot create a new hold on an inactive collection.")
+            hold = _hold
             new = False
         return hold, new
 
