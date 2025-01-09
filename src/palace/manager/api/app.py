@@ -36,6 +36,10 @@ app.config["BABEL_DEFAULT_LOCALE"] = LanguageCodes.three_to_two[
     Configuration.localization_languages()[0]
 ]
 app.config["BABEL_TRANSLATION_DIRECTORIES"] = "../translations"
+# TODO: Temporary fix to handle form data larger than 500,000 bytes.
+#  Sometimes custom list form data was too large, resulting in 413 response.
+#  The value here is chosen to roughly match the Docker nginx config.
+app.config["MAX_FORM_MEMORY_SIZE"] = 75 * 1024 * 1024
 babel = Babel(app, locale_selector=get_locale)
 
 # We use URIs as identifiers throughout the application, meaning that
