@@ -6,6 +6,7 @@ import pytest
 from palace.manager.scripts.notifications.holds_notification import (
     HoldsNotificationMonitor,
 )
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.notifications import PushNotifications
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -93,6 +94,26 @@ class TestHoldsNotifications:
             assert query.all() == [hold]
         else:
             assert query.all() == []
+
+    def test_item_query_ignores_overdrive(
+        self, holds_fixture: HoldsNotificationFixture
+    ):
+        db = holds_fixture.db
+        patron = db.patron()
+        od_work = db.work(with_license_pool=True, data_source_name=DataSource.OVERDRIVE)
+        od_hold, _ = od_work.active_license_pool().on_hold_to(
+            patron, position=0, end=utc_now() + datetime.timedelta(days=1)
+        )
+
+        non_od_work = db.work(
+            with_license_pool=True, data_source_name=DataSource.AXIS_360
+        )
+        non_od_hold, _ = non_od_work.active_license_pool().on_hold_to(
+            patron, position=0, end=utc_now() + datetime.timedelta(days=1)
+        )
+
+        query = holds_fixture.monitor.item_query()
+        assert query.all() == [non_od_hold]
 
     def test_script_run(self, holds_fixture: HoldsNotificationFixture):
         db = holds_fixture.db

@@ -6,6 +6,8 @@ from sqlalchemy import or_
 
 from palace.manager.core.monitor import SweepMonitor
 from palace.manager.sqlalchemy.model.base import Base
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.notifications import PushNotifications
@@ -42,9 +44,16 @@ class HoldsNotificationMonitor(SweepMonitor):
     def item_query(self) -> Query:
         now = utc_now()
         query = super().item_query()
+
+        # We explicitly exclude Overdrive holds from notifications until we have a
+        # better way to update their position in the hold queue. As is we don't have
+        # a good way to do this. See: PP-2048.
+        overdrive_data_source = DataSource.lookup(self._db, DataSource.OVERDRIVE)
+        query = query.join(LicensePool)
         query = query.filter(
             Hold.position == 0,
             Hold.end > now,
+            LicensePool.data_source_id != overdrive_data_source.id,
             or_(
                 Hold.patron_last_notified != now.date(),
                 Hold.patron_last_notified == None,
