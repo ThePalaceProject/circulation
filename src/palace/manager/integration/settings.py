@@ -192,7 +192,7 @@ ConfigurationFormOptionsType = Mapping[Enum | str | None, str | LazyString]
 
 
 @dataclass(frozen=True)
-class ConfigurationFormItem:
+class ConfigurationFormItem(LoggerMixin):
     """
     Configuration form item
 
@@ -259,6 +259,15 @@ class ConfigurationFormItem:
             "key": key,
             "required": required or self.required,
         }
+
+        if required and not self.required:
+            self.log.warning(
+                f'Configuration form item (label="{self.label}", key={key}) does not have a default value or '
+                f"factory and yet its required property is set to False.  This condition may indicate a "
+                f"programming error. To make this warning go away, either set the configuration form item's default "
+                f"value or set the form item's required property to True."
+            )
+
         if default is not None and default is not PydanticUndefined:
             form_entry["default"] = self.get_form_value(default)
         if self.type.value is not None:
