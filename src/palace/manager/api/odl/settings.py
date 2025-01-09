@@ -78,16 +78,18 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
         ),
     )
     password: str = FormField(
+        default=None,
         form=ConfigurationFormItem(
             label=_("Library's API password"),
             required=False,
         ),
     )
     username: str = FormField(
+        default=None,
         form=ConfigurationFormItem(
             label=_("Library's API username"),
             required=False,
-        )
+        ),
     )
     external_account_id: HttpUrl = FormField(
         form=ConfigurationFormItem(
