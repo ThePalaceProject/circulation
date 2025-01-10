@@ -389,3 +389,21 @@ class TestOPDSSerializer:
             "{http://palaceproject.io/terms/properties/}default"
             not in facet_link.attrib
         )
+
+    def test_serialize_work_entry_with_subtitle_equals_none(self):
+        data = WorkEntryData(
+            subtitle=FeedEntryType(text=None),
+        )
+
+        element = OPDS1Version1Serializer().serialize_work_entry(data)
+        child = element.findall(f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline")
+        assert len(child) == 0
+
+        data = WorkEntryData(
+            subtitle=FeedEntryType(text="test"),
+        )
+
+        element = OPDS1Version1Serializer().serialize_work_entry(data)
+        child = element.findall(f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline")
+        assert len(child) == 1
+        assert child[0].text == "test"

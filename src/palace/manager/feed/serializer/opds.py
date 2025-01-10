@@ -163,7 +163,8 @@ class BaseOPDS1Serializer(SerializerInterface[etree._Element], OPDSFeed, abc.ABC
 
         if feed_entry.title:
             entry.append(OPDSFeed.E("title", feed_entry.title.text))
-        if feed_entry.subtitle:
+
+        if feed_entry.subtitle and feed_entry.subtitle.text:
             entry.append(
                 OPDSFeed.E(
                     f"{{{OPDSFeed.SCHEMA_NS}}}alternativeHeadline",
