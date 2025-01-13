@@ -218,14 +218,14 @@ def collect_events(
     """
     with task.session() as session:
         for e in events:
-            session.refresh(e.library)
-            session.refresh(e.license_pool)
-            session.refresh(e.patron)
+            library = session.merge(e.library)
+            license_pool = session.merge(e.license_pool)
+            patron = session.merge(e.patron)
             analytics.collect_event(
                 event_type=e.event_type,
-                library=e.library,
-                license_pool=e.license_pool,
-                patron=e.patron,
+                library=library,
+                license_pool=license_pool,
+                patron=patron,
             )
 
 
