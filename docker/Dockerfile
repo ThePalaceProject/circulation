@@ -73,12 +73,7 @@ COPY docker/services/nginx /etc/nginx/
 
 # Setup uwsgi
 COPY docker/services/uwsgi /etc/
-RUN mkdir -p /var/log/uwsgi && \
-    chown root:adm /var/log/uwsgi && \
-    touch /var/log/uwsgi/uwsgi.log && \
-    chown simplified:adm /var/log/uwsgi/uwsgi.log && \
-    chmod 644 /var/log/uwsgi/uwsgi.log && \
-    mkdir /var/run/uwsgi && \
+RUN mkdir /var/run/uwsgi && \
     chown simplified:simplified /var/run/uwsgi
 
 # Setup runit

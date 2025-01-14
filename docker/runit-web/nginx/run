@@ -1,4 +1,6 @@
 #!/bin/bash
 set -e
 
+mkdir -p /var/log/nginx
+chown root:adm /var/log/nginx
 exec /usr/sbin/nginx
