@@ -64,9 +64,13 @@ class LoanlikeReaperMonitor(ReaperMonitor):
     def after_commit(self) -> None:
         super().after_commit()
         copy_of_list = list(self._events_to_be_logged)
+
         for event in copy_of_list:
-            self.services.analytics.collect_event(**event)
-            self._events_to_be_logged.remove(event)
+            # start a separate transaction for each event in order to
+            # minimize database lock durations
+            with self._db.begin() as transaction:
+                self.services.analytics.collect_event(**event)
+                self._events_to_be_logged.remove(event)
 
 
 class LoanReaper(LoanlikeReaperMonitor):
