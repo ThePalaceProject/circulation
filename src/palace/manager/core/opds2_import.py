@@ -630,7 +630,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         self.log.debug(f"Started extracting metadata from publication {publication}")
 
         title = str(publication.metadata.title)
-        subtitle = str(publication.metadata.subtitle)
+        subtitle = (
+            str(publication.metadata.subtitle)
+            if publication.metadata.subtitle
+            else None
+        )
 
         languages = first_or_default(publication.metadata.languages)
         derived_medium = self._extract_medium_from_links(publication.links)
