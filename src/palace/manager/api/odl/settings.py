@@ -77,15 +77,15 @@ class OPDS2WithODLSettings(OPDS2ImporterSettings):
             options={auth: auth.value for auth in OPDS2AuthType},
         ),
     )
-    password: str = FormField(
-        default="",
+    password: str | None = FormField(
+        default=None,
         form=ConfigurationFormItem(
             label=_("Library's API password"),
             required=False,
         ),
     )
-    username: str = FormField(
-        default="",
+    username: str | None = FormField(
+        default=None,
         form=ConfigurationFormItem(
             label=_("Library's API username"),
             required=False,

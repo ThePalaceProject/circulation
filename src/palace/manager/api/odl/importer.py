@@ -385,11 +385,11 @@ class OPDS2WithODLImportMonitor(OdlAuthenticatedRequest, OPDS2ImportMonitor):
 
     @property
     def _username(self) -> str:
-        return self.settings.username
+        return self.settings.username if self.settings.username else ""
 
     @property
     def _password(self) -> str:
-        return self.settings.password
+        return self.settings.password if self.settings.password else ""
 
     @property
     def _auth_type(self) -> OPDS2AuthType:

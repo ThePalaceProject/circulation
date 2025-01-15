@@ -130,11 +130,11 @@ class OPDS2WithODLApi(
 
     @cached_property
     def _username(self) -> str:
-        return self.settings.username
+        return self.settings.username if self.settings.username else ""
 
     @cached_property
     def _password(self) -> str:
-        return self.settings.password
+        return self.settings.password if self.settings.password else ""
 
     @cached_property
     def _auth_type(self) -> OPDS2AuthType:
