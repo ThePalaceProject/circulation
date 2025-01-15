@@ -216,8 +216,10 @@ def collect_events(
     We perform this operation outside after completed the transaction to ensure that any row locks
     are held for the shortest possible duration in case writing to the s3 analytics provider is slow.
     """
-    with task.session() as session:
-        for e in events:
+
+    for e in events:
+        with task.transaction() as session:
+            # one transaction per event to minimize possible database lock durations
             library = session.merge(e.library)
             license_pool = session.merge(e.license_pool)
             patron = session.merge(e.patron)
