@@ -28,4 +28,4 @@ pytest_plugins = [
 # Make sure if we are using pyinstrument to profile tests, that
 # freezegun doesn't interfere with it.
 # See: https://github.com/spulec/freezegun#ignore-packages
-fg_configure(extend_ignore_list=["pyinstrument"])
+fg_configure(extend_ignore_list=["pyinstrument", "celery"])
