@@ -20,9 +20,6 @@ repos:
     rev: v3.17.0
     hooks:
       - id: pyupgrade
-        # TODO: Remove when Pydantic supports `datetime.date | None` type annotation.
-        #  Otherwise, `pyupgrade` will rewrite from `Optional[datetime.date]`.
-        exclude: ^src/palace/manager/api/circulation.py
         args:
           - --py310-plus
 

@@ -1,3 +1,5 @@
+import datetime
+
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.form_data import ProcessFormData
@@ -46,6 +48,22 @@ class MockSettings(BaseSettings):
             description="Another date.",
         ),
     )
+    field6: datetime.date | None = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Another date field with a date type",
+            type=ConfigurationFormItemType.DATE,
+            description="A python date.",
+        ),
+    )
+    field7: datetime.date | None = FormField(
+        None,
+        form=ConfigurationFormItem(
+            label="Another date field with a date type",
+            type=ConfigurationFormItemType.DATE,
+            description="A python date.",
+        ),
+    )
 
 
 def test_get_settings():
@@ -59,6 +77,8 @@ def test_get_settings():
             ("field3", "value5"),
             ("field4", "2024-10-23"),
             ("field5", ""),
+            ("field6", "2024-10-23"),
+            ("field7", ""),
         ]
     )
     settings = ProcessFormData.get_settings(MockSettings, data)
@@ -67,3 +87,5 @@ def test_get_settings():
     assert settings.field3 == "value5"
     assert settings.field4 == "2024-10-23"
     assert settings.field5 is None
+    assert settings.field6 == datetime.date(2024, 10, 23)
+    assert settings.field7 is None
