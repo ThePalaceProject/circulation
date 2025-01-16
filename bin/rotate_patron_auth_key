@@ -1,7 +1,0 @@
-#!/usr/bin/env python
-"""Rotate the JWE Auth key in the database"""
-
-
-from palace.manager.scripts.rotate_jwe_key import RotateJWEKeyScript
-
-RotateJWEKeyScript().run()

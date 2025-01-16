@@ -90,10 +90,6 @@ HOME=/var/www/circulation
 # Every hour between 7AM - 1AM
 5 0,1,7-23 * * * root bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1
 
-# Rotate the patron auth JWE access token key daily
-#
-0 3 * * * root bin/run rotate_patron_auth_key >> /var/log/cron.log 2>&1
-
 # Notifications
 #
 10 */8 * * * root bin/run loan_notifications >> /var/log/cron.log 2>&1
