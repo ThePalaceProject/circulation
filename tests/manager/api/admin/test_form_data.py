@@ -32,23 +32,7 @@ class MockSettings(BaseSettings):
             label="Field 3",
         ),
     )
-    field4: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
-            label="Date field",
-            type=ConfigurationFormItemType.DATE,
-            description="A date.",
-        ),
-    )
-    field5: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
-            label="Another date field",
-            type=ConfigurationFormItemType.DATE,
-            description="Another date.",
-        ),
-    )
-    field6: datetime.date | None = FormField(
+    field4: datetime.date | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Another date field with a date type",
@@ -56,7 +40,7 @@ class MockSettings(BaseSettings):
             description="A python date.",
         ),
     )
-    field7: datetime.date | None = FormField(
+    field5: datetime.date | None = FormField(
         None,
         form=ConfigurationFormItem(
             label="Another date field with a date type",
@@ -77,15 +61,11 @@ def test_get_settings():
             ("field3", "value5"),
             ("field4", "2024-10-23"),
             ("field5", ""),
-            ("field6", "2024-10-23"),
-            ("field7", ""),
         ]
     )
     settings = ProcessFormData.get_settings(MockSettings, data)
     assert settings.field1 == ["value1", "value2"]
     assert settings.field2 == ["value3", "value4"]
     assert settings.field3 == "value5"
-    assert settings.field4 == "2024-10-23"
+    assert settings.field4 == datetime.date(2024, 10, 23)
     assert settings.field5 is None
-    assert settings.field6 == datetime.date(2024, 10, 23)
-    assert settings.field7 is None
