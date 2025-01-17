@@ -25,7 +25,7 @@ pytest_plugins = [
     "tests.fixtures.webserver",
 ]
 
-# Make sure if we are using pyinstrument to profile tests, that
-# freezegun doesn't interfere with it.
+# Ensure that Freezegun does not interfere when using PyInstrument to profile tests or
+# running Celery tests.
 # See: https://github.com/spulec/freezegun#ignore-packages
-fg_configure(extend_ignore_list=["pyinstrument"])
+fg_configure(extend_ignore_list=["pyinstrument", "celery"])

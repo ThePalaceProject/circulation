@@ -62,6 +62,13 @@ def beat_schedule() -> dict[str, Any]:
                 minute="31",
             ),  # Run every hour at 31 minutes past the hour
         },
+        "rotate_jwe_key": {
+            "task": "rotate_jwe_key.rotate_jwe_key",
+            "schedule": crontab(
+                minute="0",
+                hour="3",
+            ),  # Run every day at 3:00 AM
+        },
     }
 
 

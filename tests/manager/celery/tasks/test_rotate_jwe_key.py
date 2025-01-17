@@ -4,35 +4,43 @@ from freezegun import freeze_time
 from sqlalchemy import delete, select
 
 from palace.manager.api.authentication.access_token import PatronJWEAccessTokenProvider
-from palace.manager.scripts.rotate_jwe_key import RotateJWEKeyScript
+from palace.manager.celery.tasks.rotate_jwe_key import rotate_jwe_key
 from palace.manager.sqlalchemy.model.key import Key, KeyType
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
-class TestRotateJWEKeyScript:
-    def test_do_run(self, db: DatabaseTransactionFixture):
-        script = RotateJWEKeyScript(db.session)
-        current = PatronJWEAccessTokenProvider.create_key(db.session)
-        script.do_run()
+class TestRotateJweKey:
+    def test_normal_run(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        previous_key = PatronJWEAccessTokenProvider.create_key(db.session)
+        rotate_jwe_key.delay().wait()
         new_key = PatronJWEAccessTokenProvider.get_key(db.session)
 
-        assert current is not None
+        assert previous_key is not None
         assert new_key is not None
-        assert current.id != new_key.id
+        assert previous_key.id != new_key.id
 
-    def test_do_run_no_current_key(self, db: DatabaseTransactionFixture):
+    def test_no_key(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
         db.session.execute(delete(Key).where(Key.type == KeyType.AUTH_TOKEN_JWE))
         assert Key.get_key(db.session, KeyType.AUTH_TOKEN_JWE) is None
-        script = RotateJWEKeyScript(db.session)
-        script.do_run()
+        rotate_jwe_key.delay().wait()
         created_key = PatronJWEAccessTokenProvider.get_key(db.session)
         assert isinstance(created_key, Key)
 
     @freeze_time()
-    def test_do_run_remove_expired(self, db: DatabaseTransactionFixture):
+    def test_remove_expired(
+        self, db: DatabaseTransactionFixture, celery_fixture: CeleryFixture
+    ):
         db.session.execute(delete(Key).where(Key.type == KeyType.AUTH_TOKEN_JWE))
-        script = RotateJWEKeyScript(db.session)
 
         key1 = PatronJWEAccessTokenProvider.create_key(db.session)
         key1.created = utc_now() - timedelta(days=2, hours=4)
@@ -45,7 +53,7 @@ class TestRotateJWEKeyScript:
         key5 = PatronJWEAccessTokenProvider.create_key(db.session)
         key5.created = utc_now() - timedelta(days=6)
 
-        script.do_run()
+        rotate_jwe_key.delay().wait()
 
         queried_keys = db.session.scalars(
             select(Key)
