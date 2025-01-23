@@ -235,7 +235,7 @@ class ConfigurationFormItem(LoggerMixin):
     weight: int = 0
 
     # If set to True, the Admin UI will be directed to hide this field.
-    suppressed: bool = False
+    hidden: bool = False
 
     @staticmethod
     def get_form_value(value: Any) -> Any:
@@ -261,7 +261,7 @@ class ConfigurationFormItem(LoggerMixin):
             "label": self.label,
             "key": key,
             "required": required or self.required,
-            "suppressed": self.suppressed,
+            "hidden": self.hidden,
         }
 
         if required and not self.required:

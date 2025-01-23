@@ -68,14 +68,14 @@ class BaseSettingsFixture:
             "key": "test",
             "label": "Test",
             "required": False,
-            "suppressed": False,
+            "hidden": False,
         }
         self.number_config_dict = {
             "description": "Number description",
             "key": "number",
             "label": "Number",
             "required": True,
-            "suppressed": False,
+            "hidden": False,
         }
         self.with_alias_config_dict = {
             "default": -1.1,
@@ -83,7 +83,7 @@ class BaseSettingsFixture:
             "key": "with_alias",
             "label": "With Alias",
             "required": False,
-            "suppressed": False,
+            "hidden": False,
         }
         self.mock_db = MagicMock(spec=Session)
         self.settings = partial(MockSettings, number=1)
@@ -258,30 +258,40 @@ class TestBaseSettings:
         base_settings_fixture: BaseSettingsFixture,
     ) -> None:
         class MockConfigSettings(BaseSettings):
-            unsuppressed_field: str = FormField(
+            explicitly_unhidden_field: str = FormField(
                 "default",
                 form=ConfigurationFormItem(
-                    label="Unsuppressed",
-                    description="An unsuppressed field",
+                    label="Explicitly Unhidden",
+                    description="An explicitly unhidden field",
+                    hidden=False,
                 ),
             )
-            suppressed_field: str = FormField(
+            implicitly_unhidden_field: str = FormField(
                 "default",
                 form=ConfigurationFormItem(
-                    label="Suppressed",
-                    description="Suppressed field with default value",
-                    suppressed=True,
+                    label="Implicitly Unhidden",
+                    description="An implicitly unhidden field",
+                ),
+            )
+            hidden_field: str = FormField(
+                "default",
+                form=ConfigurationFormItem(
+                    label="Hidden",
+                    description="An explicitly hidden field",
+                    hidden=True,
                 ),
             )
 
-        [item1, item2] = MockConfigSettings().configuration_form(
+        [item1, item2, item3] = MockConfigSettings().configuration_form(
             base_settings_fixture.mock_db
         )
 
-        assert item1["key"] == "unsuppressed_field"
-        assert item1["suppressed"] is False
-        assert item2["key"] == "suppressed_field"
-        assert item2["suppressed"] is True
+        assert item1["key"] == "explicitly_unhidden_field"
+        assert item1["hidden"] is False
+        assert item2["key"] == "implicitly_unhidden_field"
+        assert item2["hidden"] is False
+        assert item3["key"] == "hidden_field"
+        assert item3["hidden"] is True
 
     def test_configuration_form_options(
         self, base_settings_fixture: BaseSettingsFixture
@@ -353,6 +363,6 @@ class TestBaseSettings:
                 "key": "test",
                 "label": "Test",
                 "required": False,
-                "suppressed": False,
+                "hidden": False,
             }
         ]
