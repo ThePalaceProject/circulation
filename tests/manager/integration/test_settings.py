@@ -68,12 +68,14 @@ class BaseSettingsFixture:
             "key": "test",
             "label": "Test",
             "required": False,
+            "suppressed": False,
         }
         self.number_config_dict = {
             "description": "Number description",
             "key": "number",
             "label": "Number",
             "required": True,
+            "suppressed": False,
         }
         self.with_alias_config_dict = {
             "default": -1.1,
@@ -81,6 +83,7 @@ class BaseSettingsFixture:
             "key": "with_alias",
             "label": "With Alias",
             "required": False,
+            "suppressed": False,
         }
         self.mock_db = MagicMock(spec=Session)
         self.settings = partial(MockSettings, number=1)
@@ -250,6 +253,36 @@ class TestBaseSettings:
         assert item1["key"] == "number"
         assert item2["key"] == "string"
 
+    def test_configuration_form_suppressed(
+        self,
+        base_settings_fixture: BaseSettingsFixture,
+    ) -> None:
+        class MockConfigSettings(BaseSettings):
+            unsuppressed_field: str = FormField(
+                "default",
+                form=ConfigurationFormItem(
+                    label="Unsuppressed",
+                    description="An unsuppressed field",
+                ),
+            )
+            suppressed_field: str = FormField(
+                "default",
+                form=ConfigurationFormItem(
+                    label="Suppressed",
+                    description="Suppressed field with default value",
+                    suppressed=True,
+                ),
+            )
+
+        [item1, item2] = MockConfigSettings().configuration_form(
+            base_settings_fixture.mock_db
+        )
+
+        assert item1["key"] == "unsuppressed_field"
+        assert item1["suppressed"] is False
+        assert item2["key"] == "suppressed_field"
+        assert item2["suppressed"] is True
+
     def test_configuration_form_options(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
@@ -320,5 +353,6 @@ class TestBaseSettings:
                 "key": "test",
                 "label": "Test",
                 "required": False,
+                "suppressed": False,
             }
         ]
