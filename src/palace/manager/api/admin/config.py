@@ -43,6 +43,15 @@ class AdminClientFeatureFlags(ServiceConfiguration):
     )
 
 
+class AdminClientSettings(ServiceConfiguration):
+    """Settings for the admin client."""
+
+    model_config = SettingsConfigDict(env_prefix="PALACE_ADMINUI_")
+
+    # This is a flag suppresses visibility of the collection subscription config in the admin UI.
+    hide_subscription_config: bool = True
+
+
 class OperationalMode(str, Enum):
     production = "production"
     development = "development"
@@ -90,6 +99,7 @@ class Configuration(LoggerMixin):
 
     # Cache the feature flags after the first lookup.
     _admin_ui_feature_flags: AdminClientFeatureFlags | None = None
+    _admin_client_settings: AdminClientSettings | None = None
 
     # Admin client feature flags
     @classmethod
@@ -97,6 +107,12 @@ class Configuration(LoggerMixin):
         if not cls._admin_ui_feature_flags:
             cls._admin_ui_feature_flags = AdminClientFeatureFlags()
         return cls._admin_ui_feature_flags
+
+    @classmethod
+    def admin_client_settings(cls) -> AdminClientSettings:
+        if not cls._admin_client_settings:
+            cls._admin_client_settings = AdminClientSettings()
+        return cls._admin_client_settings
 
     @classmethod
     def operational_mode(cls) -> OperationalMode:
