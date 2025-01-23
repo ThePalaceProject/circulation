@@ -148,14 +148,19 @@ class EnkiAPI(
     def description(cls) -> str:
         return cls.DESCRIPTION  # type: ignore[no-any-return]
 
-    def __init__(self, _db: Session, collection: Collection) -> None:
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ) -> None:
         self._db = _db
         if collection.protocol != self.ENKI:
             raise ValueError(
                 "Collection protocol is %s, but passed into EnkiAPI!"
                 % collection.protocol
             )
-        super().__init__(_db, collection)
+        super().__init__(_db, collection, analytics)
 
         self.collection_id = collection.id
         self.base_url = self.settings.url

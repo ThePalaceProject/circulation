@@ -183,8 +183,13 @@ class BibliothecaAPI(
     def description(cls):
         return ""
 
-    def __init__(self, _db, collection):
-        super().__init__(_db, collection)
+    def __init__(
+        self,
+        _db,
+        collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
+        super().__init__(_db, collection, analytics)
 
         self._db = _db
         settings = self.settings

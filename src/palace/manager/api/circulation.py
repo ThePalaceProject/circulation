@@ -9,6 +9,7 @@ from typing import Literal, TypeVar
 
 import flask
 import requests
+from dependency_injector.wiring import Provide
 from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import PositiveInt
@@ -46,6 +47,7 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -592,10 +594,16 @@ class BaseCirculationAPI(
     # delivery mechanisms (3M), set this to None.
     SET_DELIVERY_MECHANISM_AT: str | None = FULFILL_STEP
 
-    def __init__(self, _db: Session, collection: Collection):
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
         self._db = _db
         self._integration_configuration_id = collection.integration_configuration.id
         self.collection_id = collection.id
+        self.analytics = analytics
 
         if collection.protocol != self.label():
             raise ValueError(

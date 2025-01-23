@@ -384,8 +384,13 @@ class OverdriveAPI(
     def description(cls):
         return "Integrate an Overdrive collection. For an Overdrive Advantage collection, select the consortium's Overdrive collection as the parent."
 
-    def __init__(self, _db, collection):
-        super().__init__(_db, collection)
+    def __init__(
+        self,
+        _db,
+        collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
+        super().__init__(_db, collection, analytics)
 
         if collection.parent:
             # This is an Overdrive Advantage account.

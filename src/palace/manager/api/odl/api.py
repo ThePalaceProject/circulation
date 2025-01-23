@@ -107,7 +107,7 @@ class OPDS2WithODLApi(
         collection: Collection,
         analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
-        super().__init__(_db, collection)
+        super().__init__(_db, collection, analytics)
 
         if collection.protocol != self.label():
             raise ValueError(
@@ -119,7 +119,6 @@ class OPDS2WithODLApi(
         self.data_source_name = settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
-        self.analytics = analytics
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()

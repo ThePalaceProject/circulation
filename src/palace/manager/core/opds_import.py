@@ -15,6 +15,7 @@ from xml.etree.ElementTree import Element
 
 import dateutil
 import feedparser
+from dependency_injector.wiring import Provide
 from feedparser import FeedParserDict
 from flask_babel import lazy_gettext as _
 from lxml import etree
@@ -62,6 +63,8 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -217,8 +220,13 @@ class OPDSImporterLibrarySettings(BaseSettings):
 class BaseOPDSAPI(
     BaseCirculationAPI[OPDSImporterSettings, OPDSImporterLibrarySettings], ABC
 ):
-    def __init__(self, _db: Session, collection: Collection):
-        super().__init__(_db, collection)
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ):
+        super().__init__(_db, collection, analytics)
         self.saml_wayfless_url_template = self.settings.saml_wayfless_url_template
         self.saml_credential_manager = SAMLCredentialManager()
 

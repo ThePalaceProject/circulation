@@ -225,8 +225,13 @@ class Axis360API(
     def description(cls) -> str:
         return ""
 
-    def __init__(self, _db: Session, collection: Collection) -> None:
-        super().__init__(_db, collection)
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        analytics: Analytics = Provide[Services.analytics.analytics],
+    ) -> None:
+        super().__init__(_db, collection, analytics)
         settings = self.settings
         self.library_id = settings.external_account_id
         self.username = settings.username
