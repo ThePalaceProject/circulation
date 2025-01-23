@@ -234,6 +234,9 @@ class ConfigurationFormItem(LoggerMixin):
     # weight will be displayed in the order they were added.
     weight: int = 0
 
+    # If set to True, the Admin UI will be directed to hide this field.
+    hidden: bool = False
+
     @staticmethod
     def get_form_value(value: Any) -> Any:
         if value is None:
@@ -258,6 +261,7 @@ class ConfigurationFormItem(LoggerMixin):
             "label": self.label,
             "key": key,
             "required": required or self.required,
+            "hidden": self.hidden,
         }
 
         if required and not self.required:
