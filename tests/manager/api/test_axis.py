@@ -146,6 +146,9 @@ class Axis360Fixture:
     def sample_data(self, filename):
         return self.files.sample_data(filename)
 
+    def sample_text(self, filename):
+        return self.files.sample_text(filename)
+
 
 @pytest.fixture(scope="function")
 def axis360(
@@ -1508,7 +1511,7 @@ class TestAvailabilityResponseParser:
     """
 
     def test_parse_loan_and_hold(self, axis360parsers: Axis360FixturePlusParsers):
-        data = axis360parsers.sample_data("availability_with_loan_and_hold.xml")
+        data = axis360parsers.sample_text("availability_with_loan_and_hold.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         activity = list(parser.process_all(data))
         hold, loan, reserved = sorted(
@@ -1538,7 +1541,7 @@ class TestAvailabilityResponseParser:
     def test_parse_loan_no_availability(
         self, axis360parsers: Axis360FixturePlusParsers
     ):
-        data = axis360parsers.sample_data("availability_without_fulfillment.xml")
+        data = axis360parsers.sample_text("availability_without_fulfillment.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
         assert isinstance(loan, LoanInfo)
@@ -1552,7 +1555,7 @@ class TestAvailabilityResponseParser:
     def test_parse_audiobook_availability(
         self, axis360parsers: Axis360FixturePlusParsers
     ):
-        data = axis360parsers.sample_data("availability_with_audiobook_fulfillment.xml")
+        data = axis360parsers.sample_text("availability_with_audiobook_fulfillment.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         [loan] = list(parser.process_all(data))
         assert isinstance(loan, LoanInfo)
@@ -1571,7 +1574,7 @@ class TestAvailabilityResponseParser:
     def test_parse_ebook_availability(self, axis360parsers: Axis360FixturePlusParsers):
         # AvailabilityResponseParser will behave differently depending on whether
         # we ask for the book as an ePub or through AxisNow.
-        data = axis360parsers.sample_data("availability_with_ebook_fulfillment.xml")
+        data = axis360parsers.sample_text("availability_with_ebook_fulfillment.xml")
 
         # First, ask for an ePub.
         epub_parser = AvailabilityResponseParser(axis360parsers.api, "ePub")
@@ -1609,7 +1612,7 @@ class TestAvailabilityResponseParser:
     def test_patron_not_found(self, axis360parsers: Axis360FixturePlusParsers):
         # If the patron is not found, the parser will return an empty list, since
         # that patron can't have any loans or holds.
-        data = axis360parsers.sample_data("availability_patron_not_found.xml")
+        data = axis360parsers.sample_text("availability_patron_not_found.xml")
         parser = AvailabilityResponseParser(axis360parsers.api)
         assert list(parser.process_all(data)) == []
 

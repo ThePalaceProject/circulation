@@ -477,7 +477,7 @@ class Axis360API(
         identifier = licensepool.identifier
         # This should include only one 'activity'.
         internal_format = self.internal_format(delivery_mechanism)
-        debug_info: list[str] = [
+        log_messages: list[str] = [
             f"arguments for patron_activity method: "
             f"patron.id={patron.id},"
             f"internal_format={internal_format}, "
@@ -485,12 +485,13 @@ class Axis360API(
             f"patron_id={patron.id}"
         ]
         activities = self.patron_activity(
-            patron, pin, licensepool.identifier, internal_format, debug_info
+            patron, pin, licensepool.identifier, internal_format, log_messages
         )
 
-        debug_info.append(
+        log_messages.append(
             f"Patron activities returned from patron_activity method: {activities}"
         )
+
         for loan in activities:
             if not isinstance(loan, AxisLoanInfo):
                 continue
@@ -507,12 +508,11 @@ class Axis360API(
             return fulfillment
         # If we made it to this point, the patron does not have this
         # book checked out.
-        self.log.warning(
-            "Unable to fulfill because there is no active loan.  See info statements below for details."
+        log_messages.insert(
+            0,
+            "Unable to fulfill because there is no active loan. See info statements below for details:",
         )
-        for statement in debug_info:
-            self.log.info(statement)
-
+        self.log.error("\n  ".join(log_messages))
         raise NoActiveLoan()
 
     def place_hold(
@@ -564,7 +564,7 @@ class Axis360API(
         pin: str | None,
         identifier: Identifier | None = None,
         internal_format: str | None = None,
-        debug_info: list[str] | None = None,
+        log_messages: list[str] | None = None,
     ) -> list[AxisLoanInfo | HoldInfo]:
         if identifier:
             assert identifier.identifier is not None
@@ -576,10 +576,12 @@ class Axis360API(
             patron_id=patron.authorization_identifier, title_ids=title_ids
         )
 
-        availability_content_str = availability.content.decode("utf-8")
-        if debug_info:
-            debug_info.append(f"arguments to availability call: title_ids={title_ids}")
-            debug_info.append(
+        availability_content_str = availability.text
+        if log_messages:
+            log_messages.append(
+                f"arguments to availability call: title_ids={title_ids}"
+            )
+            log_messages.append(
                 f"response to availability call: status={availability.status_code}, content={availability_content_str}"
             )
         loan_info_list = list(
