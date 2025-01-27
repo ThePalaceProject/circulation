@@ -476,11 +476,20 @@ class Axis360API(
         """Fulfill a patron's request for a specific book."""
         identifier = licensepool.identifier
         # This should include only one 'activity'.
+        internal_format = self.internal_format(delivery_mechanism)
+        debug_info: list[str] = [
+            f"arguments for patron_activity method: "
+            f"patron.id={patron.id},"
+            f"internal_format={internal_format}, "
+            f"licensepool.identifier={identifier}, "
+            f"patron_id={patron.id}"
+        ]
         activities = self.patron_activity(
-            patron,
-            pin,
-            licensepool.identifier,
-            self.internal_format(delivery_mechanism),
+            patron, pin, licensepool.identifier, internal_format, debug_info
+        )
+
+        debug_info.append(
+            f"Patron activities returned from patron_activity method: {activities}"
         )
         for loan in activities:
             if not isinstance(loan, AxisLoanInfo):
@@ -498,6 +507,12 @@ class Axis360API(
             return fulfillment
         # If we made it to this point, the patron does not have this
         # book checked out.
+        self.log.warning(
+            "Unable to fulfill because there is no active loan.  See info statements below for details."
+        )
+        for statement in debug_info:
+            self.log.info(statement)
+
         raise NoActiveLoan()
 
     def place_hold(
@@ -549,20 +564,31 @@ class Axis360API(
         pin: str | None,
         identifier: Identifier | None = None,
         internal_format: str | None = None,
+        debug_info: list[str] | None = None,
     ) -> list[AxisLoanInfo | HoldInfo]:
         if identifier:
             assert identifier.identifier is not None
             title_ids = [identifier.identifier]
         else:
             title_ids = None
+
         availability = self.availability(
             patron_id=patron.authorization_identifier, title_ids=title_ids
         )
-        return list(
+
+        availability_content_str = availability.content.decode("utf-8")
+        if debug_info:
+            debug_info.append(f"arguments to availability call: title_ids={title_ids}")
+            debug_info.append(
+                f"response to availability call: status={availability.status_code}, content={availability_content_str}"
+            )
+        loan_info_list = list(
             AvailabilityResponseParser(self, internal_format).process_all(
-                availability.content
+                availability_content_str
             )
         )
+
+        return loan_info_list
 
     def update_availability(self, licensepool: LicensePool) -> None:
         """Update the availability information for a single LicensePool.
