@@ -8,7 +8,11 @@ concurrency:
 jobs:
   build:
     name: Docker build
-    runs-on: ubuntu-latest
+    # Some issue with the ubuntu-latest image is causing gcc to segfault with building
+    # an emulated arm64 target. Downgrading to 22.04 seems to fix this.
+    # See https://github.com/actions/runner-images/issues/11471
+    # runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
