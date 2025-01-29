@@ -48,7 +48,7 @@ class AdminClientSettings(ServiceConfiguration):
 
     model_config = SettingsConfigDict(env_prefix="PALACE_ADMINUI_")
 
-    # This is a flag suppresses visibility of the collection subscription config in the admin UI.
+    # This flag suppresses visibility of the collection subscription config in the admin UI.
     hide_subscription_config: bool = True
 
 
