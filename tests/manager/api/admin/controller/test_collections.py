@@ -150,9 +150,9 @@ class TestCollectionSettings:
         from palace.manager.api.circulation import BaseCirculationApiSettings
 
         for setting in affected_settings_keys:
-            hidden_field_value = BaseCirculationApiSettings.model_fields[
-                setting
-            ].form.hidden
+            form_field_info = BaseCirculationApiSettings.model_fields[setting]
+            form = form_field_info.form  # type: ignore[attr-defined]
+            hidden_field_value = form.hidden
             assert hidden_field_value == expect_hidden
 
     def test_collections_get_collections_with_multiple_collections(

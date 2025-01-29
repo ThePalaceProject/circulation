@@ -246,7 +246,7 @@ class TestAdminClientSettings:
     def test_hide_subscription_config(
         self,
         monkeypatch_env: MonkeyPatchEnvFixture,
-        should_hide: bool | None,
+        should_hide: str | None,
         expected_setting,
         monkeypatch: MonkeyPatch,
     ):
