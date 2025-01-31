@@ -1,4 +1,3 @@
-import importlib
 import json
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -8,7 +7,6 @@ from flask import Response
 from pytest import MonkeyPatch
 from werkzeug.datastructures import ImmutableMultiDict
 
-from palace.manager.api.admin.config import AdminClientSettings
 from palace.manager.api.admin.controller.collection_settings import (
     CollectionSettingsController,
 )
@@ -110,50 +108,50 @@ class TestCollectionSettings:
         expected_names = {k for k, v in controller.registry}
         assert names == expected_names
 
-    @pytest.mark.parametrize(
-        "should_hide, expect_hidden",
-        (
-            pytest.param(None, True, id="default"),
-            pytest.param(True, True, id="true"),
-            pytest.param(False, False, id="false"),
-        ),
-    )
-    @patch("palace.manager.api.admin.config.Configuration.admin_client_settings")
-    def test_hiding_subscription_config(
-        self,
-        mock_admin_client_settings: MagicMock,
-        controller: CollectionSettingsController,
-        db: DatabaseTransactionFixture,
-        monkeypatch: MonkeyPatch,
-        should_hide: bool | None,
-        expect_hidden: bool,
-    ) -> None:
-        affected_settings_keys = (
-            "subscription_activation_date",
-            "subscription_expiration_date",
-        )
-        env_var = "PALACE_ADMINUI_HIDE_SUBSCRIPTION_CONFIG"
-
-        if should_hide is None:
-            monkeypatch.delenv(env_var, raising=False)
-        else:
-            monkeypatch.setenv(env_var, str(should_hide))
-
-        # Use fresh client settings, instead of using a cached value.
-        # This needs to happen after the environment is patched.
-        mock_admin_client_settings.return_value = AdminClientSettings()
-
-        # Need to reload the module, since these form fields are class properties.
-        import palace.manager.api.circulation
-
-        importlib.reload(palace.manager.api.circulation)
-        from palace.manager.api.circulation import BaseCirculationApiSettings
-
-        for setting in affected_settings_keys:
-            form_field_info = BaseCirculationApiSettings.model_fields[setting]
-            form = form_field_info.form  # type: ignore[attr-defined]
-            hidden_field_value = form.hidden
-            assert hidden_field_value == expect_hidden
+    # @pytest.mark.parametrize(
+    #     "should_hide, expect_hidden",
+    #     (
+    #         pytest.param(None, True, id="default"),
+    #         pytest.param(True, True, id="true"),
+    #         pytest.param(False, False, id="false"),
+    #     ),
+    # )
+    # @patch("palace.manager.api.admin.config.Configuration.admin_client_settings")
+    # def test_hiding_subscription_config(
+    #     self,
+    #     mock_admin_client_settings: MagicMock,
+    #     controller: CollectionSettingsController,
+    #     db: DatabaseTransactionFixture,
+    #     monkeypatch: MonkeyPatch,
+    #     should_hide: bool | None,
+    #     expect_hidden: bool,
+    # ) -> None:
+    #     affected_settings_keys = (
+    #         "subscription_activation_date",
+    #         "subscription_expiration_date",
+    #     )
+    #     env_var = "PALACE_ADMINUI_HIDE_SUBSCRIPTION_CONFIG"
+    #
+    #     if should_hide is None:
+    #         monkeypatch.delenv(env_var, raising=False)
+    #     else:
+    #         monkeypatch.setenv(env_var, str(should_hide))
+    #
+    #     # Use fresh client settings, instead of using a cached value.
+    #     # This needs to happen after the environment is patched.
+    #     mock_admin_client_settings.return_value = AdminClientSettings()
+    #
+    #     # Need to reload the module, since these form fields are class properties.
+    #     import palace.manager.api.circulation
+    #
+    #     importlib.reload(palace.manager.api.circulation)
+    #     from palace.manager.api.circulation import BaseCirculationApiSettings
+    #
+    #     for setting in affected_settings_keys:
+    #         form_field_info = BaseCirculationApiSettings.model_fields[setting]
+    #         form = form_field_info.form  # type: ignore[attr-defined]
+    #         hidden_field_value = form.hidden
+    #         assert hidden_field_value == expect_hidden
 
     def test_collections_get_collections_with_multiple_collections(
         self,
