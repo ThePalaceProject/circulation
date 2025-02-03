@@ -206,3 +206,53 @@ class TestAdminUI:
             key=asset_key, _operational_mode=operational_mode
         )
         assert result == expected_result
+
+
+class TestAdminClientSettings:
+
+    @patch("palace.manager.api.admin.config.AdminClientSettings")
+    def test_admin_client_settings_cached(
+        self,
+        admin_client_settings_class: MagicMock,
+        monkeypatch: MonkeyPatch,
+    ):
+        # Ensure that we don't have any cached settings.
+        monkeypatch.setattr(AdminConfig, "_admin_client_settings", None)
+
+        # with patch("palace.manager.api.admin.config.AdminClientSettings") as admin_client_settings_class:
+        admin_client_settings_class.assert_not_called()
+
+        # The first time through, we have to call to populate the cache.
+        admin_client_settings_class.reset_mock()
+        settings1 = AdminConfig.admin_client_settings()
+        assert settings1 is not None
+        assert admin_client_settings_class.call_count == 1
+
+        # The second time through, we just get it from the cache.
+        admin_client_settings_class.reset_mock()
+        settings2 = AdminConfig.admin_client_settings()
+        assert settings2 is not None
+        assert settings2 == settings1
+        assert admin_client_settings_class.call_count == 0
+
+    @pytest.mark.parametrize(
+        "should_hide, expected_setting",
+        (
+            pytest.param(None, True, id="unspecified"),
+            pytest.param("true", True, id="true"),
+            pytest.param("false", False, id="false"),
+        ),
+    )
+    def test_hide_subscription_config(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        should_hide: str | None,
+        expected_setting,
+        monkeypatch: MonkeyPatch,
+    ):
+        monkeypatch_env("PALACE_ADMINUI_HIDE_SUBSCRIPTION_CONFIG", should_hide)
+        monkeypatch.setattr(AdminConfig, "_admin_client_settings", None)
+        assert (
+            AdminConfig.admin_client_settings().hide_subscription_config
+            == expected_setting
+        )

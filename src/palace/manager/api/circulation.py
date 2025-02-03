@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
+from palace.manager.api.admin.config import Configuration as AdminConfiguration
 from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
@@ -575,6 +576,7 @@ class BaseCirculationApiSettings(BaseSettings):
                 " it will not restrict any associated library's subscription status."
             ),
             required=False,
+            hidden=AdminConfiguration.admin_client_settings().hide_subscription_config,
         ),
     )
     subscription_expiration_date: datetime.date | None = FormField(
@@ -588,6 +590,7 @@ class BaseCirculationApiSettings(BaseSettings):
                 " it will not restrict any associated library's subscription status."
             ),
             required=False,
+            hidden=AdminConfiguration.admin_client_settings().hide_subscription_config,
         ),
     )
 
