@@ -564,6 +564,33 @@ class BaseCirculationApiSettings(BaseSettings):
         )
     }
 
+    subscription_activation_date: datetime.date | None = FormField(
+        default=None,
+        form=ConfigurationFormItem(
+            label=_("Collection Subscription Activation Date"),
+            type=ConfigurationFormItemType.DATE,
+            description=(
+                "A date before which this collection is considered inactive. Associated libraries"
+                " will not be considered to be subscribed until this date). If not specified,"
+                " it will not restrict any associated library's subscription status."
+            ),
+            required=False,
+        ),
+    )
+    subscription_expiration_date: datetime.date | None = FormField(
+        default=None,
+        form=ConfigurationFormItem(
+            label=_("Collection Subscription Expiration Date"),
+            type=ConfigurationFormItemType.DATE,
+            description=(
+                "A date after which this collection is considered inactive. Associated libraries"
+                " will not be considered to be subscribed beyond this date). If not specified,"
+                " it will not restrict any associated library's subscription status."
+            ),
+            required=False,
+        ),
+    )
+
 
 SettingsType = TypeVar("SettingsType", bound=BaseCirculationApiSettings, covariant=True)
 LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
