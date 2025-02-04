@@ -3866,13 +3866,13 @@ test = ["coverage (>=4.5.2)", "flake8 (>=3.6.0,<=5.0.0)", "freezegun (>=0.3.11,<
 
 [[package]]
 name = "pytz"
-version = "2024.2"
+version = "2025.1"
 description = "World timezone definitions, modern and historical"
 optional = false
 python-versions = "*"
 files = [
-    {file = "pytz-2024.2-py2.py3-none-any.whl", hash = "sha256:31c7c1817eb7fae7ca4b8c7ee50c72f93aa2dd863de768e1ef4245d426aa0725"},
-    {file = "pytz-2024.2.tar.gz", hash = "sha256:2aa355083c50a0f93fa581709deac0c9ad65cca8a9e9beac660adcbd493c798a"},
+    {file = "pytz-2025.1-py2.py3-none-any.whl", hash = "sha256:89dd22dca55b46eac6eda23b2d72721bf1bdfef212645d81513ef5d03038de57"},
+    {file = "pytz-2025.1.tar.gz", hash = "sha256:c2db42be2a2518b28e65f9207c4d05e6ff547d1efa4086469ef855e4ab70178e"},
 ]
 
 [[package]]
@@ -5173,4 +5173,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<4"
-content-hash = "9f65d4f4b8cda5a9417cf9b97a52b4e1019ec3c037f4a5757e83169140876ba3"
+content-hash = "522e7cd2c3e7e54715eff82f0e1e3713d138a80822577b1c01f15d607e8bcfb2"
