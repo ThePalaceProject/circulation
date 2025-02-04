@@ -232,7 +232,7 @@ def get_collections_by_protocol(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def reap_all_collections(task: Task, import_all: bool = False) -> None:
+def reap_all_collections(task: Task) -> None:
     """
     A shared task that loops through all Axis360 Api based collections and kick off an
     import task for each.
@@ -253,21 +253,25 @@ def reap_collection(
     This method creates new or updates new editions and license pools for each pair of metadata and circulation data in
     the items list.
     """
+
+    start_seconds = time.perf_counter()
+
     with task.session() as session:
-        collection = Collection.by_id(task.session(), collection_id)
+        collection = Collection.by_id(session, collection_id)
         api: Axis360API = Axis360API(session, collection)
         identifiers: (
             session.query(Identifier)
             .join(Identifier.licensed_through)
             .filter(LicensePool.collection == collection)
             .filter(Identifier.id > offset)
-            .order_by(Identifier.id.id)
+            .order_by(Identifier.id)
             .limit(batch_size)
             .all()
         )
 
         identifier_count = len(identifiers)
-        api.update_licensepools_for_identifiers(identifiers)
+        with session.begin():
+            api.update_licensepools_for_identifiers(identifiers)
 
     task.log.info(
         f'Reaper updated {identifier_count} books in collection (name="{collection.name}", id={collection.id}.'
@@ -275,14 +279,21 @@ def reap_collection(
     # requeue at the next offset if the batch of identifiers was full
     # otherwise the run is complete.
 
+    task.log.info(
+        f"reap_collection task at offset={offset} with {identifier_count} identifiers for collection "
+        f'(name="{collection.name}", id={collection.id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
+    )
+
     if identifier_count >= batch_size:
         new_offset = offset + identifier_count
         task.log.info(
             f"Queuing reap_collection task at offset={new_offset} for collection "
-            f'(name="{collection.name}", id={collection.id}.'
+            f'(name="{collection.name}", id={collection.id}).'
         )
         reap_collection.delay(collection_id, new_offset)
     else:
         task.log.info(
             f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
         )
+
+    task.log.info("Reaping batch process {")
