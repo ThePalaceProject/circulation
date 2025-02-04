@@ -8,7 +8,7 @@ import re
 import ssl
 import urllib
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
@@ -22,13 +22,6 @@ from lxml.etree import _Element, _ElementTree
 from pydantic import field_validator
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from palace.manager.api.admin.validator import Validator
 from palace.manager.api.circulation import (
@@ -63,7 +56,6 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.metadata_layer import (
     CirculationData,
@@ -74,12 +66,6 @@ from palace.manager.core.metadata_layer import (
     Metadata,
     ReplacementPolicy,
     SubjectData,
-    TimestampData,
-)
-from palace.manager.core.monitor import (
-    CollectionMonitor,
-    IdentifierSweepMonitor,
-    TimelineMonitor,
 )
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
@@ -102,7 +88,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http import HTTP, RemoteIntegrationException
 from palace.manager.util.log import LoggerMixin
@@ -759,192 +745,6 @@ class Axis360API(
         return HTTP.request_with_timeout(
             method, url, headers=headers, data=data, params=params, **kwargs
         )
-
-
-class Axis360CirculationMonitor(CollectionMonitor, TimelineMonitor):
-    """Maintain LicensePools for Axis 360 titles."""
-
-    SERVICE_NAME = "Axis 360 Circulation Monitor"
-    INTERVAL_SECONDS = 60
-    MAX_RETRIES = 10
-    PROTOCOL = Axis360API.label()
-
-    DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api_class: (
-            Axis360API | Callable[[Session, Collection], Axis360API]
-        ) = Axis360API,
-    ):
-        super().__init__(_db, collection)
-        if isinstance(api_class, Axis360API):
-            # Use a preexisting Axis360API instance rather than
-            # creating a new one.
-            self.api = api_class
-        else:
-            self.api = api_class(_db, collection)
-
-        self.bibliographic_coverage_provider = Axis360BibliographicCoverageProvider(
-            collection, api_class=self.api
-        )
-
-    def catch_up_from(
-        self,
-        start: datetime.datetime,
-        cutoff: datetime.datetime | None,
-        progress: TimestampData,
-    ) -> None:
-        """Find Axis 360 books that changed recently.
-
-        :progress: A TimestampData representing the time previously
-            covered by this Monitor.
-        """
-        count = 0
-        for bibliographic, circulation in self.api.recent_activity(start):
-            self.process_book(bibliographic, circulation)
-            self._db.commit()
-            count += 1
-        progress.achievements = "Modified titles: %d." % count
-
-    @retry(
-        retry=(
-            retry_if_exception_type(StaleDataError)
-            | retry_if_exception_type(ObjectDeletedError)
-        ),
-        stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=1, max=60),
-        reraise=True,
-    )
-    def process_book(
-        self, bibliographic: Metadata, circulation: CirculationData
-    ) -> tuple[Edition, LicensePool]:
-        with self._db.begin_nested():
-            edition, new_edition, license_pool, new_license_pool = self.api.update_book(
-                bibliographic, circulation
-            )
-            if new_license_pool or new_edition:
-                # At this point we have done work equivalent to that done by
-                # the Axis360BibliographicCoverageProvider. Register that the
-                # work has been done so we don't have to do it again.
-                identifier = edition.primary_identifier
-                self.bibliographic_coverage_provider.handle_success(identifier)
-                self.bibliographic_coverage_provider.add_coverage_record_for(identifier)
-
-            return edition, license_pool
-
-
-class Axis360BibliographicCoverageProvider(BibliographicCoverageProvider):
-    """Fill in bibliographic metadata for Axis 360 records.
-
-    Currently this is only used by BibliographicRefreshScript. It's
-    not normally necessary because the Axis 360 API combines
-    bibliographic and availability data. We rely on Monitors to fetch
-    availability data and fill in the bibliographic data as necessary.
-    """
-
-    SERVICE_NAME = "Axis 360 Bibliographic Coverage Provider"
-    DATA_SOURCE_NAME = DataSource.AXIS_360
-    PROTOCOL = Axis360API.label()
-    INPUT_IDENTIFIER_TYPES = Identifier.AXIS_360_ID
-    DEFAULT_BATCH_SIZE = 25
-
-    def __init__(
-        self,
-        collection: Collection,
-        api_class: (
-            Axis360API | Callable[[Session, Collection], Axis360API]
-        ) = Axis360API,
-        **kwargs: Any,
-    ) -> None:
-        """Constructor.
-
-        :param collection: Provide bibliographic coverage to all
-            Axis 360 books in the given Collection.
-        :param api_class: Instantiate this class with the given Collection,
-            rather than instantiating Axis360API.
-        """
-        super().__init__(collection, **kwargs)
-        if isinstance(api_class, Axis360API):
-            # We were given a specific Axis360API instance to use.
-            self.api = api_class
-        else:
-            # A web application should not use this option because it
-            # will put a non-scoped session in the mix.
-            _db = Session.object_session(collection)
-            self.api = api_class(_db, collection)
-        self.parser = BibliographicParser()
-
-    def process_batch(
-        self, identifiers: list[Identifier]
-    ) -> list[CoverageFailure | Identifier]:
-        identifier_strings = self.api.create_identifier_strings(identifiers)
-        response = self.api.availability(title_ids=identifier_strings)
-        seen_identifiers = set()
-        batch_results = []
-        for metadata, availability in self.parser.process_all(response.content):
-            identifier, is_new = metadata.primary_identifier.load(self._db)
-            if not identifier in identifiers:
-                # Axis 360 told us about a book we didn't ask
-                # for. This shouldn't happen, but if it does we should
-                # do nothing further.
-                continue
-            seen_identifiers.add(identifier.identifier)
-            result = self.set_metadata(identifier, metadata)
-            if not isinstance(result, CoverageFailure):
-                result = self.handle_success(identifier)
-            batch_results.append(result)
-
-        # Create a CoverageFailure object for each original identifier
-        # not mentioned in the results.
-        for identifier_string in identifier_strings:
-            if identifier_string not in seen_identifiers:
-                identifier, ignore = Identifier.for_foreign_id(
-                    self._db, Identifier.AXIS_360_ID, identifier_string
-                )
-                result = self.failure(
-                    identifier, "Book not in collection", transient=False
-                )
-                batch_results.append(result)
-        return batch_results
-
-    def handle_success(self, identifier: Identifier) -> Identifier | CoverageFailure:
-        return self.set_presentation_ready(identifier)  # type: ignore[no-any-return]
-
-    def process_item(self, identifier: Identifier) -> Identifier | CoverageFailure:
-        results = self.process_batch([identifier])
-        return results[0]
-
-
-class AxisCollectionReaper(IdentifierSweepMonitor):
-    """Check for books that are in the local collection but have left our
-    Axis 360 collection.
-    """
-
-    SERVICE_NAME = "Axis Collection Reaper"
-    INTERVAL_SECONDS = 3600 * 12
-    PROTOCOL = Axis360API.label()
-
-    def __init__(
-        self,
-        _db: Session,
-        collection: Collection,
-        api_class: (
-            Axis360API | Callable[[Session, Collection], Axis360API]
-        ) = Axis360API,
-    ) -> None:
-        super().__init__(_db, collection)
-        if isinstance(api_class, Axis360API):
-            # Use a preexisting Axis360API instance rather than
-            # creating a new one.
-            self.api = api_class
-        else:
-            self.api = api_class(_db, collection)
-
-    def process_items(self, identifiers: list[Identifier]) -> None:
-        self.api.update_licensepools_for_identifiers(identifiers)
 
 
 T = TypeVar("T")
