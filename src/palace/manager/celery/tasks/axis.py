@@ -56,7 +56,7 @@ def queue_collection_import_batches(
     """
 
     # ensure batch queuing not already running for this collection.
-    lock = _redis_lock_queue_collection_batches(
+    lock = _redis_lock_queue_collection_import(
         task.services.redis.client(), collection_id
     )
     with lock.lock() as locked:
@@ -206,15 +206,10 @@ def process_book(
     )
 
 
-def _redis_lock_queue_collection_batches(
-    client: Redis, collection_id: int
-) -> RedisLock:
+def _redis_lock_queue_collection_import(client: Redis, collection_id: int) -> RedisLock:
     return RedisLock(
         client,
-        lock_name=[
-            "Axis360QueueCollectionImport",
-            Collection.redis_key_from_id(collection_id),
-        ],
+        lock_name=f"Axis360QueueCollectionImport-{collection_id}",
     )
 
 
