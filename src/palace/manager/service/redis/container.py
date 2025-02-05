@@ -10,7 +10,11 @@ class RedisContainer(DeclarativeContainer):
     config = providers.Configuration()
 
     connection_pool: providers.Provider[redis.ConnectionPool] = providers.Singleton(
-        redis.ConnectionPool.from_url, url=config.url, decode_responses=True
+        redis.ConnectionPool.from_url,
+        url=config.url,
+        decode_responses=True,
+        socket_timeout=config.socket_timeout,
+        socket_connect_timeout=config.socket_connect_timeout,
     )
 
     key_generator: providers.Provider[RedisKeyGenerator] = providers.Singleton(
