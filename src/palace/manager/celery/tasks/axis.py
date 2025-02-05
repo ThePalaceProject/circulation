@@ -242,42 +242,44 @@ def reap_all_collections(task: Task) -> None:
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
             )
-            reap_collection.delay(collection.id)
+            reap_collection.delay(collection_id=collection.id)
+
+        task.log.info(f"Finished queuing collection for reaping.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_collection(
-    task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
+    task: Task, collection_id: int, offset: int = 0, batch_size: int = 100
 ) -> None:
     """
-    This method creates new or updates new editions and license pools for each pair of metadata and circulation data in
-    the items list.
+    Update the license pools associated with a subset of identifiers in a collection
+    defined by the offset and batch size.
     """
 
     start_seconds = time.perf_counter()
 
-    with task.session() as session:
+    with task.transaction() as session:
         collection = Collection.by_id(session, collection_id)
-        api: Axis360API = Axis360API(session, collection)
-        identifiers: (
+        api = create_api(session, collection)
+
+        identifiers = (
             session.query(Identifier)
             .join(Identifier.licensed_through)
             .filter(LicensePool.collection == collection)
-            .filter(Identifier.id > offset)
             .order_by(Identifier.id)
             .limit(batch_size)
+            .offset(offset)
             .all()
         )
 
         identifier_count = len(identifiers)
-        with session.begin():
-            api.update_licensepools_for_identifiers(identifiers)
+        api.update_licensepools_for_identifiers(identifiers=identifiers)
 
     task.log.info(
         f'Reaper updated {identifier_count} books in collection (name="{collection.name}", id={collection.id}.'
     )
-    # requeue at the next offset if the batch of identifiers was full
-    # otherwise the run is complete.
+    # Requeue at the next offset if the batch of identifiers was full otherwise do nothing since
+    # the run is complete.
 
     task.log.info(
         f"reap_collection task at offset={offset} with {identifier_count} identifiers for collection "
@@ -290,10 +292,8 @@ def reap_collection(
             f"Queuing reap_collection task at offset={new_offset} for collection "
             f'(name="{collection.name}", id={collection.id}).'
         )
-        reap_collection.delay(collection_id, new_offset)
+        reap_collection.delay(collection_id, new_offset, batch_size)
     else:
         task.log.info(
             f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
         )
-
-    task.log.info("Reaping batch process {")

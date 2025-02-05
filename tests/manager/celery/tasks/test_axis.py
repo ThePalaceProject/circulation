@@ -15,8 +15,11 @@ from palace.manager.celery.tasks.axis import (
     import_all_collections,
     import_items,
     queue_collection_import_batches,
+    reap_all_collections,
+    reap_collection,
     timestamp,
 )
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
 
 TEST_COLLECTION_ID = 1
@@ -153,3 +156,57 @@ def test_import_items(
         "availability": "b",
     }
     assert f"Edition (id={edition.id}" in caplog.text
+
+
+def test_reap_all_collections(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    set_caplog_level_to_info(caplog)
+    collection1 = db.default_collection()
+    collection2 = db.collection(name="test_collection", protocol=Axis360API.label())
+    with patch.object(axis, "reap_collection") as mock_reap_collection:
+        reap_all_collections.delay().wait()
+
+        assert mock_reap_collection.delay.call_count == 1
+        assert mock_reap_collection.delay.call_args_list[0].kwargs == {
+            "collection_id": collection2.id,
+        }
+        assert "Finished queuing collection for reaping." in caplog.text
+
+
+def test_reap_collection(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    set_caplog_level_to_info(caplog)
+    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    editions = []
+    for i in range(0, 3):
+        edition, lp = db.edition(
+            with_license_pool=True,
+            identifier_type=Identifier.AXIS_360_ID,
+            collection=collection,
+        )
+        editions.append(edition)
+
+    mock_api = MagicMock()
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value = mock_api
+        reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
+
+    assert mock_api.update_licensepools_for_identifiers.call_count == 2
+    assert mock_api.update_licensepools_for_identifiers.call_args_list[0].kwargs == {
+        "identifiers": [x.primary_identifier for x in editions[0:2]],
+    }
+    assert mock_api.update_licensepools_for_identifiers.call_args_list[1].kwargs == {
+        "identifiers": [x.primary_identifier for x in editions[2:3]],
+    }
+
+    assert (
+        f'Reaping of collection (name="test_collection", id=1) complete.' in caplog.text
+    )
