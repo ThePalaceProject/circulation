@@ -37,11 +37,16 @@ def import_all_collections(
     import task for each.
     """
     with task.session() as session:
+        count = 0
         for collection in get_collections_by_protocol(task, session, Axis360API):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
             )
-            queue_collection_import_batches.delay(collection.id, batch_size)
+            queue_collection_import_batches.delay(
+                collection_id=collection.id, batch_size=batch_size
+            )
+            count += 1
+        task.log.info(f'Finished queuing {count} collection{"s" if count > 1 else ""}.')
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -75,7 +80,6 @@ def queue_collection_import_batches(
                 _db=session,
                 default_start_time=DEFAULT_START_TIME,
                 service_name=task.name,
-                service_type="Import Service",
                 collection=collection,
             )
 
@@ -91,7 +95,7 @@ def queue_collection_import_batches(
             # processing
             count = 0
             collection = Collection.by_id(session, collection_id)
-            api: Axis360API = Axis360API(session, collection)
+            api = create_api(collection, session)
             batch: list[tuple[Metadata, CirculationData]] = []
 
             task.log.info(
@@ -106,7 +110,7 @@ def queue_collection_import_batches(
             ):
                 batch.append((bibliographic, circulation))
                 count = +1
-                if len(batch) > batch_size:
+                if len(batch) == batch_size:
                     import_items.delay(items=batch, collection_id=collection_id)
                     batch = []
 
@@ -117,18 +121,16 @@ def queue_collection_import_batches(
                         f'collection: name="{collection.name}" (collection_id={collection_id}).'
                     )
 
-            # queue import_items tasks for any remaining itmes.
+            # queue import_items tasks for any remaining items.
             if len(batch) > 0:
                 import_items.delay(items=batch, collection_id=collection_id)
 
-            ts.start = task_run_start_time
-            ts.finish = utc_now()
             elapsed_time = time.perf_counter() - start_seconds
             achievements = (
                 f"Total items queued for import:  {count}; "
                 f"elapsed time: {elapsed_time:0.2f}"
             )
-            ts.achievements = achievements
+            ts.update(task_run_start_time, utc_now(), achievements)
             # log the end of the run
             task.log.info(
                 f"Finished queuing items in collection {collection.name} (id={collection_id} "
@@ -137,11 +139,14 @@ def queue_collection_import_batches(
             )
 
 
+def create_api(collection, session):
+    return Axis360API(session, collection)
+
+
 def timestamp(
     _db: Session,
     default_start_time: datetime,
     service_name: str,
-    service_type: str,
     collection: Collection,
     default_counter: int = None,
 ):
@@ -153,7 +158,7 @@ def timestamp(
         _db,
         Timestamp,
         service=service_name,
-        service_type=service_type,
+        service_type=Timestamp.MONITOR_TYPE,
         collection=collection,
         create_method_kwargs=dict(
             start=default_start_time,
@@ -173,8 +178,8 @@ def import_items(
     the items list.
     """
     with task.session() as session:
-        collection = Collection.by_id(task.session())
-        api: Axis360API = Axis360API(session, collection)
+        collection = Collection.by_id(session, id=collection_id)
+        api = create_api(session, collection)
         for metadata, circulation in items:
             process_book(task, session, api, metadata, circulation)
 
@@ -195,9 +200,9 @@ def process_book(
     metadata: Metadata,
     circulation: CirculationData,
 ) -> None:
-    with _db.begin():
+    with _db.begin_nested():
         edition, new_edition, license_pool, new_license_pool = api.update_book(
-            metadata, circulation
+            bibliographic=metadata, availability=circulation
         )
 
     task.log.info(
