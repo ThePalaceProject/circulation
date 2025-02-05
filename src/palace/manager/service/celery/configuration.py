@@ -29,6 +29,9 @@ class CeleryConfiguration(ServiceConfiguration):
     broker_transport_options_region: str = "us-west-2"
     broker_transport_options_queue_name_prefix: str = "palace-"
 
+    # Broker options for both Redis and SQS
+    broker_transport_options_visibility_timeout: int = 3600  # 1 hour
+
     task_acks_late: bool = True
     task_reject_on_worker_lost: bool = True
     task_remote_tracebacks: bool = True
