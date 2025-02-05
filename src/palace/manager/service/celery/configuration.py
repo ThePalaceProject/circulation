@@ -35,7 +35,9 @@ class CeleryConfiguration(ServiceConfiguration):
     task_create_missing_queues: bool = False
     task_send_sent_event: bool = True
     task_track_started: bool = True
-    task_time_limit: int = 1800
+    task_time_limit: int | None = (
+        1800  # 30 minutes, tasks must complete within this time
+    )
 
     worker_cancel_long_running_tasks_on_connection_loss: bool = False
     worker_max_tasks_per_child: int = 100

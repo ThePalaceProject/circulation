@@ -11,5 +11,5 @@ class RedisConfiguration(ServiceConfiguration):
     key_prefix: str = "palace"
     model_config = SettingsConfigDict(env_prefix="PALACE_REDIS_")
 
-    socket_timeout: float = 15.0
-    socket_connect_timeout: float = 5.0
+    socket_timeout: float | None = 15.0
+    socket_connect_timeout: float | None = 5.0
