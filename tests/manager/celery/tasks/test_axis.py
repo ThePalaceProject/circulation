@@ -5,6 +5,7 @@ import pytest
 from fixtures.celery import CeleryFixture
 from fixtures.database import DatabaseTransactionFixture
 from fixtures.redis import RedisFixture
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import Axis360API
 from palace.manager.celery.tasks import axis
@@ -19,6 +20,8 @@ from palace.manager.celery.tasks.axis import (
     reap_collection,
     timestamp,
 )
+from palace.manager.core.metadata_layer import IdentifierData, Metadata
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
 
@@ -210,3 +213,46 @@ def test_reap_collection(
     assert (
         f'Reaping of collection (name="test_collection", id=1) complete.' in caplog.text
     )
+
+
+def test_retry(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+
+    set_caplog_level_to_info(caplog)
+    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+
+    edition, licensepool = db.edition(
+        collection=collection,
+        with_license_pool=True,
+        identifier_type=Identifier.AXIS_360_ID,
+        identifier_id="012345678",
+    )
+
+    identifier = IdentifierData(
+        type=licensepool.identifier.type,
+        identifier=licensepool.identifier.identifier,
+    )
+
+    metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
+
+    mock_api = MagicMock()
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value = mock_api
+        edition, lp = db.edition(with_license_pool=True)
+
+        mock_api.update_book.return_value = (edition, False, lp, False)
+
+        mock_api.update_book.side_effect = [
+            ObjectDeletedError({}, "object deleted"),
+            StaleDataError("stale data"),
+        ]
+
+        mock_api.update_book.return_value = (edition, False, licensepool, False)
+        import_items.delay(
+            collection.id, items=[(metadata, metadata.circulation)]
+        ).wait()
+        assert mock_api.update_book.call_count == 3

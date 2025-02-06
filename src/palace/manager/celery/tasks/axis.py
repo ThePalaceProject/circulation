@@ -249,7 +249,7 @@ def reap_all_collections(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_collection(
-    task: Task, collection_id: int, offset: int = 0, batch_size: int = 100
+    task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
     """
     Update the license pools associated with a subset of identifiers in a collection
