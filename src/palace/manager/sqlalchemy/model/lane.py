@@ -2062,7 +2062,7 @@ class WorkList:
                 # Either we're done with the old lane, or we're just
                 # starting and there was no old lane.
                 if working_lane:
-                    _done_with_lane(working_lane)  # type: ignore[unreachable]
+                    _done_with_lane(working_lane)
                 working_lane = lane
                 used_works_this_lane = set()
                 might_need_to_reuse = dict()
