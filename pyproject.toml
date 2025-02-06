@@ -39,6 +39,7 @@ explicit_package_bases = true
 files = ["alembic", "src/palace", "tests"]
 mypy_path = ["alembic", "src"]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
+strict_bytes = true
 warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_configs = true
