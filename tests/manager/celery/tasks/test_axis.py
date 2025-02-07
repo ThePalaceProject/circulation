@@ -14,8 +14,8 @@ from palace.manager.celery.tasks.axis import (
     DEFAULT_START_TIME,
     _redis_lock_queue_collection_import,
     import_all_collections,
-    import_items,
-    queue_collection_import_batches,
+    import_identifiers,
+    list_identifiers_for_import,
     reap_all_collections,
     reap_collection,
     timestamp,
@@ -53,7 +53,7 @@ def test_queue_collection_import_lock(
     set_caplog_level_to_info(caplog)
     queue_collection_import_lock_fixture.task_lock.acquire()
     collection_id = TEST_COLLECTION_ID
-    queue_collection_import_batches.delay(collection_id).wait()
+    list_identifiers_for_import.delay(collection_id).wait()
     assert "another task holds its lock" in caplog.text
 
 
@@ -108,7 +108,7 @@ def test_queue_collection_import_batches(
         patch.object(axis, "import_items") as mock_import_items,
     ):
         mock_create_api.return_value = mock_api
-        queue_collection_import_batches.delay(collection.id, batch_size=3).wait()
+        list_identifiers_for_import.delay(collection.id, batch_size=3).wait()
         assert mock_import_items.delay.call_count == 2
     ts = timestamp(
         _db=db.session,
@@ -147,7 +147,7 @@ def test_import_items(
         edition, lp = db.edition(with_license_pool=True)
 
         mock_api.update_book.return_value = (edition, False, lp, False)
-        import_items.delay(collection.id, items=[(1, "a"), (2, "b")]).wait()
+        import_identifiers.delay(collection.id, items=[(1, "a"), (2, "b")]).wait()
 
     assert mock_api.update_book.call_count == 2
     mock_api.update_book.call_args_list[0].kwargs == {
@@ -252,7 +252,7 @@ def test_retry(
         ]
 
         mock_api.update_book.return_value = (edition, False, licensepool, False)
-        import_items.delay(
+        import_identifiers.delay(
             collection.id, items=[(metadata, metadata.circulation)]
         ).wait()
         assert mock_api.update_book.call_count == 3

@@ -26,6 +26,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
 DEFAULT_BATCH_SIZE: int = 100
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
+TARGET_MAX_EXECUTION_SECONDS = 120
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -42,22 +43,26 @@ def import_all_collections(
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
             )
-            queue_collection_import_batches.delay(
-                collection_id=collection.id, batch_size=batch_size
+            list_identifiers_for_import.apply_async(
+                (collection.id),
+                link=import_identifiers.s(
+                    collection_id=collection.id, batch_size=batch_size
+                ),
             )
+
             count += 1
         task.log.info(f'Finished queuing {count} collection{"s" if count > 1 else ""}.')
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def queue_collection_import_batches(
+def list_identifiers_for_import(
     task: Task,
     collection_id: int,
     import_all: bool = False,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-) -> None:
+) -> list[str] | None:
     """
-    A shared task for queuing batches of identifiers to import an axis collection.
+    A task for resolving a list identifiers to import an axis collection based on the
+     most recent timestamp's start date.
     """
 
     # ensure batch queuing not already running for this collection.
@@ -69,9 +74,9 @@ def queue_collection_import_batches(
             task.log.info(
                 f"Skipping collection batch queuing:  {collection_id} because another task holds its lock."
             )
-            return
+            return None
 
-        with task.transaction() as session:
+        with task.session() as session:
 
             collection = Collection.by_id(session, collection_id)
 
@@ -104,27 +109,10 @@ def queue_collection_import_batches(
             )
             # start stop watch
             start_seconds = time.perf_counter()
-
-            for bibliographic, circulation in api.recent_activity(
-                start_time_of_last_scan
-            ):
-                batch.append((bibliographic, circulation))
+            title_ids: list[str] = []
+            for metadata, circulation in api.recent_activity(start_time_of_last_scan):
+                title_ids.append(metadata.primary_identifier.identifier)
                 count = +1
-                if len(batch) == batch_size:
-                    import_items.delay(items=batch, collection_id=collection_id)
-                    batch = []
-
-                # log every 500 items to keep logs relatively lean
-                if count % 500 == 0:
-                    task.log.info(
-                        f"Queued {count} items in batches of {batch_size} for "
-                        f'collection: name="{collection.name}" (collection_id={collection_id}).'
-                    )
-
-            # queue import_items tasks for any remaining items.
-            if len(batch) > 0:
-                import_items.delay(items=batch, collection_id=collection_id)
-
             elapsed_time = time.perf_counter() - start_seconds
             achievements = (
                 f"Total items queued for import:  {count}; "
@@ -137,6 +125,8 @@ def queue_collection_import_batches(
                 f"for import that have changed since {start_time_of_last_scan}. "
                 f"{achievements}"
             )
+
+            return title_ids
 
 
 def create_api(collection, session):
@@ -170,18 +160,86 @@ def timestamp(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def import_items(
-    task: Task, collection_id: int, items: list[tuple[Metadata, CirculationData]]
-) -> None:
+def import_identifiers(
+    task: Task,
+    collection_id: int,
+    identifiers: list[str] | None,
+    processed_count: int = 0,
+    batch_size: int = 25,
+) -> list[str] | None:
     """
     This method creates new or updates new editions and license pools for each pair of metadata and circulation data in
     the items list.
     """
+
+    if not identifiers:
+        task.log.info(
+            f"Identifiers list is None: the list_identifiers_for_"
+            f"import must have been locked. Ignoring import run for collection_id={collection_id}"
+        )
+        return None
+
     with task.session() as session:
         collection = Collection.by_id(session, id=collection_id)
         api = create_api(session, collection)
-        for metadata, circulation in items:
-            process_book(task, session, api, metadata, circulation)
+        batch: list[str] = []
+        start_seconds = time.perf_counter()
+        total_imported_in_current_task = 0
+        identifiers_list_length = 0
+        while len(identifiers_list_length) > 0:
+            identifiers_list_length = len(identifiers)
+            batch = identifiers[
+                0 : (
+                    identifiers_list_length
+                    if identifiers_list_length < batch
+                    else batch
+                )
+            ]
+
+            for metadata, circulation in api.availability(title_ids=batch):
+                process_book(task, session, api, metadata, circulation)
+
+            batch_length = len(batch)
+            task.log.info(
+                f"Imported {batch_length} identifiers for collection ({collection.name}, id={collection_id})"
+            )
+            total_imported_in_current_task += batch_length
+            task.log.info(
+                f"Total imported {total_imported_in_current_task} identifiers in current task for collection ({collection.name}, id={collection_id})"
+            )
+
+            # remove identifiers processed in previous batch
+            identifiers = identifiers[len(batch) :]
+            # measure elapsed seconds
+            elapsed_seconds = time.perf_counter() - start_seconds
+
+            if elapsed_seconds > TARGET_MAX_EXECUTION_SECONDS:
+                task.log.info(
+                    f"Execution time exceeded max allowable seconds (max={TARGET_MAX_EXECUTION_SECONDS}): elapsed seconds={elapsed_seconds}"
+                )
+                break
+
+    processed_count += total_imported_in_current_task
+
+    if len(identifiers) > 0:
+        import_identifiers.delay(
+            collection_id=collection_id,
+            identifiers=identifiers,
+            batch_size=batch_size,
+            processed_count=processed_count,
+        )
+        task.log.info(
+            f"Spawned subtask to continue importing remaining {len(identifiers)} "
+            f"for collection ({collection.name}, id={collection_id})"
+        )
+    else:
+        task.log.info(
+            f"Finished run importing identifiers for collection ({collection.name}, id={collection_id})"
+        )
+
+    task.log.info(
+        f"Total imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
+    )
 
 
 @retry(
