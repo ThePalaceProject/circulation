@@ -452,8 +452,14 @@ class Axis360API(
         response = self._checkout(
             title_id, patron_id, self.internal_format(delivery_mechanism)
         )
+
         try:
-            expiration_date = CheckoutResponseParser().process_first(response.content)
+            response_text = response.text
+            self.log.info(
+                f"patron_id={patron_id} tried to checkout title_id={title_id}: "
+                f"response_code = {response.status_code}, response_content={response_text}"
+            )
+            expiration_date = CheckoutResponseParser().process_first(response_text)
             return LoanInfo.from_license_pool(licensepool, end_date=expiration_date)
         except etree.XMLSyntaxError:
             raise RemoteInitiatedServerError(response.text, self.label())
@@ -463,7 +469,12 @@ class Axis360API(
     ) -> RequestsResponse:
         url = self.base_url + "checkout/v2"
         args = dict(titleId=title_id, patronId=patron_id, format=internal_format)
+        self.log.info(
+            f"patron_id={patron_id} about to checkout title_id={title_id}, using format={internal_format} "
+            f"posting to url={url}"
+        )
         response = self.request(url, data=args, method="POST")
+
         return response
 
     def fulfill(
