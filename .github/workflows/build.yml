@@ -7,214 +7,32 @@ concurrency:
 
 jobs:
   build:
-    name: Docker build
-    # Some issue with the ubuntu-latest image is causing gcc to segfault with building
-    # an emulated arm64 target. Downgrading to 22.04 seems to fix this.
-    # See https://github.com/actions/runner-images/issues/11471
-    # runs-on: ubuntu-latest
-    runs-on: ubuntu-22.04
+    name: Docker build (${{ matrix.arch.name }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: "amd64"
+            runner: "ubuntu-22.04"
+          - name: "arm64"
+            runner: "ubuntu-22.04-arm"
+
+    runs-on: ${{ matrix.arch.runner }}
     permissions:
       contents: read
       packages: write
 
     outputs:
-      baseimage-changed: ${{ steps.changes.outputs.baseimage }}
-      baseimage: ${{ steps.baseimage.outputs.tag }}
+      webapp-repo: ${{ steps.ghcr-repo.outputs.webapp }}
+      webapp-meta: ${{ steps.meta-webapp.outputs.json }}
+      scripts-repo: ${{ steps.ghcr-repo.outputs.scripts }}
+      scripts-meta: ${{ steps.meta-scripts.outputs.json }}
+      exec-repo: ${{ steps.ghcr-repo.outputs.exec }}
+      exec-meta: ${{ steps.meta-exec.outputs.json }}
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # If the base image build was changed, we build it first, so we can test
-      # using these changes throughout the rest of the build. If the base image
-      # build wasn't changed, we don't use it and just rely on scheduled build.
-      - name: Check if base image was changed by this branch
-        uses: dorny/paths-filter@v3
-        id: changes
-        with:
-          filters: |
-            baseimage:
-              - 'docker/Dockerfile.baseimage'
-
-      # We use docker/metadata-action to generate tags, instead of using string
-      # interpolation, because it properly handles making sure special
-      # characters are escaped, and the repo owner string is lowercase.
-      - name: Generate tags for base image
-        id: baseimage-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
-          tags: |
-            type=ref,event=branch
-            type=sha
-            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
-
-      # We are using docker/metadata-action here for the same reason as above.
-      - name: Generate tag for latest
-        id: baseimage-latest
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
-          tags: |
-            type=raw,value=latest
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-        if: steps.changes.outputs.baseimage == 'true'
-
-      # Build the base image, only if needed.
-      - name: Build base image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./docker/Dockerfile.baseimage
-          target: baseimage
-          cache-from: |
-            type=registry,ref=${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }}
-            type=registry,ref=${{ fromJSON(steps.baseimage-meta.outputs.json).tags[0] }}
-          cache-to: |
-             type=inline
-          platforms: linux/amd64, linux/arm64
-          tags: ${{ steps.baseimage-meta.outputs.tags }}
-          labels: ${{ steps.baseimage-meta.outputs.labels }}
-          push: true
-        if: steps.changes.outputs.baseimage == 'true'
-
-      # If the base image was changed, we need to use the tag we just pushed
-      # to build the common image. Otherwise, if the base image wasn't changed,
-      # we use the latest tag. If the local repo has a built base image, we use
-      # that, otherwise we just fall back to the main projects tag.
-      - name: Set correct base-image for common image build
-        id: baseimage
-        run: |
-          docker buildx imagetools inspect ${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }} > /dev/null
-          tag_exists=$?
-          if [[ "${{ steps.changes.outputs.baseimage }}" == "true" ]]; then
-            tag="${{ fromJSON(steps.baseimage-meta.outputs.json).tags[0] }}"
-          elif [[ $tag_exists -eq 0 ]]; then
-            tag="${{ fromJSON(steps.baseimage-latest.outputs.json).tags[0] }}"
-          else
-            tag="ghcr.io/thepalaceproject/circ-baseimage:latest"
-          fi
-          echo "Base image tag: $tag"
-          echo tag="$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Build common image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          target: common
-          cache-to: |
-            type=gha,scope=buildkit-${{ github.run_id }},mode=min
-          platforms: linux/amd64, linux/arm64
-          build-args: |
-            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
-
-  integration-test:
-    name: Test circ-${{ matrix.image }} (${{ matrix.platform }})
-    runs-on: ubuntu-latest
-    needs: [build]
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ["linux/amd64", "linux/arm64"]
-        image: ["scripts", "webapp"]
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & Start container
-        run: docker compose up -d --build ${{ matrix.image }}
-        env:
-          BUILD_PLATFORM: ${{ matrix.platform }}
-          BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
-
-      - name: Run tests
-        run: ./docker/ci/test_${{ matrix.image }}.sh ${{ matrix.image }}
-
-      - name: Output logs
-        if: failure()
-        run: docker logs circulation-${{ matrix.image }}-1
-
-      - name: Stop container
-        if: always()
-        run: docker compose down
-
-  unit-test:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Run unit tests
-        run: >
-          docker compose run --build webapp
-          bash -c "
-            source env/bin/activate &&
-            poetry install --without ci --no-root --sync &&
-            pytest --no-cov tests
-          "
-        env:
-          BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
-
-      - name: Stop container
-        if: always()
-        run: docker compose down
-
-  migration-test:
-    name: Migration test
-    runs-on: ubuntu-latest
-    needs: [build]
-    permissions:
-      contents: read
+# This build is heavily based on this example from the docker buildx documentation:
+# https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
 
     steps:
       - uses: actions/checkout@v4
@@ -222,47 +40,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Test migrations
-        run: ./docker/ci/test_migrations.sh
-        env:
-          BUILD_CACHE_FROM: type=gha,scope=buildkit-${{ github.run_id }}
-          BUILD_BASE_IMAGE: ${{ needs.build.outputs.baseimage }}
-
-  push:
-    name: Push circ-${{ matrix.image }}
-    runs-on: ubuntu-latest
-    needs: [build, integration-test, unit-test, migration-test]
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        image: ["scripts", "webapp", "exec"]
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
-      - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+      # Creates version files we use to track the version of code in the container
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -281,6 +59,58 @@ jobs:
           echo "__version__ = '$(dunamai from git --style semver)'" >> src/palace/manager/_version.py
           echo "__commit__ = '$(dunamai from git --format {commit} --full-commit)'" >> src/palace/manager/_version.py
           echo "__branch__ = '$(dunamai from git --format {branch})'" >> src/palace/manager/_version.py
+          cat src/palace/manager/_version.py
+
+      # Docker doesn't support uppercase letters in repo names, so we need to lowercase the owner
+      - name: Set output repos
+        id: ghcr-repo
+        run: |
+          repo=${GITHUB_REPOSITORY_OWNER,,}
+          webapp="ghcr.io/$repo/circ-webapp"
+          scripts="ghcr.io/$repo/circ-scripts"
+          exec="ghcr.io/$repo/circ-exec"
+          baseimage="ghcr.io/$repo/circ-baseimage"
+          echo "webapp=$webapp"
+          echo "webapp=$webapp" >> "$GITHUB_OUTPUT"
+          echo "scripts=$scripts"
+          echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
+          echo "exec=$exec"
+          echo "exec=$exec" >> "$GITHUB_OUTPUT"
+          echo "baseimage=$baseimage"
+          echo "baseimage=$baseimage" >> "$GITHUB_OUTPUT"
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # If the base image build was changed, we build it first, so we can test
+      # using these changes throughout the rest of the build. If the base image
+      # build wasn't changed, we don't use it and just rely on scheduled build.
+      - name: Check if base image was changed by this branch
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            baseimage:
+              - 'docker/Dockerfile.baseimage'
+
+      # Build the base image, only if needed.
+      - name: Build base image
+        id: build-baseimage
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile.baseimage
+          target: baseimage
+          cache-from: |
+            type=registry,ref=${{ steps.ghcr-repo.outputs.baseimage }}:latest
+            type=registry,ref=ghcr.io/thepalaceproject/circ-baseimage:latest
+          load: true
+          tags: circ-baseimage:local-build
+        if: steps.changes.outputs.baseimage == 'true'
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -289,27 +119,330 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate tags for image
-        id: meta
+      # If the base image was changed, we need to use the tag we just pushed
+      # to build the common image. Otherwise, if the base image wasn't changed,
+      # we use the latest tag. If the local repo has a built base image, we use
+      # that, otherwise we just fall back to the main projects tag.
+      - name: Set correct base-image for common image build
+        id: baseimage
+        run: |
+          docker buildx imagetools inspect ${{ steps.ghcr-repo.outputs.baseimage }}:latest > /dev/null
+          tag_exists=$?
+          if [[ "${{ steps.changes.outputs.baseimage }}" == "true" ]]; then
+            tag="circ-baseimage:local-build"
+          elif [[ $tag_exists -eq 0 ]]; then
+            tag="${{ steps.ghcr-repo.outputs.baseimage }}:latest"
+          else
+            tag="ghcr.io/thepalaceproject/circ-baseimage:latest"
+          fi
+          echo "Base image tag: $tag"
+          echo tag="$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build common image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: common
+          build-args: |
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
+
+      - name: Generate tags for circ-webapp
+        id: meta-webapp
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-${{ matrix.image }}
+          images: ${{ steps.ghcr-repo.outputs.webapp }}
           tags: |
             type=semver,pattern={{major}}.{{minor}},priority=10
             type=semver,pattern={{version}},priority=20
             type=ref,event=branch,priority=30
             type=sha,priority=40
 
-      - name: Push image
+      - name: Build circ-webapp image
+        id: build-webapp
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          target: ${{ matrix.image }}
-          cache-from: type=gha,scope=buildkit-${{ github.run_id }}
-          platforms: linux/amd64, linux/arm64
+          target: webapp
           build-args: |
-            BASE_IMAGE=${{ needs.build.outputs.baseimage }}
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
+          labels: ${{ steps.meta-webapp.outputs.labels }}
+          outputs: type=image,"name=${{ steps.ghcr-repo.outputs.webapp }}",push-by-digest=true,name-canonical=true,push=true
+
+      - name: Generate tags for circ-scripts
+        id: meta-scripts
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ghcr-repo.outputs.scripts }}
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Build circ-scripts image
+        id: build-scripts
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: scripts
+          build-args: |
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
+          labels: ${{ steps.meta-scripts.outputs.labels }}
+          outputs: type=image,"name=${{ steps.ghcr-repo.outputs.scripts }}",push-by-digest=true,name-canonical=true,push=true
+
+      - name: Generate tags for circ-exec
+        id: meta-exec
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ghcr-repo.outputs.exec }}
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Build circ-exec image
+        id: build-exec
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: exec
+          build-args: |
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
+          labels: ${{ steps.meta-exec.outputs.labels }}
+          outputs: type=image,"name=${{ steps.ghcr-repo.outputs.exec }}",push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digests
+        run: |
+          mkdir -p ${{ runner.temp }}/digests/webapp
+          webapp_digest="${{ steps.build-webapp.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/webapp/${webapp_digest#sha256:}"
+          echo "WEBAPP_DIGEST=$webapp_digest"
+          mkdir -p ${{ runner.temp }}/digests/scripts
+          scripts_digest="${{ steps.build-scripts.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/scripts/${scripts_digest#sha256:}"
+          echo "SCRIPTS_DIGEST=$scripts_digest"
+          mkdir -p ${{ runner.temp }}/digests/exec
+          exec_digest="${{ steps.build-exec.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/exec/${exec_digest#sha256:}"
+          echo "EXEC_DIGEST=$exec_digest"
+
+      - name: Upload digests
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  integration-test:
+    name: Integration test (${{ matrix.arch.name }})
+    runs-on: ${{ matrix.arch.runner }}
+    needs: [build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: "amd64"
+            runner: "ubuntu-22.04"
+          - name: "arm64"
+            runner: "ubuntu-22.04-arm"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}
+          pattern: digests-${{ matrix.arch.name }}
+
+      - name: Set scripts image
+        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/scripts
+        run: |
+          IMAGE="${{needs.build.outputs.scripts-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "SCRIPTS_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Set webapp image
+        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
+        run: |
+          IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull & Start containers
+        run: docker compose up -d
+
+      - name: Run webapp image tests
+        run: ./docker/ci/test_webapp.sh webapp
+
+      - name: Run scripts image tests
+        run: ./docker/ci/test_scripts.sh scripts
+
+      - name: Output logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop container
+        if: always()
+        run: docker compose down
+
+  unit-test:
+    name: Unit tests (${{ matrix.arch.name }})
+    runs-on: ${{ matrix.arch.runner }}
+    needs: [build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: "amd64"
+            runner: "ubuntu-22.04"
+          - name: "arm64"
+            runner: "ubuntu-22.04-arm"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}
+          pattern: digests-${{ matrix.arch.name }}
+
+      - name: Set webapp image
+        working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
+        run: |
+          IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run unit tests
+        run: >
+          docker compose run webapp
+          bash -c "
+            cat src/palace/manager/_version.py &&
+            source env/bin/activate &&
+            poetry install --without ci --no-root --sync &&
+            pytest --no-cov tests
+          "
+
+      - name: Stop container
+        if: always()
+        run: docker compose down
+
+  migration-test:
+    name: Migration test
+    runs-on: ubuntu-22.04
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}
+          pattern: digests-amd64
+
+      - name: Set scripts image
+        working-directory: ${{ runner.temp }}/digests-amd64/scripts
+        run: |
+          IMAGE="${{needs.build.outputs.scripts-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "SCRIPTS_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Set webapp image
+        working-directory: ${{ runner.temp }}/digests-amd64/webapp
+        run: |
+          IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test migrations
+        run: ./docker/ci/test_migrations.sh
+
+  push:
+    name: Tag & Push Images
+    runs-on: ubuntu-22.04
+    needs: [build, integration-test, unit-test, migration-test]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest & push circ-webapp
+        working-directory: ${{ runner.temp }}/digests/webapp
+        run: >
+          docker buildx imagetools create
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.webapp-meta }}')
+          $(printf '${{ needs.build.outputs.webapp-repo }}@sha256:%s ' *)
+
+      - name: Create manifest & push circ-scripts
+        working-directory: ${{ runner.temp }}/digests/scripts
+        run: >
+          docker buildx imagetools create
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.scripts-meta }}')
+          $(printf '${{ needs.build.outputs.scripts-repo }}@sha256:%s ' *)
+
+      - name: Create manifest & push circ-exec
+        working-directory: ${{ runner.temp }}/digests/exec
+        run: >
+          docker buildx imagetools create
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.exec-meta }}')
+          $(printf '${{ needs.build.outputs.exec-repo }}@sha256:%s ' *)

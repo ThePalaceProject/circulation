@@ -100,7 +100,7 @@ run_in_container()
   local CONTAINER_NAME=$1
   shift 1
   debug_echo "+" "$@"
-  compose_cmd run --build --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
+  compose_cmd run --rm --no-deps "${CONTAINER_NAME}" /bin/bash -c "source env/bin/activate && $*"
 }
 
 # Cleanup any running containers
@@ -139,6 +139,11 @@ check_db() {
   fi
   success "Database is in sync."
 }
+
+# Output the version file for debugging
+gh_group "Version file"
+run_in_container "webapp" cat /var/www/circulation/src/palace/manager/_version.py
+gh_endgroup
 
 # Find all the info we need about the first migration in the git history.
 gh_group "Finding first migration"
