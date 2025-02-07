@@ -10,7 +10,11 @@ CeleryConfFixture = Callable[..., CeleryConfiguration]
 
 @pytest.fixture
 def celery_configuration() -> CeleryConfFixture:
-    return partial(CeleryConfiguration, broker_url="redis://test.com:6379/0")
+    return partial(
+        CeleryConfiguration,
+        broker_url="redis://test.com:6379/0",
+        result_backend="redis://test.com:6379/1",
+    )
 
 
 class TestCeleryConfiguration:
@@ -27,6 +31,7 @@ class TestCeleryConfiguration:
         config = celery_configuration()
         result = config.model_dump(merge_options=False)
         assert "broker_url" in result
+        assert "result_backend" in result
         assert result.get("broker_transport_options_global_keyprefix") == "x"
         assert result.get("broker_transport_options_queue_order_strategy") == "y"
         assert "broker_transport_options" not in result
@@ -44,6 +49,7 @@ class TestCeleryConfiguration:
         config = celery_configuration()
         result = config.model_dump()
         assert "broker_url" in result
+        assert "result_backend" in result
         assert "broker_transport_options" in result
         options = result["broker_transport_options"]
         assert options.get("global_keyprefix") == "x"

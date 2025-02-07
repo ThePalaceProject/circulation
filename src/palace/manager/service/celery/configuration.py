@@ -19,6 +19,7 @@ class CeleryConfiguration(ServiceConfiguration):
     # this issue: https://github.com/pydantic/pydantic/issues/7267. If / when that
     # is resolved we can switch to using the Pydantic URL type.
     broker_url: str
+    result_backend: str
     broker_connection_retry_on_startup: bool = True
 
     # Redis broker options
