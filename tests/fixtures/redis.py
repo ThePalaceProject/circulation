@@ -25,7 +25,13 @@ class RedisFixture:
 
         self.key_prefix = f"test::{self.test_id.id}"
         self.services_fixture.services.config.from_dict(
-            {"redis": {"url": self.config.url, "key_prefix": self.key_prefix}}
+            {
+                "redis": {
+                    "url": self.config.url,
+                    "backend": self.config.url,
+                    "key_prefix": self.key_prefix,
+                }
+            }
         )
         self.client: Redis = self.services_fixture.services.redis.client()
 
