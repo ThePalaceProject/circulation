@@ -88,7 +88,7 @@ jobs:
 
       # If the base image build was changed, we build it first, so we can test
       # using these changes throughout the rest of the build. If the base image
-      # build wasn't changed, we don't use it and just rely on scheduled build.
+      # build wasn't changed, we just rely on scheduled build.
       - name: Check if base image was changed by this branch
         uses: dorny/paths-filter@v3
         id: changes
@@ -97,7 +97,7 @@ jobs:
             baseimage:
               - 'docker/Dockerfile.baseimage'
 
-      # Build the base image, only if needed.
+      # Build the base image, only if needed, and load it into the local docker daemon.
       - name: Build base image
         id: build-baseimage
         uses: docker/build-push-action@v6
@@ -119,10 +119,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # If the base image was changed, we need to use the tag we just pushed
-      # to build the common image. Otherwise, if the base image wasn't changed,
-      # we use the latest tag. If the local repo has a built base image, we use
-      # that, otherwise we just fall back to the main projects tag.
+      # If the base image was changed, we need to use the image we just build and tagged locally.
+      # Otherwise, if the base image wasn't changed, we use the latest tag. If the local repo has
+      # a built base image, we use that, otherwise we just fall back to the main projects tag.
       - name: Set correct base-image for common image build
         id: baseimage
         run: |
