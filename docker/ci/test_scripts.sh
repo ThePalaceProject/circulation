@@ -15,7 +15,10 @@ docker compose exec "$container" cat /var/www/circulation/src/palace/manager/_ve
 # Wait for container to start
 wait_for_runit "$container"
 
-# Make sure database initialization completed successfully
+# Make sure database initialization or migration script completed successfully. If
+# the scripts container starts first it will initialize the database, but if the
+# database is already initialized, it will run migrations instead. For our purposes
+# this doesn't matter, we just want to know that the database is ready.
 timeout 240s grep -q -e 'Initialization complete' -e "Migrations complete" <(docker compose logs "$container" -f 2>&1)
 
 # Make sure that cron is running in the scripts container
