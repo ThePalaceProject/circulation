@@ -264,6 +264,9 @@ jobs:
           path: ${{ runner.temp }}
           pattern: digests-${{ matrix.arch.name }}
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the scripts container to the digest of the image
+      # that was built in the build job.
       - name: Set scripts image
         working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/scripts
         run: |
@@ -271,6 +274,9 @@ jobs:
           echo "$IMAGE"
           echo "SCRIPTS_IMAGE=$IMAGE" >> $GITHUB_ENV
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the webapp container to the digest of the image
+      # that was built in the build job.
       - name: Set webapp image
         working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
         run: |
@@ -328,6 +334,9 @@ jobs:
           path: ${{ runner.temp }}
           pattern: digests-${{ matrix.arch.name }}
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the webapp container to the digest of the image
+      # that was built in the build job.
       - name: Set webapp image
         working-directory: ${{ runner.temp }}/digests-${{ matrix.arch.name }}/webapp
         run: |
@@ -375,6 +384,9 @@ jobs:
           path: ${{ runner.temp }}
           pattern: digests-amd64
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the scripts container to the digest of the image
+      # that was built in the build job.
       - name: Set scripts image
         working-directory: ${{ runner.temp }}/digests-amd64/scripts
         run: |
@@ -382,6 +394,9 @@ jobs:
           echo "$IMAGE"
           echo "SCRIPTS_IMAGE=$IMAGE" >> $GITHUB_ENV
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the webapp container to the digest of the image
+      # that was built in the build job.
       - name: Set webapp image
         working-directory: ${{ runner.temp }}/digests-amd64/webapp
         run: |
