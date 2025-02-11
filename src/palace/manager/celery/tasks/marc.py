@@ -22,7 +22,7 @@ from palace.manager.sqlalchemy.util import create
 from palace.manager.util.datetime_helpers import utc_now
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def marc_export(task: Task, force: bool = False) -> None:
     """
     Export MARC records for all collections with the `export_marc_records` flag set to True, whose libraries
@@ -101,7 +101,7 @@ def marc_export_collection_lock(
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def marc_export_collection(
     task: Task,
     collection_id: int,
@@ -261,7 +261,7 @@ def marc_export_collection(
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def marc_export_cleanup(
     task: Task,
     batch_size: int = 20,
