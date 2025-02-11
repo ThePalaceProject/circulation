@@ -29,7 +29,7 @@ DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 TARGET_MAX_EXECUTION_SECONDS = 120
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def import_all_collections(
     task: Task, import_all: bool = False, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> None:
@@ -59,7 +59,7 @@ def list_identifiers_for_import(
     task: Task,
     collection_id: int,
     import_all: bool = False,
-) -> list[str] | None:
+) -> list[str]:
     """
     A task for resolving a list identifiers to import an axis collection based on the
      most recent timestamp's start date.
@@ -159,20 +159,22 @@ def timestamp(
     return timestamp
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def import_identifiers(
     task: Task,
     collection_id: int,
     identifiers: list[str] | None,
     processed_count: int = 0,
-    batch_size: int = 25,
+    batch_size: int = DEFAULT_BATCH_SIZE,
     target_max_execution_time_in_seconds: float = TARGET_MAX_EXECUTION_SECONDS,
-) -> list[str] | None:
+) -> None:
     """
-    This method creates new or updates new editions and license pools for each pair of metadata and circulation data in
-    the items list.
+    This method creates new or updates new editions and license pools for each identifier in the list of identifiers.
+    It will query the axis availability api in batches of {batch_size} IDs and process each result in a single database
+    transaction.  It will continue in this way until it has finished the list or exceeded the max execution time
+    which defaults to 2 minutes.  If it has not finished in the target time, it will requeue the task with the
+    remaining unprocessed identifiers.
     """
-
     if not identifiers:
         task.log.info(
             f"Identifiers list is None: the list_identifiers_for_"
@@ -183,7 +185,6 @@ def import_identifiers(
     with task.session() as session:
         collection = Collection.by_id(session, id=collection_id)
         api = create_api(session, collection)
-        batch: list[str] = []
         start_seconds = time.perf_counter()
         total_imported_in_current_task = 0
         identifiers_list_length = len(identifiers)
@@ -306,7 +307,7 @@ def get_collections_by_protocol(
     return collections
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def reap_all_collections(task: Task) -> None:
     """
     A shared task that loops through all Axis360 Api based collections and kick off an
@@ -322,7 +323,7 @@ def reap_all_collections(task: Task) -> None:
         task.log.info(f"Finished queuing collection for reaping.")
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def reap_collection(
     task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
