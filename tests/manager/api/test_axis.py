@@ -18,7 +18,6 @@ from palace.manager.api.axis import (
     Axis360AcsFulfillment,
     Axis360API,
     Axis360APIConstants,
-    Axis360BibliographicCoverageProvider,
     Axis360Fulfillment,
     Axis360FulfillmentInfoResponseParser,
     Axis360Settings,

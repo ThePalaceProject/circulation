@@ -24,7 +24,7 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
-DEFAULT_BATCH_SIZE: int = 100
+DEFAULT_BATCH_SIZE: int = 25
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 TARGET_MAX_EXECUTION_SECONDS = 120
 
@@ -76,7 +76,7 @@ def list_identifiers_for_import(
             )
             return None
 
-        with task.session() as session:
+        with task.transaction() as session:
 
             collection = Collection.by_id(session, collection_id)
 
@@ -101,8 +101,6 @@ def list_identifiers_for_import(
             count = 0
             collection = Collection.by_id(session, collection_id)
             api = create_api(collection, session)
-            batch: list[tuple[Metadata, CirculationData]] = []
-
             task.log.info(
                 f"Starting process of queuing items in collection {collection.name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
@@ -118,10 +116,12 @@ def list_identifiers_for_import(
                 f"Total items queued for import:  {count}; "
                 f"elapsed time: {elapsed_time:0.2f}"
             )
-            ts.update(task_run_start_time, utc_now(), achievements)
+            ts.update(
+                start=task_run_start_time, finish=utc_now(), achievements=achievements
+            )
             # log the end of the run
             task.log.info(
-                f"Finished queuing items in collection {collection.name} (id={collection_id} "
+                f"Finished listing identifiers in collection {collection.name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
                 f"{achievements}"
             )
@@ -166,6 +166,7 @@ def import_identifiers(
     identifiers: list[str] | None,
     processed_count: int = 0,
     batch_size: int = 25,
+    target_max_execution_time_in_seconds: float = TARGET_MAX_EXECUTION_SECONDS,
 ) -> list[str] | None:
     """
     This method creates new or updates new editions and license pools for each pair of metadata and circulation data in
@@ -185,18 +186,17 @@ def import_identifiers(
         batch: list[str] = []
         start_seconds = time.perf_counter()
         total_imported_in_current_task = 0
-        identifiers_list_length = 0
-        while len(identifiers_list_length) > 0:
-            identifiers_list_length = len(identifiers)
+        identifiers_list_length = len(identifiers)
+        while identifiers_list_length > 0:
             batch = identifiers[
                 0 : (
                     identifiers_list_length
-                    if identifiers_list_length < batch
-                    else batch
+                    if identifiers_list_length < batch_size
+                    else batch_size
                 )
             ]
 
-            for metadata, circulation in api.availability(title_ids=batch):
+            for metadata, circulation in api.availability_by_title_ids(title_ids=batch):
                 process_book(task, session, api, metadata, circulation)
 
             batch_length = len(batch)
@@ -210,27 +210,25 @@ def import_identifiers(
 
             # remove identifiers processed in previous batch
             identifiers = identifiers[len(batch) :]
+            identifiers_list_length = len(identifiers)
             # measure elapsed seconds
             elapsed_seconds = time.perf_counter() - start_seconds
 
-            if elapsed_seconds > TARGET_MAX_EXECUTION_SECONDS:
+            if elapsed_seconds > target_max_execution_time_in_seconds:
                 task.log.info(
-                    f"Execution time exceeded max allowable seconds (max={TARGET_MAX_EXECUTION_SECONDS}): elapsed seconds={elapsed_seconds}"
+                    f"Execution time exceeded max allowable seconds (max={target_max_execution_time_in_seconds}): "
+                    f"elapsed seconds={elapsed_seconds}"
                 )
                 break
 
     processed_count += total_imported_in_current_task
 
     if len(identifiers) > 0:
-        import_identifiers.delay(
-            collection_id=collection_id,
-            identifiers=identifiers,
+        requeue_import_identifiers_task(
             batch_size=batch_size,
+            collection=collection,
+            identifiers=identifiers,
             processed_count=processed_count,
-        )
-        task.log.info(
-            f"Spawned subtask to continue importing remaining {len(identifiers)} "
-            f"for collection ({collection.name}, id={collection_id})"
         )
     else:
         task.log.info(
@@ -238,7 +236,26 @@ def import_identifiers(
         )
 
     task.log.info(
-        f"Total imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
+        f"Imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
+    )
+
+
+def requeue_import_identifiers_task(
+    task,
+    batch_size: int,
+    collection: Collection,
+    identifiers: list[str],
+    processed_count: int,
+):
+    import_identifiers.delay(
+        collection_id=collection.id,
+        identifiers=identifiers,
+        batch_size=batch_size,
+        processed_count=processed_count,
+    )
+    task.log.info(
+        f"Spawned subtask to continue importing remaining {len(identifiers)} "
+        f"for collection ({collection.name}, id={collection.id})"
     )
 
 
@@ -331,7 +348,8 @@ def reap_collection(
         )
 
         identifier_count = len(identifiers)
-        api.update_licensepools_for_identifiers(identifiers=identifiers)
+        if identifier_count > 0:
+            api.update_licensepools_for_identifiers(identifiers=identifiers)
 
     task.log.info(
         f'Reaper updated {identifier_count} books in collection (name="{collection.name}", id={collection.id}.'
@@ -346,12 +364,20 @@ def reap_collection(
 
     if identifier_count >= batch_size:
         new_offset = offset + identifier_count
+        requeue_reap_collection(
+            batch_size=batch_size, collection_id=collection.id, new_offset=new_offset
+        )
         task.log.info(
-            f"Queuing reap_collection task at offset={new_offset} for collection "
+            f"Queued reap_collection task at offset={new_offset} for collection "
             f'(name="{collection.name}", id={collection.id}).'
         )
-        reap_collection.delay(collection_id, new_offset, batch_size)
     else:
         task.log.info(
             f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
         )
+
+
+def requeue_reap_collection(batch_size: int, collection_id: int, new_offset: int):
+    reap_collection.delay(
+        collection_id=collection_id, new_offset=new_offset, batch_size=batch_size
+    )

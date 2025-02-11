@@ -712,6 +712,17 @@ class Axis360API(
         content = availability.content
         yield from BibliographicParser().process_all(content)
 
+    def availability_by_title_ids(
+        self,
+        title_ids: list[str],
+    ) -> Generator[tuple[Metadata, CirculationData]]:
+        """Find title availability for a list of titles
+        :yield: A sequence of (Metadata, CirculationData) 2-tuples
+        """
+        availability = self.availability(title_ids=title_ids)
+        content = availability.content
+        yield from BibliographicParser().process_all(content)
+
     @classmethod
     def create_identifier_strings(
         cls, identifiers: Sequence[Identifier | str]
