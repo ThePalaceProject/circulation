@@ -131,7 +131,7 @@ def update_read_pointer(task: Task) -> None:
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
     task_lock = TaskLock(redis_client, task)
