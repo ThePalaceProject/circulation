@@ -51,7 +51,7 @@ runs:
       id: cache
       with:
         path: ${{ steps.poetry-dir.outputs.home }}
-        key: ${{ runner.os }}-poetry${{ inputs.version }}-install-py${{ steps.python-version.outputs.version }}
+        key: ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-install-py${{ steps.python-version.outputs.version }}
 
     - run: curl -sSL https://install.python-poetry.org | python - --yes --version ${{ inputs.version }}
       env:
@@ -72,18 +72,18 @@ runs:
       with:
         path: ${{ steps.poetry-info.outputs.cache-dir }}
         key: |
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
       if: inputs.cache != 'false' && inputs.cache-restore-only == 'false'
 
     - uses: actions/cache/restore@v4
       with:
         path: ${{ steps.poetry-info.outputs.cache-dir }}
         key: |
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-${{ hashFiles('**/poetry.lock') }}
         restore-keys: |
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
-          ${{ runner.os }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-${{ inputs.cache-name }}-
+          ${{ runner.os }}-${{ runner.arch }}-poetry${{ inputs.version }}-cache-py${{ steps.python-version.outputs.version }}-
       if: inputs.cache != 'false' && inputs.cache-restore-only != 'false'

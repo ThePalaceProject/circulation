@@ -3,6 +3,13 @@ on:
   schedule:
     # Every Monday at 6:22am Eastern Time
     - cron: '22 10 * * 1'
+  push:
+    # Build base image when the Dockerfile or the workflow file changes
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-base-image.yml
+      - docker/Dockerfile.baseimage
   workflow_dispatch:
     # Allow us to manually trigger build
 
@@ -12,17 +19,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker-build-baseimage:
-    name: Build Base Image
-    # Some issue with the ubuntu-latest image is causing gcc to segfault with building
-    # an emulated arm64 target. Downgrading to 22.04 seems to fix this.
-    # See https://github.com/actions/runner-images/issues/11471
-    # runs-on: ubuntu-latest
-    runs-on: ubuntu-22.04
+  build:
+    name: Build Base Image (${{ matrix.arch.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: "amd64"
+            runner: "ubuntu-24.04"
+          - name: "arm64"
+            runner: "ubuntu-24.04-arm"
+
+    runs-on: ${{ matrix.arch.runner }}
+
     timeout-minutes: 120
     permissions:
       contents: read
       packages: write
+
+    outputs:
+      repo: ${{ steps.ghcr-repo.outputs.baseimage }}
+      meta: ${{ steps.meta.outputs.json }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +49,6 @@ jobs:
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
         run: sudo ethtool -K eth0 tx off rx off
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,11 +60,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set GHCR repos
+        # Docker doesn't support uppercase letters in repo names, so we need to lowercase the owner
+        id: ghcr-repo
+        run: |
+          baseimage="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/circ-baseimage"
+          echo "$baseimage"
+          echo "baseimage=$baseimage" >> "$GITHUB_OUTPUT"
+
       - name: Generate tags for image
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/circ-baseimage
+          images: ${{ steps.ghcr-repo.outputs.baseimage }}
           # Generate tags for the image
           # We use the following tags:
             # - The date in YYYYww format, which is the year and week number. 202052 is the last week of 2020.
@@ -60,13 +82,59 @@ jobs:
             type=raw,value=latest
 
       - name: Build base image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/Dockerfile.baseimage
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          push: true
           target: baseimage
           cache-to: type=inline
-          platforms: linux/amd64, linux/arm64
+          outputs: type=image,"name=${{ steps.ghcr-repo.outputs.baseimage }}",push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digests
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digests
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch.name }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  push:
+    name: Tag & Push Images
+    runs-on: ubuntu-24.04
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest & push images
+        working-directory: ${{ runner.temp }}/digests
+        run: >
+          docker buildx imagetools create
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.meta }}')
+          $(printf '${{ needs.build.outputs.repo }}@sha256:%s ' *)
