@@ -106,13 +106,6 @@ def celery_factory(config: dict[str, Any]) -> Celery:
     app.conf.update(config)
     app.conf.update(task_queue_config())
     app.conf.update({"beat_schedule": beat_schedule()})
-    app.conf.update(
-        {"result_backend_transport_options": result_backend_transport_options()}
-    )
     app.set_default()
 
     return app
-
-
-def result_backend_transport_options():
-    return {"retry_policy": {"timeout": 5.0}}
