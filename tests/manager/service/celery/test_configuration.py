@@ -13,7 +13,7 @@ def celery_configuration() -> CeleryConfFixture:
     return partial(
         CeleryConfiguration,
         broker_url="redis://test.com:6379/0",
-        result_backend="redis://test.com:6379/1",
+        result_backend="redis://test.com:6379/0",
     )
 
 

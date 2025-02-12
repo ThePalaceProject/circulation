@@ -81,7 +81,7 @@ class CloudwatchCameraFixture:
     def configure_app(
         self,
         broker_url: str = "redis://testtesttest:1234/0",
-        result_backend: str = "redis://testtesttest:1234/1",
+        result_backend: str = "redis://testtesttest:1234/0",
         region: str = "region",
         dry_run: bool = False,
         manager_name: str = "manager",
