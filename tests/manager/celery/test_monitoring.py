@@ -213,7 +213,7 @@ class TestCloudwatch:
         assert cloudwatch.queues == {"queue1", "queue2"}
         assert cloudwatch.redis_client == cloudwatch_camera.mock_get_redis.return_value
         cloudwatch_camera.mock_get_redis.assert_called_once_with(
-            "redis://testtesttest:1234/1",
+            "redis://testtesttest:1234/0",
             "manager",
         )
 
