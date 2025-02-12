@@ -42,7 +42,6 @@ from palace.manager.api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
-from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -51,7 +50,6 @@ from palace.manager.core.metadata_layer import (
     SubjectData,
 )
 from palace.manager.integration.base import integration_settings_update
-from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -1720,9 +1718,6 @@ class Axis360ProviderFixture(Axis360Fixture):
     def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
         super().__init__(db, files)
         mock_api = MockAxis360API(db.session, self.collection)
-        self.provider = Axis360BibliographicCoverageProvider(
-            self.collection, api_class=mock_api
-        )
         self.api = mock_api
 
 
@@ -1731,91 +1726,6 @@ def axis360provider(
     db: DatabaseTransactionFixture, axis_files_fixture: AxisFilesFixture
 ) -> Axis360ProviderFixture:
     return Axis360ProviderFixture(db, axis_files_fixture)
-
-
-class TestAxis360BibliographicCoverageProvider:
-    """Test the code that looks up bibliographic information from Axis 360."""
-
-    def test_script_instantiation(self, axis360provider: Axis360ProviderFixture):
-        """Test that RunCoverageProviderScript can instantiate
-        the coverage provider.
-        """
-        script = RunCollectionCoverageProviderScript(
-            Axis360BibliographicCoverageProvider,
-            axis360provider.db.session,
-            api_class=MockAxis360API,
-        )
-        [provider] = script.providers
-        assert isinstance(provider, Axis360BibliographicCoverageProvider)
-        assert isinstance(provider.api, MockAxis360API)
-
-    def test_process_item_creates_presentation_ready_work(
-        self, axis360provider: Axis360ProviderFixture
-    ):
-        """Test the normal workflow where we ask Axis for data,
-        Axis provides it, and we create a presentation-ready work.
-        """
-        data = axis360provider.sample_data("single_item.xml")
-        axis360provider.api.queue_response(200, content=data)
-
-        # Here's the book mentioned in single_item.xml.
-        identifier = axis360provider.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        identifier.identifier = "0003642860"
-
-        # This book has no LicensePool.
-        assert [] == identifier.licensed_through
-
-        # Run it through the Axis360BibliographicCoverageProvider
-        [result] = axis360provider.provider.process_batch([identifier])
-        assert identifier == result
-
-        # A LicensePool was created. We know both how many copies of this
-        # book are available, and what formats it's available in.
-        [pool] = identifier.licensed_through
-        assert 9 == pool.licenses_owned
-        [lpdm] = pool.delivery_mechanisms
-        assert (
-            "application/epub+zip (application/vnd.adobe.adept+xml)"
-            == lpdm.delivery_mechanism.name
-        )
-
-        # A Work was created and made presentation ready.
-        assert "Faith of My Fathers : A Family Memoir" == pool.work.title
-        assert True == pool.work.presentation_ready
-
-    def test_transient_failure_if_requested_book_not_mentioned(
-        self, axis360provider: Axis360ProviderFixture
-    ):
-        """Test an unrealistic case where we ask Axis 360 about one book and
-        it tells us about a totally different book.
-        """
-        # We're going to ask about abcdef
-        identifier = axis360provider.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        identifier.identifier = "abcdef"
-
-        # But we're going to get told about 0003642860.
-        data = axis360provider.sample_data("single_item.xml")
-        axis360provider.api.queue_response(200, content=data)
-
-        [result] = axis360provider.provider.process_batch([identifier])
-
-        # Coverage failed for the book we asked about.
-        assert isinstance(result, CoverageFailure)
-        assert identifier == result.obj
-        assert "Book not in collection" == result.exception
-
-        # And nothing major was done about the book we were told
-        # about. We created an Identifier record for its identifier,
-        # but no LicensePool or Edition.
-        wrong_identifier = Identifier.for_foreign_id(
-            axis360provider.db.session, Identifier.AXIS_360_ID, "0003642860"
-        )
-        assert [] == identifier.licensed_through
-        assert [] == identifier.primarily_identifies
 
 
 class Axis360AcsFulfillmentFixture:

@@ -3,9 +3,6 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fixtures.celery import CeleryFixture
-from fixtures.database import DatabaseTransactionFixture
-from fixtures.redis import RedisFixture
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import Axis360API
@@ -24,6 +21,9 @@ from palace.manager.celery.tasks.axis import (
 from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
+from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 
 TEST_COLLECTION_ID = 1
 
@@ -154,7 +154,7 @@ def test_list_identifiers_for_import(
         default_start_time=DEFAULT_START_TIME,
     )
 
-    assert ts.start > current_time
+    assert ts.start and ts.start > current_time
     assert not queue_collection_import_lock_fixture.task_lock.locked()
     assert mock_api.recent_activity.call_count == 1
     assert mock_api.recent_activity.call_args[0][0] == axis.DEFAULT_START_TIME
