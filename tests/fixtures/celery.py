@@ -1,4 +1,5 @@
 import os
+import tempfile
 from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -39,8 +40,10 @@ def celery_pydantic_config() -> CeleryConfiguration:
 
     The config returned will then be used to configure the `celery_app` fixture.
     """
+    temp_dir = tempfile.mkdtemp(prefix="celery_test_backend")
+
     return CeleryConfiguration.model_construct(
-        broker_url="memory://", result_backend="redis://"
+        broker_url="memory://", result_backend=f"file://{temp_dir}"
     )
 
 
