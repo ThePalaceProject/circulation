@@ -218,7 +218,7 @@ def test_import_items(
     assert f"Imported {len(title_ids)} identifiers" in caplog.text
 
 
-def test_import_items_two_batches(
+def test_import_items_with_requeue(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
