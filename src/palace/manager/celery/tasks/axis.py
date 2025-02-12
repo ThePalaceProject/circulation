@@ -39,7 +39,9 @@ def import_all_collections(
     """
     with task.session() as session:
         count = 0
-        for collection in get_collections_by_protocol(task, session, Axis360API):
+        for collection in get_collections_by_protocol(
+            task=task, session=session, protocol_class=Axis360API
+        ):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
             )
@@ -59,7 +61,7 @@ def list_identifiers_for_import(
     task: Task,
     collection_id: int,
     import_all: bool = False,
-) -> list[str]:
+) -> list[str] | None:
     """
     A task for resolving a list identifiers to import an axis collection based on the
      most recent timestamp's start date.
@@ -77,8 +79,10 @@ def list_identifiers_for_import(
             return None
 
         with task.transaction() as session:
-
             collection = Collection.by_id(session, collection_id)
+            if not collection:
+                task.log.error(f"Collection not found:  {collection_id} : ignoring...")
+                return None
 
             # retrieve timestamp of last run
             ts = timestamp(
@@ -93,13 +97,12 @@ def list_identifiers_for_import(
                 start_time_of_last_scan = DEFAULT_START_TIME
             else:
                 # otherwise use the start date of the previous timestamp.
-                start_time_of_last_scan = ts.start
+                start_time_of_last_scan = ts.start if ts.start else DEFAULT_START_TIME
 
             task_run_start_time = utc_now()
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             count = 0
-            collection = Collection.by_id(session, collection_id)
             api = create_api(collection, session)
             task.log.info(
                 f"Starting process of queuing items in collection {collection.name} (id={collection_id} "
@@ -129,7 +132,7 @@ def list_identifiers_for_import(
             return title_ids
 
 
-def create_api(collection, session):
+def create_api(collection: Collection, session: Session) -> Axis360API:
     return Axis360API(session, collection)
 
 
@@ -138,8 +141,8 @@ def timestamp(
     default_start_time: datetime,
     service_name: str,
     collection: Collection,
-    default_counter: int = None,
-):
+    default_counter: int = 0,
+) -> Timestamp:
     """Find or create a Timestamp.
     A new timestamp will have .finish set to None, since the first
     run is presumably in progress.
@@ -184,7 +187,10 @@ def import_identifiers(
 
     with task.session() as session:
         collection = Collection.by_id(session, id=collection_id)
-        api = create_api(session, collection)
+        if not collection:
+            task.log.error(f"Collection not found:  {collection_id} : ignoring...")
+            return None
+        api = create_api(session=session, collection=collection)
         start_seconds = time.perf_counter()
         total_imported_in_current_task = 0
         identifiers_list_length = len(identifiers)
@@ -230,6 +236,7 @@ def import_identifiers(
             collection=collection,
             identifiers=identifiers,
             processed_count=processed_count,
+            task=task,
         )
     else:
         task.log.info(
@@ -242,12 +249,12 @@ def import_identifiers(
 
 
 def requeue_import_identifiers_task(
-    task,
+    task: Task,
     batch_size: int,
     collection: Collection,
     identifiers: list[str],
     processed_count: int,
-):
+) -> None:
     import_identifiers.delay(
         collection_id=collection.id,
         identifiers=identifiers,
@@ -294,9 +301,7 @@ def _redis_lock_queue_collection_import(client: Redis, collection_id: int) -> Re
     )
 
 
-def get_collections_by_protocol(
-    task: Task, session: Session, protocol_class
-) -> list[Collection]:
+def get_collections_by_protocol(task: Task, session: Session, protocol_class) -> list[Collection]:  # type: ignore[no-untyped-def]
     registry = task.services.integration_registry.license_providers()
     protocols = registry.get_protocols(protocol_class, default=False)
     collections = [
@@ -336,7 +341,11 @@ def reap_collection(
 
     with task.transaction() as session:
         collection = Collection.by_id(session, collection_id)
-        api = create_api(session, collection)
+        if not collection:
+            task.log.error(f"Collection not found:  {collection_id} : ignoring...")
+            return None
+
+        api = create_api(session=session, collection=collection)
 
         identifiers = (
             session.query(Identifier)
@@ -378,7 +387,9 @@ def reap_collection(
         )
 
 
-def requeue_reap_collection(batch_size: int, collection_id: int, new_offset: int):
+def requeue_reap_collection(
+    batch_size: int, collection_id: int, new_offset: int
+) -> None:
     reap_collection.delay(
         collection_id=collection_id, new_offset=new_offset, batch_size=batch_size
     )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from palace.manager.api.axis import Axis360BibliographicCoverageProvider
 from palace.manager.api.bibliotheca import BibliothecaCirculationSweep
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.scripts.input import IdentifierInputScript
@@ -37,8 +36,5 @@ class AvailabilityRefreshScript(IdentifierInputScript):
             api = OverdriveAPI(self._db)
             for identifier in identifiers:
                 api.update_licensepool(identifier.identifier)
-        elif identifier.type == Identifier.AXIS_360_ID:
-            provider = Axis360BibliographicCoverageProvider(self._db)
-            provider.process_batch(identifiers)
         else:
             self.log.warn("Cannot update coverage for %r" % identifier.type)
