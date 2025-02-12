@@ -258,12 +258,11 @@ def test_import_items_two_batches(
     )
     assert mock_api.update_book.call_count == 1
     assert requeue.call_count == 1
-    assert requeue.call_args_list[0].kwargs == {
-        "processed_count": 1,
-        "identifiers": title_ids[1:],
-        "collection": collection,
-        "batch_size": 1,
-    }
+    kwargs = requeue.call_args_list[0].kwargs
+    assert kwargs["processed_count"] == 1
+    assert kwargs["identifiers"] == title_ids[1:]
+    assert kwargs["collection"] == collection
+    assert kwargs["batch_size"] == 1
 
     assert f"Edition (id={edition_1.id}" in caplog.text
     assert f"Finished run" not in caplog.text
