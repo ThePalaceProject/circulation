@@ -147,7 +147,7 @@ def recalculate_holds_for_licensepool(
     return updated, events
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def remove_expired_holds_for_collection_task(task: Task, collection_id: int) -> None:
     """
     A shared task for removing expired holds from the database for a collection
@@ -169,7 +169,7 @@ def remove_expired_holds_for_collection_task(task: Task, collection_id: int) -> 
     collect_events(task, events, analytics)
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def remove_expired_holds(task: Task) -> None:
     """
     Issue remove expired hold tasks for eligible collections
@@ -186,7 +186,7 @@ def remove_expired_holds(task: Task) -> None:
         remove_expired_holds_for_collection_task.delay(collection_id)
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def recalculate_hold_queue(task: Task) -> None:
     """
     Queue a task for each OPDS2WithODLApi integration to recalculate the hold queue.
@@ -231,7 +231,7 @@ def collect_events(
             )
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def recalculate_hold_queue_collection(
     task: Task, collection_id: int, batch_size: int = 100, after_id: int | None = None
 ) -> None:

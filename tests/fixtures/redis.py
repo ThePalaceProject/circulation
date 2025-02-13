@@ -28,7 +28,6 @@ class RedisFixture:
             {
                 "redis": {
                     "url": self.config.url,
-                    "backend": self.config.url,
                     "key_prefix": self.key_prefix,
                 }
             }

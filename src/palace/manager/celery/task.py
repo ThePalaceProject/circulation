@@ -29,9 +29,9 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
       ...
     ```
 
-    NB: It the task does not return a result, you must either call .get() or .ignore_result() on the result or
-    annotate the @shared_task with the task_ignore_results=True flag to prevent the build up of unused stored results
-    in the backend.
+    NB: If task returns a result, you must annotate the @shared_task with the ignore_result=False since we have
+    configured the global task_ignore_result=True now that the result backend has been enabled and most tasks that
+    we've written so far do not return results.
 
     This class follows the pattern suggested in the Celery documentation:
     https://docs.celeryq.dev/en/stable/userguide/tasks.html#custom-task-classes

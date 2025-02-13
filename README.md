@@ -189,7 +189,7 @@ pass a broker URL and a result backend url to the application.
           export PALACE_CELERY_BROKER_URL="redis://localhost:6379/0"`
 
         ```
-- `PALACE_CELERY_RESULT_BACKEND`: The url of the  result backend to use for Celery. (**required**).
+- `PALACE_CELERY_RESULT_BACKEND`: The url of the result backend to use for Celery. (**required**).
     - for example:
         ```sh
           export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"`
