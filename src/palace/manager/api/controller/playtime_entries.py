@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 
 import flask
 from pydantic import ValidationError
@@ -12,8 +13,8 @@ from palace.manager.api.controller.circulation_manager import (
 from palace.manager.api.model.time_tracking import (
     PlaytimeEntriesPost,
     PlaytimeEntriesPostResponse,
+    PlaytimeEntriesPostSummary,
 )
-from palace.manager.api.problem_details import NOT_FOUND_ON_REMOTE
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.core.query.playtime_entries import PlaytimeEntries
@@ -39,33 +40,47 @@ def resolve_loan_identifier(loan: Loan | None) -> str:
 
 class PlaytimeEntriesController(CirculationManagerController):
     def track_playtimes(self, collection_id, identifier_type, identifier_idn):
-        library = get_request_library()
+        library = get_request_library(default=None)
         identifier = get_one(
             self._db, Identifier, type=identifier_type, identifier=identifier_idn
         )
         collection = Collection.by_id(self._db, collection_id)
 
-        if not identifier:
-            return NOT_FOUND_ON_REMOTE.detailed(
-                f"The identifier {identifier_type}/{identifier_idn} was not found."
-            )
-        if not collection:
-            return NOT_FOUND_ON_REMOTE.detailed(
-                f"The collection {collection_id} was not found."
-            )
-
-        if collection not in library.associated_collections:
-            return INVALID_INPUT.detailed("Collection was not found in the Library.")
-
-        if not identifier.licensed_through_collection(collection):
-            return INVALID_INPUT.detailed(
-                "This Identifier was not found in the Collection."
-            )
-
         try:
             data = PlaytimeEntriesPost(**flask.request.json)
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
+
+        # TODO: For the time being, we need to return a 207 multi-response instead
+        #  of a 404 or 400 problem detail for missing or incorrectly associated
+        #  libraries, collections, and identifiers. We can switch back to the problem
+        #  detail responses once most instances of the client apps support them.
+        #  We can remove the `_handle_unrecoverable_entries` function then, as well.
+        if not library:
+            return _handle_unrecoverable_entries(
+                data,
+                "The library was not found.",
+            )
+
+        if not identifier:
+            return _handle_unrecoverable_entries(
+                data,
+                f"The identifier {identifier_type}/{identifier_idn} was not found.",
+            )
+        if not collection:
+            return _handle_unrecoverable_entries(
+                data, f"The collection {collection_id} was not found."
+            )
+
+        if collection not in library.associated_collections:
+            return _handle_unrecoverable_entries(
+                data, "Collection was not found in the Library."
+            )
+
+        if not identifier.licensed_through_collection(collection):
+            return _handle_unrecoverable_entries(
+                data, "This Identifier was not found in the Collection."
+            )
 
         # attempt to resolve a loan associated with the patron, identifier, in the time period
         entry_max_start_time = max([x.during_minute for x in data.time_entries])
@@ -95,9 +110,29 @@ class PlaytimeEntriesController(CirculationManagerController):
             loan_identifier,
         )
 
-        response_data = PlaytimeEntriesPostResponse(
-            summary=summary, responses=responses
-        )
-        response = flask.jsonify(response_data.model_dump())
-        response.status_code = 207
-        return response
+        return make_response(responses, summary)
+
+
+# TODO: We can remove this function once we switch back to problem
+#  detail responses (see comment above).
+def _handle_unrecoverable_entries(
+    data: PlaytimeEntriesPost, reason: str, status: int = 410
+):
+    entries = data.time_entries
+    count = len(entries)
+    summary = PlaytimeEntriesPostSummary(failures=count, total=count)
+    entry_responses = [
+        dict(id=entry.id, status=status, message=reason) for entry in entries
+    ]
+    return make_response(entry_responses, summary)
+
+
+def make_response(
+    response_entries: list[dict[str, Any]], summary: PlaytimeEntriesPostSummary
+):
+    response_data = PlaytimeEntriesPostResponse(
+        summary=summary, responses=response_entries
+    )
+    response = flask.jsonify(response_data.model_dump())
+    response.status_code = 207
+    return response

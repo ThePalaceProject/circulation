@@ -539,15 +539,20 @@ def track_analytics_event(identifier_type, identifier, event_type):
     )
 
 
+# TODO: For the time being, we need to use `@allows_library` instead of
+#  `@requires_library` here because the latter would immediately return a
+#  404 if the library was not found. This is a problem right now, since
+#  some still-supported versions of the client apps need this to be handled
+#  specially.
 @library_route(
     "/playtimes/<int:collection_id>/<identifier_type>/<path:identifier>",
     methods=["POST"],
 )
-@has_library
+@allows_library
 @requires_auth
 @returns_problem_detail
 def track_playtime_events(collection_id, identifier_type, identifier):
-    """The actual response type is 207, but due to a bug in flask-pydantic-spec we must document it as a 200"""
+    """The usual response status is 207."""
     return app.manager.playtime_entries.track_playtimes(
         collection_id, identifier_type, identifier
     )

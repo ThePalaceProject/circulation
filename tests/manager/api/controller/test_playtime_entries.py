@@ -305,53 +305,121 @@ class TestPlaytimeEntriesController:
         library = db.default_library()
         patron = db.patron()
 
+        tracking_request_data = dict(
+            timeEntries=[
+                {
+                    "id": "tracking-id-1",
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=1
+                    ),
+                    "seconds_played": 12,
+                },
+                {
+                    "id": "tracking-id-2",
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=2
+                    ),
+                    "seconds_played": 60,
+                },
+                {
+                    "id": "tracking-id-1",
+                    "during_minute": playtime_entries_controller_fixture.date_string(
+                        hour=12, minute=3
+                    ),
+                    "seconds_played": 60,
+                },
+            ]
+        )
+
+        def expected_207_response_body(expected_message, expected_status_code):
+            count = len(tracking_request_data["timeEntries"])
+            entry_responses = [
+                dict(
+                    id=entry["id"],
+                    status=expected_status_code,
+                    message=expected_message,
+                )
+                for entry in tracking_request_data["timeEntries"]
+            ]
+            response_body = {
+                "responses": entry_responses,
+                "summary": {"total": count, "successes": 0, "failures": count},
+            }
+            return response_body
+
         with flask_app_fixture.test_request_context(
-            "/", method="POST", json={}, library=library, patron=patron
+            "/",
+            method="POST",
+            json=tracking_request_data,
+            library=None,
+            patron=patron,
+        ):
+            # Bad library
+            response = playtime_entries_controller_fixture.controller.track_playtimes(
+                collection.id, identifier.type, "not-an-identifier"
+            )
+            assert response.status_code == 207
+            assert response.json == expected_207_response_body(
+                "The library was not found.", 410
+            )
+
+        with flask_app_fixture.test_request_context(
+            "/",
+            method="POST",
+            json=tracking_request_data,
+            library=library,
+            patron=patron,
         ):
             # Bad identifier
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, "not-an-identifier"
             )
-            assert isinstance(response, ProblemDetail)
-            assert response.status_code == 404
-            assert (
-                response.detail
-                == "The identifier Gutenberg ID/not-an-identifier was not found."
+            assert response.status_code == 207
+            assert response.json == expected_207_response_body(
+                "The identifier Gutenberg ID/not-an-identifier was not found.", 410
             )
 
             # Bad collection
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 9088765, identifier.type, identifier.identifier
             )
-            assert isinstance(response, ProblemDetail)
-            assert response.status_code == 404
-            assert response.detail == f"The collection 9088765 was not found."
+            assert response.status_code == 207
+            assert response.json == expected_207_response_body(
+                "The collection 9088765 was not found.", 410
+            )
 
             # Collection not in library
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
-            assert isinstance(response, ProblemDetail)
-            assert response.status_code == 400
-            assert response.detail == "Collection was not found in the Library."
+            assert response.status_code == 207
+            assert response.json == expected_207_response_body(
+                "Collection was not found in the Library.", 410
+            )
+
+            # Add the collection to the library.
+            collection.associated_libraries.append(library)
 
             # Identifier not part of collection
-            collection.associated_libraries.append(library)
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
             )
-            assert isinstance(response, ProblemDetail)
-            assert response.status_code == 400
-            assert response.detail == "This Identifier was not found in the Collection."
-
-            # Attach the identifier to the collection
-            pool = db.licensepool(
-                db.edition(
-                    identifier_type=identifier.type, identifier_id=identifier.identifier
-                ),
-                collection=collection,
+            assert response.status_code == 207
+            assert response.json == expected_207_response_body(
+                "This Identifier was not found in the Collection.", 410
             )
 
+        # Attach the identifier to the collection.
+        _ = db.licensepool(
+            db.edition(
+                identifier_type=identifier.type, identifier_id=identifier.identifier
+            ),
+            collection=collection,
+        )
+
+        with flask_app_fixture.test_request_context(
+            "/", method="POST", json={}, library=library, patron=patron
+        ):
             # Incorrect JSON format
             response = playtime_entries_controller_fixture.controller.track_playtimes(
                 collection.id, identifier.type, identifier.identifier
