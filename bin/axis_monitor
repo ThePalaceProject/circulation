@@ -1,8 +1,0 @@
-#!/usr/bin/env python
-"""Monitor the Axis 360 collection by asking about recently changed books."""
-
-
-from palace.manager.api.axis import Axis360CirculationMonitor
-from palace.manager.scripts.monitor import RunCollectionMonitorScript
-
-RunCollectionMonitorScript(Axis360CirculationMonitor).run()

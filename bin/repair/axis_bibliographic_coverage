@@ -1,8 +1,0 @@
-#!/usr/bin/env python
-"""Make sure all Axis 360 books have bibliographic coverage."""
-
-
-from palace.manager.api.axis import Axis360BibliographicCoverageProvider
-from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
-
-RunCollectionCoverageProviderScript(Axis360BibliographicCoverageProvider).run()
