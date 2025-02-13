@@ -51,29 +51,34 @@ class PlaytimeEntriesController(CirculationManagerController):
         except ValidationError as ex:
             return INVALID_INPUT.detailed(ex.json())
 
+        # TODO: For the time being, we need to return a 207 multi-response instead
+        #  of a 404 or 400 problem detail for missing or incorrectly associated
+        #  libraries, collections, and identifiers. We can switch back to the problem
+        #  detail responses once most instances of the client apps support them.
+        #  We can remove the `_handle_unrecoverable_entries` function then, as well.
         if not library:
-            return handle_unrecoverable_entries(
+            return _handle_unrecoverable_entries(
                 data,
                 "The library was not found.",
             )
 
         if not identifier:
-            return handle_unrecoverable_entries(
+            return _handle_unrecoverable_entries(
                 data,
                 f"The identifier {identifier_type}/{identifier_idn} was not found.",
             )
         if not collection:
-            return handle_unrecoverable_entries(
+            return _handle_unrecoverable_entries(
                 data, f"The collection {collection_id} was not found."
             )
 
         if collection not in library.associated_collections:
-            return handle_unrecoverable_entries(
+            return _handle_unrecoverable_entries(
                 data, "Collection was not found in the Library."
             )
 
         if not identifier.licensed_through_collection(collection):
-            return handle_unrecoverable_entries(
+            return _handle_unrecoverable_entries(
                 data, "This Identifier was not found in the Collection."
             )
 
@@ -108,7 +113,9 @@ class PlaytimeEntriesController(CirculationManagerController):
         return make_response(responses, summary)
 
 
-def handle_unrecoverable_entries(
+# TODO: We can remove this function once we switch back to problem
+#  detail responses (see comment above).
+def _handle_unrecoverable_entries(
     data: PlaytimeEntriesPost, reason: str, status: int = 410
 ):
     entries = data.time_entries
