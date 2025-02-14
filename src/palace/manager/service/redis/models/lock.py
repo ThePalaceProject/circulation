@@ -229,8 +229,8 @@ class RedisLock(BaseRedisLock):
 class TaskLock(RedisLock):
     def __init__(
         self,
-        redis_client: Redis,
         task: Task,
+        redis_client: Redis | None = None,
         lock_name: str | None = None,
         lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
@@ -244,4 +244,6 @@ class TaskLock(RedisLock):
             name = ["Task", task.name]
         else:
             name = [lock_name]
+        if redis_client is None:
+            redis_client = task.services.redis.client()
         super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)

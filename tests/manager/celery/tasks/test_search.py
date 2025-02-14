@@ -36,7 +36,7 @@ class SearchReindexTaskLockFixture:
         self.task = MagicMock()
         self.task.request.root_id = "fake"
         self.task_lock = TaskLock(
-            self.redis_client, self.task, lock_name="search_reindex"
+            self.task, lock_name="search_reindex", redis_client=self.redis_client
         )
 
 
@@ -351,7 +351,7 @@ class SearchIndexingFixture:
         task = MagicMock()
         task.request.root_id = "fake"
         task.name = "palace.manager.celery.tasks.search.search_indexing"
-        self.lock = TaskLock(self.redis_client, task)
+        self.lock = TaskLock(task, redis_client=self.redis_client)
 
         self.waiting = WaitingForIndexing(self.redis_client)
         self.mock_works = {w_id for w_id in range(10)}

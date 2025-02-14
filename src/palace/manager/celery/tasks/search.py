@@ -69,8 +69,7 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
     task will do a batch, then requeue itself until all works have been indexed.
     """
     index = task.services.search.index()
-    redis_client = task.services.redis.client()
-    task_lock = TaskLock(redis_client, task, lock_name="search_reindex")
+    task_lock = TaskLock(task, lock_name="search_reindex")
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         task.log.info(
@@ -129,7 +128,7 @@ def update_read_pointer(task: Task) -> None:
 @shared_task(queue=QueueNames.default, bind=True)
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
-    with TaskLock(redis_client, task).lock():
+    with TaskLock(task).lock():
         waiting = WaitingForIndexing(redis_client)
         works = waiting.pop(batch_size)
 

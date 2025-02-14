@@ -188,13 +188,15 @@ class TestTaskLock:
 
         # If we don't provide a lock_name, and the task name is None, we should get an error
         with pytest.raises(LockValueError):
-            TaskLock(redis_fixture.client, mock_task)
+            TaskLock(mock_task, redis_client=redis_fixture.client)
 
         # If we don't provide a lock_name, we should use the task name
         mock_task.name = "test_task"
-        task_lock = TaskLock(redis_fixture.client, mock_task)
+        task_lock = TaskLock(mock_task, redis_client=redis_fixture.client)
         assert task_lock.key.endswith("::TaskLock::Task::test_task")
 
         # If we provide a lock_name, we should use that instead
-        task_lock = TaskLock(redis_fixture.client, mock_task, lock_name="test_lock")
+        task_lock = TaskLock(
+            mock_task, lock_name="test_lock", redis_client=redis_fixture.client
+        )
         assert task_lock.key.endswith("::TaskLock::test_lock")
