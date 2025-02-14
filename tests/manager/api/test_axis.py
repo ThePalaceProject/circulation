@@ -859,6 +859,19 @@ class TestAxis360API:
                 merge=True,
             )
 
+    def test_availablility_by_title_ids(self, axis360: Axis360Fixture):
+        ids = ["my_id"]
+        with patch.object(axis360.api, "availability") as availability:
+            availability.content.return_value = """
+            <?xml version="1.0" encoding="utf-8"?>
+            """
+            for metadata, circulation in axis360.api.availability_by_title_ids(
+                title_ids=ids
+            ):
+                pass
+
+            assert availability.call_args_list[0].kwargs["title_ids"] == ids
+
 
 class TestParsers:
     def test_status_parser(self, axis360: Axis360Fixture):
