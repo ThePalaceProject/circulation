@@ -131,7 +131,6 @@ module = [
     "palace.manager.util.http",
     "palace.manager.util.log",
     "palace.manager.util.migration.*",
-    "palace.manager.util.notifications",
     "palace.manager.util.problem_detail",
     "palace.manager.util.string_helpers",
     "palace.manager.util.uuid",

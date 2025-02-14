@@ -1,6 +1,0 @@
-#!/usr/bin/env python
-"""Send out Loan Notifications to patrons"""
-
-from palace.manager.scripts.notifications.loan import LoanNotificationsScript
-
-LoanNotificationsScript().run()
