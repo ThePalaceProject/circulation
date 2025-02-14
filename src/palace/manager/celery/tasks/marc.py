@@ -130,17 +130,9 @@ def marc_export_collection(
         context or {}
     )
 
-    lock = marc_export_collection_lock(
+    with marc_export_collection_lock(
         task.services.redis.client(), collection_id, delta
-    )
-
-    with lock.lock() as locked:
-        if not locked:
-            task.log.info(
-                f"Skipping collection {collection_id} because another task is already processing it."
-            )
-            return
-
+    ).lock():
         with ExitStack() as stack, task.transaction() as session:
             files = {
                 library: stack.enter_context(TemporaryFile())

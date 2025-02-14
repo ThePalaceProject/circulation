@@ -119,9 +119,12 @@ class TestRedisLock:
             assert redis_lock_fixture.lock.locked() is True
         assert redis_lock_fixture.lock.locked() is False
 
-        # The context manager returns false if the lock is not acquired
+        # The context manager returns false if the lock is not acquired and the
+        # raise_when_not_acquired parameter is set to False
         with redis_lock_fixture.no_timeout_lock.lock():
-            with redis_lock_fixture.lock.lock() as acquired:
+            with redis_lock_fixture.lock.lock(
+                raise_when_not_acquired=False
+            ) as acquired:
                 assert not acquired
 
         # If the raise_when_not_acquired parameter is set, the context manager raises
@@ -129,7 +132,7 @@ class TestRedisLock:
         with redis_lock_fixture.no_timeout_lock.lock() as acquired:
             assert acquired
             with pytest.raises(LockNotAcquired):
-                with redis_lock_fixture.lock.lock(raise_when_not_acquired=True):
+                with redis_lock_fixture.lock.lock():
                     ...
 
         # If the lock is extended, the context manager returns True

@@ -80,7 +80,7 @@ class BaseRedisLock(ABC):
     @contextmanager
     def lock(
         self,
-        raise_when_not_acquired: bool = False,
+        raise_when_not_acquired: bool = True,
         release_on_error: bool = True,
         release_on_exit: bool = True,
         ignored_exceptions: tuple[type[BaseException], ...] = (),

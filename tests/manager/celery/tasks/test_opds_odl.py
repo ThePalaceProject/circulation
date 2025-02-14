@@ -19,6 +19,7 @@ from palace.manager.celery.tasks.opds_odl import (
     remove_expired_holds_for_collection_task,
 )
 from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.service.redis.models.lock import LockNotAcquired
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import License, LicensePool
@@ -384,19 +385,16 @@ class TestRecalculateHoldQueueCollection:
         celery_fixture: CeleryFixture,
         redis_fixture: RedisFixture,
         db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
     ):
-        caplog.set_level(LogLevel.info)
-
         collection = db.collection(protocol=OPDS2WithODLApi)
         assert collection.id is not None
         lock = _redis_lock_recalculate_holds(redis_fixture.client, collection.id)
 
         # Acquire the lock, to simulate another task already running
         lock.acquire()
-        recalculate_hold_queue_collection.delay(collection.id).wait()
 
-        assert "another task holds its lock" in caplog.text
+        with pytest.raises(LockNotAcquired):
+            recalculate_hold_queue_collection.delay(collection.id).wait()
 
     def test_collection_deleted(
         self,
