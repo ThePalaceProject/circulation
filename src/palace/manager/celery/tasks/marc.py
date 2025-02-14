@@ -64,7 +64,7 @@ def marc_export(task: Task, force: bool = False) -> None:
                 collection_name=collection.name,
                 start_time=start_time,
                 libraries=[l.model_dump() for l in libraries_info],
-            )
+            ).forget()
 
             needs_delta = [l.model_dump() for l in libraries_info if l.last_updated]
             if needs_delta:
@@ -88,7 +88,7 @@ def marc_export(task: Task, force: bool = False) -> None:
                         start_time=start_time,
                         libraries=needs_delta,
                         delta=True,
-                    )
+                    ).forget()
 
 
 def marc_export_collection_lock(

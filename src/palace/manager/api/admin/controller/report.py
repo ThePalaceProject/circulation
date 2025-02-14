@@ -85,6 +85,8 @@ class ReportController(LoggerMixin):
             task = generate_inventory_and_hold_reports.delay(
                 email_address=admin.email, library_id=library.id
             )
+
+            task.forget()
         except Exception as e:
             msg = f"failed to generate inventory report request: {e}"
             self.log.error(msg=msg, exc_info=e)

@@ -183,7 +183,7 @@ def remove_expired_holds(task: Task) -> None:
             if collection.id is not None
         ]
     for collection_id, collection_name in collections:
-        remove_expired_holds_for_collection_task.delay(collection_id)
+        remove_expired_holds_for_collection_task.delay(collection_id).forget()
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -195,7 +195,7 @@ def recalculate_hold_queue(task: Task) -> None:
     protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
     with task.session() as session:
         for collection in Collection.by_protocol(session, protocols):
-            recalculate_hold_queue_collection.delay(collection.id)
+            recalculate_hold_queue_collection.delay(collection.id).forget()
 
 
 def _redis_lock_recalculate_holds(client: Redis, collection_id: int) -> RedisLock:

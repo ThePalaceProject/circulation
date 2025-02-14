@@ -133,7 +133,7 @@ def search_indexing(task: Task, batch_size: int = 500) -> None:
         works = waiting.pop(batch_size)
 
         if len(works) > 0:
-            index_works.delay(works=works)
+            index_works.delay(works=works).forget()
 
     if len(works) == batch_size:
         # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
