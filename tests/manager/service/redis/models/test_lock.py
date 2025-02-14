@@ -4,7 +4,12 @@ from unittest.mock import create_autospec
 import pytest
 
 from palace.manager.celery.task import Task
-from palace.manager.service.redis.models.lock import LockError, RedisLock, TaskLock
+from palace.manager.service.redis.models.lock import (
+    LockNotAcquired,
+    LockValueError,
+    RedisLock,
+    TaskLock,
+)
 from tests.fixtures.redis import RedisFixture
 
 
@@ -47,7 +52,7 @@ class TestRedisLock:
 
     def test_acquire_blocking(self, redis_lock_fixture: RedisLockFixture):
         # If you specify a negative timeout, you should get an error
-        with pytest.raises(LockError):
+        with pytest.raises(LockValueError):
             redis_lock_fixture.lock.acquire_blocking(timeout=-5)
 
         # If you acquire the lock with blocking, it will block until the lock is available or times out.
@@ -114,10 +119,18 @@ class TestRedisLock:
             assert redis_lock_fixture.lock.locked() is True
         assert redis_lock_fixture.lock.locked() is False
 
-        # The context manager returns LockReturn.acquired if the lock is acquired
+        # The context manager returns false if the lock is not acquired
         with redis_lock_fixture.no_timeout_lock.lock():
             with redis_lock_fixture.lock.lock() as acquired:
                 assert not acquired
+
+        # If the raise_when_not_acquired parameter is set, the context manager raises
+        # an exception is the lock is not acquired.
+        with redis_lock_fixture.no_timeout_lock.lock() as acquired:
+            assert acquired
+            with pytest.raises(LockNotAcquired):
+                with redis_lock_fixture.lock.lock(raise_when_not_acquired=True):
+                    ...
 
         # If the lock is extended, the context manager returns True
         redis_lock_fixture.lock.acquire()
@@ -171,7 +184,7 @@ class TestTaskLock:
         mock_task.name = None
 
         # If we don't provide a lock_name, and the task name is None, we should get an error
-        with pytest.raises(LockError):
+        with pytest.raises(LockValueError):
             TaskLock(redis_fixture.client, mock_task)
 
         # If we don't provide a lock_name, we should use the task name
