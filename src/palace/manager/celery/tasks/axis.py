@@ -29,7 +29,7 @@ DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 TARGET_MAX_EXECUTION_SECONDS = 120
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def import_all_collections(
     task: Task, import_all: bool = False, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> None:
@@ -162,7 +162,7 @@ def timestamp(
     return timestamp
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def import_identifiers(
     task: Task,
     collection_id: int,
@@ -312,7 +312,7 @@ def get_collections_by_protocol(task: Task, session: Session, protocol_class) ->
     return collections
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def reap_all_collections(task: Task) -> None:
     """
     A shared task that loops through all Axis360 Api based collections and kick off an
@@ -328,7 +328,7 @@ def reap_all_collections(task: Task) -> None:
         task.log.info(f"Finished queuing collection for reaping.")
 
 
-@shared_task(queue=QueueNames.default, bind=True, task_ignore_results=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def reap_collection(
     task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
