@@ -32,7 +32,15 @@ class CeleryConfiguration(ServiceConfiguration):
 
     # Broker options for both Redis and SQS
     broker_transport_options_visibility_timeout: int = 3600  # 1 hour
+
+    # This setting defaults to False.  I've made that explicit here
+    # for clarity and as a point of reference if we are able to change it down the road.
+    # It would be better if we could set this value to True since most tasks so far do not
+    # produce results.  Setting this value to True obviates the need to call .ignore() on async results
+    # when the task does not produce a result.  However, I ran into timeout issues in the unit tests
+    # that I couldn't resolve with this setting set to True.  So there is it.
     task_ignore_result: bool = False
+
     task_acks_late: bool = True
     task_reject_on_worker_lost: bool = True
     task_remote_tracebacks: bool = True
