@@ -60,5 +60,4 @@ def test_collection_delete_task(
     query = select(Collection).where(Collection.id == collection.id)
     assert db.session.execute(query).scalar_one_or_none() == collection
     collection_delete.delay(collection.id).wait()
-
     assert db.session.execute(query).scalar_one_or_none() is None

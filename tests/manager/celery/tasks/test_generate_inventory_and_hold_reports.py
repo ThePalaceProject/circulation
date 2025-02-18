@@ -316,6 +316,7 @@ def test_generate_inventory_and_hold_reports_task(
     create_test_opds_collection("c1", "d1", db, library)
     generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
     services_fixture.email_fixture.mock_emailer.send.assert_called_once()
+
     mock_s3_service.store_stream.assert_called_once()
     mock_s3_service.generate_url.assert_called_once()
 
