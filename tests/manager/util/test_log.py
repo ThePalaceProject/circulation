@@ -1,10 +1,8 @@
-from unittest.mock import patch
-
 import pytest
 from pytest import LogCaptureFixture
 
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.log import LoggerMixin, log_elapsed_time, logger_for_function
+from palace.manager.util.log import LoggerMixin, log_elapsed_time
 
 
 class MockClass(LoggerMixin):
@@ -53,12 +51,3 @@ def test_log_elapsed_time_invalid(caplog: LogCaptureFixture):
     with pytest.raises(RuntimeError):
         log_elapsed_time(log_level=LogLevel.info, message_prefix="Test")(lambda: None)()
     assert len(caplog.records) == 0
-
-
-def test_logger_for_function():
-    logger = logger_for_function()
-    assert logger.name == "tests.manager.util.test_log.test_logger_for_function"
-
-    with patch("palace.manager.util.log.inspect", side_effect=Exception("Boom")):
-        logger = logger_for_function()
-    assert logger.name == "palace.manager.<unknown>"

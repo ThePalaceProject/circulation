@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 import palace.manager.core.classifier as genres
@@ -24,7 +26,8 @@ from palace.manager.sqlalchemy.model.lane import (
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.log import logger_for_function
+
+log = logging.getLogger(__name__)
 
 
 def load_lanes(_db, library, collection_ids):
@@ -850,7 +853,7 @@ def create_lane_for_small_collection(_db, library, parent, languages, priority=0
     try:
         language_identifier = LanguageCodes.name_for_languageset(languages)
     except ValueError as e:
-        logger_for_function().warning(
+        log.warning(
             "Could not create a lane for small collection with languages %s", languages
         )
         return 0
@@ -922,7 +925,7 @@ def create_lane_for_tiny_collection(_db, library, parent, languages, priority=0)
     try:
         name = LanguageCodes.name_for_languageset(languages)
     except ValueError as e:
-        logger_for_function().warning(
+        log.warning(
             "Could not create a lane for tiny collection with languages %s", languages
         )
         return 0
