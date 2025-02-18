@@ -934,16 +934,20 @@ class TestCrawlableFacets:
         library = db.library()
         # The first two collections are always active, ...
         c1 = db.collection(
-            library=library, settings=db.opds_settings(data_source=c1_distributor),
+            library=library,
+            settings=db.opds_settings(data_source=c1_distributor),
         )
         # ... but, this one may be inactive.
         c2 = db.collection(
-            library=library, settings=db.opds_settings(data_source=c2_distributor),
+            library=library,
+            settings=db.opds_settings(data_source=c2_distributor),
         )
         # The third collection always has the same distributor as the first
         # one, but it may be inactive.
         c3 = db.collection(
-            library=library, settings=db.opds_settings(data_source=c1_distributor), inactive=is_inactive
+            library=library,
+            settings=db.opds_settings(data_source=c1_distributor),
+            inactive=is_inactive,
         )
 
         facets = CrawlableFacets.default(library)
