@@ -9,8 +9,7 @@ from palace.manager.celery.tasks import marc
 from palace.manager.celery.tasks.marc import marc_export_collection_lock
 from palace.manager.marc.exporter import MarcExporter
 from palace.manager.marc.uploader import MarcUploadManager
-from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.service.redis.models.lock import RedisLock
+from palace.manager.service.redis.models.lock import LockNotAcquired, RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work
@@ -344,16 +343,12 @@ class TestMarcExportCollection:
         redis_fixture: RedisFixture,
         marc_exporter_fixture: MarcExporterFixture,
         marc_export_collection_fixture: MarcExportCollectionFixture,
-        caplog: pytest.LogCaptureFixture,
     ):
-        caplog.set_level(LogLevel.info)
         collection = marc_exporter_fixture.collection1
         marc_export_collection_fixture.redis_lock(collection).acquire()
         marc_export_collection_fixture.setup_mock_storage()
-        with patch.object(MarcExporter, "query_works") as query:
+        with pytest.raises(LockNotAcquired):
             marc_export_collection_fixture.export_collection(collection)
-        query.assert_not_called()
-        assert "another task is already processing it" in caplog.text
 
 
 def test_marc_export_cleanup(

@@ -238,14 +238,9 @@ def recalculate_hold_queue_collection(
     """
     Recalculate the hold queue for a collection.
     """
-    lock = _redis_lock_recalculate_holds(task.services.redis.client(), collection_id)
     analytics = task.services.analytics.analytics()
-    with lock.lock() as locked:
-        if not locked:
-            task.log.info(
-                f"Skipping collection {collection_id} because another task holds its lock."
-            )
-            return
+    redis_client = task.services.redis.client()
+    with _redis_lock_recalculate_holds(redis_client, collection_id).lock():
         with task.transaction() as session:
             collection = Collection.by_id(session, collection_id)
             if collection is None:

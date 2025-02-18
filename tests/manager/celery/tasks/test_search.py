@@ -18,7 +18,7 @@ from palace.manager.celery.tasks.search import (
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.external_search import Filter
-from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -36,7 +36,7 @@ class SearchReindexTaskLockFixture:
         self.task = MagicMock()
         self.task.request.root_id = "fake"
         self.task_lock = TaskLock(
-            self.redis_client, self.task, lock_name="search_reindex"
+            self.task, lock_name="search_reindex", redis_client=self.redis_client
         )
 
 
@@ -112,10 +112,10 @@ def test_search_reindex_lock(
 ):
     search_reindex_task_lock_fixture.task_lock.acquire()
 
-    with pytest.raises(BasePalaceException) as exc_info:
+    with pytest.raises(LockNotAcquired) as exc_info:
         search_reindex.delay().wait()
 
-    assert "Another re-index task is already running." in str(exc_info.value)
+    assert "TaskLock::search_reindex could not be acquired" in str(exc_info.value)
 
 
 def test_fiction_query_returns_results(
@@ -351,7 +351,7 @@ class SearchIndexingFixture:
         task = MagicMock()
         task.request.root_id = "fake"
         task.name = "palace.manager.celery.tasks.search.search_indexing"
-        self.lock = TaskLock(self.redis_client, task)
+        self.lock = TaskLock(task, redis_client=self.redis_client)
 
         self.waiting = WaitingForIndexing(self.redis_client)
         self.mock_works = {w_id for w_id in range(10)}
@@ -371,10 +371,8 @@ def test_search_indexing_lock(
 ):
     search_indexing_fixture.lock.acquire()
 
-    with pytest.raises(BasePalaceException) as exc_info:
+    with pytest.raises(LockNotAcquired):
         search_indexing.delay().wait()
-
-    assert "search_indexing is already running." in str(exc_info.value)
 
 
 @pytest.mark.parametrize("batch_size", [3, 5, 500])
