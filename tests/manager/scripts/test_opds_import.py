@@ -39,7 +39,7 @@ class MockOPDSImportScript(OPDSImportScript):
 
 class TestOPDSImportScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        # Create the default collections, active and inactive.
+        # Create the default collections: active and inactive.
         db.make_default_library_with_collections()
         script = MockOPDSImportScript(db.session)
 
@@ -49,7 +49,7 @@ class TestOPDSImportScript:
 
         # Since we provided no collection, a MockOPDSImportMonitor is
         # instantiated for each OPDS Import collection in the database,
-        # active and inactive.
+        # both the active one and the inactive one.
         monitor_collections = {x.collection for x in MockOPDSImportMonitor.INSTANCES}
         assert len(MockOPDSImportMonitor.INSTANCES) == 2
         assert monitor_collections == {
