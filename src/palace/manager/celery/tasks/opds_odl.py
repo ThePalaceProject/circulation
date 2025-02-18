@@ -147,7 +147,7 @@ def recalculate_holds_for_licensepool(
     return updated, events
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
 def remove_expired_holds_for_collection_task(task: Task, collection_id: int) -> None:
     """
     A shared task for removing expired holds from the database for a collection
@@ -169,7 +169,7 @@ def remove_expired_holds_for_collection_task(task: Task, collection_id: int) -> 
     collect_events(task, events, analytics)
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
 def remove_expired_holds(task: Task) -> None:
     """
     Issue remove expired hold tasks for eligible collections
@@ -183,10 +183,10 @@ def remove_expired_holds(task: Task) -> None:
             if collection.id is not None
         ]
     for collection_id, collection_name in collections:
-        remove_expired_holds_for_collection_task.delay(collection_id).forget()
+        remove_expired_holds_for_collection_task.delay(collection_id)
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
 def recalculate_hold_queue(task: Task) -> None:
     """
     Queue a task for each OPDS2WithODLApi integration to recalculate the hold queue.
@@ -195,7 +195,7 @@ def recalculate_hold_queue(task: Task) -> None:
     protocols = registry.get_protocols(OPDS2WithODLApi, default=False)
     with task.session() as session:
         for collection in Collection.by_protocol(session, protocols):
-            recalculate_hold_queue_collection.delay(collection.id).forget()
+            recalculate_hold_queue_collection.delay(collection.id)
 
 
 def _redis_lock_recalculate_holds(client: Redis, collection_id: int) -> RedisLock:
@@ -231,7 +231,7 @@ def collect_events(
             )
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
 def recalculate_hold_queue_collection(
     task: Task, collection_id: int, batch_size: int = 100, after_id: int | None = None
 ) -> None:

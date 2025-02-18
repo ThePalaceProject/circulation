@@ -40,6 +40,6 @@ class CollectionDeleteJob(Job):
             collection.delete()
 
 
-@shared_task(queue=QueueNames.high, bind=True)
+@shared_task(queue=QueueNames.high, bind=True, ignore_result=True)
 def collection_delete(task: Task, collection_id: int) -> None:
     CollectionDeleteJob(task.session_maker, collection_id).run()

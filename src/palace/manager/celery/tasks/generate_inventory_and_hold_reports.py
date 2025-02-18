@@ -334,7 +334,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
         """
 
 
-@shared_task(queue=QueueNames.high, bind=True)
+@shared_task(queue=QueueNames.high, bind=True, ignore_result=True)
 def generate_inventory_and_hold_reports(
     task: Task, library_id: int, email_address: str
 ) -> None:

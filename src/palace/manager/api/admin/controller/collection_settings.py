@@ -165,7 +165,7 @@ class CollectionSettingsController(
 
         # Flag the collection to be deleted by script in the background.
         collection.marked_for_deletion = True
-        collection_delete.delay(collection.id).forget()
+        collection_delete.delay(collection.id).wait()
         return Response("Deleted", 200)
 
     def process_collection_self_tests(

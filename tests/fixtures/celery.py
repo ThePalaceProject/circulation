@@ -40,7 +40,9 @@ def celery_pydantic_config() -> CeleryConfiguration:
     The config returned will then be used to configure the `celery_app` fixture.
     """
     return CeleryConfiguration.model_construct(
-        broker_url="memory://", result_backend="cache+memory://"
+        broker_url="memory://",
+        result_backend="cache+memory://",
+        task_always_eager=True,
     )
 
 

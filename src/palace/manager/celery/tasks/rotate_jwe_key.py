@@ -5,7 +5,7 @@ from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
 def rotate_jwe_key(task: Task) -> None:
     with task.transaction() as session:
         try:

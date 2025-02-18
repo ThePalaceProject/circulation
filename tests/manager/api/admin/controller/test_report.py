@@ -92,12 +92,7 @@ class TestReportController:
         )
 
         task_id = 7
-        mock_async_result = MagicMock()
-
-        mock_async_result.id = task_id
-        SimpleNamespace(id=task_id)
-        mock_generate_reports.delay.return_value = mock_async_result
-
+        mock_generate_reports.delay.return_value = SimpleNamespace(id=task_id)
         log_message_suffix = f"Task Request Id: {task_id})"
 
         controller = report_fixture.controller
@@ -132,8 +127,6 @@ class TestReportController:
             assert email in response.get_json().get("message")
             assert log_message_suffix in caplog.text
             caplog.clear()
-            assert mock_async_result.forget.call_count == 1
-            mock_async_result.forget.reset_mock()
 
         # Sysadmin can get info for any library.
         with flask_app_fixture.test_request_context(

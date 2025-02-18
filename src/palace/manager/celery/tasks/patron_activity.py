@@ -17,7 +17,7 @@ from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.http import RemoteIntegrationException
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4, ignore_result=True)
 def sync_patron_activity(
     task: Task, collection_id: int, patron_id: int, pin: str | None, force: bool = False
 ) -> None:

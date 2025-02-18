@@ -66,7 +66,7 @@ class RebuildSearchIndexScript(Script):
         if self.blocking:
             rebuild_task()
         else:
-            task = rebuild_task.delay().forget()
+            task = rebuild_task.delay().wait()
             self.log.info(
                 f"Search index rebuild started (Task ID: {task.id}). The reindex will run in the background."
             )

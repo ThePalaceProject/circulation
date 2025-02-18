@@ -29,13 +29,8 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
       ...
     ```
 
-    NB: For tasks that return a result, you must call .get() or .forget() on the async task if it is not chained to the input
-    of another task.  Otherwise, results will accumulate in the result backend.  For tasks that do not return
-    a result you must call .forget() in order to prevent the backend from storing an empty result.  According
-    to the docs, you can use the shared_task annotation attribute "ignore_result=True" (default behavior,
-    set by the celery config parameter "task_ignore result", is False) for tasks without results.  However,
-     in practice this feature does not seem to work as expected, so I have reverted to calling the .ignore()
-     method on the async task results for tasks that return no result.
+    NB: For tasks that do not return a result, you must set the ignore_result attribute to True on the @shared_task
+    annotation.  Otherwise, empty results will accumulate in the result backend.
 
     This class follows the pattern suggested in the Celery documentation:
     https://docs.celeryq.dev/en/stable/userguide/tasks.html#custom-task-classes
