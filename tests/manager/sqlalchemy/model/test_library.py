@@ -108,10 +108,10 @@ class TestLibrary:
         parent = db.collection()
         db.default_collection().parent_id = parent.id
 
-        assert [
+        assert {
             db.default_collection(),
             db.default_inactive_collection(),
-        ] == library.associated_collections
+        } == set(library.associated_collections)
         assert [db.default_collection()] == library.active_collections
 
     def test_estimated_holdings_by_language(self, db: DatabaseTransactionFixture):
