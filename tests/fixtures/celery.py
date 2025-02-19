@@ -42,7 +42,6 @@ def celery_pydantic_config() -> CeleryConfiguration:
     return CeleryConfiguration.model_construct(
         broker_url="memory://",
         result_backend="cache+memory://",
-        task_always_eager=True,
     )
 
 

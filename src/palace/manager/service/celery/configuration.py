@@ -32,7 +32,7 @@ class CeleryConfiguration(ServiceConfiguration):
 
     # Broker options for both Redis and SQS
     broker_transport_options_visibility_timeout: int = 3600  # 1 hour
-    task_always_eager: bool = False
+    result_expires: int = 3600  # 1 hour  (default is 1 day)
     task_acks_late: bool = True
     task_reject_on_worker_lost: bool = True
     task_remote_tracebacks: bool = True

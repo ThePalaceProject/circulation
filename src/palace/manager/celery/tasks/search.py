@@ -60,7 +60,7 @@ def add_documents_to_index(
 class FailedToIndex(BasePalaceException): ...
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4, ignore_result=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
     """
     Submit all works that are presentation ready to the search index.
@@ -99,7 +99,7 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
     task_lock.release()
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4, ignore_result=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def update_read_pointer(task: Task) -> None:
     """
     Update the read pointer to the latest revision.
@@ -125,7 +125,7 @@ def update_read_pointer(task: Task) -> None:
     )
 
 
-@shared_task(queue=QueueNames.default, bind=True, ignore_result=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
     with TaskLock(task).lock():
@@ -144,7 +144,7 @@ def search_indexing(task: Task, batch_size: int = 500) -> None:
     return
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4, ignore_result=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def index_works(task: Task, works: Sequence[int]) -> None:
     index = task.services.search.index()
 

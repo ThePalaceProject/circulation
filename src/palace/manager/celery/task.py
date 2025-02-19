@@ -29,9 +29,6 @@ class Task(celery.Task, LoggerMixin, SessionMixin):
       ...
     ```
 
-    NB: For tasks that do not return a result, you must set the ignore_result attribute to True on the @shared_task
-    annotation.  Otherwise, empty results will accumulate in the result backend.
-
     This class follows the pattern suggested in the Celery documentation:
     https://docs.celeryq.dev/en/stable/userguide/tasks.html#custom-task-classes
 
