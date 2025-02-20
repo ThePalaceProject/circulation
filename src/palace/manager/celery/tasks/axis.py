@@ -230,41 +230,28 @@ def import_identifiers(
 
     processed_count += total_imported_in_current_task
 
+    task.log.info(
+        f"Imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
+    )
+
     if len(identifiers) > 0:
-        requeue_import_identifiers_task(
-            batch_size=batch_size,
-            collection=collection,
-            identifiers=identifiers,
-            processed_count=processed_count,
-            task=task,
+        task.log.info(
+            f"Replacing task to continue importing remaining {len(identifiers)} "
+            f"for collection ({collection.name}, id={collection.id})"
+        )
+
+        raise task.replace(
+            import_identifiers.s(
+                collection_id=collection.id,
+                identifiers=identifiers,
+                batch_size=batch_size,
+                processed_count=processed_count,
+            )
         )
     else:
         task.log.info(
             f"Finished run importing identifiers for collection ({collection.name}, id={collection_id})"
         )
-
-    task.log.info(
-        f"Imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
-    )
-
-
-def requeue_import_identifiers_task(
-    task: Task,
-    batch_size: int,
-    collection: Collection,
-    identifiers: list[str],
-    processed_count: int,
-) -> None:
-    import_identifiers.delay(
-        collection_id=collection.id,
-        identifiers=identifiers,
-        batch_size=batch_size,
-        processed_count=processed_count,
-    )
-    task.log.info(
-        f"Spawned subtask to continue importing remaining {len(identifiers)} "
-        f"for collection ({collection.name}, id={collection.id})"
-    )
 
 
 @retry(
@@ -325,7 +312,7 @@ def reap_all_collections(task: Task) -> None:
             )
             reap_collection.delay(collection_id=collection.id)
 
-        task.log.info(f"Finished queuing collection for reaping.")
+        task.log.info(f"Finished queuing collections for reaping.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -374,22 +361,21 @@ def reap_collection(
 
     if identifier_count >= batch_size:
         new_offset = offset + identifier_count
-        requeue_reap_collection(
-            batch_size=batch_size, collection_id=collection.id, new_offset=new_offset
-        )
+
         task.log.info(
-            f"Queued reap_collection task at offset={new_offset} for collection "
+            f"Re-queuing reap_collection task at offset={new_offset} for collection "
             f'(name="{collection.name}", id={collection.id}).'
         )
+
+        raise task.replace(
+            reap_collection.s(
+                collection_id=collection_id,
+                new_offset=new_offset,
+                batch_size=batch_size,
+            )
+        )
+
     else:
         task.log.info(
             f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
         )
-
-
-def requeue_reap_collection(
-    batch_size: int, collection_id: int, new_offset: int
-) -> None:
-    reap_collection.delay(
-        collection_id=collection_id, new_offset=new_offset, batch_size=batch_size
-    )
