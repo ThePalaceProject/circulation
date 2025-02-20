@@ -414,6 +414,14 @@ class DatabaseTransactionFixture:
         self._session = SessionManager.session_from_connection(database.connection)
         self._transaction = database.connection.begin_nested()
 
+        self._goal_registry_mapping: Mapping[Goals, IntegrationRegistry[Any]] = {
+            Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
+            Goals.DISCOVERY_GOAL: self._services.services.integration_registry.discovery(),
+            Goals.LICENSE_GOAL: self._services.services.integration_registry.license_providers(),
+            Goals.METADATA_GOAL: self._services.services.integration_registry.metadata(),
+            Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
+        }
+
     def _make_default_library(self) -> Library:
         """Ensure that the default library exists in the given database."""
         library = self.library("default", "default")
@@ -971,16 +979,6 @@ class DatabaseTransactionFixture:
 
     def isbn_take(self) -> str:
         return self._isbns.pop()
-
-    @cached_property
-    def _goal_registry_mapping(self) -> Mapping[Goals, IntegrationRegistry[Any]]:
-        return {
-            Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
-            Goals.DISCOVERY_GOAL: self._services.services.integration_registry.discovery(),
-            Goals.LICENSE_GOAL: self._services.services.integration_registry.license_providers(),
-            Goals.METADATA_GOAL: self._services.services.integration_registry.metadata(),
-            Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
-        }
 
     def protocol_string(
         self, goal: Goals, protocol: type[BaseCirculationAPI[Any, Any]]
