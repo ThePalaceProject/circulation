@@ -181,12 +181,19 @@ export PALACE_SEARCH_URL="http://localhost:9200"
 #### Celery
 
 We use [Celery](https://docs.celeryproject.org/en/stable/) to run background tasks. To configure Celery, you need to
-pass a broker URL to the application.
+pass a broker URL and a result backend url to the application.
 
 - `PALACE_CELERY_BROKER_URL`: The URL of the broker to use for Celery. (**required**).
     - for example:
         ```sh
           export PALACE_CELERY_BROKER_URL="redis://localhost:6379/0"`
+
+        ```
+- `PALACE_CELERY_RESULT_BACKEND`: The url of the result backend to use for Celery. (**required**).
+    - for example:
+        ```sh
+          export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"`
+
         ```
 
 We support overriding a number of other Celery settings via environment variables, but in most cases

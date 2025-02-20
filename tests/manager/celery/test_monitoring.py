@@ -80,7 +80,8 @@ class CloudwatchCameraFixture:
 
     def configure_app(
         self,
-        broker_url: str = "redis://testtesttest:1234/1",
+        broker_url: str = "redis://testtesttest:1234/0",
+        result_backend: str = "redis://testtesttest:1234/2",
         region: str = "region",
         dry_run: bool = False,
         manager_name: str = "manager",
@@ -91,6 +92,7 @@ class CloudwatchCameraFixture:
         queues = queues or ["queue1", "queue2"]
         self.app.conf = {
             "broker_url": broker_url,
+            "result_backend": result_backend,
             "cloudwatch_statistics_region": region,
             "cloudwatch_statistics_dryrun": dry_run,
             "broker_transport_options": {"global_keyprefix": manager_name},
@@ -211,7 +213,7 @@ class TestCloudwatch:
         assert cloudwatch.queues == {"queue1", "queue2"}
         assert cloudwatch.redis_client == cloudwatch_camera.mock_get_redis.return_value
         cloudwatch_camera.mock_get_redis.assert_called_once_with(
-            "redis://testtesttest:1234/1",
+            "redis://testtesttest:1234/0",
             "manager",
         )
 

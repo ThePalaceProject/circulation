@@ -19,6 +19,7 @@ class CeleryConfiguration(ServiceConfiguration):
     # this issue: https://github.com/pydantic/pydantic/issues/7267. If / when that
     # is resolved we can switch to using the Pydantic URL type.
     broker_url: str
+    result_backend: str
     broker_connection_retry_on_startup: bool = True
 
     # Redis broker options
@@ -31,7 +32,7 @@ class CeleryConfiguration(ServiceConfiguration):
 
     # Broker options for both Redis and SQS
     broker_transport_options_visibility_timeout: int = 3600  # 1 hour
-
+    result_expires: int = 3600  # 1 hour  (default is 1 day)
     task_acks_late: bool = True
     task_reject_on_worker_lost: bool = True
     task_remote_tracebacks: bool = True
