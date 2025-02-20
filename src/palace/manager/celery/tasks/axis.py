@@ -22,6 +22,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
 DEFAULT_BATCH_SIZE: int = 25
@@ -48,7 +49,9 @@ def import_all_collections(
             list_identifiers_for_import.apply_async(
                 (collection.id),
                 link=import_identifiers.s(
-                    collection_id=collection.id, batch_size=batch_size
+                    collection_id=collection.id,
+                    batch_size=batch_size,
+                    import_all=import_all,
                 ),
             )
 
@@ -71,17 +74,22 @@ def list_identifiers_for_import(
     lock = _redis_lock_queue_collection_import(
         task.services.redis.client(), collection_id
     )
-    with lock.lock() as locked:
-        if not locked:
-            task.log.info(
-                f"Skipping collection batch queuing:  {collection_id} because another task holds its lock."
-            )
-            return None
+    with lock.lock(raise_when_not_acquired=False) as locked:
 
         with task.transaction() as session:
             collection = Collection.by_id(session, collection_id)
             if not collection:
                 task.log.error(f"Collection not found:  {collection_id} : ignoring...")
+                return None
+
+            if not locked:
+                # we want to log
+                task.log.warning(
+                    f'Skipping collection batch queuing:  "{collection.name}"({collection_id}) because another '
+                    f"task holds its lock. This means that a previously spawned instance of this task is taking an "
+                    f"unexpectedly long time. It is likely that  this collection is being processed for the first time "
+                    f"and therefore must read the entire list of identifiers for this collection."
+                )
                 return None
 
             # retrieve timestamp of last run
@@ -92,7 +100,7 @@ def list_identifiers_for_import(
                 collection=collection,
             )
 
-            # if import_all  use default start date
+            # if import_all use default start date
             if import_all:
                 start_time_of_last_scan = DEFAULT_START_TIME
             else:
@@ -162,7 +170,7 @@ def timestamp(
     return timestamp
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def import_identifiers(
     task: Task,
     collection_id: int,
@@ -185,7 +193,7 @@ def import_identifiers(
         )
         return None
 
-    with task.session() as session:
+    with task.transaction() as session:
         collection = Collection.by_id(session, id=collection_id)
         if not collection:
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
@@ -203,8 +211,18 @@ def import_identifiers(
                 )
             ]
 
-            for metadata, circulation in api.availability_by_title_ids(title_ids=batch):
-                process_book(task, session, api, metadata, circulation)
+            try:
+                for metadata, circulation in api.availability_by_title_ids(
+                    title_ids=batch
+                ):
+                    process_book(task, session, api, metadata, circulation)
+            except Exception as e:
+                wait_time = exponential_backoff(task.request.retries)
+                task.log.error(
+                    f"Something unexpected went wrong while processing a batch of titles for collection "
+                    f'"{collection.name}" task(id={task.id} due to {e}. Retrying in {wait_time} seconds.'
+                )
+                raise task.retry(countdown=wait_time)
 
             batch_length = len(batch)
             task.log.info(

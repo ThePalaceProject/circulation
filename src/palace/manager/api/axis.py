@@ -667,9 +667,7 @@ class Axis360API(
         :yield: A stream of (Metadata, CirculationData) 2-tuples.
         """
         identifier_strings = self.create_identifier_strings(identifiers)
-        response = self.availability(title_ids=identifier_strings)
-        parser = BibliographicParser()
-        return parser.process_all(response.content)
+        return self.availability_by_title_ids(title_ids=identifier_strings)
 
     def _reap(self, identifier: Identifier) -> None:
         """Update our local circulation information to reflect the fact that

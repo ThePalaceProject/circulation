@@ -50,6 +50,7 @@ def test_queue_collection_import_lock(
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
     caplog: pytest.LogCaptureFixture,
 ):
+    db.default_collection()
     set_caplog_level_to_info(caplog)
     queue_collection_import_lock_fixture.task_lock.acquire()
     collection_id = TEST_COLLECTION_ID
@@ -86,7 +87,9 @@ def test_import_all_collections(
         assert mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs[
             "link"
         ] == import_identifiers.s(
-            collection_id=collection2.id, batch_size=DEFAULT_BATCH_SIZE
+            collection_id=collection2.id,
+            batch_size=DEFAULT_BATCH_SIZE,
+            import_all=False,
         )
         assert "Finished queuing 1 collection." in caplog.text
 
@@ -185,10 +188,7 @@ def test_import_items(
     collection = db.collection(name="test_collection", protocol=Axis360API.label())
 
     mock_api = MagicMock()
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch.object(axis, "requeue_import_identifiers_task") as requeue,
-    ):
+    with (patch.object(axis, "create_api") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -208,7 +208,6 @@ def test_import_items(
     assert mock_api.availability_by_title_ids.call_count == 1
     assert mock_api.availability_by_title_ids.call_args.kwargs["title_ids"] == title_ids
     assert mock_api.update_book.call_count == 2
-    assert requeue.call_count == 0
 
     assert f"Edition (id={edition_1.id}" in caplog.text
     assert (
@@ -230,8 +229,12 @@ def test_import_items_with_requeue(
     mock_api = MagicMock()
     with (
         patch.object(axis, "create_api") as mock_create_api,
-        patch.object(axis, "requeue_import_identifiers_task") as requeue,
+        patch("palace.manager.celery.task.Task.replace") as replace,
     ):
+        # Have the replace method return an exception rather than an Ignore exception which is what
+        # would happen in a production situation.  If we return Ignore() the wait() method will block
+        # indefinitely.
+        replace.return_value = Exception()
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -244,12 +247,16 @@ def test_import_items_with_requeue(
             (edition_1, False, lp_1, False),
             (edition_2, False, lp_2, False),
         ]
-        import_identifiers.delay(
-            collection.id,
-            identifiers=identifiers,
-            batch_size=1,
-            target_max_execution_time_in_seconds=0,
-        ).wait()
+
+        with pytest.raises(Exception) as exec_info:
+            import_identifiers.delay(
+                collection.id,
+                identifiers=identifiers,
+                batch_size=1,
+                target_max_execution_time_in_seconds=0,
+            ).wait(
+                propagate=True
+            )  # propagate the Exception.
 
     assert mock_api.availability_by_title_ids.call_count == 1
     assert (
@@ -257,12 +264,13 @@ def test_import_items_with_requeue(
         == title_ids[0:1]
     )
     assert mock_api.update_book.call_count == 1
-    assert requeue.call_count == 1
-    kwargs = requeue.call_args_list[0].kwargs
-    assert kwargs["processed_count"] == 1
-    assert kwargs["identifiers"] == title_ids[1:]
-    assert kwargs["collection"] == collection
-    assert kwargs["batch_size"] == 1
+    assert replace.call_count == 1
+    assert replace.call_args_list[0].args[0] == import_identifiers.s(
+        processed_count=1,
+        identifiers=title_ids[1:],
+        collection_id=collection.id,
+        batch_size=1,
+    )
 
     assert f"Edition (id={edition_1.id}" in caplog.text
     assert f"Finished run" not in caplog.text
@@ -286,7 +294,7 @@ def test_reap_all_collections(
         assert mock_reap_collection.delay.call_args_list[0].kwargs == {
             "collection_id": collection2.id,
         }
-        assert "Finished queuing collection for reaping." in caplog.text
+        assert "Finished queuing collections for reaping." in caplog.text
 
 
 def test_reap_collection_with_requeue(
@@ -309,18 +317,28 @@ def test_reap_collection_with_requeue(
     mock_api = MagicMock()
     with (
         patch.object(axis, "create_api") as mock_create_api,
-        patch.object(axis, "requeue_reap_collection") as requeue,
+        patch("palace.manager.celery.task.Task.replace") as replace,
     ):
         mock_create_api.return_value = mock_api
-        reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
+        # return exception rather than Ignore in order to prevent endless blocking on the wait() call below.
+        replace.return_value = Exception()
 
-    assert mock_api.update_licensepools_for_identifiers.call_count == 1
-    assert requeue.call_count == 1
-    assert requeue.call_args_list[0].kwargs["new_offset"] == 2
-    assert mock_api.update_licensepools_for_identifiers.call_args_list[0].kwargs == {
-        "identifiers": [x.primary_identifier for x in editions[0:2]],
-    }
-    assert f"Queued reap_collection task at offset=2" in caplog.text
+        with pytest.raises(Exception) as exec_info:
+            reap_collection.delay(collection_id=collection.id, batch_size=2).wait(
+                propagate=True
+            )
+
+        assert mock_api.update_licensepools_for_identifiers.call_count == 1
+        assert replace.call_count == 1
+        assert replace.call_args_list[0].args[0] == reap_collection.s(
+            collection_id=collection.id, new_offset=2, batch_size=2
+        )
+        assert mock_api.update_licensepools_for_identifiers.call_args_list[
+            0
+        ].kwargs == {
+            "identifiers": [x.primary_identifier for x in editions[0:2]],
+        }
+        assert f"Re-queuing reap_collection task at offset=2" in caplog.text
 
 
 def test_reap_collection_finish(
@@ -341,15 +359,11 @@ def test_reap_collection_finish(
         editions.append(edition)
 
     mock_api = MagicMock()
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch.object(axis, "requeue_reap_collection") as requeue,
-    ):
+    with (patch.object(axis, "create_api") as mock_create_api,):
         mock_create_api.return_value = mock_api
         reap_collection.delay(collection_id=collection.id).wait()
 
     assert mock_api.update_licensepools_for_identifiers.call_count == 1
-    assert requeue.call_count == 0
     assert mock_api.update_licensepools_for_identifiers.call_args_list[0].kwargs == {
         "identifiers": [x.primary_identifier for x in editions],
     }
@@ -359,7 +373,7 @@ def test_reap_collection_finish(
     )
 
 
-def test_retry(
+def test_retry_failed_process_book_call(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
