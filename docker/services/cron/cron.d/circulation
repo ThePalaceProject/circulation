@@ -90,11 +90,6 @@ HOME=/var/www/circulation
 # Every hour between 7AM - 1AM
 5 0,1,7-23 * * * root bin/run custom_list_update_new_entries >> /var/log/cron.log 2>&1
 
-# Notifications
-#
-10 */8 * * * root bin/run loan_notifications >> /var/log/cron.log 2>&1
-15 */8 * * * root bin/run hold_notifications >> /var/log/cron.log 2>&1
-
 # Audiobook playtimes
 # Every 12 hours, but spaced after hour 8 to reduce job cluttering
 0 8,20 * * * root bin/run playtime_summation >> /var/log/cron.log 2>&1

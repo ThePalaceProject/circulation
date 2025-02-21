@@ -69,6 +69,18 @@ def beat_schedule() -> dict[str, Any]:
                 hour="3",
             ),  # Run every day at 3:00 AM
         },
+        "loan_expiration_notifications": {
+            "task": "notifications.loan_expiration",
+            "schedule": crontab(
+                minute="*/20",
+            ),  # Run every 20 minutes
+        },
+        "hold_available_notifications": {
+            "task": "notifications.hold_available",
+            "schedule": crontab(
+                minute="*/20",
+            ),  # Run every 20 minutes
+        },
     }
 
 
