@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
-from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import (
     AudiobookMetadataParser,
@@ -19,12 +18,9 @@ from palace.manager.api.axis import (
     Axis360AcsFulfillment,
     Axis360API,
     Axis360APIConstants,
-    Axis360BibliographicCoverageProvider,
-    Axis360CirculationMonitor,
     Axis360Fulfillment,
     Axis360FulfillmentInfoResponseParser,
     Axis360Settings,
-    AxisCollectionReaper,
     AxisNowManifest,
     BibliographicParser,
     CheckinResponseParser,
@@ -46,17 +42,14 @@ from palace.manager.api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
-from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import (
     CirculationData,
     ContributorData,
     IdentifierData,
     Metadata,
     SubjectData,
-    TimestampData,
 )
 from palace.manager.integration.base import integration_settings_update
-from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -65,9 +58,8 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
-from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http import RemoteIntegrationException
@@ -867,228 +859,18 @@ class TestAxis360API:
                 merge=True,
             )
 
+    def test_availablility_by_title_ids(self, axis360: Axis360Fixture):
+        ids = ["my_id"]
+        with patch.object(axis360.api, "availability") as availability:
+            availability.content.return_value = """
+            <?xml version="1.0" encoding="utf-8"?>
+            """
+            for metadata, circulation in axis360.api.availability_by_title_ids(
+                title_ids=ids
+            ):
+                pass
 
-class TestCirculationMonitor:
-    def test_run(self, axis360: Axis360Fixture):
-        class Mock(Axis360CirculationMonitor):
-            def catch_up_from(self, start, cutoff, progress):
-                self.called_with = (start, cutoff, progress)
-
-        monitor = Mock(axis360.db.session, axis360.collection, api_class=MockAxis360API)
-
-        # The first time run() is called, catch_up_from() is asked to
-        # find events between DEFAULT_START_TIME and the current time.
-        monitor.run()
-        start, cutoff, progress = monitor.called_with
-        now = utc_now()
-        assert monitor.DEFAULT_START_TIME == start
-        assert (now - cutoff).total_seconds() < 2
-
-        # The second time run() is called, catch_up_from() is asked
-        # to find events between five minutes before the last cutoff,
-        # and what is now the current time.
-        monitor.run()
-        new_start, new_cutoff, new_progress = monitor.called_with
-        now = utc_now()
-        before_old_cutoff = cutoff - monitor.OVERLAP
-        assert before_old_cutoff == new_start
-        assert (now - new_cutoff).total_seconds() < 2
-
-    def test_catch_up_from(self, axis360: Axis360Fixture):
-        class MockAPI(MockAxis360API):
-            def recent_activity(self, since):
-                self.recent_activity_called_with = since
-                return [(1, "a"), (2, "b")]
-
-        class MockMonitor(Axis360CirculationMonitor):
-            processed = []
-
-            def process_book(self, bibliographic, circulation):
-                self.processed.append((bibliographic, circulation))
-
-        mock_api = MockAPI(axis360.db.session, axis360.collection)
-        monitor = MockMonitor(
-            axis360.db.session, axis360.collection, api_class=mock_api
-        )
-        data = axis360.sample_data("single_item.xml")
-        axis360.api.queue_response(200, content=data)
-        progress = TimestampData()
-        start_mock = MagicMock()
-        monitor.catch_up_from(start_mock, MagicMock(), progress)
-
-        # The start time was passed into recent_activity.
-        assert start_mock == mock_api.recent_activity_called_with
-
-        # process_book was called on each item returned by recent_activity.
-        assert [(1, "a"), (2, "b")] == monitor.processed
-
-        # The number of books processed was stored in
-        # TimestampData.achievements.
-        assert "Modified titles: 2." == progress.achievements
-
-    def test_process_book(self, axis360: Axis360Fixture):
-        monitor = Axis360CirculationMonitor(
-            axis360.db.session,
-            axis360.collection,
-            api_class=MockAxis360API,
-        )
-        edition, license_pool = monitor.process_book(
-            axis360.BIBLIOGRAPHIC_DATA, axis360.AVAILABILITY_DATA
-        )
-        assert "Faith of My Fathers : A Family Memoir" == edition.title
-        assert "eng" == edition.language
-        assert "Random House Inc" == edition.publisher
-        assert "Random House Inc2" == edition.imprint
-
-        assert Identifier.AXIS_360_ID == edition.primary_identifier.type
-        assert "0003642860" == edition.primary_identifier.identifier
-
-        [isbn] = [
-            x
-            for x in edition.equivalent_identifiers()
-            if x is not edition.primary_identifier
-        ]
-        assert Identifier.ISBN == isbn.type
-        assert "9780375504587" == isbn.identifier
-
-        assert ["McCain, John", "Salter, Mark"] == sorted(
-            x.sort_name for x in edition.contributors
-        )
-
-        subs = sorted(
-            (x.subject.type, x.subject.identifier)
-            for x in edition.primary_identifier.classifications
-        )
-        assert [
-            (Subject.BISAC, "BIOGRAPHY & AUTOBIOGRAPHY / Political"),
-            (Subject.FREEFORM_AUDIENCE, "Adult"),
-        ] == subs
-
-        assert 9 == license_pool.licenses_owned
-        assert 8 == license_pool.licenses_available
-        assert 0 == license_pool.patrons_in_hold_queue
-        assert datetime_utc(2015, 5, 20, 2, 9, 8) == license_pool.last_checked
-
-        # Three circulation events were created, backdated to the
-        # last_checked date of the license pool.
-        events = license_pool.circulation_events
-
-        for e in events:
-            assert e.start == license_pool.last_checked
-
-        # A presentation-ready work has been created for the LicensePool.
-        work = license_pool.work
-        assert True == work.presentation_ready
-        assert "Faith of My Fathers : A Family Memoir" == work.title
-
-        # A CoverageRecord has been provided for this book in the Axis
-        # 360 bibliographic coverage provider, so that in the future
-        # it doesn't have to make a separate API request to ask about
-        # this book.
-        records = [
-            x
-            for x in license_pool.identifier.coverage_records
-            if x.data_source.name == DataSource.AXIS_360 and x.operation is None
-        ]
-        assert 1 == len(records)
-
-        # Now, another collection with the same book shows up.
-        collection2 = MockAxis360API.mock_collection(
-            axis360.db.session, axis360.db.default_library(), "coll2"
-        )
-        monitor = Axis360CirculationMonitor(
-            axis360.db.session,
-            collection2,
-            api_class=MockAxis360API,
-        )
-        edition2, license_pool2 = monitor.process_book(
-            axis360.BIBLIOGRAPHIC_DATA, axis360.AVAILABILITY_DATA
-        )
-
-        # Both license pools have the same Work and the same presentation
-        # edition.
-        assert license_pool.work == license_pool2.work
-        assert license_pool.presentation_edition == license_pool2.presentation_edition
-
-    def test_process_book_updates_old_licensepool(self, axis360: Axis360Fixture):
-        """If the LicensePool already exists, the circulation monitor
-        updates it.
-        """
-        edition, licensepool = axis360.db.edition(
-            with_license_pool=True,
-            identifier_type=Identifier.AXIS_360_ID,
-            identifier_id="0003642860",
-        )
-        licensepool, _ = get_one_or_create(
-            axis360.db.session, LicensePool, id=licensepool.id
-        )
-        # We start off with availability information based on the
-        # default for test data.
-        assert 1 == licensepool.licenses_owned
-
-        identifier = IdentifierData(
-            type=licensepool.identifier.type,
-            identifier=licensepool.identifier.identifier,
-        )
-        metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
-        monitor = Axis360CirculationMonitor(
-            axis360.db.session,
-            axis360.collection,
-            api_class=MockAxis360API,
-        )
-        edition, licensepool = monitor.process_book(metadata, axis360.AVAILABILITY_DATA)
-
-        # Now we have information based on the CirculationData.
-        assert 9 == licensepool.licenses_owned
-
-    # def test_retry_failure
-
-    def test_retry(self, axis360: Axis360Fixture):
-        monitor = Axis360CirculationMonitor(
-            axis360.db.session,
-            axis360.collection,
-            api_class=MockAxis360API,
-        )
-
-        edition, licensepool = axis360.db.edition(
-            with_license_pool=True,
-            identifier_type=Identifier.AXIS_360_ID,
-            identifier_id="012345678",
-        )
-        identifier = IdentifierData(
-            type=licensepool.identifier.type,
-            identifier=licensepool.identifier.identifier,
-        )
-
-        metadata = Metadata(DataSource.AXIS_360, primary_identifier=identifier)
-
-        with patch("tests.mocks.axis.MockAxis360API.update_book") as update_book, patch(
-            "tests.mocks.axis.MockAxis360API.recent_activity"
-        ) as recent_activity:
-            update_book.side_effect = [
-                ObjectDeletedError({}, "object deleted"),
-                StaleDataError("stale data"),
-            ]
-
-            update_book.return_value = (edition, False, licensepool, False)
-            recent_activity.return_value = [(metadata, metadata.circulation)]
-            monitor = Axis360CirculationMonitor(
-                axis360.db.session,
-                axis360.collection,
-                api_class=MockAxis360API,
-            )
-
-            monitor.run()
-
-            assert update_book.call_count == 3
-
-
-class TestReaper:
-    def test_instantiate(self, axis360: Axis360Fixture):
-        # Validate the standard CollectionMonitor interface.
-        monitor = AxisCollectionReaper(
-            axis360.db.session, axis360.collection, api_class=MockAxis360API
-        )
+            assert availability.call_args_list[0].kwargs["title_ids"] == ids
 
 
 class TestParsers:
@@ -1949,9 +1731,6 @@ class Axis360ProviderFixture(Axis360Fixture):
     def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
         super().__init__(db, files)
         mock_api = MockAxis360API(db.session, self.collection)
-        self.provider = Axis360BibliographicCoverageProvider(
-            self.collection, api_class=mock_api
-        )
         self.api = mock_api
 
 
@@ -1960,91 +1739,6 @@ def axis360provider(
     db: DatabaseTransactionFixture, axis_files_fixture: AxisFilesFixture
 ) -> Axis360ProviderFixture:
     return Axis360ProviderFixture(db, axis_files_fixture)
-
-
-class TestAxis360BibliographicCoverageProvider:
-    """Test the code that looks up bibliographic information from Axis 360."""
-
-    def test_script_instantiation(self, axis360provider: Axis360ProviderFixture):
-        """Test that RunCoverageProviderScript can instantiate
-        the coverage provider.
-        """
-        script = RunCollectionCoverageProviderScript(
-            Axis360BibliographicCoverageProvider,
-            axis360provider.db.session,
-            api_class=MockAxis360API,
-        )
-        [provider] = script.providers
-        assert isinstance(provider, Axis360BibliographicCoverageProvider)
-        assert isinstance(provider.api, MockAxis360API)
-
-    def test_process_item_creates_presentation_ready_work(
-        self, axis360provider: Axis360ProviderFixture
-    ):
-        """Test the normal workflow where we ask Axis for data,
-        Axis provides it, and we create a presentation-ready work.
-        """
-        data = axis360provider.sample_data("single_item.xml")
-        axis360provider.api.queue_response(200, content=data)
-
-        # Here's the book mentioned in single_item.xml.
-        identifier = axis360provider.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        identifier.identifier = "0003642860"
-
-        # This book has no LicensePool.
-        assert [] == identifier.licensed_through
-
-        # Run it through the Axis360BibliographicCoverageProvider
-        [result] = axis360provider.provider.process_batch([identifier])
-        assert identifier == result
-
-        # A LicensePool was created. We know both how many copies of this
-        # book are available, and what formats it's available in.
-        [pool] = identifier.licensed_through
-        assert 9 == pool.licenses_owned
-        [lpdm] = pool.delivery_mechanisms
-        assert (
-            "application/epub+zip (application/vnd.adobe.adept+xml)"
-            == lpdm.delivery_mechanism.name
-        )
-
-        # A Work was created and made presentation ready.
-        assert "Faith of My Fathers : A Family Memoir" == pool.work.title
-        assert True == pool.work.presentation_ready
-
-    def test_transient_failure_if_requested_book_not_mentioned(
-        self, axis360provider: Axis360ProviderFixture
-    ):
-        """Test an unrealistic case where we ask Axis 360 about one book and
-        it tells us about a totally different book.
-        """
-        # We're going to ask about abcdef
-        identifier = axis360provider.db.identifier(
-            identifier_type=Identifier.AXIS_360_ID
-        )
-        identifier.identifier = "abcdef"
-
-        # But we're going to get told about 0003642860.
-        data = axis360provider.sample_data("single_item.xml")
-        axis360provider.api.queue_response(200, content=data)
-
-        [result] = axis360provider.provider.process_batch([identifier])
-
-        # Coverage failed for the book we asked about.
-        assert isinstance(result, CoverageFailure)
-        assert identifier == result.obj
-        assert "Book not in collection" == result.exception
-
-        # And nothing major was done about the book we were told
-        # about. We created an Identifier record for its identifier,
-        # but no LicensePool or Edition.
-        wrong_identifier = Identifier.for_foreign_id(
-            axis360provider.db.session, Identifier.AXIS_360_ID, "0003642860"
-        )
-        assert [] == identifier.licensed_through
-        assert [] == identifier.primarily_identifies
 
 
 class Axis360AcsFulfillmentFixture:

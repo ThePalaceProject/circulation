@@ -105,6 +105,7 @@ class Timestamp(Base):
     __tablename__ = "timestamps"
 
     MONITOR_TYPE = "monitor"
+    TASK_TYPE = "task"
     COVERAGE_PROVIDER_TYPE = "coverage_provider"
     SCRIPT_TYPE = "script"
 
@@ -117,6 +118,7 @@ class Timestamp(Base):
         MONITOR_TYPE,
         COVERAGE_PROVIDER_TYPE,
         SCRIPT_TYPE,
+        TASK_TYPE,
         name="service_type",
     )
 
