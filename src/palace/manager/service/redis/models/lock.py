@@ -17,6 +17,14 @@ class LockError(BasePalaceException):
     pass
 
 
+class LockValueError(LockError, ValueError):
+    pass
+
+
+class LockNotAcquired(LockError):
+    pass
+
+
 class BaseRedisLock(ABC):
     def __init__(
         self,
@@ -72,6 +80,7 @@ class BaseRedisLock(ABC):
     @contextmanager
     def lock(
         self,
+        raise_when_not_acquired: bool = True,
         release_on_error: bool = True,
         release_on_exit: bool = True,
         ignored_exceptions: tuple[type[BaseException], ...] = (),
@@ -79,6 +88,7 @@ class BaseRedisLock(ABC):
         """
         Context manager for acquiring and releasing the lock.
 
+        :param raise_when_not_acquired: If True, raise an exception if the lock is not acquired.
         :param release_on_error: If True, release the lock if an exception occurs.
         :param release_on_exit: If True, release the lock when the context manager exits.
         :param ignored_exceptions: Exceptions that should not cause the lock to be released.
@@ -86,6 +96,9 @@ class BaseRedisLock(ABC):
         :return: The result of the lock acquisition. You must check the return value to see if the lock was acquired.
         """
         locked = self.acquire()
+        if raise_when_not_acquired and not locked:
+            raise LockNotAcquired(f"Lock {self.key} could not be acquired")
+
         exception_occurred = False
         try:
             yield locked
@@ -180,7 +193,7 @@ class RedisLock(BaseRedisLock):
         :return: The result of the lock acquisition. You must check the return value to see if the lock was acquired.
         """
         if timeout < 0:
-            raise LockError("Cannot specify a negative timeout")
+            raise LockValueError("Cannot specify a negative timeout")
 
         start_time = time.time()
         while timeout == 0 or (time.time() - start_time) < timeout:
@@ -216,8 +229,8 @@ class RedisLock(BaseRedisLock):
 class TaskLock(RedisLock):
     def __init__(
         self,
-        redis_client: Redis,
         task: Task,
+        redis_client: Redis | None = None,
         lock_name: str | None = None,
         lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
@@ -225,10 +238,12 @@ class TaskLock(RedisLock):
         random_value = task.request.root_id or task.request.id
         if lock_name is None:
             if task.name is None:
-                raise LockError(
+                raise LockValueError(
                     "Task.name must not be None if lock_name is not provided."
                 )
             name = ["Task", task.name]
         else:
             name = [lock_name]
+        if redis_client is None:
+            redis_client = task.services.redis.client()
         super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)

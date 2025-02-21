@@ -5,7 +5,11 @@ from dependency_injector.containers import DeclarativeContainer
 from firebase_admin import App, initialize_app
 from firebase_admin.credentials import Certificate
 
-from palace.manager.service.fcm.fcm import credentials
+from palace.manager.service.fcm.fcm import (
+    SendNotificationsCallable,
+    credentials,
+    send_notifications,
+)
 
 
 class FcmContainer(DeclarativeContainer):
@@ -23,4 +27,9 @@ class FcmContainer(DeclarativeContainer):
 
     app: providers.Provider[App] = providers.Singleton(
         initialize_app, credential=certificate
+    )
+
+    send_notifications: SendNotificationsCallable = providers.Callable(
+        send_notifications,
+        app=app,
     )

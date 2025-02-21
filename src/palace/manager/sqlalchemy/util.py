@@ -11,8 +11,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
 from sqlalchemy.orm import Session
 
-from palace.manager.util.log import logger_for_function
-
 # This is the lock ID used to ensure that only one circulation manager
 # initializes or migrates the database at a time.
 LOCK_ID_DB_INIT = 1000000001
@@ -112,6 +110,9 @@ def get_one(
         return None
 
 
+log = logging.getLogger(__name__)
+
+
 def get_one_or_create(
     db: Session,
     model: type[T],
@@ -133,7 +134,7 @@ def get_one_or_create(
                 obj = create(db, model, create_method, create_method_kwargs, **kwargs)
                 return obj
         except IntegrityError as e:
-            logger_for_function().debug(
+            log.debug(
                 "INTEGRITY ERROR on %r %r, %r: %r",
                 model,
                 create_method_kwargs,
