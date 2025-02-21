@@ -420,12 +420,12 @@ AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES = pd(
     detail=_("Entries are automatically managed for auto update custom lists"),
 )
 
-COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY = pd(
+COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY = pd(
     "http://librarysimplified.org/terms/problem/collection-not-associated-with-library",
     status_code=400,
-    title=_("Collection not associated with library"),
+    title=_("Collection not active for library"),
     detail=_(
-        "You can't add a collection to a list unless it is associated with the list's library."
+        "You can't add a collection to a list unless it is active for the list's library."
     ),
 )
 

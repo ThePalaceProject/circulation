@@ -1577,8 +1577,8 @@ class Filter(SearchBase):
         """
 
         if isinstance(collections, Library):
-            # Find all works in this Library's collections.
-            collections = collections.associated_collections
+            # Find all works in this Library's active collections.
+            collections = collections.active_collections
         self.collection_ids = self._filter_ids(collections)
 
         self.media = media

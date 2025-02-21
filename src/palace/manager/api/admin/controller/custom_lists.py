@@ -17,7 +17,7 @@ from palace.manager.api.admin.problem_details import (
     ADMIN_NOT_AUTHORIZED,
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
     CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
-    COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY,
+    COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY,
     CUSTOM_LIST_NAME_ALREADY_IN_USE,
     CUSTOMLIST_CANNOT_DELETE_SHARE,
     MISSING_COLLECTION,
@@ -286,9 +286,9 @@ class CustomListsController(
             if not collection:
                 self._db.rollback()
                 return MISSING_COLLECTION
-            if list.library not in collection.associated_libraries:
+            if list.library not in collection.active_libraries:
                 self._db.rollback()
-                return COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY
+                return COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY
             new_collections.append(collection)
         list.collections = new_collections
 

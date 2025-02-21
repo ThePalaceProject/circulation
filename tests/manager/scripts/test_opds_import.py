@@ -21,6 +21,10 @@ class MockOPDSImportMonitor:
     def run(self):
         self.was_run = True
 
+    @classmethod
+    def reset(cls):
+        cls.INSTANCES.clear()
+
 
 class MockOPDSImporter:
     """Pretend to import titles from an OPDS feed."""
@@ -35,36 +39,46 @@ class MockOPDSImportScript(OPDSImportScript):
 
 class TestOPDSImportScript:
     def test_do_run(self, db: DatabaseTransactionFixture):
-        # Create a collection to use as the default
-        db.default_collection()
-
+        # Create the default collections: active and inactive.
+        db.make_default_library_with_collections()
         script = MockOPDSImportScript(db.session)
+
+        # Run the script with no arguments.
+        MockOPDSImportMonitor.reset()
         script.do_run([])
 
-        # Since we provided no collection, a MockOPDSImportMonitor
-        # was instantiated for each OPDS Import collection in the database.
-        monitor = MockOPDSImportMonitor.INSTANCES.pop()
-        assert db.default_collection() == monitor.collection
+        # Since we provided no collection, a MockOPDSImportMonitor is
+        # instantiated for each OPDS Import collection in the database,
+        # both the active one and the inactive one.
+        monitor_collections = {x.collection for x in MockOPDSImportMonitor.INSTANCES}
+        assert len(MockOPDSImportMonitor.INSTANCES) == 2
+        assert monitor_collections == {
+            db.default_collection(),
+            db.default_inactive_collection(),
+        }
 
-        args = ["--collection=%s" % db.default_collection().name]
+        # If we provide one or more collection names, then `MockOPDSImportMonitor`s
+        # are instantiated for only the specified collections
+        MockOPDSImportMonitor.reset()
+        args = [f"--collection={db.default_collection().name}"]
         script.do_run(args)
 
-        # If we provide the collection name, a MockOPDSImportMonitor is
-        # also instantiated.
-        monitor = MockOPDSImportMonitor.INSTANCES.pop()
-        assert db.default_collection() == monitor.collection
-        assert True == monitor.was_run
+        monitor_collections = {x.collection for x in MockOPDSImportMonitor.INSTANCES}
+        assert len(MockOPDSImportMonitor.INSTANCES) == 1
+        [monitor] = MockOPDSImportMonitor.INSTANCES
+        assert monitor_collections == {db.default_collection()}
 
         # Our replacement OPDS importer class was passed in to the
         # monitor constructor. If this had been a real monitor, that's the
         # code we would have used to import OPDS feeds.
         assert MockOPDSImporter == monitor.kwargs["import_class"]
-        assert False == monitor.kwargs["force_reimport"]
+        assert monitor.kwargs["force_reimport"] is False
 
-        # Setting --force changes the 'force_reimport' argument
+        # Adding --force changes the 'force_reimport' argument
         # passed to the monitor constructor.
+        MockOPDSImportMonitor.reset()
         args.append("--force")
         script.do_run(args)
-        monitor = MockOPDSImportMonitor.INSTANCES.pop()
+        [monitor] = MockOPDSImportMonitor.INSTANCES
         assert db.default_collection() == monitor.collection
-        assert True == monitor.kwargs["force_reimport"]
+        assert monitor.kwargs["force_reimport"] is True

@@ -1417,14 +1417,14 @@ class TestLoanController:
         assert not "<entry>" in response.get_data(as_text=True)
         assert response.headers["Cache-Control"].startswith("private,")
 
-        # We queued up a sync_patron_activity task to go sync the patrons information
+        # We queued up a sync_patron_activity task to go sync the patrons information,
+        # Only active collections are synced.
         assert isinstance(patron, Patron)
-        assert sync_task.apply_async.call_count == len(
-            patron.library.associated_collections
-        )
-        for library in patron.library.associated_collections:
+        patron_collections = patron.library.active_collections
+        assert sync_task.apply_async.call_count == len(patron_collections)
+        for collection in patron_collections:
             sync_task.apply_async.assert_any_call(
-                (library.id, patron.id, loan_fixture.valid_credentials["password"]),
+                (collection.id, patron.id, loan_fixture.valid_credentials["password"]),
             )
 
         # Set up some loans and holds

@@ -39,27 +39,33 @@ class TestRunSelfTestsScript:
             library2.name,
         )
 
-        # The default library is the only one with a collection;
-        # test_collection() was called on that collection.
-        [(collection, api_map)] = script.tested
-        assert [collection] == library1.associated_collections
+        # `library2` doesn't have any associated collections, but `library1`
+        # has two, the default and default_inactive collections.
+        [(c_default, api_map_1), (c_default_inactive, api_map_2)] = script.tested
+        assert {c_default, c_default_inactive} == {
+            db.default_collection(),
+            db.default_inactive_collection(),
+        }
+        assert set(library1.associated_collections) == {c_default, c_default_inactive}
 
-        # The API lookup map passed into test_collection() is a LicenseProvidersRegistry.
-        assert isinstance(api_map, LicenseProvidersRegistry)
+        # The API lookup maps passed into test_collection() are `LicenseProvidersRegistry`s.
+        assert isinstance(api_map_1, LicenseProvidersRegistry)
+        assert isinstance(api_map_2, LicenseProvidersRegistry)
 
         # If test_collection raises an exception, the exception is recorded,
         # and we move on.
         class MockScript2(MockScript):
             def test_collection(self, collection, api_map):
-                raise Exception("blah")
+                raise Exception(f"blah - {collection.name}")
 
         out = StringIO()
         script = MockScript2(db.session, out)
         script.do_run()
-        assert (
-            out.getvalue()
-            == "Testing %s\n  Exception while running self-test: 'blah'\nTesting %s\n"
-            % (library1.name, library2.name)
+        assert out.getvalue() == (
+            f"Testing {library1.name}\n"
+            f"  Exception while running self-test: 'blah - {c_default.name}'\n"
+            f"  Exception while running self-test: 'blah - {c_default_inactive.name}'\n"
+            f"Testing {library2.name}\n"
         )
 
     def test_test_collection(self, db: DatabaseTransactionFixture):
