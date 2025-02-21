@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, PropertyMock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
 from palace.manager.integration.configuration.formats import FormatPriorities
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -271,7 +272,7 @@ class TestRightsStatus:
 class LicenseTestFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
-        self.pool = db.licensepool(None)
+        self.pool = db.licensepool(None, collection=db.default_collection())
 
         now = utc_now()
         next_year = now + datetime.timedelta(days=365)
@@ -328,6 +329,14 @@ class LicenseTestFixture:
             status=LicenseStatus.unavailable,
         )
 
+        self.inactive_pool = db.licensepool(
+            None, collection=db.default_inactive_collection()
+        )
+        self.inactive = db.license(
+            self.inactive_pool,
+            status=LicenseStatus.available,
+        )
+
 
 @pytest.fixture(scope="function")
 def licenses(db: DatabaseTransactionFixture) -> LicenseTestFixture:
@@ -338,18 +347,39 @@ class TestLicense:
     def test_loan_to(self, licenses: LicenseTestFixture):
         # Verify that loaning a license also loans its pool.
         pool = licenses.pool
-        license = licenses.perpetual
-        patron = licenses.db.patron()
-        loan, is_new = license.loan_to(patron)
+        collection = pool.collection
+        license = licenses.time_limited
+
+        patron1 = licenses.db.patron()
+        patron2 = licenses.db.patron()
+        assert patron1 != patron2
+
+        loan, is_new = license.loan_to(patron1)
         assert license == loan.license
         assert pool == loan.license_pool
         assert True == is_new
 
-        loan2, is_new = license.loan_to(patron)
+        loan2, is_new = license.loan_to(patron1)
         assert loan == loan2
         assert license == loan2.license
         assert pool == loan2.license_pool
         assert False == is_new
+
+        # Now the collection becomes inactive.
+        db = licenses.db
+        db.make_collection_inactive(collection)
+
+        # Getting the existing loan should work, even if the collection is inactive.
+        loan3, is_new = license.loan_to(patron1)
+        assert loan3 == loan
+        assert loan3.license == license
+        assert loan3.license_pool == pool
+        assert is_new is False
+
+        # However, trying to get a new loan should fail.
+        with pytest.raises(CannotLoan) as exc:
+            license.loan_to(patron2)
+        assert "Cannot create a new loan on an inactive collection" in str(exc.value)
 
     @pytest.mark.parametrize(
         (
@@ -1239,16 +1269,20 @@ class TestLicensePool:
         # Test our ability to put a Patron in the holds queue for a LicensePool.
 
         pool = db.licensepool(None)
-        patron = db.patron()
-        now = utc_now()
+        collection = pool.collection
 
+        patron1 = db.patron()
+        patron2 = db.patron()
+        assert patron1 != patron2
+
+        now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         tomorrow = now + datetime.timedelta(days=1)
 
         fulfillment = pool.delivery_mechanisms[0]
         position = 99
         hold, is_new = pool.on_hold_to(
-            patron,
+            patron1,
             start=yesterday,
             end=tomorrow,
             position=position,
@@ -1257,20 +1291,38 @@ class TestLicensePool:
         assert is_new is True
         assert isinstance(hold, Hold)
         assert pool == hold.license_pool
-        assert patron == hold.patron
+        assert patron1 == hold.patron
         assert yesterday == hold.start
         assert tomorrow == hold.end
         assert position == hold.position
 
         # 'Creating' a hold that already exists returns the existing hold.
         hold2, is_new = pool.on_hold_to(
-            patron,
+            patron1,
             start=yesterday,
             end=tomorrow,
             position=position,
         )
         assert is_new is False
         assert hold == hold2
+
+        # Now the collection becomes inactive.
+        db.make_collection_inactive(collection)
+
+        # Getting the existing hold should work, even if the collection is inactive.
+        hold3, is_new = pool.on_hold_to(
+            patron1,
+            start=yesterday,
+            end=tomorrow,
+            position=position,
+        )
+        assert hold3 == hold
+        assert is_new is False
+
+        # However, trying to get a new hold should fail.
+        with pytest.raises(CannotHold) as exc:
+            pool.on_hold_to(patron2)
+        assert "Cannot create a new hold on an inactive collection" in str(exc.value)
 
 
 class TestLicensePoolDeliveryMechanism:
