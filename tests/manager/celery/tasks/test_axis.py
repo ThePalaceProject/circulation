@@ -27,37 +27,37 @@ from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
 
-TEST_COLLECTION_ID = 1
-
 
 class QueueCollectionImportLockFixture:
-    def __init__(self, redis_fixture: RedisFixture):
+    def __init__(self, redis_fixture: RedisFixture, db: DatabaseTransactionFixture):
         self.redis_fixture = redis_fixture
         self.redis_client = redis_fixture.client
         self.task = MagicMock()
         self.task.request.root_id = "fake"
+        self.collection = db.collection(protocol=Axis360API)
         self.task_lock = _redis_lock_list_identifiers_for_import(
-            self.redis_client, collection_id=TEST_COLLECTION_ID
+            self.redis_client, collection_id=self.collection.id
         )
 
 
 @pytest.fixture
-def queue_collection_import_lock_fixture(redis_fixture: RedisFixture):
-    return QueueCollectionImportLockFixture(redis_fixture)
+def queue_collection_import_lock_fixture(
+    redis_fixture: RedisFixture, db: DatabaseTransactionFixture
+):
+    return QueueCollectionImportLockFixture(redis_fixture, db)
 
 
 def test_queue_collection_import_lock(
-    db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
     caplog: pytest.LogCaptureFixture,
 ):
-    db.default_collection()
     set_caplog_level_to_info(caplog)
     queue_collection_import_lock_fixture.task_lock.acquire()
-    collection_id = TEST_COLLECTION_ID
-    list_identifiers_for_import.delay(collection_id).wait()
-    assert "another task holds its lock" in caplog.text
+    list_identifiers_for_import.delay(
+        collection_id=queue_collection_import_lock_fixture.collection.id
+    ).wait()
+    assert "Skipping list_identifiers_for_import" in caplog.text
 
 
 def set_caplog_level_to_info(caplog):
@@ -70,7 +70,6 @@ def set_caplog_level_to_info(caplog):
 def test_import_all_collections(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
@@ -219,7 +218,7 @@ def test_import_items(
     assert f"Imported {len(title_ids)} identifiers" in caplog.text
 
 
-def test_import_items_with_requeue(
+def test_import_identifiers_with_requeue(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
@@ -229,14 +228,7 @@ def test_import_items_with_requeue(
     collection = db.collection(name="test_collection", protocol=Axis360API.label())
 
     mock_api = MagicMock()
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch("palace.manager.celery.task.Task.replace") as replace,
-    ):
-        # Have the replace method return an exception rather than an Ignore exception which is what
-        # would happen in a production situation.  If we return Ignore() the wait() method will block
-        # indefinitely.
-        replace.return_value = Exception()
+    with (patch.object(axis, "create_api") as mock_create_api,):
         mock_create_api.return_value = mock_api
         edition_1, lp_1 = db.edition(with_license_pool=True)
         edition_2, lp_2 = db.edition(with_license_pool=True)
@@ -250,40 +242,33 @@ def test_import_items_with_requeue(
             (edition_2, False, lp_2, False),
         ]
 
-        with pytest.raises(Exception) as exec_info:
-            import_identifiers.delay(
-                collection.id,
-                identifiers=identifiers,
-                batch_size=1,
-                target_max_execution_time_in_seconds=0,
-            ).wait(
-                propagate=True
-            )  # propagate the Exception.
+        import_identifiers.delay(
+            collection.id,
+            identifiers=identifiers,
+            batch_size=1,
+            target_max_execution_time_in_seconds=0,
+        ).wait()
 
-    assert mock_api.availability_by_title_ids.call_count == 1
+    assert mock_api.availability_by_title_ids.call_count == 2
     assert (
-        mock_api.availability_by_title_ids.call_args.kwargs["title_ids"]
+        mock_api.availability_by_title_ids.call_args_list[0].kwargs["title_ids"]
         == title_ids[0:1]
     )
-    assert mock_api.update_book.call_count == 1
-    assert replace.call_count == 1
-    assert replace.call_args_list[0].args[0] == import_identifiers.s(
-        processed_count=1,
-        identifiers=title_ids[1:],
-        collection_id=collection.id,
-        batch_size=1,
+    assert (
+        mock_api.availability_by_title_ids.call_args_list[1].kwargs["title_ids"]
+        == title_ids[1:]
     )
+    assert mock_api.update_book.call_count == 2
 
     assert f"Edition (id={edition_1.id}" in caplog.text
     assert f"Finished run" not in caplog.text
-
-    assert f"Imported {1} identifiers"
+    assert f"Imported {2} identifiers"
+    assert f"Replacing task to continue importing remaining 1 identifier" in caplog.text
 
 
 def test_reap_all_collections(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
@@ -316,63 +301,27 @@ def test_reap_collection_with_requeue(
         )
         editions.append(edition)
 
+    identifiers = [x.primary_identifier for x in editions]
     mock_api = MagicMock()
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch("palace.manager.celery.task.Task.replace") as replace,
-    ):
+    with patch.object(axis, "create_api") as mock_create_api:
         mock_create_api.return_value = mock_api
-        # return exception rather than Ignore in order to prevent endless blocking on the wait() call below.
-        replace.return_value = Exception()
 
-        with pytest.raises(Exception) as exec_info:
-            reap_collection.delay(collection_id=collection.id, batch_size=2).wait(
-                propagate=True
-            )
+        reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
 
-        assert mock_api.update_licensepools_for_identifiers.call_count == 1
-        assert replace.call_count == 1
-        assert replace.call_args_list[0].args[0] == reap_collection.s(
-            collection_id=collection.id, new_offset=2, batch_size=2
-        )
-        assert mock_api.update_licensepools_for_identifiers.call_args_list[
-            0
-        ].kwargs == {
-            "identifiers": [x.primary_identifier for x in editions[0:2]],
+        update_license_pools = mock_api.update_licensepools_for_identifiers
+        assert update_license_pools.call_count == 2
+
+        assert update_license_pools.call_args_list[0].kwargs == {
+            "identifiers": identifiers[0:2]
+        }
+        assert update_license_pools.call_args_list[1].kwargs == {
+            "identifiers": identifiers[2:]
         }
         assert f"Re-queuing reap_collection task at offset=2" in caplog.text
-
-
-def test_reap_collection_finish(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
-):
-    set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
-    editions = []
-    for i in range(0, 1):
-        edition, lp = db.edition(
-            with_license_pool=True,
-            identifier_type=Identifier.AXIS_360_ID,
-            collection=collection,
+        assert (
+            f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
+            in caplog.text
         )
-        editions.append(edition)
-
-    mock_api = MagicMock()
-    with (patch.object(axis, "create_api") as mock_create_api,):
-        mock_create_api.return_value = mock_api
-        reap_collection.delay(collection_id=collection.id).wait()
-
-    assert mock_api.update_licensepools_for_identifiers.call_count == 1
-    assert mock_api.update_licensepools_for_identifiers.call_args_list[0].kwargs == {
-        "identifiers": [x.primary_identifier for x in editions],
-    }
-    assert (
-        f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
-        in caplog.text
-    )
 
 
 def test_retry_import_identifiers(
@@ -423,7 +372,6 @@ def test_process_item_creates_presentation_ready_work(
     data = axis_files_fixture.sample_data("single_item.xml")
 
     with (patch.object(axis, "create_api") as mock_create_api,):
-
         api = MockAxis360API(_db=db.session, collection=collection)
         mock_create_api.return_value = api
         api.queue_response(200, content=data)
@@ -466,7 +414,6 @@ def test_transient_failure_if_requested_book_not_mentioned(
     collection = MockAxis360API.mock_collection(db.session, library=library)
 
     with (patch.object(axis, "create_api") as mock_create_api,):
-
         api = MockAxis360API(_db=db.session, collection=collection)
         mock_create_api.return_value = api
 

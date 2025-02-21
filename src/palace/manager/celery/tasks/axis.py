@@ -84,7 +84,7 @@ def list_identifiers_for_import(
             if not locked:
                 # we want to log
                 task.log.warning(
-                    f'Skipping collection batch queuing:  "{collection.name}"({collection_id}) because another '
+                    f'Skipping list_identifiers_for_import for "{collection.name}"({collection_id}) because another '
                     f"task holds its lock. This means that a previously spawned instance of this task is taking an "
                     f"unexpectedly long time. It is likely that  this collection is being processed for the first time "
                     f"and therefore must read the entire list of identifiers for this collection."
@@ -192,7 +192,7 @@ def import_identifiers(
         def log_run_end_message() -> None:
             task.log.info(
                 f"Finished importing identifiers for collection ({collection.name}, id={collection_id}), "
-                f"tas(id={task.request.id})"
+                f"task(id={task.request.id})"
             )
 
         if identifiers is None:
@@ -259,7 +259,7 @@ def import_identifiers(
 
     if len(identifiers) > 0:
         task.log.info(
-            f"Replacing task to continue importing remaining {len(identifiers)} "
+            f"Replacing task to continue importing remaining {len(identifiers)} identifier{'' if len(identifiers) == 1 else 's'} "
             f"for collection ({collection.name}, id={collection.id})"
         )
 
@@ -393,7 +393,7 @@ def reap_collection(
         raise task.replace(
             reap_collection.s(
                 collection_id=collection_id,
-                new_offset=new_offset,
+                offset=new_offset,
                 batch_size=batch_size,
             )
         )
