@@ -39,11 +39,6 @@ HOME=/var/www/circulation
 # The remaining scripts keep the circulation manager in sync with
 # specific types of collections.
 
-# Axis 360
-#
-*/15 * * * * root bin/run axis_monitor >> /var/log/cron.log 2>&1
-0 4 * * * root bin/run axis_reaper >> /var/log/cron.log 2>&1
-
 # Bibliotheca
 #
 */15 * * * * root bin/run bibliotheca_monitor >> /var/log/cron.log 2>&1

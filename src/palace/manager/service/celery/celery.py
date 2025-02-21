@@ -81,6 +81,17 @@ def beat_schedule() -> dict[str, Any]:
                 minute="*/20",
             ),  # Run every 20 minutes
         },
+        "axis_import_all_collections": {
+            "task": "axis.import_all_collections",
+            "schedule": crontab(minute="*/15"),  # Run every 15 minutes
+        },
+        "axis_reap_all_collections": {
+            "task": "axis.reap_all_collections",
+            "schedule": crontab(
+                minute="0",
+                hour="4",
+            ),  # Once a day at 4:00 AM
+        },
     }
 
 
