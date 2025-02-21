@@ -199,20 +199,6 @@ class Library(Base, HasSessionCache):
         )
 
     @property
-    def associated_collections_ids(self) -> list[CollectionInfoTuple]:
-        """Get the collection ids for this library"""
-        from palace.manager.sqlalchemy.model.collection import Collection
-        from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
-
-        _db = Session.object_session(self)
-        query = select(Collection.id, IntegrationConfiguration.protocol).select_from(
-            Collection
-        )
-        query = self._associated_collections_query(query)
-        results = _db.execute(query).all()
-        return [CollectionInfoTuple(*row) for row in results]
-
-    @property
     def associated_collections(self) -> Sequence[Collection]:
         """Get all associated collections for this library."""
         _db = Session.object_session(self)
