@@ -2,16 +2,15 @@ import time
 from datetime import datetime
 
 from celery import shared_task
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from palace.manager.api.axis import Axis360API
+from palace.manager.api.circulation import (
+    BaseCirculationAPI,
+    LibrarySettingsType,
+    SettingsType,
+)
 from palace.manager.celery.task import Task
 from palace.manager.core.metadata_layer import CirculationData, Metadata
 from palace.manager.service.celery.celery import QueueNames
@@ -71,7 +70,7 @@ def list_identifiers_for_import(
     """
 
     # ensure batch queuing not already running for this collection.
-    lock = _redis_lock_queue_collection_import(
+    lock = _redis_lock_list_identifiers_for_import(
         task.services.redis.client(), collection_id
     )
     with lock.lock(raise_when_not_acquired=False) as locked:
@@ -110,21 +109,19 @@ def list_identifiers_for_import(
             task_run_start_time = utc_now()
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
-            count = 0
             api = create_api(collection, session)
             task.log.info(
                 f"Starting process of queuing items in collection {collection.name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
             )
-            # start stop watch
+            # start stopwatch
             start_seconds = time.perf_counter()
             title_ids: list[str] = []
             for metadata, circulation in api.recent_activity(start_time_of_last_scan):
                 title_ids.append(metadata.primary_identifier.identifier)
-                count = +1
             elapsed_time = time.perf_counter() - start_seconds
             achievements = (
-                f"Total items queued for import:  {count}; "
+                f"Total items queued for import:  {len(title_ids)}; "
                 f"elapsed time: {elapsed_time:0.2f}"
             )
             ts.update(
@@ -159,7 +156,7 @@ def timestamp(
         _db,
         Timestamp,
         service=service_name,
-        service_type=Timestamp.MONITOR_TYPE,
+        service_type=Timestamp.TASK_TYPE,
         collection=collection,
         create_method_kwargs=dict(
             start=default_start_time,
@@ -186,30 +183,38 @@ def import_identifiers(
     which defaults to 2 minutes.  If it has not finished in the target time, it will requeue the task with the
     remaining unprocessed identifiers.
     """
-    if not identifiers:
-        task.log.info(
-            f"Identifiers list is None: the list_identifiers_for_"
-            f"import must have been locked. Ignoring import run for collection_id={collection_id}"
-        )
-        return None
-
     with task.transaction() as session:
         collection = Collection.by_id(session, id=collection_id)
         if not collection:
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
             return None
+
+        def log_run_end_message() -> None:
+            task.log.info(
+                f"Finished importing identifiers for collection ({collection.name}, id={collection_id}), "
+                f"tas(id={task.request.id})"
+            )
+
+        if identifiers is None:
+
+            task.log.info(
+                f"Identifiers list is None: the list_identifiers_for_import "
+                f"must have been locked. Ignoring import run for collection_id={collection_id}"
+            )
+            return
+
+        if not identifiers:
+            task.log.info(
+                f"Identifiers list is empty: Nothing remains for processing in task(id={task.request.id})"
+            )
+            log_run_end_message()
+            return
+
         api = create_api(session=session, collection=collection)
         start_seconds = time.perf_counter()
         total_imported_in_current_task = 0
-        identifiers_list_length = len(identifiers)
-        while identifiers_list_length > 0:
-            batch = identifiers[
-                0 : (
-                    identifiers_list_length
-                    if identifiers_list_length < batch_size
-                    else batch_size
-                )
-            ]
+        while len(identifiers) > 0:
+            batch = identifiers[:batch_size]
 
             try:
                 for metadata, circulation in api.availability_by_title_ids(
@@ -220,7 +225,7 @@ def import_identifiers(
                 wait_time = exponential_backoff(task.request.retries)
                 task.log.error(
                     f"Something unexpected went wrong while processing a batch of titles for collection "
-                    f'"{collection.name}" task(id={task.id} due to {e}. Retrying in {wait_time} seconds.'
+                    f'"{collection.name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
                 )
                 raise task.retry(countdown=wait_time)
 
@@ -267,20 +272,9 @@ def import_identifiers(
             )
         )
     else:
-        task.log.info(
-            f"Finished run importing identifiers for collection ({collection.name}, id={collection_id})"
-        )
+        log_run_end_message()
 
 
-@retry(
-    retry=(
-        retry_if_exception_type(StaleDataError)
-        | retry_if_exception_type(ObjectDeletedError)
-    ),
-    stop=stop_after_attempt(max_attempt_number=5),
-    wait=wait_exponential(multiplier=1, min=1, max=60),
-    reraise=True,
-)
 def process_book(
     task: Task,
     _db: Session,
@@ -299,14 +293,23 @@ def process_book(
     )
 
 
-def _redis_lock_queue_collection_import(client: Redis, collection_id: int) -> RedisLock:
+def _redis_lock_list_identifiers_for_import(
+    client: Redis, collection_id: int
+) -> RedisLock:
     return RedisLock(
         client,
-        lock_name=f"Axis360QueueCollectionImport-{collection_id}",
+        lock_name=[
+            f"ListIdentifiersForImport",
+            Collection.redis_key_from_id(collection_id),
+        ],
     )
 
 
-def get_collections_by_protocol(task: Task, session: Session, protocol_class) -> list[Collection]:  # type: ignore[no-untyped-def]
+def get_collections_by_protocol(
+    task: Task,
+    session: Session,
+    protocol_class: type[BaseCirculationAPI[SettingsType, LibrarySettingsType]],
+) -> list[Collection]:
     registry = task.services.integration_registry.license_providers()
     protocols = registry.get_protocols(protocol_class, default=False)
     collections = [
@@ -320,8 +323,7 @@ def get_collections_by_protocol(task: Task, session: Session, protocol_class) ->
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_all_collections(task: Task) -> None:
     """
-    A shared task that loops through all Axis360 Api based collections and kick off an
-    import task for each.
+    A shared task that  kicks off a reap collection task for each Axis 360 collection.
     """
     with task.session() as session:
         for collection in get_collections_by_protocol(task, session, Axis360API):
@@ -330,7 +332,7 @@ def reap_all_collections(task: Task) -> None:
             )
             reap_collection.delay(collection_id=collection.id)
 
-        task.log.info(f"Finished queuing collections for reaping.")
+        task.log.info(f"Finished queuing reap collection tasks.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -353,12 +355,15 @@ def reap_collection(
         api = create_api(session=session, collection=collection)
 
         identifiers = (
-            session.query(Identifier)
-            .join(Identifier.licensed_through)
-            .filter(LicensePool.collection == collection)
-            .order_by(Identifier.id)
-            .limit(batch_size)
-            .offset(offset)
+            session.scalars(
+                select(Identifier)
+                .join(Identifier.licensed_through)
+                .where(LicensePool.collection == collection)
+                .order_by(Identifier.id)
+                .limit(batch_size)
+                .offset(offset)
+            )
+            .unique()
             .all()
         )
 

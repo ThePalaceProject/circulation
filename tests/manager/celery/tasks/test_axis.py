@@ -3,14 +3,13 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import Axis360API
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
     DEFAULT_BATCH_SIZE,
     DEFAULT_START_TIME,
-    _redis_lock_queue_collection_import,
+    _redis_lock_list_identifiers_for_import,
     import_all_collections,
     import_identifiers,
     list_identifiers_for_import,
@@ -24,6 +23,9 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
+from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
+from tests.manager.api.test_axis import AxisFilesFixture
+from tests.mocks.axis import MockAxis360API
 
 TEST_COLLECTION_ID = 1
 
@@ -34,7 +36,7 @@ class QueueCollectionImportLockFixture:
         self.redis_client = redis_fixture.client
         self.task = MagicMock()
         self.task.request.root_id = "fake"
-        self.task_lock = _redis_lock_queue_collection_import(
+        self.task_lock = _redis_lock_list_identifiers_for_import(
             self.redis_client, collection_id=TEST_COLLECTION_ID
         )
 
@@ -164,7 +166,7 @@ def test_list_identifiers_for_import(
     assert "Finished listing identifiers in collection" in caplog.text
 
 
-def generate_test_metadata_and_circulation_objects(test_ids):
+def generate_test_metadata_and_circulation_objects(test_ids: list[str]):
     metadata_and_circulation_data_list = []
     for id in test_ids:
         data_source = "data_source"
@@ -211,7 +213,7 @@ def test_import_items(
 
     assert f"Edition (id={edition_1.id}" in caplog.text
     assert (
-        f"Finished run importing identifiers for collection ({collection.name}, id={collection.id})"
+        f"Finished importing identifiers for collection ({collection.name}, id={collection.id})"
         in caplog.text
     )
     assert f"Imported {len(title_ids)} identifiers" in caplog.text
@@ -285,7 +287,7 @@ def test_reap_all_collections(
     caplog: pytest.LogCaptureFixture,
 ):
     set_caplog_level_to_info(caplog)
-    collection1 = db.default_collection()
+    db.default_collection()
     collection2 = db.collection(name="test_collection", protocol=Axis360API.label())
     with patch.object(axis, "reap_collection") as mock_reap_collection:
         reap_all_collections.delay().wait()
@@ -294,7 +296,7 @@ def test_reap_all_collections(
         assert mock_reap_collection.delay.call_args_list[0].kwargs == {
             "collection_id": collection2.id,
         }
-        assert "Finished queuing collections for reaping." in caplog.text
+        assert "Finished queuing reap collection tasks" in caplog.text
 
 
 def test_reap_collection_with_requeue(
@@ -373,7 +375,7 @@ def test_reap_collection_finish(
     )
 
 
-def test_retry_failed_process_book_call(
+def test_retry_import_identifiers(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
@@ -396,15 +398,8 @@ def test_retry_failed_process_book_call(
 
         mock_api.availability_by_title_ids.return_value = [({}, {})]
 
-        mock_api.recent.side_effect = [
-            ObjectDeletedError({}, "object deleted"),
-            StaleDataError("stale data"),
-            (edition, False, licensepool, False),
-        ]
-
         mock_api.update_book.side_effect = [
-            ObjectDeletedError({}, "object deleted"),
-            StaleDataError("stale data"),
+            Exception("object deleted"),
             (edition, False, licensepool, False),
         ]
 
@@ -412,4 +407,86 @@ def test_retry_failed_process_book_call(
             collection.id, identifiers=[edition.primary_identifier.identifier]
         ).wait()
 
-        assert mock_api.update_book.call_count == 3
+        assert mock_api.update_book.call_count == 2
+
+
+def test_process_item_creates_presentation_ready_work(
+    axis_files_fixture: AxisFilesFixture,
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """Test the normal workflow where we ask Axis for data,
+    Axis provides it, and we create a presentation-ready work.
+    """
+    library = db.default_library()
+    collection = MockAxis360API.mock_collection(db.session, library=library)
+    data = axis_files_fixture.sample_data("single_item.xml")
+
+    with (patch.object(axis, "create_api") as mock_create_api,):
+
+        api = MockAxis360API(_db=db.session, collection=collection)
+        mock_create_api.return_value = api
+        api.queue_response(200, content=data)
+
+        # Here's the book mentioned in single_item.xml.
+        identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
+        identifier.identifier = "0003642860"
+
+        # This book has no LicensePool.
+        assert [] == identifier.licensed_through
+
+        import_identifiers.delay(
+            collection_id=collection.id, identifiers=[identifier.identifier]
+        ).wait()
+
+        # A LicensePool was created. We know both how many copies of this
+        # book are available, and what formats it's available in.
+        [pool] = identifier.licensed_through
+        assert 9 == pool.licenses_owned
+        [lpdm] = pool.delivery_mechanisms
+        assert (
+            "application/epub+zip (application/vnd.adobe.adept+xml)"
+            == lpdm.delivery_mechanism.name
+        )
+
+        # A Work was created and made presentation ready.
+        assert "Faith of My Fathers : A Family Memoir" == pool.work.title
+        assert pool.work.presentation_ready is True
+
+
+def test_transient_failure_if_requested_book_not_mentioned(
+    axis_files_fixture: AxisFilesFixture,
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """Test an unrealistic case where we ask Axis 360 about one book and
+    it tells us about a totally different book.
+    """
+    library = db.default_library()
+    collection = MockAxis360API.mock_collection(db.session, library=library)
+
+    with (patch.object(axis, "create_api") as mock_create_api,):
+
+        api = MockAxis360API(_db=db.session, collection=collection)
+        mock_create_api.return_value = api
+
+        # We're going to ask about abcdef
+        identifier = db.identifier(identifier_type=Identifier.AXIS_360_ID)
+        identifier.identifier = "abcdef"
+
+        # But we're going to get told about 0003642860.
+        data = axis_files_fixture.sample_data("single_item.xml")
+        api.queue_response(200, content=data)
+
+        import_identifiers.delay(
+            collection_id=collection.id, identifiers=[identifier.identifier]
+        ).wait()
+
+        # And nothing major was done about the book we were told
+        # about. We created an Identifier record for its identifier,
+        # but no LicensePool or Edition.
+        wrong_identifier = Identifier.for_foreign_id(
+            db.session, Identifier.AXIS_360_ID, "0003642860"
+        )
+        assert [] == identifier.licensed_through
+        assert [] == identifier.primarily_identifies
