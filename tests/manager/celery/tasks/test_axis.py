@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.orm.exc import ObjectDeletedError
 
 from palace.manager.api.axis import Axis360API
 from palace.manager.celery.tasks import axis
@@ -348,7 +349,7 @@ def test_retry_import_identifiers(
         mock_api.availability_by_title_ids.return_value = [({}, {})]
 
         mock_api.update_book.side_effect = [
-            Exception("object deleted"),
+            ObjectDeletedError(None),
             (edition, False, licensepool, False),
         ]
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import Axis360API
 from palace.manager.api.circulation import (
@@ -221,9 +222,9 @@ def import_identifiers(
                     title_ids=batch
                 ):
                     process_book(task, session, api, metadata, circulation)
-            except Exception as e:
+            except (ObjectDeletedError, StaleDataError) as e:
                 wait_time = exponential_backoff(task.request.retries)
-                task.log.error(
+                task.log.exception(
                     f"Something unexpected went wrong while processing a batch of titles for collection "
                     f'"{collection.name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
                 )
@@ -282,10 +283,9 @@ def process_book(
     metadata: Metadata,
     circulation: CirculationData,
 ) -> None:
-    with _db.begin_nested():
-        edition, new_edition, license_pool, new_license_pool = api.update_book(
-            bibliographic=metadata, availability=circulation
-        )
+    edition, new_edition, license_pool, new_license_pool = api.update_book(
+        bibliographic=metadata, availability=circulation
+    )
 
     task.log.info(
         f"Edition (id={edition.id}, title={edition.title}) {'created' if new_edition else 'updated'}. "
