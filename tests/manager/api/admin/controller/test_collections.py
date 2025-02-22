@@ -96,6 +96,7 @@ class TestCollectionSettings:
     ) -> None:
         # Delete any existing collections created by the test setup.
         db.session.delete(db.default_collection())
+        db.session.delete(db.default_inactive_collection())
 
         response = controller.process_get()
         assert isinstance(response, Response)
@@ -108,13 +109,24 @@ class TestCollectionSettings:
         expected_names = {k for k, v in controller.registry}
         assert names == expected_names
 
+    @pytest.mark.parametrize(
+        "is_inactive",
+        (
+            pytest.param(True, id="inactive collection"),
+            pytest.param(False, id="active collection"),
+        ),
+    )
     def test_collections_get_collections_with_multiple_collections(
         self,
         controller: CollectionSettingsController,
         flask_app_fixture: FlaskAppFixture,
         db: DatabaseTransactionFixture,
+        is_inactive: bool,
     ) -> None:
-        [c1] = db.default_library().associated_collections
+        default_library = db.library(short_name="default", name="Default Library")
+        c1 = db.collection(
+            library=default_library, name="Default Collection", inactive=is_inactive
+        )
 
         c2 = db.collection(
             name="Collection 2",
@@ -137,7 +149,7 @@ class TestCollectionSettings:
         c3.parent = c2
 
         l1 = db.library(short_name="L1")
-        c3.associated_libraries += [l1, db.default_library()]
+        c3.associated_libraries += [l1, default_library]
         db.integration_library_configuration(
             c3.integration_configuration,
             l1,
@@ -192,10 +204,11 @@ class TestCollectionSettings:
         )
         assert "L1" == coll3_l1.get("short_name")
         assert 14 == coll3_l1.get("ebook_loan_duration")
-        assert db.default_library().short_name == coll3_default.get("short_name")
+        assert default_library.short_name == coll3_default.get("short_name")
 
+        # A librarian only sees collections associated with their library
+        # (including inactive ones).
         with flask_app_fixture.test_request_context("/", admin=l1_librarian):
-            # A librarian only sees collections associated with their library.
             response2 = controller.process_collections()
         assert isinstance(response2, Response)
         assert response2.status_code == 200

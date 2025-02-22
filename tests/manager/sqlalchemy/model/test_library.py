@@ -1,6 +1,10 @@
+import datetime
+
 import pytest
 from Crypto.PublicKey.RSA import RsaKey, import_key
 
+from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
+from palace.manager.integration.base import integration_settings_update
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -104,7 +108,11 @@ class TestLibrary:
         parent = db.collection()
         db.default_collection().parent_id = parent.id
 
-        assert [db.default_collection()] == library.associated_collections
+        assert {
+            db.default_collection(),
+            db.default_inactive_collection(),
+        } == set(library.associated_collections)
+        assert [db.default_collection()] == library.active_collections
 
     def test_estimated_holdings_by_language(self, db: DatabaseTransactionFixture):
         library = db.default_library()
@@ -199,3 +207,97 @@ hidden_content_types='[]'
         # Test with a properly formatted settings dict.
         library2 = db.library()
         assert library2.settings.website == "http://library.com"
+
+
+class TestLibraryCollections:
+    # TODO: Pydantic and FreezeGun don't play well together, so we'll use
+    #  dates well into the past and into the future to avoid any flakiness.
+    @pytest.mark.parametrize(
+        "activation_date, expiration_date, expect_active",
+        (
+            pytest.param(None, None, True, id="no start/end dates"),
+            pytest.param(None, datetime.date(2222, 8, 31), True, id="no start date"),
+            pytest.param(datetime.date(1960, 8, 1), None, True, id="no end date"),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(2222, 8, 31),
+                True,
+                id="both dates",
+            ),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(1961, 8, 15),
+                False,
+                id="ends before today",
+            ),
+            pytest.param(
+                datetime.date(2222, 9, 1),
+                None,
+                False,
+                id="starts after today",
+            ),
+        ),
+    )
+    def test_active_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        activation_date: datetime.date | None,
+        expiration_date: datetime.date | None,
+        expect_active: bool,
+    ):
+        library = db.default_library()
+
+        # Collection subscription settings.
+        subscription_test_settings = (
+            {"subscription_activation_date": activation_date} if activation_date else {}
+        ) | (
+            {"subscription_expiration_date": expiration_date} if expiration_date else {}
+        )
+
+        # Our library is associated with three collections, one of whose
+        # subscriptions settings we're testing.
+        forever_collection = db.default_collection()
+        never_collection = db.default_inactive_collection()
+        test_collection = db.collection(
+            name="Test Collection", protocol=OPDSAPI, library=library
+        )
+
+        assert set(library.associated_collections) == {
+            forever_collection,
+            never_collection,
+            test_collection,
+        }
+
+        # Initially there are no subscription settings for the test collection.
+        test_integration = test_collection.integration_configuration
+        initial_settings = test_integration.settings_dict
+        assert "subscription_activation_date" not in initial_settings
+        assert "subscription_expiration_date" not in initial_settings
+
+        # And without subscription settings, the collections is active by default.
+        assert forever_collection in library.active_collections
+        assert test_collection in library.active_collections
+
+        # The "never" collection is inactive, as it always should be.
+        assert never_collection not in library.active_collections
+
+        # Now we apply the settings for the test collection.
+        integration_settings_update(
+            OPDSImporterSettings,
+            test_integration,
+            subscription_test_settings,
+            merge=True,
+        )
+
+        # All collections are still associated with the library,...
+        assert set(library.associated_collections) == {
+            forever_collection,
+            never_collection,
+            test_collection,
+        }
+        # ... and the forever collection is still active for the library, ....
+        assert forever_collection in library.active_collections
+        # ... and the "never" collection is still inactive for the library, ....
+        assert never_collection not in library.active_collections
+        # ... the test collection is only active when we expect it to be.
+        assert (test_collection in library.active_collections) == expect_active

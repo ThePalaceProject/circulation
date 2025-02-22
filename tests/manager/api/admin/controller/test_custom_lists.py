@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Literal
 from unittest import mock
 
 import feedparser
@@ -13,7 +14,7 @@ from palace.manager.api.admin.model.custom_lists import CustomListPostRequest
 from palace.manager.api.admin.problem_details import (
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
     CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
-    COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY,
+    COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY,
     CUSTOM_LIST_NAME_ALREADY_IN_USE,
     MISSING_COLLECTION,
     MISSING_CUSTOM_LIST,
@@ -254,11 +255,31 @@ class TestCustomListsController:
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
             )
 
+    @pytest.mark.parametrize(
+        "collection_status, expect_problem",
+        [
+            pytest.param("active", False, id="active collection"),
+            pytest.param("inactive", True, id="associated, inactive collection"),
+            pytest.param("unassociated", True, id="unassociated collection"),
+        ],
+    )
     def test_custom_lists_post_collection_with_wrong_library(
-        self, admin_librarian_fixture: AdminLibrarianFixture
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        collection_status: Literal["active", "inactive", "unassociated"],
+        expect_problem: bool,
     ):
-        # This collection is not associated with any libraries.
-        collection = admin_librarian_fixture.ctrl.db.collection()
+        # Get a collection with the right relationship to the library.
+        collection = (
+            admin_librarian_fixture.ctrl.db.collection()
+            if collection_status == "unassociated"
+            else (
+                admin_librarian_fixture.ctrl.db.default_inactive_collection()
+                if collection_status == "inactive"
+                else admin_librarian_fixture.ctrl.db.default_collection()
+            )
+        )
+
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="POST"
         ):
@@ -272,7 +293,12 @@ class TestCustomListsController:
             response = (
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
-            assert COLLECTION_NOT_ASSOCIATED_WITH_LIBRARY == response
+
+        if expect_problem:
+            assert response == COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY
+        else:
+            assert not isinstance(response, ProblemDetail)
+            assert response.status_code == 201
 
     def test_custom_lists_create(self, admin_librarian_fixture: AdminLibrarianFixture):
         work = admin_librarian_fixture.ctrl.db.work(with_open_access_download=True)
