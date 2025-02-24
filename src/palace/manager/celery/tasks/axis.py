@@ -47,11 +47,10 @@ def import_all_collections(
                 f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
             )
             list_identifiers_for_import.apply_async(
-                (collection.id),
+                kwargs={"collection_id": collection.id},
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
-                    import_all=import_all,
                 ),
             )
 
@@ -171,8 +170,8 @@ def timestamp(
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def import_identifiers(
     task: Task,
-    collection_id: int,
     identifiers: list[str] | None,
+    collection_id: int,
     processed_count: int = 0,
     batch_size: int = DEFAULT_BATCH_SIZE,
     target_max_execution_time_in_seconds: float = TARGET_MAX_EXECUTION_SECONDS,
