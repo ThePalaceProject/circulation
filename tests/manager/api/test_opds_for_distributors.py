@@ -3,6 +3,7 @@ from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
@@ -505,6 +506,7 @@ class TestOPDSForDistributorsAPI:
 
 
 class TestOPDSForDistributorsImporter:
+    @freeze_time()
     def test_import(self, opds_dist_api_fixture: OPDSForDistributorsAPIFixture):
         feed = opds_dist_api_fixture.files.sample_data("biblioboard_mini_feed.opds")
 
@@ -526,26 +528,24 @@ class TestOPDSForDistributorsImporter:
         # it adds delivery mechanisms for books with epub acquisition links
         # and sets pools' licenses_owned and licenses_available.
 
-        # Both works were created, since we can use their acquisition links
+        # All four works in the feed were created, since we can use their acquisition links
         # to give copies to patrons.
-        [camelot, camelot_audio, southern] = sorted(
+        [camelot, camelot_audio, shogun, southern] = sorted(
             imported_works, key=lambda x: x.title
         )
 
         # Each work has a license pool.
         [camelot_pool] = camelot.license_pools
         [southern_pool] = southern.license_pools
+        [camelot_audio_pool] = camelot_audio.license_pools
+        [shogun_pool] = shogun.license_pools
         now = utc_now()
 
-        for pool in [camelot_pool, southern_pool]:
+        for pool in [camelot_pool, southern_pool, camelot_audio_pool, shogun_pool]:
             assert False == pool.open_access
             assert (
                 RightsStatus.IN_COPYRIGHT
                 == pool.delivery_mechanisms[0].rights_status.uri
-            )
-            assert (
-                Representation.EPUB_MEDIA_TYPE
-                == pool.delivery_mechanisms[0].delivery_mechanism.content_type
             )
             assert (
                 DeliveryMechanism.BEARER_TOKEN
@@ -553,13 +553,29 @@ class TestOPDSForDistributorsImporter:
             )
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_owned
             assert LicensePool.UNLIMITED_ACCESS == pool.licenses_available
-            assert pool.work.last_update_time is not None
-            assert (pool.work.last_update_time - now).total_seconds() <= 2
+            assert pool.work.last_update_time == now
+
+        # The ebooks have the correct delivery mechanism and they don't track playtime
+        for pool in [camelot_pool, southern_pool]:
+            assert (
+                Representation.EPUB_MEDIA_TYPE
+                == pool.delivery_mechanisms[0].delivery_mechanism.content_type
+            )
             assert pool.should_track_playtime == False
 
-        # Audiobooks always track playtime
-        camelot_audio_pool = camelot_audio.license_pools[0]
-        assert camelot_audio_pool.should_track_playtime == True
+        # The audiobooks have the correct delivery mechanism
+        for pool in [camelot_audio_pool, shogun_pool]:
+            assert (
+                Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+                == pool.delivery_mechanisms[0].delivery_mechanism.content_type
+            )
+
+        # The camelot audiobook does not track playtime
+        assert camelot_audio_pool.should_track_playtime == False
+
+        # The shogun audiobook does track playtime
+        assert shogun_pool.should_track_playtime == True
+
         [camelot_audio_acquisition_link] = [
             l
             for l in camelot_audio_pool.identifier.links
@@ -570,6 +586,18 @@ class TestOPDSForDistributorsImporter:
         assert (
             "https://library.biblioboard.com/ext/api/media/04377e87-ab69-41c8-a2a4-812d55dc0953/assets/content.json"
             == camelot_audio_acquisition_link.resource.representation.url
+        )
+
+        [shogun_acquisition_link] = [
+            l
+            for l in shogun_pool.identifier.links
+            if l.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+            and l.resource.representation.media_type
+            == Representation.AUDIOBOOK_MANIFEST_MEDIA_TYPE
+        ]
+        assert (
+            "https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011/manifest.json"
+            == shogun_acquisition_link.resource.representation.url
         )
 
         [camelot_acquisition_link] = [

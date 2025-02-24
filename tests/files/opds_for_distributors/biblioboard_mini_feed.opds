@@ -1,4 +1,5 @@
-<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dcterms="http://purl.org/dc/terms/">
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:palace="http://palaceproject.io/terms" xmlns:simplified="http://librarysimplified.org/terms/">
 <title>BiblioBoard - All Titles - epub</title>
 <link rel="self" type="application/atom+xml" href="https://catalog.biblioboard.com/opds/content-type/epub/0"/>
 <link rel="http://opds-spec.org/crawlable" type="application/atom+xml" href="https://catalog.biblioboard.com/opds/crawlable/0" title="Crawlable Feed"/>
@@ -70,5 +71,50 @@ A USA Today bestseller! When out of work graphic designer Verity Long accidental
 <dcterms:identifier>04da95cd-6cfc-4e82-810f-121d418b6963</dcterms:identifier>
 <dcterms:language>en</dcterms:language>
 <dcterms:issued>2015-01-01T00:00:00Z</dcterms:issued>
+</entry>
+<entry>
+<title>Shōgun, Part One</title>
+<link rel="alternate" type="text/html" href="https://library.biblioboard.com/content/12905232-0b38-4c3f-a1f3-1a3a34db0011" title="View Details on BiblioBoard" />
+<link rel="self" type="application/atom+xml;type=entry;profile=opds-catalog" href="https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011" />
+<link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="https://library.biblioboard.com/ext/api/media/12905232-0b38-4c3f-a1f3-1a3a34db0011/assets/thumbnail.jpg" />
+<link rel="http://opds-spec.org/image" type="image/jpeg" href="https://library.biblioboard.com/ext/api/media/12905232-0b38-4c3f-a1f3-1a3a34db0011/assets/thumbnail_full.jpg" />
+<link rel="collection" type="application/atom+xml" href="https://catalog.biblioboard.com/opds/modules/e2fb45d1-0c27-4483-9c36-5d89664140e2/0" title="Blackstone Publishing" />
+<link rel="collection" type="application/atom+xml" href="https://catalog.biblioboard.com/opds/modules/48bbed50-b2c8-4de8-a460-3e8b0e562e8b/0" title="Blackstone Publishing - Adult Collection" />
+<link rel="http://opds-spec.org/acquisition" type="application/audiobook+json" href="https://catalog.biblioboard.com/opds/items/12905232-0b38-4c3f-a1f3-1a3a34db0011/manifest.json" />
+<category term="FIC004000" label="Fiction / Classics" scheme="http://www.bisg.org/standards/bisac_subject/" />
+<category term="FIC054000" label="Fiction / Asian American &amp; Pacific Islander" scheme="http://www.bisg.org/standards/bisac_subject/" />
+<category term="FIC014000" label="Fiction / Historical" scheme="http://www.bisg.org/standards/bisac_subject/" />
+<author>
+  <name>James Clavell</name>
+  <simplified:sort_name>Clavell, James</simplified:sort_name>
+</author>
+<contributor>
+  <name>Ralph Lister</name>
+  <simplified:sort_name>Lister, Ralph</simplified:sort_name>
+</contributor>
+<id>urn:uuid:12905232-0b38-4c3f-a1f3-1a3a34db0011</id>
+<updated>2024-11-20T16:35:32Z</updated>
+<summary type="text">By the #1 New York Times bestselling author and unparalleled master of historical fiction, James Clavell’s Shōgun is soon to be a major FX/Hulu TV series!
+Shōgun, the classic epic novel of feudal Japan that captured the heart of a culture and the imagination of the world, is now available for the first time in serial format. Part One contains the first half of the complete novel.
+After Englishman John Blackthorne is lost at sea, he awakens in a place few Europeans know of and even fewer have seen—Nippon. Thrust into the closed society that is seventeenth-century Japan, a land where the line between life and death is razor-thin, Blackthorne must negotiate not only a foreign people, with unknown customs and language, but also his own definitions of morality, truth, and freedom. As internal political strife and a clash of cultures lead to seemingly inevitable conflict, Blackthorne’s loyalty and strength of character are tested by both passion and loss, and he is torn between two worlds that will each be forever changed.
+Powerful and engrossing, capturing both the rich pageantry and stark realities of life in feudal Japan, Shōgun is a critically acclaimed powerhouse of a book. Heart-stopping, edge-of-your-seat action melds seamlessly with intricate historical detail and raw human emotion. Endlessly compelling, this sweeping saga captivated the world to become not only one of the best-selling novels of all time but one of the highest-rated television miniseries, as well as inspiring a nationwide surge of interest in the culture of Japan. Shakespearean in both scope and depth, Shōgun is, as the New York Times put it, “not only something you read—you live it.” </summary>
+<rights>Copyright held by content provider</rights>
+<dcterms:publisher>Blackstone Publishing</dcterms:publisher>
+<dcterms:format>application/audiobook+json</dcterms:format>
+<dcterms:identifier>urn:uuid:12905232-0b38-4c3f-a1f3-1a3a34db0011</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910828</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212895194</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212911016</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910873</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910866</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910811</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212911009</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910996</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910842</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910859</dcterms:identifier>
+<dcterms:identifier>urn:isbn:9798212910804</dcterms:identifier>
+<dcterms:language>en</dcterms:language>
+<dcterms:issued>2023-01-01T00:00:00Z</dcterms:issued>
+<palace:timeTracking>true</palace:timeTracking>
 </entry>
 </feed>
