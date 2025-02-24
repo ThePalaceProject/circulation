@@ -20,7 +20,7 @@ from palace.manager.api.circulation_exceptions import (
     LibraryAuthorizationFailedException,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.core.metadata_layer import FormatData, Metadata, TimestampData
+from palace.manager.core.metadata_layer import FormatData, TimestampData
 from palace.manager.core.opds_import import (
     OPDSImporter,
     OPDSImporterSettings,
@@ -31,7 +31,6 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     FormField,
 )
-from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -407,21 +406,6 @@ class OPDSForDistributorsImporter(OPDSImporter):
                         rights_uri=RightsStatus.IN_COPYRIGHT,
                     )
                 )
-
-    def extract_feed_data(
-        self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
-        metadatas, failures = super().extract_feed_data(feed, feed_url)
-
-        # Force all audiobook licensepools to track playtime
-        for _, metadata in metadatas.items():
-            if (
-                metadata.medium == EditionConstants.AUDIO_MEDIUM
-                and metadata.circulation is not None
-            ):
-                metadata.circulation.should_track_playtime = True
-
-        return metadatas, failures
 
 
 class OPDSForDistributorsImportMonitor(OPDSImportMonitor):
