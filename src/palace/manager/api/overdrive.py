@@ -1654,11 +1654,11 @@ class OverdriveAPI(
             # The book was successfully placed on hold. Return an
             # appropriate HoldInfo.
             data = response.json()
-            position1, date = self.extract_data_from_hold_response(data)
+            position, date = self.extract_data_from_hold_response(data)
             return HoldInfo.from_license_pool(
                 licensepool,
                 start_date=date,
-                hold_position=position1,
+                hold_position=position,
             )
         else:
             # Some other problem happened -- we don't know what.  It's
