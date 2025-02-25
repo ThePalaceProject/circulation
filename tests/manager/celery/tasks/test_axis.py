@@ -83,7 +83,9 @@ def test_import_all_collections(
 
         assert mock_list_identifiers_for_import.apply_async.call_count == 1
         assert (
-            mock_list_identifiers_for_import.apply_async.call_args_list[0].args[0]
+            mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs[
+                "kwargs"
+            ]["collection_id"]
             == collection2.id
         )
         assert mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs[
@@ -91,7 +93,6 @@ def test_import_all_collections(
         ] == import_identifiers.s(
             collection_id=collection2.id,
             batch_size=DEFAULT_BATCH_SIZE,
-            import_all=False,
         )
         assert "Finished queuing 1 collection." in caplog.text
 
@@ -204,7 +205,7 @@ def test_import_items(
             (edition_2, False, lp_2, False),
         ]
         import_identifiers.delay(
-            collection.id, identifiers=identifiers, batch_size=25
+            collection_id=collection.id, identifiers=identifiers, batch_size=25
         ).wait()
 
     assert mock_api.availability_by_title_ids.call_count == 1
@@ -244,8 +245,8 @@ def test_import_identifiers_with_requeue(
         ]
 
         import_identifiers.delay(
-            collection.id,
             identifiers=identifiers,
+            collection_id=collection.id,
             batch_size=1,
             target_max_execution_time_in_seconds=0,
         ).wait()
@@ -354,7 +355,8 @@ def test_retry_import_identifiers(
         ]
 
         import_identifiers.delay(
-            collection.id, identifiers=[edition.primary_identifier.identifier]
+            collection_id=collection.id,
+            identifiers=[edition.primary_identifier.identifier],
         ).wait()
 
         assert mock_api.update_book.call_count == 2
