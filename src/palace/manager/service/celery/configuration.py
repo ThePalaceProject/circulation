@@ -33,6 +33,7 @@ class CeleryConfiguration(ServiceConfiguration):
     # Broker options for both Redis and SQS
     broker_transport_options_visibility_timeout: int = 3600  # 1 hour
     result_expires: int = 3600  # 1 hour  (default is 1 day)
+    result_backend_transport_options_global_keyprefix: str = "palace-"
     task_acks_late: bool = True
     task_reject_on_worker_lost: bool = True
     task_remote_tracebacks: bool = True
@@ -68,12 +69,27 @@ class CeleryConfiguration(ServiceConfiguration):
         results = super().model_dump(**kwargs)
         if merge_options:
             result_keys = results.copy().keys()
-            broker_transport_options = {}
+            broker_transport_options: dict[str, Any] = {}
+            result_backend_transport_options: dict[str, Any] = {}
             for key in result_keys:
-                if key.startswith("broker_transport_options_"):
-                    value = results.pop(key)
-                    broker_transport_options[
-                        key.replace("broker_transport_options_", "")
-                    ] = value
+                self.extract_keys_by_prefix(
+                    broker_transport_options, results, "broker_transport_options_", key
+                )
+                self.extract_keys_by_prefix(
+                    result_backend_transport_options,
+                    results,
+                    "result_backend_transport_options_",
+                    key,
+                )
             results["broker_transport_options"] = broker_transport_options
+            results["result_backend_transport_options"] = (
+                result_backend_transport_options
+            )
         return results
+
+    def extract_keys_by_prefix(
+        self, new_dict: dict[str, Any], results: dict[str, Any], prefix: str, key: str
+    ) -> None:
+        if key.startswith(prefix):
+            value = results.pop(key)
+            new_dict[key.replace(prefix, "")] = value
