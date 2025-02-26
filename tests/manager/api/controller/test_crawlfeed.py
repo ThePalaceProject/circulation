@@ -57,6 +57,8 @@ class TestCrawlableFeed:
         # a library.
         controller = circulation_fixture.manager.opds_feeds
         library = circulation_fixture.db.default_library()
+        active_collection = circulation_fixture.db.default_collection()
+        inactive_collection = circulation_fixture.db.default_inactive_collection()
         with circulation_fixture.request_context_with_library("/"):
             with self.mock_crawlable_feed(circulation_fixture):
                 response = controller.crawlable_library_feed()
@@ -79,11 +81,16 @@ class TestCrawlableFeed:
         assert OPDSAcquisitionFeed == kwargs.pop("feed_class")
 
         # A CrawlableCollectionBasedLane has been set up to show
-        # everything in any of the requested library's collections.
+        # everything in any of the requested library's active collections.
         lane = kwargs.pop("worklist")
         assert isinstance(lane, CrawlableCollectionBasedLane)
         assert library.id == lane.library_id
-        assert [x.id for x in library.associated_collections] == lane.collection_ids
+        assert library.associated_collections == [
+            active_collection,
+            inactive_collection,
+        ]
+        assert library.active_collections == [active_collection]
+        assert set(lane.collection_ids) == {x.id for x in library.active_collections}
         assert {} == kwargs
 
     def test_crawlable_collection_feed(

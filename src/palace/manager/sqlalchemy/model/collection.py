@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     ForeignKey,
     Integer,
     Table,
     UniqueConstraint,
     exists,
+    not_,
     select,
 )
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import Mapped, Query, mapper, relationship
+from sqlalchemy.orm import Mapped, Query, aliased, mapper, relationship
 from sqlalchemy.orm.session import Session
+from sqlalchemy.sql import Select
 from sqlalchemy.sql.expression import and_, or_
+from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
@@ -28,7 +33,10 @@ from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord, Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.sqlalchemy.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
@@ -269,6 +277,95 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
                 qu = qu.filter(IntegrationConfiguration.protocol.in_(protocol))
 
         return qu
+
+    @property
+    def is_active(self) -> bool:
+        """Return True if the collection is active, False otherwise."""
+        active_query = self.active_collections_filter(sa_select=select(count())).where(
+            Collection.id == self.id
+        )
+        _db = Session.object_session(self)
+        count_ = _db.execute(active_query).scalar()
+        return False if count_ is None else count_ > 0
+
+    @classmethod
+    def active_collections_filter(
+        cls, *, sa_select: Select | None = None, today: datetime.date | None = None
+    ) -> Select:
+        """Filter to select from only collections that are considered active.
+
+        A collection is considered active if it either:
+            - has no activation/expiration settings; or
+            - meets the criteria specified by the activation/expiration settings.
+
+        :param sa_select: A SQLAlchemy Select object. Defaults to an empty Select.
+        :param today: The date to use as the current date. Defaults to today.
+        :return: A filtered SQLAlchemy Select object.
+        """
+        sa_select = sa_select if sa_select is not None else select()
+        if today is None:
+            today = datetime.date.today()
+        return cls._filter_active_collections(
+            sa_select=(sa_select.select_from(Collection).join(IntegrationConfiguration))
+        )
+
+    @staticmethod
+    def _filter_active_collections(
+        *, sa_select: Select, today: datetime.date | None = None
+    ) -> Select:
+        """Constrain to only active collections.
+
+        A collection is considered active if it either:
+            - has no activation/expiration settings; or
+            - meets the criteria specified by the activation/expiration settings.
+
+        :param sa_select: A SQLAlchemy Select object.
+        :param today: The date to use as the current date. Defaults to today.
+        :return: A filtered SQLAlchemy Select object.
+        """
+        if today is None:
+            today = datetime.date.today()
+        return sa_select.where(
+            or_(
+                not_(
+                    IntegrationConfiguration.settings_dict.has_key(
+                        "subscription_activation_date"
+                    )
+                ),
+                IntegrationConfiguration.settings_dict[
+                    "subscription_activation_date"
+                ].astext.cast(Date)
+                <= today,
+            ),
+            or_(
+                not_(
+                    IntegrationConfiguration.settings_dict.has_key(
+                        "subscription_expiration_date"
+                    )
+                ),
+                IntegrationConfiguration.settings_dict[
+                    "subscription_expiration_date"
+                ].astext.cast(Date)
+                >= today,
+            ),
+        )
+
+    @property
+    def active_libraries(self) -> list[Library]:
+        """Return a list of libraries that are active for this collection.
+
+        Active means either that there is no subscription activation/expiration
+        criteria set, or that the criteria specified are satisfied.
+        """
+        library = aliased(Library, name="library")
+        query = (
+            self.active_collections_filter(sa_select=select(library))
+            .join(IntegrationLibraryConfiguration)
+            .join(library)
+            .where(Collection.id == self.id)
+        )
+        _db = Session.object_session(self)
+        return [row.library for row in _db.execute(query)]
 
     @property
     def name(self) -> str:

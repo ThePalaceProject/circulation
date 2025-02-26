@@ -379,7 +379,9 @@ class PatronActivity(LoggerMixin):
         patron activity sync. This indicates that the collection is ready to be
         synced.
         """
-        collections = patron.library.associated_collections
+        # TODO: What should happen to loans that are in a collection that is not active?
+        #  For now, we'll handle loans only for active collections.
+        collections = patron.library.active_collections
         keys = [
             cls._get_key(redis_client, patron.id, collection.id)
             for collection in collections

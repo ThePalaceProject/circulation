@@ -3330,7 +3330,9 @@ class TestFilter:
 
         # Verify that the Filter constructor sets members with
         # minimal processing.
-        collection = transaction.default_collection()
+        default_library = transaction.default_library()
+        active_collection = transaction.default_collection()
+        inactive_collection = transaction.default_inactive_collection()
 
         media = object()
         languages = object()
@@ -3362,22 +3364,34 @@ class TestFilter:
 
         # Test the `collections` argument.
 
-        # If you pass in a library, you get all of its collections.
-        library_filter = Filter(collections=transaction.default_library())
-        assert [transaction.default_collection().id] == library_filter.collection_ids
+        # If you pass in a library, you get all of its active collections.
+        library_filter = Filter(collections=default_library)
+        assert [active_collection.id] == library_filter.collection_ids
+
+        # If the library has no active collections, the collection filter
+        # will filter everything out.
+        active_collection.associated_libraries = []
+        assert default_library.associated_collections == [inactive_collection]
+        assert default_library.active_collections == []
+        library_filter = Filter(collections=default_library)
+        assert library_filter.collection_ids == []
 
         # If the library has no collections, the collection filter
         # will filter everything out.
-        transaction.default_collection().associated_libraries = []
-        assert transaction.default_library().associated_collections == []
-        library_filter = Filter(collections=transaction.default_library())
-        assert [] == library_filter.collection_ids
+        inactive_collection.associated_libraries = []
+        assert default_library.associated_collections == []
+        assert default_library.active_collections == []
+        library_filter = Filter(collections=default_library)
+        assert library_filter.collection_ids == []
 
         # If you pass in Collection objects, you get their IDs.
-        collection_filter = Filter(collections=transaction.default_collection())
-        assert [transaction.default_collection().id] == collection_filter.collection_ids
-        collection_filter = Filter(collections=[transaction.default_collection()])
-        assert [transaction.default_collection().id] == collection_filter.collection_ids
+        collection_filter = Filter(collections=active_collection)
+        assert [active_collection.id] == collection_filter.collection_ids
+        collection_filter = Filter(collections=[active_collection, inactive_collection])
+        assert collection_filter.collection_ids == [
+            active_collection.id,
+            inactive_collection.id,
+        ]
 
         # If you pass in IDs, they're left alone.
         ids = [10, 11, 22]
@@ -3497,6 +3511,8 @@ class TestFilter:
         # are used to determine what should go into the constructor.
 
         library = transaction.default_library()
+        active_collection = transaction.default_collection()
+        inactive_collection = transaction.default_inactive_collection()
         settings = library.settings
         assert settings.allow_holds is True
 
@@ -3524,8 +3540,16 @@ class TestFilter:
 
         facets = Mock()
 
+        # Only the active collections for a library will be included in
+        # the search filter.
+        assert library.associated_collections == [
+            active_collection,
+            inactive_collection,
+        ]
+        assert library.active_collections == [active_collection]
+
         filter = Filter.from_worklist(session, inherits, facets)
-        assert [transaction.default_collection().id] == filter.collection_ids
+        assert filter.collection_ids == [active_collection.id]
         assert parent.media == filter.media
         assert parent.languages == filter.languages
         assert parent.fiction == filter.fiction
@@ -3576,9 +3600,7 @@ class TestFilter:
 
         [subfilter] = subfilters.pop("licensepools")
         assert {
-            "terms": {
-                "licensepools.collection_id": [transaction.default_collection().id]
-            }
+            "terms": {"licensepools.collection_id": [active_collection.id]}
         } == subfilter.to_dict()
 
         # No other subfilters were specified.
@@ -3596,11 +3618,11 @@ class TestFilter:
 
         # Here's a collection associated with the default library.
         for_default_library = WorkList()
-        for_default_library.initialize(transaction.default_library())
+        for_default_library.initialize(library)
 
         # Its filter uses all the collections associated with that library.
         filter = Filter.from_worklist(session, for_default_library, None)
-        assert [transaction.default_collection().id] == filter.collection_ids
+        assert [active_collection.id] == filter.collection_ids
 
         # Here's a child of that WorkList associated with a different
         # library.

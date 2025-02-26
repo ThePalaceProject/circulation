@@ -1219,10 +1219,17 @@ class TestCollectionReaper:
         reaper.delete(collection)
         assert True == collection.was_called
 
-    def test_run_once(self, db: DatabaseTransactionFixture):
+    @pytest.mark.parametrize(
+        "is_inactive",
+        (
+            pytest.param(True, id="inactive"),
+            pytest.param(False, id="active"),
+        ),
+    )
+    def test_run_once(self, db: DatabaseTransactionFixture, is_inactive: bool):
         # End-to-end test
-        c1 = db.default_collection()
-        c2 = db.collection()
+        c1 = db.collection()
+        c2 = db.collection(inactive=is_inactive)
         c2.marked_for_deletion = True
         reaper = CollectionReaper(db.session)
         result = reaper.run_once()

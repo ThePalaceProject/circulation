@@ -1,3 +1,4 @@
+import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -5,6 +6,8 @@ from sqlalchemy import select
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive import OverdriveAPI, OverdriveLibrarySettings
+from palace.manager.core.opds_import import OPDSImporterSettings
+from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -355,36 +358,36 @@ class TestCollection:
             "  external_account_id: id2",
         ] == data
 
-    def test_disassociate_libraries(
-        self, example_collection_fixture: ExampleCollectionFixture
-    ):
-        db = example_collection_fixture.database_fixture
+    def test_disassociate_libraries(self, db: DatabaseTransactionFixture):
+
         # Here's a Collection.
-        collection = db.default_collection()
+        collection = db.collection()
 
         # It's associated with two different libraries.
-        assert db.default_library() in collection.associated_libraries
+        default_library = db.library()
         other_library = db.library()
+        collection.associated_libraries.append(default_library)
         collection.associated_libraries.append(other_library)
 
         # It has an integration, which has some settings.
         integration = collection.integration_configuration
         integration.settings_dict = {"key": "value"}
 
-        # And it has some library-specific settings.
-        default_library_settings = integration.for_library(db.default_library())
-        assert default_library_settings is not None
-        default_library_settings.settings_dict = {"a": "b"}
-        other_library_settings = integration.for_library(other_library)
-        assert other_library_settings is not None
-        other_library_settings.settings_dict = {"c": "d"}
+        def update_library_settings(integration, library, settings):
+            # And it has some library-specific settings.
+            library_integration = integration.for_library(library)
+            assert library_integration is not None
+            library_integration.settings_dict = settings
+
+        update_library_settings(integration, default_library, {"a": "b"})
+        update_library_settings(integration, other_library, {"c": "d"})
 
         # Now, disassociate one of the libraries from the collection.
-        collection.associated_libraries.remove(db.default_library())
+        collection.associated_libraries.remove(default_library)
 
         # It's gone.
         assert db.default_library() not in collection.associated_libraries
-        assert collection not in db.default_library().associated_collections
+        assert collection not in default_library.associated_collections
 
         # The library-specific settings for that library have been deleted.
         library_config_ids = [
@@ -393,7 +396,7 @@ class TestCollection:
                 select(IntegrationLibraryConfiguration.library_id)
             )
         ]
-        assert db.default_library().id not in library_config_ids
+        assert default_library.id not in library_config_ids
 
         # But the library-specific settings for the other library are still there.
         assert other_library in collection.associated_libraries
@@ -412,6 +415,79 @@ class TestCollection:
 
         # The integration settings are still there.
         assert collection.integration_configuration.settings_dict == {"key": "value"}
+
+    # TODO: Pydantic and FreezeGun don't play well together, so we'll use
+    #  dates well into the past and into the future to avoid any flakiness.
+    @pytest.mark.parametrize(
+        "activation_date, expiration_date, expect_active",
+        (
+            pytest.param(None, None, True, id="no start/end dates"),
+            pytest.param(None, datetime.date(2222, 8, 31), True, id="no start date"),
+            pytest.param(datetime.date(1960, 8, 1), None, True, id="no end date"),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(2222, 8, 31),
+                True,
+                id="both dates",
+            ),
+            pytest.param(
+                datetime.date(1960, 8, 1),
+                datetime.date(1961, 8, 15),
+                False,
+                id="ends before today",
+            ),
+            pytest.param(
+                datetime.date(2222, 9, 1),
+                None,
+                False,
+                id="starts after today",
+            ),
+        ),
+    )
+    def test_collection_subscription(
+        self,
+        db: DatabaseTransactionFixture,
+        activation_date: datetime.date | None,
+        expiration_date: datetime.date | None,
+        expect_active: bool,
+    ):
+        # Collection subscription settings.
+        test_subscription_settings = (
+            {"subscription_activation_date": activation_date} if activation_date else {}
+        ) | (
+            {"subscription_expiration_date": expiration_date} if expiration_date else {}
+        )
+
+        # Here's a Collection.
+        collection = db.default_collection()
+        assert collection.is_active is True
+
+        # It's associated with two different libraries.
+        assert db.default_library() in collection.associated_libraries
+        other_library = db.library()
+        collection.associated_libraries.append(other_library)
+
+        # Initially there are no subscription settings.
+        integration = collection.integration_configuration
+        initial_settings = integration.settings_dict
+        assert "subscription_activation_date" not in initial_settings
+        assert "subscription_expiration_date" not in initial_settings
+
+        # So our associated libraries are active by default.
+        assert db.default_library() in collection.active_libraries
+        assert other_library in collection.active_libraries
+
+        # Now we apply the settings for the current case.
+        integration_settings_update(
+            OPDSImporterSettings, integration, test_subscription_settings, merge=True
+        )
+
+        # Whether the collection is active or not depends on the
+        # subscription settings.
+        assert collection.is_active == expect_active
+        # And the libraries should have the active status that we expect.
+        assert (db.default_library() in collection.active_libraries) == expect_active
+        assert (other_library in collection.active_libraries) == expect_active
 
     def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
         db = example_collection_fixture.database_fixture
@@ -456,32 +532,48 @@ class TestCollection:
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 
+    @pytest.mark.parametrize(
+        "is_inactive, active_collection_count",
+        (
+            pytest.param(True, 0, id="inactive collection"),
+            pytest.param(False, 1, id="active collection"),
+        ),
+    )
     def test_delete(
         self,
-        example_collection_fixture: ExampleCollectionFixture,
+        db: DatabaseTransactionFixture,
         services_fixture_wired: ServicesFixture,
+        is_inactive: bool,
+        active_collection_count: int,
     ):
         """Verify that Collection.delete will only operate on collections
         flagged for deletion, and that deletion cascades to all
         relevant related database objects.
+
+        This test also demonstrates that the deletion works the same for active
+        and inactive collections.
         """
-        db = example_collection_fixture.database_fixture
-        # This collection is doomed.
-        collection = db.default_collection()
+        library = db.library()
+        collection = db.collection(library=library)
 
         # It's associated with a library.
-        assert db.default_library() in collection.associated_libraries
+        assert collection.associated_libraries == [library]
+        assert len(library.associated_collections) == 1
+        # Even if we're going to test deletion of an inactive collection,
+        # we should start with it being active, so that loans and holds
+        # can be created. We'll make it inactive later.
+        assert len(library.active_collections) == 1
 
         # It's got a Work that has a LicensePool, which has a License,
         # which has a loan.
-        work = db.work(with_license_pool=True)
+        work = db.work(with_license_pool=True, collection=collection)
         [pool] = work.license_pools
         license = db.license(pool)
-        patron = db.patron()
+        patron = db.patron(library=library)
         loan, is_new = license.loan_to(patron)
 
         # The LicensePool also has a hold.
-        patron2 = db.patron()
+        patron2 = db.patron(library=library)
         hold, is_new = pool.on_hold_to(patron2)
 
         # And a CirculationEvent.
@@ -492,7 +584,7 @@ class TestCollection:
         # There's a second Work which has _two_ LicensePools from two
         # different Collections -- the one we're about to delete and
         # another Collection.
-        work2 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True, collection=collection)
         collection2 = db.collection()
         pool2 = db.licensepool(None, collection=collection2)
         work2.license_pools.append(pool2)
@@ -511,12 +603,19 @@ class TestCollection:
         # Works are removed from the search index.
         index = MagicMock(spec=ExternalSearchIndex)
 
+        # If we're meant to test an inactive collection, make it inactive.
+        if is_inactive:
+            db.make_collection_inactive(collection)
+
+        assert len(library.associated_collections) == 1
+        assert len(library.active_collections) == active_collection_count
+
         # delete() will not work on a collection that's not marked for
         # deletion.
         with pytest.raises(Exception) as excinfo:
             collection.delete()
         assert (
-            "Cannot delete %s: it is not marked for deletion." % collection.name
+            f"Cannot delete {collection.name}: it is not marked for deletion."
             in str(excinfo.value)
         )
 
@@ -528,7 +627,7 @@ class TestCollection:
         assert collection not in db.session.query(Collection).all()
 
         # The default library now has no collections.
-        assert [] == db.default_library().associated_collections
+        assert [] == library.associated_collections
 
         # The collection based coverage record got deleted
         assert db.session.query(CoverageRecord).get(record.id) == None

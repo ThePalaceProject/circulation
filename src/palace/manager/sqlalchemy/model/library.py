@@ -183,25 +183,32 @@ class Library(Base, HasSessionCache):
             )
         )
 
-    @property
-    def associated_collections_ids(self) -> list[CollectionInfoTuple]:
-        """Get the collection ids for this library"""
+    def _active_collections_query(self) -> Select:
+        """Return a SQLAlchemy query that selects active collections for this library."""
         from palace.manager.sqlalchemy.model.collection import Collection
-        from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
-
-        _db = Session.object_session(self)
-        query = select(Collection.id, IntegrationConfiguration.protocol).select_from(
-            Collection
+        from palace.manager.sqlalchemy.model.integration import (
+            IntegrationLibraryConfiguration,
         )
-        query = self._associated_collections_query(query)
-        results = _db.execute(query).all()
-        return [CollectionInfoTuple(*row) for row in results]
+
+        return (
+            Collection.active_collections_filter(sa_select=select(Collection))
+            .join(IntegrationLibraryConfiguration)
+            .where(
+                IntegrationLibraryConfiguration.library_id == self.id,
+            )
+        )
 
     @property
     def associated_collections(self) -> Sequence[Collection]:
         """Get all associated collections for this library."""
         _db = Session.object_session(self)
         return _db.scalars(self._associated_collections_query()).all()
+
+    @property
+    def active_collections(self) -> Sequence[Collection]:
+        """Active collections for this library."""
+        _db = Session.object_session(self)
+        return _db.scalars(self._active_collections_query()).all()
 
     # Cache of the libraries loaded settings object
     _settings: LibrarySettings | None
@@ -323,16 +330,21 @@ class Library(Base, HasSessionCache):
 
     def enabled_facets(self, group_name: str) -> list[str]:
         """Look up the enabled facets for a given facet group."""
-        if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
+        if group_name in [
+            FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME,
+            FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME,
+        ]:
             enabled = []
-            for collection in self.associated_collections:
+            collections = self.active_collections
+
+        if group_name == FacetConstants.DISTRIBUTOR_FACETS_GROUP_NAME:
+            for collection in collections:
                 if collection.data_source and collection.data_source.name:
                     enabled.append(collection.data_source.name)
             return list(set(enabled))
 
         if group_name == FacetConstants.COLLECTION_NAME_FACETS_GROUP_NAME:
-            enabled = []
-            for collection in self.associated_collections:
+            for collection in collections:
                 if collection.name is not None:
                     enabled.append(collection.name)
             return enabled

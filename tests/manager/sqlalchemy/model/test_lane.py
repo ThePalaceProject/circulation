@@ -1712,6 +1712,10 @@ class MockWorks(WorkList):
 
 class TestWorkList:
     def test_initialize(self, db: DatabaseTransactionFixture):
+        default_library = db.default_library()
+        active_collection = db.default_collection()
+        inactive_collection = db.default_inactive_collection()
+
         wl = WorkList()
         child = WorkList()
         child.initialize(db.default_library())
@@ -1721,19 +1725,24 @@ class TestWorkList:
         # Create a WorkList that's associated with a Library, two genres,
         # and a child WorkList.
         wl.initialize(
-            db.default_library(),
+            default_library,
             children=[child],
             genres=[sf, romance],
             entrypoints=[1, 2, 3],
         )
 
         # Access the Library.
-        assert db.default_library() == wl.get_library(db.session)
+        assert default_library == wl.get_library(db.session)
 
-        # The Collections associated with the WorkList are those associated
-        # with the Library.
+        # Only the library's active collections are associated
+        # with the WorkList.
+        assert default_library.associated_collections == [
+            active_collection,
+            inactive_collection,
+        ]
+        assert default_library.active_collections == [active_collection]
         assert set(wl.collection_ids) == {
-            x.id for x in db.default_library().associated_collections
+            x.id for x in default_library.active_collections
         }
 
         # The Genres associated with the WorkList are the ones passed
@@ -2833,52 +2842,102 @@ class TestDatabaseBackedWorkList:
         # This is a simple end-to-end test of functionality that's
         # tested in more detail elsewhere.
 
+        default_library = db.default_library()
+        active_collection = db.default_collection()
+        inactive_collection = db.default_inactive_collection()
+
         # Create two books.
         oliver_twist = db.work(
-            title="Oliver Twist", with_license_pool=True, language="eng"
+            title="Oliver Twist",
+            with_license_pool=True,
+            language="eng",
+            collection=active_collection,
         )
         barnaby_rudge = db.work(
-            title="Barnaby Rudge", with_license_pool=True, language="spa"
+            title="Barnaby Rudge",
+            with_license_pool=True,
+            language="spa",
+            collection=active_collection,
+        )
+        # And one more in the inactive collection.
+        grim_furry_tails = db.work(
+            title="Grim Furry Tails",
+            with_license_pool=True,
+            language="fre",
+            collection=inactive_collection,
         )
 
-        # A standard DatabaseBackedWorkList will find both books.
+        # A standard DatabaseBackedWorkList will find both books
+        # from the library's active collections.
         wl = DatabaseBackedWorkList()
-        wl.initialize(db.default_library())
+        wl.initialize(default_library)
+        assert default_library.associated_collections == [
+            active_collection,
+            inactive_collection,
+        ]
+        assert default_library.active_collections == [active_collection]
         assert 2 == wl.works_from_database(db.session).count()
 
         # A work list with a language restriction will only find books
         # in that language.
-        wl.initialize(db.default_library(), languages=["eng"])
+        wl.initialize(default_library, languages=["eng"])
         assert [oliver_twist] == [x for x in wl.works_from_database(db.session)]
 
         # A DatabaseBackedWorkList will only find books licensed
         # through one of its collections.
-        db.default_collection().associated_libraries = []
+        active_collection.associated_libraries = []
         collection = db.collection()
-        collection.associated_libraries.append(db.default_library())
-        assert db.default_library().associated_collections == [collection]
-        wl.initialize(db.default_library())
+        collection.associated_libraries.append(default_library)
+        assert set(default_library.associated_collections) == {
+            collection,
+            inactive_collection,
+        }
+        assert default_library.active_collections == [collection]
+        wl.initialize(default_library)
+        assert 0 == wl.works_from_database(db.session).count()
+
+        # If a DatabaseBackedWorkList's library has only
+        # inactive collections, it has no books.
+        collection.associated_libraries = []
+        assert default_library.associated_collections == [inactive_collection]
+        assert default_library.active_collections == []
+        wl.initialize(default_library)
         assert 0 == wl.works_from_database(db.session).count()
 
         # If a DatabaseBackedWorkList has no collections, it has no
         # books.
-        collection.associated_libraries = []
-        assert db.default_library().associated_collections == []
-        wl.initialize(db.default_library())
+        inactive_collection.associated_libraries = []
+        assert default_library.associated_collections == []
+        wl.initialize(default_library)
         assert 0 == wl.works_from_database(db.session).count()
 
-        # A DatabaseBackedWorkList can be set up with a collection
-        # rather than a library. TODO: The syntax here could be improved.
+        # A DatabaseBackedWorkList can be set up with collections
+        # rather than a library, even if the collection is inactive.
+        # TODO: The syntax here could be improved.
         wl = DatabaseBackedWorkList()
-        wl.initialize(None)
-        wl.collection_ids = [db.default_collection().id]
+        wl.initialize(
+            None, collection_ids=[active_collection.id, inactive_collection.id]
+        )
         assert None == wl.get_library(db.session)
+        assert 3 == wl.works_from_database(db.session).count()
+
+        # Reset our collection library associations and re-initialize
+        # our work list to the default library.
+        active_collection.associated_libraries = [default_library]
+        inactive_collection.associated_libraries = [default_library]
+        wl.initialize(default_library)
+
+        assert default_library.associated_collections == [
+            active_collection,
+            inactive_collection,
+        ]
+        assert default_library.active_collections == [active_collection]
         assert 2 == wl.works_from_database(db.session).count()
 
         # Facets and pagination can affect which entries and how many
         # are returned.
         facets = DatabaseBackedFacets(
-            db.default_library(),
+            default_library,
             availability=Facets.AVAILABLE_ALL,
             order=Facets.ORDER_TITLE,
             distributor=None,

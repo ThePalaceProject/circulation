@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import functools
 import importlib
 import logging
@@ -403,6 +404,7 @@ class DatabaseTransactionFixture:
         self._database = database
         self._default_library: Library | None = None
         self._default_collection: Collection | None = None
+        self._default_inactive_collection: Collection | None = None
         self._counter = 2000
         self._isbns = [
             "9780674368279",
@@ -422,7 +424,7 @@ class DatabaseTransactionFixture:
             Goals.PATRON_AUTH_GOAL: self._services.services.integration_registry.patron_auth(),
         }
 
-    def _make_default_library(self) -> Library:
+    def make_default_library_with_collections(self) -> None:
         """Ensure that the default library exists in the given database."""
         library = self.library("default", "default")
         collection = self.collection(
@@ -431,7 +433,21 @@ class DatabaseTransactionFixture:
             settings=self.opds_settings(data_source="OPDS"),
         )
         collection.associated_libraries.append(library)
-        return library
+        inactive_collection = self.collection(
+            "Default Inactive Collection",
+            protocol=OPDSAPI,
+            settings=self.opds_settings(data_source="OPDS"),
+            inactive=True,
+        )
+        inactive_collection.associated_libraries.append(library)
+
+        # Ensure that the library's collections are set up correctly.
+        assert set(library.associated_collections) == {collection, inactive_collection}
+        assert library.active_collections == [collection]
+
+        self._default_library = library
+        self._default_collection = collection
+        self._default_inactive_collection = inactive_collection
 
     @classmethod
     @contextmanager
@@ -478,9 +494,18 @@ class DatabaseTransactionFixture:
         saves time.
         """
         if not self._default_collection:
-            self._default_collection = self.default_library().associated_collections[0]
+            self.make_default_library_with_collections()
+            assert self._default_collection is not None
 
         return self._default_collection
+
+    def default_inactive_collection(self) -> Collection:
+        """An inactive Collection that will only be created once throughout a given test."""
+        if not self._default_inactive_collection:
+            self.make_default_library_with_collections()
+            assert self._default_inactive_collection is not None
+
+        return self._default_inactive_collection
 
     def default_library(self) -> Library:
         """A Library that will only be created once throughout a given test.
@@ -489,7 +514,8 @@ class DatabaseTransactionFixture:
         the default library.
         """
         if not self._default_library:
-            self._default_library = self._make_default_library()
+            self.make_default_library_with_collections()
+            assert self._default_library is not None
 
         return self._default_library
 
@@ -589,6 +615,7 @@ class DatabaseTransactionFixture:
         protocol: type[BaseCirculationAPI[Any, Any]] | str = OPDSAPI,
         settings: BaseCirculationApiSettings | dict[str, Any] | None = None,
         library: Library | None = None,
+        inactive: bool = False,
     ) -> Collection:
         name = name or self.fresh_str()
         protocol_str = (
@@ -616,7 +643,25 @@ class DatabaseTransactionFixture:
 
         if library and library not in collection.associated_libraries:
             collection.associated_libraries.append(library)
+
+        if inactive:
+            self.make_collection_inactive(collection)
         return collection
+
+    def make_collection_inactive(self, collection: Collection) -> None:
+        """Make a collection inactive using some settings that will make it so."""
+        protocol_cls = self._goal_registry_mapping[Goals.LICENSE_GOAL][
+            collection.protocol
+        ]
+        protocol_cls.settings_update(
+            collection.integration_configuration,
+            {
+                "subscription_activation_date": datetime.date(2000, 12, 31),
+                "subscription_expiration_date": datetime.date(1999, 1, 1),
+            },
+            merge=True,
+        )
+        assert not collection.is_active
 
     def work(
         self,

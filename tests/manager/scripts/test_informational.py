@@ -183,6 +183,7 @@ class MockWhereAreMyBooks(WhereAreMyBooksScript):
         self.output = []
 
     def out(self, s, *args):
+        print(">>>> Out: ", s, *args)
         if args:
             self.output.append((s, list(args)))
         else:
@@ -213,44 +214,56 @@ class TestWhereAreMyBooksScript:
         script.output = []
 
         # Make some libraries and some collections, and try again.
-        library1 = db.default_library()
-        library2 = db.library()
+        # The db fixture creates all three of these if any of them is present,
+        # so if one is present, we must account for them all.
+        default_library = db.default_library()
+        default_active_collection = db.default_collection()
+        default_inactive_collection = db.default_inactive_collection()
+        # And we'll add a couple more items to the mix.
+        other_library = db.library()
+        other_collection = db.collection()
 
-        collection1 = db.default_collection()
-        collection2 = db.collection()
+        libraries = [default_library, other_library]
+        collections = [
+            default_active_collection,
+            default_inactive_collection,
+            other_collection,
+        ]
+
+        # We expect one output newline per library, one more per collection,
+        # and one more between the library and collection sections.
+        expected_newlines = len(libraries) + len(collections) + 1
 
         script.run()
 
         # Every library in the collection was checked.
         mock_check_library.assert_has_calls(
-            [call(library1), call(library2)], any_order=True
+            [call(library) for library in libraries], any_order=True
         )
 
         # Every collection in the database was explained.
         mock_explain_collection.assert_has_calls(
-            [call(collection1), call(collection2)], any_order=True
+            [call(collection) for collection in collections], any_order=True
         )
 
-        # There only output were the newlines after the five method
-        # calls. All other output happened inside the methods we
-        # mocked.
-        assert ["\n"] * 5 == script.output
+        # We got the expected number of newlines.
+        assert ["\n"] * expected_newlines == script.output
 
         # Finally, verify the ability to use the command line to limit
         # the check to specific collections. (This isn't terribly useful
         # since checks now run very quickly.)
         mock_explain_collection.reset_mock()
-        script.run(cmd_args=["--collection=%s" % collection2.name])
-        mock_explain_collection.assert_called_once_with(collection2)
+        script.run(cmd_args=["--collection=%s" % other_collection.name])
+        mock_explain_collection.assert_called_once_with(other_collection)
 
     def test_check_library(
         self,
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        # Give the default library a collection and a lane.
-        library = db.default_library()
-        collection = db.default_collection()
+        # Give the library an active collection and a lane.
+        library = db.library()
+        collection = db.collection(library=library)
         lane = db.lane(library=library)
 
         script = MockWhereAreMyBooks(
@@ -260,7 +273,22 @@ class TestWhereAreMyBooksScript:
 
         checking, has_collection, has_lanes = script.output
         assert ("Checking library %s", [library.name]) == checking
-        assert (" Associated with collection %s.", [collection.name]) == has_collection
+        assert (
+            has_collection
+            == f" Associated with collection {collection.name} (active=True)."
+        )
+        assert (" Associated with %s lanes.", [1]) == has_lanes
+
+        # Now we'll add an inactive collection to the library.
+        collection2 = db.collection(library=library, inactive=True)
+        script.output = []
+        script.check_library(library)
+        checking, has_one_collection, has_another_collection, has_lanes = script.output
+        assert ("Checking library %s", [library.name]) == checking
+        assert {has_one_collection, has_another_collection} == {
+            f" Associated with collection {collection.name} (active=True).",
+            f" Associated with collection {collection2.name} (active=False).",
+        }
         assert (" Associated with %s lanes.", [1]) == has_lanes
 
         # This library has no collections and no lanes.
@@ -269,8 +297,24 @@ class TestWhereAreMyBooksScript:
         script.check_library(library2)
         checking, no_collection, no_lanes = script.output
         assert ("Checking library %s", [library2.name]) == checking
-        assert " This library has no collections -- that's a problem." == no_collection
+        assert (
+            no_collection
+            == " This library has no associated collections -- that's a problem."
+        )
         assert " This library has no lanes -- that's a problem." == no_lanes
+
+        # This library has a collection, but it is inactive.
+        library3 = db.library()
+        collection3 = db.collection(library=library3, inactive=True)
+
+        script.output = []
+        script.check_library(library3)
+        checking, no_active_collection, no_lanes = script.output
+        assert ("Checking library %s", [library3.name]) == checking
+        assert (
+            no_active_collection
+            == " This library has no active collections -- that's a problem."
+        )
 
     @staticmethod
     def check_explanation(

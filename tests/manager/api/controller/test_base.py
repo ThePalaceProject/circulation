@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import MagicMock, patch
 
 import flask
+import pytest
 from flask import Response
 from werkzeug.datastructures import Authorization
 
@@ -193,10 +194,24 @@ class TestBaseController:
             response = circulation_fixture.controller.authenticate()
             assert None == response.headers.get("WWW-Authenticate")
 
-    def test_load_licensepools(self, circulation_fixture: CirculationControllerFixture):
+    @pytest.mark.parametrize(
+        "is_inactive",
+        (
+            pytest.param(True, id="inactive collection"),
+            pytest.param(False, id="active collection"),
+        ),
+    )
+    def test_load_licensepools(
+        self, circulation_fixture: CirculationControllerFixture, is_inactive: bool
+    ):
         # Here's a Library that has two Collections.
         library = circulation_fixture.library
-        [c1] = library.associated_collections
+        assert len(library.associated_collections) == 2
+        c1 = (
+            circulation_fixture.db.default_inactive_collection()
+            if is_inactive
+            else circulation_fixture.db.default_collection()
+        )
         c2 = circulation_fixture.db.collection()
         c2.associated_libraries.append(library)
 
