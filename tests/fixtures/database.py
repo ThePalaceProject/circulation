@@ -648,16 +648,19 @@ class DatabaseTransactionFixture:
             self.make_collection_inactive(collection)
         return collection
 
-    @staticmethod
-    def make_collection_inactive(collection: Collection):
+    def make_collection_inactive(self, collection: Collection) -> None:
         """Make a collection inactive using some settings that will make it so."""
-        collection.integration_configuration.settings_dict.update(
+        protocol_cls = self._goal_registry_mapping[Goals.LICENSE_GOAL][
+            collection.protocol
+        ]
+        protocol_cls.settings_update(
+            collection.integration_configuration,
             {
                 "subscription_activation_date": datetime.date(2000, 12, 31),
                 "subscription_expiration_date": datetime.date(1999, 1, 1),
-            }
+            },
+            merge=True,
         )
-        flag_modified(collection.integration_configuration, "settings_dict")
         assert not collection.is_active
 
     def work(

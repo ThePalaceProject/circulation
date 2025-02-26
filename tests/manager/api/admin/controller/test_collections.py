@@ -123,10 +123,8 @@ class TestCollectionSettings:
         db: DatabaseTransactionFixture,
         is_inactive: bool,
     ) -> None:
-        default_library = db.library(short_name="default", name="Default Library")
-        c1 = db.collection(
-            library=default_library, name="Default Collection", inactive=is_inactive
-        )
+        l1 = db.library(short_name="default", name="Default Library")
+        c1 = db.collection(library=l1, name="Default Collection", inactive=is_inactive)
 
         c2 = db.collection(
             name="Collection 2",
@@ -148,17 +146,17 @@ class TestCollectionSettings:
         )
         c3.parent = c2
 
-        l1 = db.library(short_name="L1")
-        c3.associated_libraries += [l1, default_library]
+        l2 = db.library(short_name="L2")
+        c3.associated_libraries += [l2, l1]
         db.integration_library_configuration(
             c3.integration_configuration,
-            l1,
+            l2,
             OverdriveLibrarySettings(ebook_loan_duration=14),
         )
 
         admin = flask_app_fixture.admin_user()
         l1_librarian = flask_app_fixture.admin_user(
-            email="admin@l1.org", role=AdminRole.LIBRARIAN, library=l1
+            email="admin@l2.org", role=AdminRole.LIBRARIAN, library=l2
         )
 
         with flask_app_fixture.test_request_context("/", admin=admin):
@@ -202,9 +200,9 @@ class TestCollectionSettings:
         coll3_l1, coll3_default = sorted(
             coll3_libraries, key=lambda x: x.get("short_name")
         )
-        assert "L1" == coll3_l1.get("short_name")
+        assert "L2" == coll3_l1.get("short_name")
         assert 14 == coll3_l1.get("ebook_loan_duration")
-        assert default_library.short_name == coll3_default.get("short_name")
+        assert l1.short_name == coll3_default.get("short_name")
 
         # A librarian only sees collections associated with their library
         # (including inactive ones).
@@ -219,7 +217,7 @@ class TestCollectionSettings:
 
         coll3_libraries = coll3.get("libraries")
         assert 1 == len(coll3_libraries)
-        assert "L1" == coll3_libraries[0].get("short_name")
+        assert "L2" == coll3_libraries[0].get("short_name")
         assert 14 == coll3_libraries[0].get("ebook_loan_duration")
 
     @pytest.mark.parametrize(
