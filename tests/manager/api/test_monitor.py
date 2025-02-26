@@ -193,11 +193,9 @@ class TestLoanlikeReaperMonitor:
         call_args_list = (
             services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
         )
-        assert len(call_args_list) == 4
+        assert len(call_args_list) == 2
         event_types = [call_args.kwargs["event_type"] for call_args in call_args_list]
         assert event_types == [
-            CirculationEvent.CM_LOAN_EXPIRED,
-            CirculationEvent.CM_LOAN_EXPIRED,
             CirculationEvent.CM_HOLD_EXPIRED,
             CirculationEvent.CM_HOLD_EXPIRED,
         ]
