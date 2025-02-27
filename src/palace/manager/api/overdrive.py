@@ -44,6 +44,7 @@ from palace.manager.api.circulation import (
     RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
+    AlreadyOnHold,
     CannotFulfill,
     CannotHold,
     CannotLoan,
@@ -1054,9 +1055,6 @@ class OverdriveAPI(
             code = error.get("errorCode", code)
         if code == "NoCopiesAvailable":
             # Clearly our info is out of date.
-            # TODO: This shouldn't be happening in the web thread, it should really be happening in a
-            #   background job. No need to block the user while we update the license pool.
-            self.update_licensepool(identifier.identifier)
             raise NoAvailableCopies()
 
         if code == "TitleAlreadyCheckedOut":
@@ -1201,12 +1199,6 @@ class OverdriveAPI(
         """
         url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
         data = self.patron_request(patron, pin, url, is_fulfillment=True).json()
-        self.raise_exception_on_error(data)
-        return data
-
-    def get_hold(self, patron, pin, overdrive_id):
-        url = self.endpoint(self.HOLD_ENDPOINT, product_id=overdrive_id.upper())
-        data = self.patron_request(patron, pin, url).json()
         self.raise_exception_on_error(data)
         return data
 
@@ -1640,18 +1632,6 @@ class OverdriveAPI(
             could be placed.
         """
 
-        def make_holdinfo(hold_response):
-            # Create a HoldInfo object by combining data passed into
-            # the enclosing method with the data from a hold response
-            # (either creating a new hold or fetching an existing
-            # one).
-            position, start_date = self.extract_data_from_hold_response(hold_response)
-            return HoldInfo.from_license_pool(
-                licensepool,
-                start_date=start_date,
-                hold_position=position,
-            )
-
         family = response.status_code // 100
 
         if family == 4:
@@ -1660,11 +1640,8 @@ class OverdriveAPI(
                 raise CannotHold()
             code = error["errorCode"]
             if code == "AlreadyOnWaitList":
-                # The book is already on hold, so this isn't an exceptional
-                # condition. Refresh the queue info and act as though the
-                # request was successful.
-                hold = self.get_hold(patron, pin, licensepool.identifier.identifier)
-                return make_holdinfo(hold)
+                # The book is already on hold.
+                raise AlreadyOnHold()
             elif code == "NotWithinRenewalWindow":
                 # The patron has this book checked out and cannot yet
                 # renew their loan.
@@ -1674,10 +1651,15 @@ class OverdriveAPI(
             else:
                 raise CannotHold(code)
         elif family == 2:
-            # The book was successfuly placed on hold. Return an
+            # The book was successfully placed on hold. Return an
             # appropriate HoldInfo.
             data = response.json()
-            return make_holdinfo(data)
+            position, date = self.extract_data_from_hold_response(data)
+            return HoldInfo.from_license_pool(
+                licensepool,
+                start_date=date,
+                hold_position=position,
+            )
         else:
             # Some other problem happened -- we don't know what.  It's
             # not a 5xx error because the HTTP client would have been

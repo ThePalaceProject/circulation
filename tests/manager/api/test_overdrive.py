@@ -23,6 +23,7 @@ from palace.manager.api.circulation import (
     RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
+    AlreadyOnHold,
     CannotFulfill,
     CannotHold,
     CannotLoan,
@@ -915,12 +916,8 @@ class TestOverdriveAPI:
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
-                self.update_licensepool_called_with = []
                 self.get_loan_called_with = []
                 self.extract_expiration_date_called_with = []
-
-            def update_licensepool(self, identifier):
-                self.update_licensepool_called_with.append(identifier)
 
             def get_loan(self, patron, pin, identifier):
                 self.get_loan_called_with.append((patron, pin, identifier))
@@ -974,10 +971,9 @@ class TestOverdriveAPI:
         # requests as the result of a failure during the loan process.
 
         # First, if the error is "NoCopiesAvailable", we know we have
-        # out-of-date availability information and we need to call
-        # update_licensepool before raising NoAvailbleCopies().
+        # out-of-date availability information. We raise NoAvailableCopies
+        # and let the circulation API take care of handling that.
         pytest.raises(NoAvailableCopies, with_error_code, "NoCopiesAvailable")
-        assert identifier.identifier == api.update_licensepool_called_with.pop()
 
         # If the error is "TitleAlreadyCheckedOut", then the problem
         # is that the patron tried to take out a new loan instead of
@@ -1123,14 +1119,7 @@ class TestOverdriveAPI:
             "successful_hold.json"
         )
 
-        class Mock(MockOverdriveAPI):
-            def get_hold(self, patron, pin, overdrive_id):
-                # Return a sample hold representation rather than
-                # making another API request.
-                self.get_hold_called_with = (patron, pin, overdrive_id)
-                return successful_hold
-
-        api = Mock(db.session, overdrive_api_fixture.collection)
+        api = MockOverdriveAPI(db.session, overdrive_api_fixture.collection)
 
         def process_error_response(message):
             # Attempt to process a response that resulted in an error.
@@ -1146,6 +1135,7 @@ class TestOverdriveAPI:
         pytest.raises(
             PatronHoldLimitReached, process_error_response, "PatronExceededHoldLimit"
         )
+        pytest.raises(AlreadyOnHold, process_error_response, "AlreadyOnWaitList")
 
         # An unrecognized error message results in a generic
         # CannotHold.
@@ -1170,43 +1160,17 @@ class TestOverdriveAPI:
         pin = object()
         licensepool = db.licensepool(edition=None)
 
-        # The remaining tests will end up running the same code on the
-        # same data, so they will return the same HoldInfo. Define a
-        # helper method to make this easier.
-        def assert_correct_holdinfo(x):
-            assert isinstance(x, HoldInfo)
-            assert licensepool.collection == x.collection(db.session)
-            assert identifier.identifier == x.identifier
-            assert identifier.type == x.identifier_type
-            assert datetime_utc(2015, 3, 26, 11, 30, 29) == x.start_date
-            assert None == x.end_date
-            assert 1 == x.hold_position
-
-        # Test the case where the 'error' is that the book is already
-        # on hold.
-        already_on_hold = dict(errorCode="AlreadyOnWaitList")
-        response = MockRequestsResponse(400, content=already_on_hold)
-        result = api.process_place_hold_response(response, patron, pin, licensepool)
-
-        # get_hold() was called with the arguments we expect.
-        identifier = licensepool.identifier
-        assert (patron, pin, identifier.identifier) == api.get_hold_called_with
-
-        # The result was converted into a HoldInfo object. The
-        # effective result is exactly as if we had successfully put
-        # the book on hold.
-        assert_correct_holdinfo(result)
-
         # Finally, let's test the case where there was no hold and now
         # there is.
-        api.get_hold_called_with = None
         response = MockRequestsResponse(200, content=successful_hold)
         result = api.process_place_hold_response(response, patron, pin, licensepool)
-        assert_correct_holdinfo(result)
-
-        # Here, get_hold was _not_ called, because the hold didn't
-        # already exist.
-        assert None == api.get_hold_called_with
+        assert isinstance(result, HoldInfo)
+        assert licensepool.collection == result.collection(db.session)
+        assert licensepool.identifier.identifier == result.identifier
+        assert licensepool.identifier.type == result.identifier_type
+        assert datetime_utc(2015, 3, 26, 11, 30, 29) == result.start_date
+        assert None == result.end_date
+        assert 1 == result.hold_position
 
     def test_checkin(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
