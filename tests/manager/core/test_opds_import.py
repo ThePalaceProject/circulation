@@ -1476,6 +1476,33 @@ class TestOPDSImporter:
         assert str(excinfo.value).startswith("SAML subject")
         assert str(excinfo.value).endswith("does not contain an IdP's entityID")
 
+    @patch.object(Identifier, "parse_urn")
+    def test_parse_identifier(
+        self,
+        mock_parse_urn: MagicMock,
+        opds_importer_fixture: OPDSImporterFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # Normal case, we just call out to Identifier.parse_urn
+        mock_parse_urn.return_value = ("returned value", True)
+        importer = opds_importer_fixture.importer()
+        test_identifier = "test"
+        value = importer.parse_identifier(test_identifier)
+        assert value == "returned value"
+        mock_parse_urn.assert_called_once_with(
+            opds_importer_fixture.db.session, test_identifier
+        )
+
+        # In the case of an exception, we log the relevant info.
+        mock_parse_urn.reset_mock()
+        mock_parse_urn.side_effect = ValueError("My god, it's full of stars")
+        assert importer.parse_identifier(test_identifier) is None
+        assert (
+            "An unexpected exception occurred during parsing identifier test: My god, it's full of stars"
+            in caplog.text
+        )
+        assert "Traceback" in caplog.text
+
 
 class TestCombine:
     """Test that OPDSImporter.combine combines dictionaries in sensible
