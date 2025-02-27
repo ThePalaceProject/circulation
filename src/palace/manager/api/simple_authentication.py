@@ -4,7 +4,6 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.api.config import CannotLoadConfiguration
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -23,9 +22,10 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
             required=True,
         ),
     )
-    test_password: str = FormField(
-        ...,
+    test_password: str | None = FormField(
+        None,
         form=ConfigurationFormItem(
+            required=True,
             label="Test password",
             description="A test password to use when testing the authentication provider.",
         ),
@@ -91,8 +91,6 @@ class SimpleAuthenticationProvider(
 
         self.test_password = settings.test_password
         test_identifier = settings.test_identifier
-        if not (test_identifier and self.test_password):
-            raise CannotLoadConfiguration("Test identifier and password not set.")
 
         self.test_identifiers = [test_identifier, test_identifier + "_username"]
         additional_identifiers = settings.additional_test_identifiers
@@ -101,6 +99,11 @@ class SimpleAuthenticationProvider(
                 self.test_identifiers += [identifier, identifier + "_username"]
 
         self.test_neighborhood = settings.neighborhood
+
+    @property
+    def collects_password(self) -> bool:
+        """Do we expect a username and a password, or just a username?"""
+        return super().collects_password and self.test_password is not None
 
     def remote_authenticate(
         self, username: str | None, password: str | None
