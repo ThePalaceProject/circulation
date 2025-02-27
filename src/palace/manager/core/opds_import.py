@@ -427,7 +427,7 @@ class BaseOPDSImporter(
                 parsed_identifier, _ = result
         except Exception as e:
             self.log.exception(
-                f"An unexpected exception occurred during parsing identifier {identifier}: {e}"
+                f"An unexpected exception occurred during parsing identifier '{identifier}': {e}"
             )
 
         return parsed_identifier

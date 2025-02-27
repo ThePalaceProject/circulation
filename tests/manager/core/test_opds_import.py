@@ -1498,7 +1498,7 @@ class TestOPDSImporter:
         mock_parse_urn.side_effect = ValueError("My god, it's full of stars")
         assert importer.parse_identifier(test_identifier) is None
         assert (
-            "An unexpected exception occurred during parsing identifier test: My god, it's full of stars"
+            "An unexpected exception occurred during parsing identifier 'test': My god, it's full of stars"
             in caplog.text
         )
         assert "Traceback" in caplog.text
