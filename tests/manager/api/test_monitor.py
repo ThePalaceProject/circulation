@@ -189,15 +189,13 @@ class TestLoanlikeReaperMonitor:
         assert [sot_hold] == inactive_patron.holds
         assert 2 == len(current_patron.holds)
 
-        # verify expected circ event count and order for two monitor operations.
+        # verify expected circ event count for hold reaper run
         call_args_list = (
             services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
         )
-        assert len(call_args_list) == 4
+        assert len(call_args_list) == 2
         event_types = [call_args.kwargs["event_type"] for call_args in call_args_list]
         assert event_types == [
-            CirculationEvent.CM_LOAN_EXPIRED,
-            CirculationEvent.CM_LOAN_EXPIRED,
             CirculationEvent.CM_HOLD_EXPIRED,
             CirculationEvent.CM_HOLD_EXPIRED,
         ]

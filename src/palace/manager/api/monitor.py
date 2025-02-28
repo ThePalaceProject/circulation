@@ -49,18 +49,6 @@ class LoanlikeReaperMonitor(ReaperMonitor):
         )
         return ~self.MODEL_CLASS.id.in_(source_of_truth_subquery)
 
-    def delete(self, row) -> None:
-        ce = CirculationEvent
-        event_type = ce.CM_LOAN_EXPIRED if isinstance(row, Loan) else ce.CM_HOLD_EXPIRED
-        event = dict(
-            library=row.library,
-            license_pool=row.license_pool,
-            event_type=event_type,
-            patron=row.patron,
-        )
-        super().delete(row)
-        self._events_to_be_logged.append(event)
-
     def after_commit(self) -> None:
         super().after_commit()
         copy_of_list = list(self._events_to_be_logged)
@@ -129,6 +117,16 @@ class HoldReaper(LoanlikeReaperMonitor):
             start_field < self.cutoff, or_(end_field == None, end_date_in_past)
         )
         return and_(superclause, probably_abandoned)
+
+    def delete(self, row) -> None:
+        event = dict(
+            library=row.library,
+            license_pool=row.license_pool,
+            event_type=CirculationEvent.CM_HOLD_EXPIRED,
+            patron=row.patron,
+        )
+        super().delete(row)
+        self._events_to_be_logged.append(event)
 
 
 ReaperMonitor.REGISTRY.append(HoldReaper)
