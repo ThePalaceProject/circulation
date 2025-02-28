@@ -4,6 +4,7 @@ import logging
 from copy import deepcopy
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.core.metadata_layer import (
@@ -33,6 +34,7 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.mocks.mock import LogCaptureHandler
@@ -104,7 +106,7 @@ class TestMetadataImporter:
             ("tag", "Setting Driven", 100),
         ] == [
             (x.type, x.identifier, x.weight)
-            for x in sorted(m2.subjects, key=lambda x: x.identifier)
+            for x in sorted(m2.subjects, key=lambda x: x.identifier or "")
         ]
 
     def test_classifications_from_another_source_not_updated(
@@ -745,7 +747,7 @@ class TestMetadata:
             sort_title="Harry Otter and the Seaweed of Ages, The",
             subtitle="Kelp At It",
             series="The Harry Otter Sagas",
-            series_position="4",
+            series_position=4,
             language="eng",
             medium="Audio",
             publisher="Scholastic Inc",
@@ -762,7 +764,7 @@ class TestMetadata:
         assert edition_new.sort_title == "Harry Otter and the Seaweed of Ages, The"
         assert edition_new.subtitle == "Kelp At It"
         assert edition_new.series == "The Harry Otter Sagas"
-        assert edition_new.series_position == "4"
+        assert edition_new.series_position == 4
         assert edition_new.language == "eng"
         assert edition_new.medium == "Audio"
         assert edition_new.publisher == "Scholastic Inc"
@@ -841,7 +843,7 @@ class TestMetadata:
         # recalculated.
 
         # We then find a new description for the work.
-        metadata.subjects = None
+        metadata.subjects = []
         metadata.links = [LinkData(rel=Hyperlink.DESCRIPTION, content="a description")]
         metadata.apply(edition, None)
 
@@ -849,7 +851,7 @@ class TestMetadata:
         assert_registered(full=True)
 
         # We then find a new cover image for the work.
-        metadata.subjects = None
+        metadata.subjects = []
         metadata.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
         metadata.apply(edition, None)
 
@@ -880,19 +882,17 @@ class TestMetadata:
         # Metadata.identifiers has two elements -- the primary and the
         # other one.
         assert 2 == len(metadata.identifiers)
-        assert primary in metadata.identifiers
+        assert primary_as_data in metadata.identifiers
 
-        # If the primary identifier is mentioned both as
-        # primary_identifier and in identifiers, it shows up twice
-        # in metadata.identifiers.
+        # Test case where the primary identifier is mentioned both as
+        # primary_identifier and in identifiers
         metadata2 = Metadata(
             data_source=DataSource.OVERDRIVE,
             primary_identifier=primary,
             identifiers=[primary_as_data, other_data],
         )
-        assert 3 == len(metadata2.identifiers)
+        assert 2 == len(metadata2.identifiers)
         assert primary_as_data in metadata2.identifiers
-        assert primary in metadata2.identifiers
         assert other_data in metadata2.identifiers
 
         # Write this state of affairs to the database.
@@ -1137,7 +1137,7 @@ class TestTimestampData:
 
     def test_is_failure(self):
         # A TimestampData represents failure if its exception is set to
-        # any value other than None or CLEAR_VALUE.
+        # any value other than None or SentinelType.ClearValue.
         d = TimestampData()
         assert False == d.is_failure
 
@@ -1147,13 +1147,13 @@ class TestTimestampData:
         d.exception = None
         assert False == d.is_failure
 
-        d.exception = d.CLEAR_VALUE
+        d.exception = SentinelType.ClearValue
         assert False == d.is_failure
 
     def test_is_complete(self):
         # A TimestampData is complete if it represents a failure
         # (see above) or if its .finish is set to any value other
-        # than None or CLEAR_VALUE
+        # than None or SentinelType.ClearValue
 
         d = TimestampData()
         assert False == d.is_complete
@@ -1164,12 +1164,13 @@ class TestTimestampData:
         d.finish = None
         assert False == d.is_complete
 
-        d.finish = d.CLEAR_VALUE
+        d.finish = SentinelType.ClearValue
         assert False == d.is_complete
 
         d.exception = "oops"
         assert True == d.is_complete
 
+    @freeze_time()
     def test_finalize_minimal(self, db: DatabaseTransactionFixture):
         # Calling finalize() with only the minimal arguments sets the
         # timestamp values to sensible defaults and leaves everything
@@ -1185,41 +1186,43 @@ class TestTimestampData:
         assert db.default_collection().id == d.collection_id
 
         # The timestamp values are set to sensible defaults.
-        assert d.start == d.finish
-        assert (utc_now() - d.start).total_seconds() < 2
+        assert d.start == d.finish == utc_now()
 
         # Other fields are still at None.
         for i in d.achievements, d.counter, d.exception:
-            assert i == None
+            assert i is None
 
     def test_finalize_full(self, db: DatabaseTransactionFixture):
         # You can call finalize() with a complete set of arguments.
         d = TimestampData()
+        start = utc_now() - datetime.timedelta(days=1)
+        finish = utc_now() - datetime.timedelta(hours=1)
+        counter = 100
         d.finalize(
             "service",
             "service_type",
             db.default_collection(),
-            start="start",
-            finish="finish",
-            counter="counter",
+            start=start,
+            finish=finish,
+            counter=counter,
             exception="exception",
         )
-        assert "start" == d.start
-        assert "finish" == d.finish
-        assert "counter" == d.counter
+        assert start == d.start
+        assert finish == d.finish
+        assert counter == d.counter
         assert "exception" == d.exception
 
         # If the TimestampData fields are already set to values other
-        # than CLEAR_VALUE, the required fields will be overwritten but
+        # than SentinelType.ClearValue, the required fields will be overwritten but
         # the optional fields will be left alone.
         new_collection = db.collection()
         d.finalize(
             "service2",
             "service_type2",
             new_collection,
-            start="start2",
-            finish="finish2",
-            counter="counter2",
+            start=utc_now(),
+            finish=utc_now(),
+            counter=15555,
             exception="exception2",
         )
         # These have changed.
@@ -1228,9 +1231,9 @@ class TestTimestampData:
         assert new_collection.id == d.collection_id
 
         # These have not.
-        assert "start" == d.start
-        assert "finish" == d.finish
-        assert "counter" == d.counter
+        assert start == d.start
+        assert finish == d.finish
+        assert counter == d.counter
         assert "exception" == d.exception
 
     def test_collection(self, db: DatabaseTransactionFixture):
@@ -1240,6 +1243,7 @@ class TestTimestampData:
         d.finalize("service", "service_type", db.default_collection())
         assert db.default_collection() == d.collection(session)
 
+    @freeze_time()
     def test_apply(self, db: DatabaseTransactionFixture):
         session = db.session
 
@@ -1256,13 +1260,11 @@ class TestTimestampData:
         collection = db.default_collection()
         d.finalize("service", Timestamp.SCRIPT_TYPE, collection)
         d.apply(session)
-        now = utc_now()
 
         timestamp = Timestamp.lookup(
             session, "service", Timestamp.SCRIPT_TYPE, collection
         )
-        assert (now - timestamp.start).total_seconds() < 2
-        assert timestamp.start == timestamp.finish
+        assert timestamp.start == timestamp.finish == utc_now()
 
         # Now set the optional fields as well.
         d.counter = 100
@@ -1277,12 +1279,11 @@ class TestTimestampData:
         # We can also use apply() to clear out the values for all
         # fields other than the ones that uniquely identify the
         # Timestamp.
-        clear = TimestampData.CLEAR_VALUE
-        d.start = clear
-        d.finish = clear
-        d.counter = clear
-        d.achievements = clear
-        d.exception = clear
+        d.start = SentinelType.ClearValue
+        d.finish = SentinelType.ClearValue
+        d.counter = SentinelType.ClearValue
+        d.achievements = SentinelType.ClearValue
+        d.exception = SentinelType.ClearValue
         d.apply(session)
 
         assert None == timestamp.start

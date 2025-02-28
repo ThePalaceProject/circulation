@@ -84,15 +84,13 @@ class ToFeedEntry:
         if role in Contributor.AUTHOR_ROLES:
             current_role = "author"
             marc_role = None
-        elif role is not None:
+        else:
             current_role = "contributor"
             marc_role = Contributor.MARC_ROLE_CODES.get(role)
             if not marc_role:
                 # This contribution is not one that we publish as
                 # a <atom:contributor> tag. Skip it.
                 return None
-        else:
-            return None
 
         name = contributor.display_name or contributor.sort_name
         name_key = name and name.lower()

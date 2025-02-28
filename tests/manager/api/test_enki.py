@@ -729,6 +729,7 @@ class TestBibliographicParser:
 
         assert Hyperlink.DESCRIPTION == description.rel
         assert "text/html" == description.media_type
+        assert isinstance(description.content, str)
         assert description.content.startswith("David Hoffmeister r&eacute;")
 
         # The full-sized image has a thumbnail.
@@ -736,7 +737,7 @@ class TestBibliographicParser:
         assert "http://thumbnail/" == image.thumbnail.href
 
         # Four subjects.
-        subjects = sorted(m.subjects, key=lambda x: x.identifier)
+        subjects = sorted(m.subjects, key=lambda x: x.identifier or "")
 
         # All subjects are classified as tags, rather than BISAC, due
         # to inconsistencies in the data presentation.

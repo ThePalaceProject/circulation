@@ -636,15 +636,15 @@ class TestOPDSForDistributorsImporter:
         # Create a CirculationData object with a number of links.
         # Only the third of these links will become a FormatData
         # object.
-        circulation = CirculationData("data source", "identifier")
+        circulation = CirculationData("data source", MagicMock())
         good_rel = Hyperlink.GENERIC_OPDS_ACQUISITION
-        for rel, media, href in (
-            ("http://wrong/rel/", good_media_type, "http://url1/"),
-            (good_rel, "wrong/media type", "http://url2/"),
-            (good_rel, good_media_type, "http://url3/"),
-        ):
-            link = LinkData(rel=rel, href=href, media_type=media)
-            circulation.links.append(link)
+        circulation.links = [
+            LinkData(
+                rel="http://wrong/rel/", media_type=good_media_type, href="http://url1/"
+            ),
+            LinkData(rel=good_rel, media_type="wrong/media type", href="http://url2/"),
+            LinkData(rel=good_rel, media_type=good_media_type, href="http://url3/"),
+        ]
 
         assert [] == circulation.formats
         OPDSForDistributorsImporter._add_format_data(circulation)

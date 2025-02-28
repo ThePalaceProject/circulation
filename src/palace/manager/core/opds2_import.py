@@ -617,7 +617,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
     def _extract_publication_metadata(
         self,
         publication: opds2.BasePublication,
-        data_source_name: str | None,
+        data_source_name: str,
         feed_self_url: str,
     ) -> Metadata:
         """Extract a Metadata object from opds2.Publication.
@@ -841,7 +841,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         rights_uri = link_data.rights_uri or circulation_data.default_rights_uri
         open_access_rights_link = (
             link_data.media_type in Representation.BOOK_MEDIA_TYPES
-            and link_data.href
+            and bool(link_data.href)
             and rights_uri in RightsStatus.OPEN_ACCESS
         )
 
@@ -1005,9 +1005,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
                 publication, self.data_source_name, feed_self_url
             )
 
-            publication_metadata_dictionary[
-                publication_metadata.primary_identifier.identifier
-            ] = publication_metadata
+            # Make sure we have a primary identifier before trying to use it
+            if publication_metadata.primary_identifier is not None:
+                publication_metadata_dictionary[
+                    publication_metadata.primary_identifier.identifier
+                ] = publication_metadata
 
         return publication_metadata_dictionary, failures
 

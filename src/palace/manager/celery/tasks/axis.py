@@ -118,7 +118,8 @@ def list_identifiers_for_import(
             start_seconds = time.perf_counter()
             title_ids: list[str] = []
             for metadata, circulation in api.recent_activity(start_time_of_last_scan):
-                title_ids.append(metadata.primary_identifier.identifier)
+                if metadata.primary_identifier is not None:
+                    title_ids.append(metadata.primary_identifier.identifier)
             elapsed_time = time.perf_counter() - start_seconds
             achievements = (
                 f"Total items queued for import:  {len(title_ids)}; "

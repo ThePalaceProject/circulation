@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.sqlalchemy.model.coverage import (
@@ -14,6 +15,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -48,37 +50,40 @@ class TestTimestamp:
         )
         assert None == Timestamp.value(db.session, "service", Timestamp.SCRIPT_TYPE, c2)
 
-    def test_stamp(self, db: DatabaseTransactionFixture):
+    def test_stamp(self, db: DatabaseTransactionFixture) -> None:
         service = "service"
         type = Timestamp.SCRIPT_TYPE
 
-        # If no date is specified, the value of the timestamp is the time
-        # stamp() was called.
-        stamp = Timestamp.stamp(db.session, service, type)
-        now = utc_now()
-        assert (now - stamp.finish).total_seconds() < 2
-        assert stamp.start == stamp.finish
-        assert service == stamp.service
-        assert type == stamp.service_type
-        assert None == stamp.collection
-        assert None == stamp.achievements
-        assert None == stamp.counter
-        assert None == stamp.exception
+        with freeze_time("2010-01-01"):
+            # If no date is specified, the value of the timestamp is the time
+            # stamp() was called.
+            stamp = Timestamp.stamp(db.session, service, type)
+            assert stamp.start == stamp.finish == utc_now()
+            assert service == stamp.service
+            assert type == stamp.service_type
+            assert None == stamp.collection
+            assert None == stamp.achievements
+            assert None == stamp.counter
+            assert None == stamp.exception
 
-        # Calling stamp() again will update the Timestamp.
-        stamp2 = Timestamp.stamp(
-            db.session, service, type, achievements="yay", counter=100, exception="boo"
-        )
-        assert stamp == stamp2
-        now = utc_now()
-        assert (now - stamp.finish).total_seconds() < 2
-        assert stamp.start == stamp.finish
-        assert service == stamp.service
-        assert type == stamp.service_type
-        assert None == stamp.collection
-        assert "yay" == stamp.achievements
-        assert 100 == stamp.counter
-        assert "boo" == stamp.exception
+        with freeze_time("2010-01-02"):
+            # Calling stamp() again will update the Timestamp.
+            stamp2 = Timestamp.stamp(
+                db.session,
+                service,
+                type,
+                achievements="yay",
+                counter=100,
+                exception="boo",
+            )
+            assert stamp == stamp2
+            assert stamp.start == stamp.finish == utc_now()
+            assert service == stamp.service
+            assert type == stamp.service_type
+            assert None == stamp.collection
+            assert "yay" == stamp.achievements
+            assert 100 == stamp.counter
+            assert "boo" == stamp.exception
 
         # Passing in a different collection will create a new Timestamp.
         stamp3 = Timestamp.stamp(
@@ -87,15 +92,15 @@ class TestTimestamp:
         assert stamp3 != stamp
         assert db.default_collection() == stamp3.collection
 
-        # Passing in CLEAR_VALUE for start, end, or exception will
+        # Passing in SentinelType.ClearValue for start, end, or exception will
         # clear an existing Timestamp.
         stamp4 = Timestamp.stamp(
             db.session,
             service,
             type,
-            start=Timestamp.CLEAR_VALUE,
-            finish=Timestamp.CLEAR_VALUE,
-            exception=Timestamp.CLEAR_VALUE,
+            start=SentinelType.ClearValue,
+            finish=SentinelType.ClearValue,
+            exception=SentinelType.ClearValue,
         )
         assert stamp4 == stamp
         assert None == stamp4.start

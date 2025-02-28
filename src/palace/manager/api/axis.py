@@ -642,7 +642,7 @@ class Axis360API(
             self._db, self.collection
         )
         edition, new_edition = bibliographic.edition(self._db)
-        license_pool.edition = edition
+        license_pool.presentation_edition = edition
         policy = ReplacementPolicy(
             identifiers=False,
             subjects=True,

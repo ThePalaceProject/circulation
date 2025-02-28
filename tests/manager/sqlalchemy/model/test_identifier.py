@@ -579,13 +579,11 @@ class TestIdentifier:
     def test_missing_coverage_from_with_cutoff_date(
         self, db: DatabaseTransactionFixture
     ):
-        gutenberg = DataSource.lookup(db.session, DataSource.GUTENBERG)
-        oclc = DataSource.lookup(db.session, DataSource.OCLC)
-        web = DataSource.lookup(db.session, DataSource.WEB)
+        gutenberg_ds = DataSource.lookup(db.session, DataSource.GUTENBERG)
 
         # Here's an Edition with a coverage record from OCLC classify.
         gutenberg, ignore = Edition.for_foreign_id(
-            db.session, gutenberg, Identifier.GUTENBERG_ID, "1"
+            db.session, gutenberg_ds, Identifier.GUTENBERG_ID, "1"
         )
         identifier = gutenberg.primary_identifier
         oclc = DataSource.lookup(db.session, DataSource.OCLC)

@@ -947,6 +947,7 @@ class TestParsers:
         [description, cover] = bib1.links
         assert Hyperlink.DESCRIPTION == description.rel
         assert Representation.TEXT_PLAIN == description.media_type
+        assert isinstance(description.content, str)
         assert description.content.startswith("John McCain's deeply moving memoir")
 
         # The cover image simulates the current state of the B&T cover
@@ -1001,7 +1002,7 @@ class TestParsers:
             Subject.AXIS_360_AUDIENCE,
         ] == [x.type for x in subjects]
         general_fiction, women_sleuths, romantic_suspense = sorted(
-            x.name for x in subjects if x.type == Subject.BISAC
+            x.name for x in subjects if x.type == Subject.BISAC and x.name is not None
         )
         assert "FICTION / General" == general_fiction
         assert "FICTION / Mystery & Detective / Women Sleuths" == women_sleuths

@@ -455,7 +455,10 @@ class TestNoveListAPI:
         assert isinstance(metadata, Metadata)
         assert isinstance(confidence, float)
         assert round(confidence, 2) == 0.67
-        assert metadata.primary_identifier == more_identifier
+        primary_identifier, _ = metadata.primary_identifier.load(
+            novelist_fixture.db.session
+        )
+        assert primary_identifier == more_identifier
 
     def test_get_items_from_query(self, novelist_fixture: NoveListFixture):
         items = novelist_fixture.novelist.get_items_from_query(
