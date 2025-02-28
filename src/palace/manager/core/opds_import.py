@@ -425,9 +425,9 @@ class BaseOPDSImporter(
             result = Identifier.parse_urn(self._db, identifier)
             if result is not None:
                 parsed_identifier, _ = result
-        except Exception:
-            self.log.error(
-                f"An unexpected exception occurred during parsing identifier {identifier}"
+        except Exception as e:
+            self.log.exception(
+                f"An unexpected exception occurred during parsing identifier '{identifier}': {e}"
             )
 
         return parsed_identifier
