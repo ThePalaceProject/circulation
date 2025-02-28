@@ -198,17 +198,17 @@ files = [
 
 [[package]]
 name = "boto3"
-version = "1.37.2"
+version = "1.37.3"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "boto3-1.37.2-py3-none-any.whl", hash = "sha256:e58136d52d79425ce26c3c1578bf94d4b2e91ead55fed9f6950406ee9713e6af"},
-    {file = "boto3-1.37.2.tar.gz", hash = "sha256:d64491bd4142c2c6dfe44479bf89c4ab7fa8d00210c2aaa7361931e61898b608"},
+    {file = "boto3-1.37.3-py3-none-any.whl", hash = "sha256:2063b40af99fd02f6228ff52397b552ff3353831edaf8d25cc04801827ab9794"},
+    {file = "boto3-1.37.3.tar.gz", hash = "sha256:21f3ce0ef111297e63a6eb998a25197b8c10982970c320d4c6e8db08be2157be"},
 ]
 
 [package.dependencies]
-botocore = ">=1.37.2,<1.38.0"
+botocore = ">=1.37.3,<1.38.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.11.0,<0.12.0"
 
@@ -217,17 +217,17 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.37.2"
-description = "Type annotations for boto3 1.37.2 generated with mypy-boto3-builder 8.9.2"
+version = "1.37.3"
+description = "Type annotations for boto3 1.37.3 generated with mypy-boto3-builder 8.9.2"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "boto3_stubs-1.37.2-py3-none-any.whl", hash = "sha256:2b4bb1fb2dd03a9a0c0b8fce09a463096f6ddec6fce686d916e3e8e32f553223"},
-    {file = "boto3_stubs-1.37.2.tar.gz", hash = "sha256:36c90a4f62f74c2d4337a83ccaf71128ab0acaa19d4eb15636ad0106e03bb801"},
+    {file = "boto3_stubs-1.37.3-py3-none-any.whl", hash = "sha256:5735265685641c7f143f480ef738f3bba1b3514b0022758b21664f67defc330d"},
+    {file = "boto3_stubs-1.37.3.tar.gz", hash = "sha256:1483f7622e695a7b7d8da7be89c3197c334f7b17953966b2d20cfc04159575d6"},
 ]
 
 [package.dependencies]
-boto3 = {version = "1.37.2", optional = true, markers = "extra == \"boto3\""}
+boto3 = {version = "1.37.3", optional = true, markers = "extra == \"boto3\""}
 botocore-stubs = "*"
 mypy-boto3-cloudformation = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"essential\""}
 mypy-boto3-cloudwatch = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"cloudwatch\""}
@@ -236,7 +236,7 @@ mypy-boto3-ec2 = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extr
 mypy-boto3-lambda = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"essential\""}
 mypy-boto3-logs = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"logs\""}
 mypy-boto3-rds = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"essential\""}
-mypy-boto3-s3 = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"s3\" or extra == \"essential\""}
+mypy-boto3-s3 = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"essential\" or extra == \"s3\""}
 mypy-boto3-sqs = {version = ">=1.37.0,<1.38.0", optional = true, markers = "extra == \"essential\""}
 types-s3transfer = "*"
 typing-extensions = {version = ">=4.1.0", markers = "python_version < \"3.12\""}
@@ -289,7 +289,7 @@ bedrock-data-automation-runtime = ["mypy-boto3-bedrock-data-automation-runtime (
 bedrock-runtime = ["mypy-boto3-bedrock-runtime (>=1.37.0,<1.38.0)"]
 billing = ["mypy-boto3-billing (>=1.37.0,<1.38.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.37.0,<1.38.0)"]
-boto3 = ["boto3 (==1.37.2)"]
+boto3 = ["boto3 (==1.37.3)"]
 braket = ["mypy-boto3-braket (>=1.37.0,<1.38.0)"]
 budgets = ["mypy-boto3-budgets (>=1.37.0,<1.38.0)"]
 ce = ["mypy-boto3-ce (>=1.37.0,<1.38.0)"]
@@ -651,13 +651,13 @@ xray = ["mypy-boto3-xray (>=1.37.0,<1.38.0)"]
 
 [[package]]
 name = "botocore"
-version = "1.37.2"
+version = "1.37.3"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "botocore-1.37.2-py3-none-any.whl", hash = "sha256:5f59b966f3cd0c8055ef6f7c2600f7db5f8218071d992e5f95da3f9156d4370f"},
-    {file = "botocore-1.37.2.tar.gz", hash = "sha256:3f460f3c32cd6d747d5897a9cbde011bf1715abc7bf0a6ea6fdb0b812df63287"},
+    {file = "botocore-1.37.3-py3-none-any.whl", hash = "sha256:d01bd3bf4c80e61fa88d636ad9f5c9f60a551d71549b481386c6b4efe0bb2b2e"},
+    {file = "botocore-1.37.3.tar.gz", hash = "sha256:fe8403eb55a88faf9b0f9da6615e5bee7be056d75e17af66c3c8f0a3b0648da4"},
 ]
 
 [package.dependencies]
