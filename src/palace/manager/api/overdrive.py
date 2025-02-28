@@ -1211,11 +1211,6 @@ class OverdriveAPI(
     ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         internal_format = self.internal_format(delivery_mechanism)
-        if licensepool.identifier.identifier is None:
-            self.log.error(
-                f"Cannot fulfill licensepool with no identifier. Licensepool.id: {licensepool.id}"
-            )
-            raise CannotFulfill()
         try:
             result = self.get_fulfillment_link(
                 patron, pin, licensepool.identifier.identifier, internal_format

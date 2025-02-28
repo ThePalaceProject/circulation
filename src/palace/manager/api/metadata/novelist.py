@@ -284,9 +284,6 @@ class NoveListAPI(
             return self.lookup_equivalent_isbns(identifier)
 
         isbn = identifier.identifier
-        if isbn is None:
-            return None
-
         params = dict(
             ClientIdentifier=client_identifier,
             ISBN=isbn,
