@@ -4,7 +4,6 @@ from palace.manager.api.authentication.basic import (
     BasicAuthProviderLibrarySettings,
     BasicAuthProviderSettings,
 )
-from palace.manager.api.config import CannotLoadConfiguration
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
@@ -23,11 +22,14 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
             required=True,
         ),
     )
-    test_password: str = FormField(
-        ...,
+    test_password: str | None = FormField(
+        None,
         form=ConfigurationFormItem(
+            required=True,
             label="Test password",
-            description="A test password to use when testing the authentication provider.",
+            description="A test password to use when testing the authentication provider. If you do not want to "
+            "collect passwords, leave this field blank and set the 'Keyboard for password entry' option to "
+            "'patrons have no password'.",
         ),
     )
     additional_test_identifiers: list[str] | None = FormField(
@@ -91,8 +93,6 @@ class SimpleAuthenticationProvider(
 
         self.test_password = settings.test_password
         test_identifier = settings.test_identifier
-        if not (test_identifier and self.test_password):
-            raise CannotLoadConfiguration("Test identifier and password not set.")
 
         self.test_identifiers = [test_identifier, test_identifier + "_username"]
         additional_identifiers = settings.additional_test_identifiers
