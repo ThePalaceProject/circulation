@@ -90,22 +90,8 @@ class TestSimpleAuth:
         assert "barcode" == user.authorization_identifier
         assert "neighborhood" == user.neighborhood
 
-    @pytest.mark.parametrize(
-        "provider_settings",
-        [
-            pytest.param(
-                {"password_keyboard": Keyboards.NULL},
-                id="null keyboard",
-            ),
-            pytest.param(
-                {"test_password": None},
-                id="no password",
-            ),
-        ],
-    )
     def test_no_password_authentication(
         self,
-        provider_settings: dict[str, str | None],
         create_settings: Callable[..., SimpleAuthSettings],
         create_provider: Callable[..., SimpleAuthenticationProvider],
     ):
@@ -113,7 +99,7 @@ class TestSimpleAuth:
         simpler by having it authenticate solely based on username.
         """
         settings = create_settings(
-            **provider_settings,
+            password_keyboard=Keyboards.NULL,
         )
         provider = create_provider(settings=settings)
 

@@ -27,7 +27,9 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
         form=ConfigurationFormItem(
             required=True,
             label="Test password",
-            description="A test password to use when testing the authentication provider.",
+            description="A test password to use when testing the authentication provider. If you do not want to "
+            "collect passwords, leave this field blank and set the 'Keyboard for password entry' option to "
+            "'patrons have no password'.",
         ),
     )
     additional_test_identifiers: list[str] | None = FormField(
@@ -99,11 +101,6 @@ class SimpleAuthenticationProvider(
                 self.test_identifiers += [identifier, identifier + "_username"]
 
         self.test_neighborhood = settings.neighborhood
-
-    @property
-    def collects_password(self) -> bool:
-        """Do we expect a username and a password, or just a username?"""
-        return super().collects_password and self.test_password is not None
 
     def remote_authenticate(
         self, username: str | None, password: str | None
