@@ -792,6 +792,55 @@ class PatronActivityCirculationAPI(
 
         self.sync_loans(patron, remote_loans, local_loans)
         self.sync_holds(patron, remote_holds, local_holds)
+        self.delete_loans_no_longer_available(patron)
+
+    def delete_loans_and_holds_no_longer_available(self, patron: Patron) -> None:
+        # get all loans and holds for patron
+        loans_and_holds: list[Loan | Hold] = patron.loans + patron.holds
+        # for each loan delete if any of the following are true:
+        library = patron.library
+        for loan_or_hold in loans_and_holds:
+            remove = False
+            collection: Collection = loan_or_hold.license_pool.collection
+            license_pool = loan_or_hold.license_pool
+            if license_pool.presentation_edition:
+                title = license_pool.presentation_edition.title
+            else:
+                title = "[no title available]"
+
+            log_message = (
+                f'Removing {loan_or_hold} (title="{title}") from patron(uuid={patron.uuid}) '
+                f"for the following reasons: "
+            )
+            # the collection is no longer associated with the patron's library
+            if library not in collection.associated_libraries:
+                log_message += (
+                    f'\n  * the patron\'s library ("{library.name}") '
+                    f'is no longer associated with the collection ("{collection.name}")'
+                )
+                remove = True
+
+            # the collection associated with this loan or hold is not active
+            if not collection.is_active:
+                log_message += (
+                    f'\n  * the collection("{collection.name}") is not currently active'
+                )
+                remove = True
+
+            # the associated licensepool is not deliverable.
+            if not license_pool.deliverable:
+                log_message += (
+                    f"\n  * the license pool (id={license_pool.id}) is not deliverable"
+                )
+                remove = True
+            # the associated licensepool has no owned copies
+            if not license_pool.licenses_owned == 0 and not license_pool.open_access:
+                log_message += f"\n  * the license pool (id={license_pool.id}) does not have any owned licenses."
+                remove = True
+
+            if remove:
+                self.log.info(log_message)
+                self._db.delete(loan_or_hold)
 
 
 class CirculationAPI(LoggerMixin):
