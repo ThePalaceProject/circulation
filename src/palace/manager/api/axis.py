@@ -238,7 +238,7 @@ class Axis360API(
 
     @property
     def source(self) -> DataSource | None:
-        return DataSource.lookup(self._db, DataSource.AXIS_360)  # type: ignore[no-any-return]
+        return DataSource.lookup(self._db, DataSource.AXIS_360, autocreate=True)
 
     @property
     def authorization_headers(self) -> dict[str, str]:

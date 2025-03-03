@@ -438,7 +438,7 @@ class BaseOPDSImporter(
         source of this OPDS feed.
         """
         offers_licenses = self.collection is not None
-        return DataSource.lookup(  # type: ignore[no-any-return]
+        return DataSource.lookup(
             self._db,
             self.data_source_name,
             autocreate=True,

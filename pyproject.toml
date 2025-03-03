@@ -121,6 +121,7 @@ module = [
     "palace.manager.sqlalchemy.hassessioncache",
     "palace.manager.sqlalchemy.model.announcements",
     "palace.manager.sqlalchemy.model.collection",
+    "palace.manager.sqlalchemy.model.datasource",
     "palace.manager.sqlalchemy.model.integration",
     "palace.manager.sqlalchemy.model.library",
     "palace.manager.sqlalchemy.model.patron",

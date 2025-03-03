@@ -356,6 +356,7 @@ class TestOPDSImporter:
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
         importer = opds_importer_fixture.importer(data_source_name=data_source.name)
         values, failures = importer.extract_data_from_feedparser(
             data.content_server_mini_feed, data_source
@@ -393,6 +394,7 @@ class TestOPDSImporter:
                 raise Exception("Utter failure!")
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
         importer = DoomedFeedparserOPDSImporter(
             session, db.default_collection(), data_source_name=data_source.name
         )
@@ -430,6 +432,7 @@ class TestOPDSImporter:
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
 
         data, failures = OPDSImporter.extract_metadata_from_elementtree(
             fixture.content_server_feed, data_source
@@ -525,6 +528,7 @@ class TestOPDSImporter:
         )
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
 
         feed = opds_files_fixture.sample_data("unrecognized_identifier.opds")
         values, failures = OPDSImporter.extract_metadata_from_elementtree(
@@ -641,6 +645,7 @@ class TestOPDSImporter:
         become a CoverageFailure.
         """
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
 
         def f(*args):
             message = OPDSMessage(*args)
@@ -694,6 +699,7 @@ class TestOPDSImporter:
                 return [not_a_failure]
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
 
         values, failures = MockOPDSImporter.extract_metadata_from_elementtree(
             data.content_server_mini_feed, data_source
@@ -717,6 +723,7 @@ class TestOPDSImporter:
                 raise Exception("Utter failure!")
 
         data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
+        assert data_source is not None
 
         (
             values,
