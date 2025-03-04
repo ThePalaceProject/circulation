@@ -240,6 +240,7 @@ Flask-Babel = "^4.0"
 Flask-Cors = "5.0.1"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 google-api-python-client = "^2.162.0"
+google-api-python-client-stubs = "^1.29.0"
 google-auth = "^2.38.0"
 html-sanitizer = "^2.1.0"
 isbnlib = "^3.10.14"

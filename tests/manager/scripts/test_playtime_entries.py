@@ -536,11 +536,11 @@ class TestPlaytimeEntriesEmailReportsScript:
         services_fixture: ServicesFixture,
     ):
         identifier = db.identifier()
-        collection = db.default_collection()
+        collection = db.collection("collection b")
         library = db.default_library()
         edition = db.edition()
         identifier2 = edition.primary_identifier
-        collection2 = db.collection()
+        collection2 = db.collection("collection a")
         library2 = db.library()
 
         identifier3 = db.identifier()
@@ -665,9 +665,10 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         reporting_name = "test cm"
 
-        mock_s3_service = MagicMock()
-        mock_s3_service.generate_url.return_value = "http://test"
-        services_fixture.services.storage.public.override(mock_s3_service)
+        mock_google_drive_service = MagicMock()
+        services_fixture.services.google_drive.palace_internal.override(
+            mock_google_drive_service
+        )
 
         with (
             patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,
@@ -676,6 +677,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                 new={
                     Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
                     Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
+                    Configuration.PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE: "palace-test",
                 },
             ),
         ):
@@ -684,26 +686,25 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         # Assert
         assert (
-            writer().writerow.call_count == 9
+            writer().writerow.call_count == 10
         )  # 1 header, 5 identifier,collection,library entries
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
         column1 = f"{cutoff} - {until}"
         call_args = writer().writerow.call_args_list
+        headers = (
+            "date",
+            "urn",
+            "isbn",
+            "collection",
+            "library",
+            "title",
+            "total seconds",
+            "loan count",
+        )
         assert call_args == [
-            call(
-                (  # Header
-                    "date",
-                    "urn",
-                    "isbn",
-                    "collection",
-                    "library",
-                    "title",
-                    "total seconds",
-                    "loan count",
-                )
-            ),
+            call(headers),
             call(
                 (
                     column1,
@@ -764,6 +765,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                     1,
                 )
             ),
+            call(headers),
             call(
                 (
                     column1,
@@ -803,33 +805,35 @@ class TestPlaytimeEntriesEmailReportsScript:
         ]
 
         # verify the number of unique loans
-        assert len(loan_identifiers) == sum([x.args[0][7] for x in call_args[1:]])
-        assert services_email_fixture.mock_emailer.send.call_count == 1
-        mock_s3_service.store_stream.assert_called_once()
-        mock_s3_service.generate_url.assert_called_once()
-        assert services_email_fixture.mock_emailer.send.call_args == call(
-            subject=f"{reporting_name}: Playtime Summaries {cutoff} - {until}",
-            sender=services_email_fixture.sender_email,
-            receivers=["reporting@test.email"],
-            text="Download Report here -> http://test \n\nThis report will be available for download for 30 days.",
-            html=None,
-            attachments=None,
+
+        # count only the int values (ie skip the rows with headers)
+        assert len(loan_identifiers) == sum(
+            [x.args[0][7] if isinstance(x.args[0][7], int) else 0 for x in call_args]
+        )
+        assert mock_google_drive_service.store_stream.call_count == 2
+
+        store_stream_call_list = mock_google_drive_service.store_stream.call_args_list
+        assert (
+            f"playtime-summary-test_cm-collection_a-{cutoff.year}"
+            in store_stream_call_list[0].kwargs["file_name"]
+        )
+        assert (
+            f"playtime-summary-test_cm-collection_b-{cutoff.year}"
+            in store_stream_call_list[1].kwargs["file_name"]
         )
 
+        assert mock_google_drive_service.store_stream.call_args_list
+
+        nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
+        assert nested_method.call_count == 1
+        assert nested_method.call_args_list[0].kwargs["folders"] == [
+            "palace-test",
+            "usage_reports",
+            "test cm",
+            "2025",
+        ]
+
     def test_no_reporting_email(self, db: DatabaseTransactionFixture):
-        identifier = db.identifier()
-        collection = db.default_collection()
-        library = db.default_library()
-        loan_id = "loan-id"
-        _ = playtime(
-            db.session,
-            identifier,
-            collection,
-            library,
-            dt1m(20),
-            1,
-            loan_id,
-        )
 
         with patch("palace.manager.scripts.playtime_entries.os.environ", new={}):
             script = PlaytimeEntriesEmailReportsScript(db.session)
@@ -837,8 +841,11 @@ class TestPlaytimeEntriesEmailReportsScript:
             script.run()
 
             assert script._log.error.call_count == 1
-            assert script._log.warning.call_count == 1
-            assert "date,urn,isbn,collection," in script._log.warning.call_args[0][0]
+
+            assert (
+                "Cannot playtime summary report without an email recipient"
+                in script._log.error.call_args[0][0]
+            )
 
     @pytest.mark.parametrize(
         "current_utc_time, start_arg, expected_start, until_arg, expected_until",

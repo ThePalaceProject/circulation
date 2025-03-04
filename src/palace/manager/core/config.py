@@ -58,6 +58,9 @@ class Configuration(ConfigurationConstants):
     # Environment variable for used to distinguish one CM environment from another in reports
     REPORTING_NAME_ENVIRONMENT_VARIABLE = "PALACE_REPORTING_NAME"
 
+    # Environment variable specifying the google drive root folder for this environment
+    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE = "PALACE_GOOGLE_DRIVE_ROOT"
+
     # Integrations
     URL = "url"
     INTEGRATIONS = "integrations"
