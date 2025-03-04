@@ -355,8 +355,9 @@ class TestOPDSImporter:
             opds_importer_fixture.db.session,
         )
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
         importer = opds_importer_fixture.importer(data_source_name=data_source.name)
         values, failures = importer.extract_data_from_feedparser(
             data.content_server_mini_feed, data_source
@@ -393,8 +394,9 @@ class TestOPDSImporter:
             def _data_detail_for_feedparser_entry(cls, entry, data_source):
                 raise Exception("Utter failure!")
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
         importer = DoomedFeedparserOPDSImporter(
             session, db.default_collection(), data_source_name=data_source.name
         )
@@ -431,8 +433,9 @@ class TestOPDSImporter:
             opds_importer_fixture.db.session,
         )
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
 
         data, failures = OPDSImporter.extract_metadata_from_elementtree(
             fixture.content_server_feed, data_source
@@ -527,8 +530,9 @@ class TestOPDSImporter:
             opds_importer_fixture.db.session,
         )
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
 
         feed = opds_files_fixture.sample_data("unrecognized_identifier.opds")
         values, failures = OPDSImporter.extract_metadata_from_elementtree(
@@ -644,8 +648,9 @@ class TestOPDSImporter:
         """Test all the different ways a <simplified:message> tag might
         become a CoverageFailure.
         """
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
 
         def f(*args):
             message = OPDSMessage(*args)
@@ -698,8 +703,9 @@ class TestOPDSImporter:
                 """
                 return [not_a_failure]
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
 
         values, failures = MockOPDSImporter.extract_metadata_from_elementtree(
             data.content_server_mini_feed, data_source
@@ -722,8 +728,9 @@ class TestOPDSImporter:
             def _detail_for_elementtree_entry(cls, *args, **kwargs):
                 raise Exception("Utter failure!")
 
-        data_source = DataSource.lookup(session, DataSource.OA_CONTENT_SERVER)
-        assert data_source is not None
+        data_source = DataSource.lookup(
+            session, DataSource.OA_CONTENT_SERVER, autocreate=True
+        )
 
         (
             values,

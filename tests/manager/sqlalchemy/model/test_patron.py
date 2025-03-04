@@ -369,8 +369,7 @@ class TestPatron:
         axis = DataSource.AXIS_360
         axis_identifier = patron.identifier_to_remote_service(axis)
 
-        feedbooks = DataSource.lookup(db.session, DataSource.FEEDBOOKS)
-        assert feedbooks is not None
+        feedbooks = DataSource.lookup(db.session, DataSource.FEEDBOOKS, autocreate=True)
         feedbooks_identifier = patron.identifier_to_remote_service(feedbooks)
 
         # The identifiers are different.
