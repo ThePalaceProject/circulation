@@ -999,8 +999,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
             for i in all_classifications[1:]:
                 _db.delete(i)
 
-        if classification.weight != weight:
-            classification.weight = weight
+        classification.weight = weight
         return classification
 
     @classmethod
