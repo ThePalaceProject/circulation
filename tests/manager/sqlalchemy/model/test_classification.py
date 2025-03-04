@@ -27,6 +27,7 @@ class TestSubject:
         # By default, Subject.lookup creates a Subject that doesn't exist.
         identifier = db.fresh_str()
         name = db.fresh_str()
+        subject: Subject | None
         subject, was_new = Subject.lookup(db.session, Subject.TAG, identifier, name)
         assert True == was_new
         assert identifier == subject.identifier

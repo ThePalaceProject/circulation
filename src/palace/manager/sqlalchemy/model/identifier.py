@@ -985,6 +985,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
                 identifier=self,
                 subject=subject,
                 data_source=data_source,
+                create_method_kwargs={"weight": weight},
             )
         except MultipleResultsFound as e:
             # TODO: This is a hack.
@@ -998,7 +999,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
             for i in all_classifications[1:]:
                 _db.delete(i)
 
-        classification.weight = weight
+        if classification.weight != weight:
+            classification.weight = weight
         return classification
 
     @classmethod

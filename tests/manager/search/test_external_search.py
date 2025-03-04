@@ -3304,10 +3304,15 @@ class FilterFixture:
         data.transaction = transaction
         session = transaction.session
         # Look up three Genre objects which can be used to make filters.
-        data.literary_fiction, ignore = Genre.lookup(session, "Literary Fiction")
-        data.fantasy, ignore = Genre.lookup(session, "Fantasy")
-        data.horror, ignore = Genre.lookup(session, "Horror")
-
+        literary_fiction, ignore = Genre.lookup(session, "Literary Fiction")
+        assert literary_fiction is not None
+        data.literary_fiction = literary_fiction
+        fantasy, ignore = Genre.lookup(session, "Fantasy")
+        assert fantasy is not None
+        data.fantasy = fantasy
+        horror, ignore = Genre.lookup(session, "Horror")
+        assert horror is not None
+        data.horror = horror
         # Create two empty CustomLists which can be used to make filters.
         data.best_sellers, ignore = transaction.customlist(num_entries=0)
         data.staff_picks, ignore = transaction.customlist(num_entries=0)
