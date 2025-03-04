@@ -10,6 +10,8 @@ from palace.manager.service.email.configuration import EmailConfiguration
 from palace.manager.service.email.container import Email
 from palace.manager.service.fcm.configuration import FcmConfiguration
 from palace.manager.service.fcm.container import FcmContainer
+from palace.manager.service.google_drive.configuration import GoogleDriveConfiguration
+from palace.manager.service.google_drive.container import GoogleDrive
 from palace.manager.service.integration_registry.container import (
     IntegrationRegistryContainer,
 )
@@ -72,6 +74,11 @@ class Services(DeclarativeContainer):
         config=config.redis,
     )
 
+    google_drive = Container(
+        GoogleDrive,
+        config=config.google_drive,
+    )
+
 
 def wire_container(container: Services) -> None:
     container.wire(
@@ -105,6 +112,7 @@ def create_container() -> Services:
             "celery": CeleryConfiguration().model_dump(),
             "fcm": FcmConfiguration().model_dump(),
             "redis": RedisConfiguration().model_dump(),
+            "google_drive": GoogleDriveConfiguration().model_dump(),
         }
     )
     wire_container(container)

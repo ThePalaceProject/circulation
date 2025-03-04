@@ -1709,6 +1709,22 @@ httplib2 = ">=0.19.0,<1.dev0"
 uritemplate = ">=3.0.1,<5"
 
 [[package]]
+name = "google-api-python-client-stubs"
+version = "1.29.0"
+description = "Type stubs for google-api-python-client"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google_api_python_client_stubs-1.29.0-py3-none-any.whl", hash = "sha256:e874eda842dec69781e4bf4e151b47f6e57cc419ff2c0d1e4719ff8dc3a559fc"},
+    {file = "google_api_python_client_stubs-1.29.0.tar.gz", hash = "sha256:ef88272accb67b92e512e41d04b73651da183c0eabb6028d71b4633e23a9e47e"},
+]
+
+[package.dependencies]
+google-api-python-client = ">=2.159.0"
+types-httplib2 = ">=0.22.0.2"
+typing-extensions = ">=3.10.0"
+
+[[package]]
 name = "google-auth"
 version = "2.38.0"
 description = "Google Authentication Library"
@@ -4946,6 +4962,17 @@ files = [
 Flask = ">=2.0.0"
 
 [[package]]
+name = "types-httplib2"
+version = "0.22.0.20241221"
+description = "Typing stubs for httplib2"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types_httplib2-0.22.0.20241221-py3-none-any.whl", hash = "sha256:b15aed53ae5430b87205b6ac270d6332cb5e28e27151e2ac4848fe417827eb54"},
+    {file = "types_httplib2-0.22.0.20241221.tar.gz", hash = "sha256:42b67f16a6b0abb337a1fcea628dcd335e1e75f32cd198a657f41a6f4d507508"},
+]
+
+[[package]]
 name = "types-pillow"
 version = "10.2.0.20240822"
 description = "Typing stubs for Pillow"
@@ -5410,8 +5437,4 @@ lxml = ">=3.8"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4"
-<<<<<<< HEAD
-content-hash = "fcba0cd3249c90fc74b469bfb3285a312d5a4a91bd2875c1c8f7e21794495697"
-=======
-content-hash = "67e3c2a83784191ff470fac5278b00bae9adf99e49ae999dc014c902bd9dea7c"
->>>>>>> 8b3ee752a (Adds GoogleDriveService)
+content-hash = "2517239265e80d06d1c901ad355aea9b3a2d71e589dd5805876f6ff2f0124780"
