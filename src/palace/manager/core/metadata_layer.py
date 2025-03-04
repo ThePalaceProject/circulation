@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from sqlalchemy import Boolean
 from sqlalchemy.orm import Query
+from sqlalchemy.sql import ColumnElement
 
 from palace.manager.util.sentinel import SentinelType
 
@@ -253,9 +255,11 @@ class ContributorData(LoggerMixin):
 
         :return: A ContributorData.
         """
-        clauses: list[Any] = []
+        clauses: list[ColumnElement[Boolean]] = []
         if sort_name:
-            clauses.append(Contributor.sort_name == sort_name)  # type: ignore[comparison-overlap]
+            # Mypy doesn't like this one because Contributor.sort_name is a HybridProperty, so we just
+            # ignore the type check here, since it is a valid comparison.
+            clauses.append(Contributor.sort_name == sort_name)  # type: ignore[arg-type, comparison-overlap]
         if display_name:
             clauses.append(Contributor.display_name == display_name)
         if lc:
