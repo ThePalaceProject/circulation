@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
-from urllib.parse import quote, unquote
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, Query, Session, relationship
 
 from palace.manager.sqlalchemy.constants import DataSourceConstants, IdentifierConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
     from palace.manager.sqlalchemy.model.edition import Edition
-    from palace.manager.sqlalchemy.model.identifier import Equivalency
+    from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
     from palace.manager.sqlalchemy.model.licensing import (
         LicensePool,
         LicensePoolDeliveryMechanism,
@@ -38,7 +38,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
 
     __tablename__ = "datasources"
     id: Mapped[int] = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, index=True)
+    name: Mapped[str] = Column(String, unique=True, index=True, nullable=False)
     offers_licenses: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     primary_identifier_type = Column(String, index=True)
     extra: Mapped[dict[str, str]] = Column(
@@ -114,29 +114,54 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         foreign_keys="Lane._list_datasource_id",
     )
 
-    def __repr__(self):
+    metadata_lookups_by_identifier_type: defaultdict[str | None, list[str]]
+
+    def __repr__(self) -> str:
         return '<DataSource: name="%s">' % (self.name)
 
-    def cache_key(self):
+    def cache_key(self) -> str:
         return self.name
+
+    @classmethod
+    @overload
+    def lookup(
+        cls,
+        _db: Session,
+        name: str,
+        autocreate: Literal[True],
+        offers_licenses: bool = ...,
+        primary_identifier_type: str | None = ...,
+    ) -> DataSource: ...
+
+    @classmethod
+    @overload
+    def lookup(
+        cls,
+        _db: Session,
+        name: str,
+        autocreate: bool = ...,
+        offers_licenses: bool = ...,
+        primary_identifier_type: str | None = ...,
+    ) -> DataSource | None: ...
 
     @classmethod
     def lookup(
         cls,
-        _db,
-        name,
-        autocreate=False,
-        offers_licenses=False,
-        primary_identifier_type=None,
-    ):
+        _db: Session,
+        name: str,
+        autocreate: bool = False,
+        offers_licenses: bool = False,
+        primary_identifier_type: str | None = None,
+    ) -> DataSource | None:
         # Turn a deprecated name (e.g. "3M" into the current name
         # (e.g. "Bibliotheca").
         name = cls.DEPRECATED_NAMES.get(name, name)
 
-        def lookup_hook():
+        def lookup_hook() -> tuple[DataSource | None, bool]:
             """There was no such DataSource in the cache. Look one up or
             create one.
             """
+            data_source: DataSource | None
             if autocreate:
                 data_source, is_new = get_one_or_create(
                     _db,
@@ -160,25 +185,9 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     URI_PREFIX = "http://librarysimplified.org/terms/sources/"
 
     @classmethod
-    def name_from_uri(cls, uri):
-        """Turn a data source URI into a name suitable for passing
-        into lookup().
-        """
-        if not uri.startswith(cls.URI_PREFIX):
-            return None
-        name = uri[len(cls.URI_PREFIX) :]
-        return unquote(name)
-
-    @classmethod
-    def from_uri(cls, _db, uri):
-        return cls.lookup(_db, cls.name_from_uri(uri))
-
-    @property
-    def uri(self):
-        return self.URI_PREFIX + quote(self.name)
-
-    @classmethod
-    def license_source_for(cls, _db, identifier):
+    def license_source_for(
+        cls, _db: Session, identifier: Identifier | str
+    ) -> DataSource | None:
         """Find the one DataSource that provides licenses for books identified
         by the given identifier.
         If there is no such DataSource, or there is more than one,
@@ -188,14 +197,13 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         return sources.one()
 
     @classmethod
-    def license_sources_for(cls, _db, identifier):
+    def license_sources_for(
+        cls, _db: Session, identifier: Identifier | str
+    ) -> Query[DataSource]:
         """A query that locates all DataSources that provide licenses for
         books identified by the given identifier.
         """
-        if isinstance(identifier, (bytes, str)):
-            type = identifier
-        else:
-            type = identifier.type
+        type = identifier if isinstance(identifier, str) else identifier.type
         q = (
             _db.query(DataSource)
             .filter(DataSource.offers_licenses == True)
@@ -204,15 +212,13 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         return q
 
     @classmethod
-    def metadata_sources_for(cls, _db, identifier):
+    def metadata_sources_for(
+        cls, _db: Session, identifier: Identifier | str
+    ) -> list[DataSource]:
         """Finds the DataSources that provide metadata for books
         identified by the given identifier.
         """
-        if isinstance(identifier, (bytes, str)):
-            type = identifier
-        else:
-            type = identifier.type
-
+        type = identifier if isinstance(identifier, str) else identifier.type
         if not hasattr(cls, "metadata_lookups_by_identifier_type"):
             # This should only happen during testing.
             list(DataSource.well_known_sources(_db))
@@ -221,7 +227,7 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
         return _db.query(DataSource).filter(DataSource.name.in_(names)).all()
 
     @classmethod
-    def well_known_sources(cls, _db):
+    def well_known_sources(cls, _db: Session) -> Generator[DataSource]:
         """Make sure all the well-known sources exist in the database."""
 
         cls.metadata_lookups_by_identifier_type = defaultdict(list)

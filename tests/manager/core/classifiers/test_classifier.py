@@ -429,7 +429,7 @@ class TestWorkClassifier:
         # YA. classifier.audience_weights[AUDIENCE_ADULT] will be set
         # to 500.
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         for subject in ("Nonfiction", "Science Fiction", "History"):
             c = i.classify(source, Subject.OVERDRIVE, subject, weight=1000)
             data.classifier.add(c)
@@ -452,7 +452,7 @@ class TestWorkClassifier:
         # direct_from_license_source, one of which implies the book is
         # for adults only.
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         for subject in ("Erotic Literature", "Science Fiction", "History"):
             c = i.classify(source, Subject.OVERDRIVE, subject, weight=1)
             data.classifier.add(c)
@@ -488,7 +488,7 @@ class TestWorkClassifier:
         # This work has a classification direct from the distributor
         # that implies the book is for children, so no conclusions are
         # drawn in the prepare_to_classify() step.
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c = data.identifier.classify(
             source, Subject.OVERDRIVE, "Picture Books", weight=1000
         )
@@ -507,7 +507,7 @@ class TestWorkClassifier:
         # Here's how we deal with that.
         #
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OCLC)
+        source = DataSource.lookup(session, DataSource.OCLC, autocreate=True)
         c = i.classify(source, Subject.LCC, "PZ", weight=100)
         data.classifier.add(c)
 
@@ -686,7 +686,7 @@ class TestWorkClassifier:
         # the "comic books" classification does not come from its
         # license source.
         source = data.work.license_pools[0].data_source
-        oclc = DataSource.lookup(session, DataSource.OCLC)
+        oclc = DataSource.lookup(session, DataSource.OCLC, autocreate=True)
         data.identifier.classify(oclc, Subject.TAG, "Comic Books", weight=100)
         data.classifier.add(data.identifier.classifications[0])
         genres = data.classifier.genres(fiction=True)
@@ -731,7 +731,7 @@ class TestWorkClassifier:
         session = data.transaction.session
         # Target age data can't override an independently determined
         # audience.
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c1 = data.identifier.classify(
             overdrive, Subject.OVERDRIVE, "Picture Books", weight=10000
         )
@@ -747,7 +747,7 @@ class TestWorkClassifier:
         session = data.transaction.session
         # We have a weak but reliable signal that this is a book for
         # ages 5 to 7.
-        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE)
+        overdrive = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c1 = data.identifier.classify(
             overdrive, Subject.OVERDRIVE, "Beginning Readers", weight=2
         )
@@ -755,7 +755,7 @@ class TestWorkClassifier:
 
         # We have a louder but less reliable signal that this is a
         # book for eleven-year-olds.
-        oclc = DataSource.lookup(session, DataSource.OCLC)
+        oclc = DataSource.lookup(session, DataSource.OCLC, autocreate=True)
         c2 = data.identifier.classify(oclc, Subject.TAG, "Grade 6", weight=3)
         data.classifier.add(c2)
 
@@ -778,7 +778,7 @@ class TestWorkClassifier:
         data = work_classifier_fixture
         session = data.transaction.session
         i = data.transaction.identifier()
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c1 = i.classify(source, Subject.AGE_RANGE, "8-9", weight=1)
         c2 = i.classify(source, Subject.AGE_RANGE, "6-7", weight=1)
 
@@ -866,7 +866,7 @@ class TestWorkClassifier:
         # not under any more specific category is believed to have a
         # target age range of 9-12.
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c = i.classify(source, Subject.OVERDRIVE, "Juvenile Fiction", weight=1)
         data.classifier.add(c)
         data.classifier.prepare_to_classify()
@@ -883,7 +883,7 @@ class TestWorkClassifier:
         # the target age range associated with that more specific
         # category.
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         for subject in ("Juvenile Fiction", "Picture Books"):
             c = i.classify(source, Subject.OVERDRIVE, subject, weight=1)
         data.classifier.add(c)
@@ -989,7 +989,7 @@ class TestWorkClassifier:
             "Science Fiction: A Comprehensive History"
         )
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.OVERDRIVE)
+        source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
         c1 = i.classify(source, Subject.OVERDRIVE, "History", weight=10)
         c2 = i.classify(source, Subject.OVERDRIVE, "Science Fiction", weight=100)
         c3 = i.classify(source, Subject.OVERDRIVE, "Young Adult Nonfiction", weight=100)
@@ -1030,7 +1030,7 @@ class TestWorkClassifier:
         session = data.transaction.session
         history = self._genre(session, classifier.History)
         i = data.identifier
-        source = DataSource.lookup(session, DataSource.AMAZON)
+        source = DataSource.lookup(session, DataSource.AMAZON, autocreate=True)
         c1 = i.classify(source, Subject.TAG, "History", weight=1)
         assert [] == data.classifier.classifications
 
@@ -1044,7 +1044,9 @@ class TestWorkClassifier:
 
         # The same classification can come in from another data source and
         # it will be taken into consideration.
-        source2 = DataSource.lookup(session, DataSource.OCLC_LINKED_DATA)
+        source2 = DataSource.lookup(
+            session, DataSource.OCLC_LINKED_DATA, autocreate=True
+        )
         c3 = i.classify(source2, Subject.TAG, "History", weight=1)
         data.classifier.add(c3)
         assert data.classifier.genre_weights[history] > old_weight

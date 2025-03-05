@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -63,13 +64,13 @@ class VerboseAnnotator(Annotator):
         )
         for c in classifications:
             subject = c.subject
-            if subject.type in Subject.uri_lookup:
+            if subject and subject.type in Subject.uri_lookup:
                 scheme = Subject.uri_lookup[subject.type]
                 term = subject.identifier
                 weight_field = "ratingValue"
                 key = (scheme, term)
                 if not key in by_scheme_and_term:
-                    value = dict(term=subject.identifier)
+                    value: dict[str, Any] = dict(term=subject.identifier)
                     if subject.name:
                         value["label"] = subject.name
                     value[weight_field] = 0

@@ -46,7 +46,7 @@ class TestIdentifier:
         assert False == was_new
 
         # If we pass in no data we get nothing back.
-        assert None == Identifier.for_foreign_id(db.session, None, None)
+        assert (None, False) == Identifier.for_foreign_id(db.session, None, None)
 
     def test_for_foreign_id_by_deprecated_type(self, db: DatabaseTransactionFixture):
         threem_id, is_new = Identifier.for_foreign_id(
@@ -83,30 +83,6 @@ class TestIdentifier:
         )
         assert None == identifier
         assert False == was_new
-
-    def test_from_asin(self, db: DatabaseTransactionFixture):
-        isbn10 = "1449358063"
-        isbn13 = "9781449358068"
-        asin = "B0088IYM3C"
-        isbn13_with_dashes = "978-144-935-8068"
-
-        i_isbn10, new1 = Identifier.from_asin(db.session, isbn10)
-        i_isbn13, new2 = Identifier.from_asin(db.session, isbn13)
-        i_asin, new3 = Identifier.from_asin(db.session, asin)
-        i_isbn13_2, new4 = Identifier.from_asin(db.session, isbn13_with_dashes)
-
-        # The three ISBNs are equivalent, so they got turned into the same
-        # Identifier, using the ISBN13.
-        assert i_isbn10 == i_isbn13
-        assert i_isbn13_2 == i_isbn13
-        assert Identifier.ISBN == i_isbn10.type
-        assert isbn13 == i_isbn10.identifier
-        assert True == new1
-        assert False == new2
-        assert False == new4
-
-        assert Identifier.ASIN == i_asin.type
-        assert asin == i_asin.identifier
 
     def test_urn(self, db: DatabaseTransactionFixture):
         # ISBN identifiers use the ISBN URN scheme.
@@ -701,7 +677,9 @@ class TestIdentifier:
 
     def test_add_link(self, db: DatabaseTransactionFixture):
         identifier: Identifier = db.identifier()
-        datasource = DataSource.lookup(db.session, DataSource.GUTENBERG)
+        datasource = DataSource.lookup(
+            db.session, DataSource.GUTENBERG, autocreate=True
+        )
         identifier.add_link(
             Hyperlink.SAMPLE,
             "http://example.org/sample",

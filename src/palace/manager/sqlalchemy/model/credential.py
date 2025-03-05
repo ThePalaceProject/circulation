@@ -122,7 +122,7 @@ class Credential(Base):
     def lookup(
         cls,
         _db: Session,
-        data_source: DataSource | str,
+        data_source: DataSource | str | None,
         token_type: str,
         patron: Patron | None,
         refresher_method: Callable[[Credential], Any] | None,

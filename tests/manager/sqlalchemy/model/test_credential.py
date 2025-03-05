@@ -271,7 +271,9 @@ def test_uniqueness_fixture(
     fix = TestUniquenessConstraintsFixture()
     fix.transaction = db
     fix.type = "a credential type"
-    fix.data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+    fix.data_source = DataSource.lookup(
+        db.session, DataSource.OVERDRIVE, autocreate=True
+    )
     fix.patron = db.patron()
     fix.col1 = db.default_collection()
     fix.col2 = db.collection()

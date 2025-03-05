@@ -169,7 +169,7 @@ class NoveListAPI(
 
     @property
     def source(self) -> DataSource:
-        return DataSource.lookup(self._db, DataSource.NOVELIST)  # type: ignore[no-any-return]
+        return DataSource.lookup(self._db, DataSource.NOVELIST, autocreate=True)
 
     def lookup_equivalent_isbns(self, identifier: Identifier) -> Metadata | None:
         """Finds NoveList data for all ISBNs equivalent to an identifier.
@@ -284,9 +284,6 @@ class NoveListAPI(
             return self.lookup_equivalent_isbns(identifier)
 
         isbn = identifier.identifier
-        if isbn is None:
-            return None
-
         params = dict(
             ClientIdentifier=client_identifier,
             ISBN=isbn,

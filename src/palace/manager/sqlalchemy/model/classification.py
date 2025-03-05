@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Generator, Sequence
+from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import (
     Boolean,
@@ -17,7 +18,6 @@ from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.functions import func
 
 from palace.manager.core import classifier
 from palace.manager.core.classifier import Classifier, Erotica, GenreData
@@ -31,6 +31,7 @@ from palace.manager.sqlalchemy.util import (
     numericrange_to_tuple,
     tuple_to_numericrange,
 )
+from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     # This is needed during type checking so we have the
@@ -97,7 +98,7 @@ class Subject(Base):
     __tablename__ = "subjects"
     id: Mapped[int] = Column(Integer, primary_key=True)
     # Type should be one of the constants in this class.
-    type = Column(Unicode, index=True)
+    type: Mapped[str] = Column(Unicode, index=True, nullable=False)
 
     # Formal identifier for the subject (e.g. "300" for Dewey Decimal
     # System's Social Sciences subject.)
@@ -150,7 +151,7 @@ class Subject(Base):
     # Type + identifier must be unique.
     __table_args__ = (UniqueConstraint("type", "identifier"),)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.name:
             name = ' ("%s")' % self.name
         else:
@@ -187,11 +188,11 @@ class Subject(Base):
         return str(a)
 
     @property
-    def target_age_string(self):
+    def target_age_string(self) -> str:
         return numericrange_to_string(self.target_age)
 
     @property
-    def describes_format(self):
+    def describes_format(self) -> bool:
         """Does this Subject describe a format of book rather than
         subject matter, audience, etc?
         If so, there are limitations on when we believe this Subject
@@ -204,15 +205,39 @@ class Subject(Base):
         return False
 
     @classmethod
-    def lookup(cls, _db, type, identifier, name, autocreate=True):
+    @overload
+    def lookup(
+        cls,
+        _db: Session,
+        type: str | None,
+        identifier: str | None,
+        name: str | None,
+        autocreate: Literal[True] = ...,
+    ) -> tuple[Subject, bool]: ...
+
+    @classmethod
+    @overload
+    def lookup(
+        cls,
+        _db: Session,
+        type: str | None,
+        identifier: str | None,
+        name: str | None,
+        autocreate: bool = ...,
+    ) -> tuple[Subject | None, bool]: ...
+
+    @classmethod
+    def lookup(
+        cls,
+        _db: Session,
+        type: str | None,
+        identifier: str | None,
+        name: str | None,
+        autocreate: bool = True,
+    ) -> tuple[Subject | None, bool]:
         """Turn a subject type and identifier into a Subject."""
-        classifier = Classifier.lookup(type)
         if not type:
             raise ValueError("Cannot look up Subject with no type.")
-        if not identifier and not name:
-            raise ValueError(
-                "Cannot look up Subject when neither identifier nor name is provided."
-            )
 
         # An identifier is more reliable than a name, so we would rather
         # search based on identifier. But if we only have a name, we'll
@@ -220,70 +245,32 @@ class Subject(Base):
         if identifier:
             find_with = dict(identifier=identifier)
             create_with = dict(name=name)
-        else:
+        elif name:
             # Type + identifier is unique, but type + name is not
             # (though maybe it should be). So we need to provide
             # on_multiple.
             find_with = dict(name=name, on_multiple="interchangeable")
             create_with = dict()
+        else:
+            raise ValueError(
+                "Cannot look up Subject when neither identifier nor name is provided."
+            )
 
+        subject: Subject | None
         if autocreate:
             subject, new = get_one_or_create(
                 _db, Subject, type=type, create_method_kwargs=create_with, **find_with
             )
         else:
-            subject = get_one(_db, Subject, type=type, **find_with)
+            subject = get_one(_db, Subject, type=type, **find_with)  # type: ignore[arg-type]
             new = False
-        if name and not subject.name:
+        if name and subject and not subject.name:
             # We just discovered the name of a subject that previously
             # had only an ID.
             subject.name = name
         return subject, new
 
-    @classmethod
-    def common_but_not_assigned_to_genre(
-        cls, _db, min_occurances=1000, type_restriction=None
-    ):
-        q = _db.query(Subject).join(Classification).filter(Subject.genre == None)
-
-        if type_restriction:
-            q = q.filter(Subject.type == type_restriction)
-        q = (
-            q.group_by(Subject.id)
-            .having(func.count(Subject.id) > min_occurances)
-            .order_by(func.count(Classification.id).desc())
-        )
-        return q
-
-    @classmethod
-    def assign_to_genres(cls, _db, type_restriction=None, force=False, batch_size=1000):
-        """Find subjects that have not been checked yet, assign each a
-        genre/audience/fiction status if possible, and mark each as checked.
-
-        :param type_restriction: Only consider subjects of the given type.
-        :param force: Assign a genre to all subjects not just the ones that
-            have been checked.
-        :param batch_size: Perform a database commit every time this many
-            subjects have been checked.
-
-        """
-        q = _db.query(Subject).filter(Subject.locked == False)
-
-        if type_restriction:
-            q = q.filter(Subject.type == type_restriction)
-
-        if not force:
-            q = q.filter(Subject.checked == False)
-
-        counter = 0
-        for subject in q:
-            subject.assign_to_genre()
-            counter += 1
-            if not counter % batch_size:
-                _db.commit()
-        _db.commit()
-
-    def assign_to_genre(self):
+    def assign_to_genre(self) -> None:
         """Assign this subject to a genre."""
         classifier = Classifier.classifiers.get(self.type, None)
         if not classifier:
@@ -346,21 +333,23 @@ class Classification(Base):
 
     __tablename__ = "classifications"
     id: Mapped[int] = Column(Integer, primary_key=True)
-    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Mapped[Identifier | None] = relationship(
+    identifier_id = Column(
+        Integer, ForeignKey("identifiers.id"), index=True, nullable=False
+    )
+    identifier: Mapped[Identifier] = relationship(
         "Identifier", back_populates="classifications"
     )
-    subject_id = Column(Integer, ForeignKey("subjects.id"), index=True)
-    subject: Mapped[Subject | None] = relationship(
-        "Subject", back_populates="classifications"
+    subject_id = Column(Integer, ForeignKey("subjects.id"), index=True, nullable=False)
+    subject: Mapped[Subject] = relationship("Subject", back_populates="classifications")
+    data_source_id = Column(
+        Integer, ForeignKey("datasources.id"), index=True, nullable=False
     )
-    data_source_id = Column(Integer, ForeignKey("datasources.id"), index=True)
-    data_source: Mapped[DataSource | None] = relationship(
+    data_source: Mapped[DataSource] = relationship(
         "DataSource", back_populates="classifications"
     )
 
     # How much weight the data source gives to this classification.
-    weight = Column(Integer)
+    weight: Mapped[int] = Column(Integer, nullable=False)
 
     # If we hear about a classification from a distributor (and we
     # trust the distributor to have accurate classifications), we
@@ -369,8 +358,8 @@ class Classification(Base):
     TRUSTED_DISTRIBUTOR_WEIGHT = 100.0
 
     @property
-    def scaled_weight(self):
-        weight = self.weight
+    def scaled_weight(self) -> float:
+        weight = self.weight * 1.0
         if self.data_source.name == DataSourceConstants.OCLC_LINKED_DATA:
             weight = weight / 10.0
         elif self.data_source.name == DataSourceConstants.OVERDRIVE:
@@ -388,7 +377,7 @@ class Classification(Base):
     # subject type in an unreliable way.
     _juvenile_subject_types = {Subject.LCC}
 
-    _quality_as_indicator_of_target_age = {
+    _quality_as_indicator_of_target_age: dict[Sequence[str | None], float] = {
         # Not all classifications are equally reliable as indicators
         # of a target age. This dictionary contains the coefficients
         # we multiply against the weights of incoming classifications
@@ -433,7 +422,7 @@ class Classification(Base):
     }
 
     @property
-    def generic_juvenile_audience(self):
+    def generic_juvenile_audience(self) -> bool:
         """Is this a classification that mentions (e.g.) a Children's audience
         but is actually a generic 'Juvenile' classification?
         """
@@ -443,7 +432,7 @@ class Classification(Base):
         )
 
     @property
-    def quality_as_indicator_of_target_age(self):
+    def quality_as_indicator_of_target_age(self) -> float:
         if not self.subject.target_age:
             return 0
         data_source = self.data_source.name
@@ -462,11 +451,11 @@ class Classification(Base):
         return 0.1
 
     @property
-    def weight_as_indicator_of_target_age(self):
+    def weight_as_indicator_of_target_age(self) -> float:
         return self.weight * self.quality_as_indicator_of_target_age
 
     @property
-    def comes_from_license_source(self):
+    def comes_from_license_source(self) -> bool:
         """Does this Classification come from a data source that also
         provided a license for this book?
         """
@@ -478,14 +467,14 @@ class Classification(Base):
         return False
 
 
-class Genre(Base, HasSessionCache):
+class Genre(Base, HasSessionCache, LoggerMixin):
     """A subject-matter classification for a book.
     Much, much more general than Classification.
     """
 
     __tablename__ = "genres"
     id: Mapped[int] = Column(Integer, primary_key=True)
-    name = Column(Unicode, unique=True, index=True)
+    name: Mapped[str] = Column(Unicode, unique=True, index=True, nullable=False)
 
     # One Genre may have affinity with many Subjects.
     subjects: Mapped[list[Subject]] = relationship("Subject", back_populates="genre")
@@ -501,7 +490,7 @@ class Genre(Base, HasSessionCache):
         "LaneGenre", back_populates="genre"
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if classifier.genres.get(self.name):
             length = len(classifier.genres[self.name].subgenres)
         else:
@@ -513,25 +502,32 @@ class Genre(Base, HasSessionCache):
             length,
         )
 
-    def cache_key(self):
+    def cache_key(self) -> str:
         return self.name
 
     @classmethod
-    def lookup(cls, _db, name, autocreate=False, use_cache=True):
+    def lookup(
+        cls,
+        _db: Session,
+        name: str | GenreData,
+        autocreate: bool = False,
+        use_cache: bool = True,
+    ) -> tuple[Genre | None, bool]:
         if isinstance(name, GenreData):
             name = name.name
 
-        def create():
+        def create() -> tuple[Genre | None, bool]:
             """Function called when a Genre is not found in cache and must be
             created."""
             new = False
             args = (_db, Genre)
+            genre: Genre | None
             if autocreate:
                 genre, new = get_one_or_create(*args, name=name)
             else:
                 genre = get_one(*args, name=name)
                 if genre is None:
-                    logging.getLogger().error('"%s" is not a recognized genre.', name)
+                    cls.logger().error('"%s" is not a recognized genre.', name)
                     return None, False
             return genre, new
 
@@ -541,28 +537,30 @@ class Genre(Base, HasSessionCache):
             return create()
 
     @property
-    def genredata(self):
+    def genredata(self) -> GenreData:
         if classifier.genres.get(self.name):
             return classifier.genres[self.name]
         else:
             return GenreData(self.name, False)
 
     @property
-    def subgenres(self):
+    def subgenres(self) -> Generator[Genre]:
         for genre in self.self_and_subgenres:
             if genre != self:
                 yield genre
 
     @property
-    def self_and_subgenres(self):
+    def self_and_subgenres(self) -> list[Genre]:
         _db = Session.object_session(self)
         genres = []
         for genre_data in self.genredata.self_and_subgenres:
-            genres.append(self.lookup(_db, genre_data.name)[0])
+            genre, _ = self.lookup(_db, genre_data.name)
+            if genre:
+                genres.append(genre)
         return genres
 
     @property
-    def default_fiction(self):
+    def default_fiction(self) -> bool | None:
         if self.name not in classifier.genres:
             return None
-        return classifier.genres[self.name].is_fiction
+        return classifier.genres[self.name].is_fiction  # type: ignore[no-any-return]

@@ -161,7 +161,9 @@ def get_available_holds(
     # We explicitly exclude Overdrive holds from notifications until we have a
     # better way to update their position in the hold queue. As is we don't have
     # a good way to do this. See: PP-2048.
-    overdrive_data_source = DataSource.lookup(session, DataSource.OVERDRIVE)
+    overdrive_data_source = DataSource.lookup(
+        session, DataSource.OVERDRIVE, autocreate=True
+    )
 
     query = (
         select(Hold)

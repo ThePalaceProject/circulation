@@ -418,7 +418,7 @@ class LicensePool(Base):
             raise CollectionMissing()
 
         # Get the DataSource.
-        if isinstance(data_source, (bytes, str)):
+        if isinstance(data_source, str):
             data_source = DataSource.lookup(_db, data_source)
 
         # The type of the foreign ID must be the primary identifier

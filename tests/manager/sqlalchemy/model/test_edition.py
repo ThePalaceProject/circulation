@@ -434,8 +434,10 @@ class TestEdition:
         self, db: DatabaseTransactionFixture
     ):
         e, pool = db.edition(with_license_pool=True)
-        oclc = DataSource.lookup(db.session, DataSource.OCLC_LINKED_DATA)
-        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        oclc = DataSource.lookup(
+            db.session, DataSource.OCLC_LINKED_DATA, autocreate=True
+        )
+        overdrive = DataSource.lookup(db.session, DataSource.OVERDRIVE, autocreate=True)
 
         # There's a perfunctory description from Overdrive.
         l1, new = pool.add_link(
@@ -473,7 +475,7 @@ class TestEdition:
         # there are no descriptions from that data source, a
         # head-to-head evaluation is performed, and OCLC Linked Data
         # wins.
-        threem = DataSource.lookup(db.session, DataSource.THREEM)
+        threem = DataSource.lookup(db.session, DataSource.THREEM, autocreate=True)
         champ3, resources3 = Identifier.evaluate_summary_quality(
             db.session, ids, [threem]
         )
@@ -491,7 +493,7 @@ class TestEdition:
         # Even an empty string wins if it's from the most privileged data source.
         # This is not a silly example.  The librarian may choose to set the description
         # to an empty string in the admin inteface, to override a bad overdrive/etc. description.
-        staff = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        staff = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF, autocreate=True)
         l3, new = pool.add_link(
             Hyperlink.SHORT_DESCRIPTION, None, staff, "text/plain", ""
         )
@@ -532,7 +534,7 @@ class TestEdition:
         # Verify that a cover will be used even if it's some
         # distance away along the identifier-equivalence line.
         e, pool = db.edition(with_license_pool=True)
-        oclc_classify = DataSource.lookup(db.session, DataSource.OCLC)
+        oclc_classify = DataSource.lookup(db.session, DataSource.OCLC, autocreate=True)
         oclc_number, ignore = Identifier.for_foreign_id(
             db.session, Identifier.OCLC_NUMBER, "22"
         )

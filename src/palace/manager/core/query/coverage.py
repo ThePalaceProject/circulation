@@ -31,9 +31,7 @@ class EquivalencyCoverageQueries:
         )
 
         # Need to be reset
-        equivs: list[Equivalency] = Equivalency.for_identifiers(
-            _db, (p[0] for p in parent_ids)
-        )
+        equivs = Equivalency.for_identifiers(_db, (p[0] for p in parent_ids))
         records = []
 
         # Make sure we haven't already added this record to the session, but not committed it yet
