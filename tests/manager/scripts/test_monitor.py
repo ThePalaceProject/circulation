@@ -3,13 +3,12 @@ from __future__ import annotations
 import pytest
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.core.monitor import CollectionMonitor, Monitor, ReaperMonitor
+from palace.manager.core.monitor import CollectionMonitor, Monitor
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.scripts.monitor import (
     RunCollectionMonitorScript,
     RunMonitorScript,
     RunMultipleMonitorsScript,
-    RunReaperMonitorsScript,
 )
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -80,19 +79,6 @@ class TestRunMultipleMonitorsScript:
         # .exception, in case we want to look at it.
         assert "Doomed!" == str(m2.exception)
         assert None == getattr(m1, "exception", None)
-
-
-class TestRunReaperMonitorsScript:
-    def test_monitors(self, db: DatabaseTransactionFixture):
-        """This script instantiates a Monitor for every class in
-        ReaperMonitor.REGISTRY.
-        """
-        old_registry = ReaperMonitor.REGISTRY
-        ReaperMonitor.REGISTRY = [SuccessMonitor]
-        script = RunReaperMonitorsScript(db.session)
-        [monitor] = script.monitors()
-        assert isinstance(monitor, SuccessMonitor)
-        ReaperMonitor.REGISTRY = old_registry
 
 
 class TestCollectionMonitorWithDifferentRunners:
