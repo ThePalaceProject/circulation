@@ -7,6 +7,7 @@ from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
 
 from palace.manager.celery.task import Task
+from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -190,11 +191,12 @@ def annotation_reaper(task: Task) -> None:
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def hold_reaper(task: Task, batch_size: int = 1000) -> None:
+def hold_reaper(task: Task, batch_size: int = 100) -> None:
     """
     Remove seemingly abandoned holds from the database.
     """
     cutoff = utc_now() - timedelta(days=365)
+    analytics_service = task.services.analytics.analytics()
     query = (
         select(Hold)
         .where(Hold.start < cutoff, or_(Hold.end == None, Hold.end < utc_now()))
@@ -203,21 +205,24 @@ def hold_reaper(task: Task, batch_size: int = 1000) -> None:
     )
     events_to_be_logged = []
     with task.transaction() as session:
-        for count, hold in enumerate(session.execute(query).scalars()):
-            event = dict(
-                library=hold.library,
-                license_pool=hold.license_pool,
-                event_type=CirculationEvent.CM_HOLD_EXPIRED,
-                patron=hold.patron,
+        holds = session.execute(query).scalars().all()
+        for hold in holds:
+            events_to_be_logged.append(
+                AnalyticsEventData.create(
+                    library=hold.library,
+                    license_pool=hold.license_pool,
+                    event_type=CirculationEvent.CM_HOLD_EXPIRED,
+                    patron=hold.patron,
+                )
             )
             session.delete(hold)
-            events_to_be_logged.append(event)
+
+    count = len(holds)
+    task.log.info(f"Deleted {count} expired {_pluralize(count, 'hold')}.")
 
     with task.transaction() as session:
         for event in events_to_be_logged:
-            task.services.analytics.collect_event(**event)
-
-    task.log.info(f"Deleted {count} expired holds.")
+            analytics_service.collect(event=event, session=session)
 
     if count == batch_size:
         task.log.info("There may be more holds to delete. Re-queueing the reaper.")

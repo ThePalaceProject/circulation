@@ -14,6 +14,7 @@ from palace.manager.celery.tasks.reaper import (
     work_reaper,
 )
 from palace.manager.service.logging.configuration import LogLevel
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
@@ -408,7 +409,7 @@ def test_hold_reaper(
     assert len(current_patron.holds) == 2
 
     # Now we fire up the hold reaper.
-    hold_reaper.delay().wait()
+    hold_reaper.delay(batch_size=1).wait()
 
     # All the inactive patron's holds have been reaped
     assert db.session.query(Hold).where(Hold.patron == inactive_patron).all() == []
@@ -416,10 +417,10 @@ def test_hold_reaper(
 
     # verify expected circ event count for hold reaper run
     call_args_list = (
-        services_fixture.analytics_fixture.analytics_mock.collect_event.call_args_list
+        services_fixture.analytics_fixture.analytics_mock.collect.call_args_list
     )
     assert len(call_args_list) == 2
-    event_types = [call_args.kwargs["event_type"] for call_args in call_args_list]
+    event_types = [call_args.kwargs["event"].type for call_args in call_args_list]
     assert event_types == [
         CirculationEvent.CM_HOLD_EXPIRED,
         CirculationEvent.CM_HOLD_EXPIRED,
