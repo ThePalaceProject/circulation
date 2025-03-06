@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any
 
 import flask
 
-from palace.manager.api.s3_analytics_provider import S3AnalyticsProvider
-from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.manager.service.analytics.local import LocalAnalyticsProvider
+from palace.manager.service.analytics.s3 import S3AnalyticsProvider
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Patron

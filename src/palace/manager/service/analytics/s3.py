@@ -7,7 +7,7 @@ import string
 from typing import TYPE_CHECKING
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool

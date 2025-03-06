@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from palace.manager.api.s3_analytics_provider import S3AnalyticsProvider
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.service.analytics.s3 import S3AnalyticsProvider
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
