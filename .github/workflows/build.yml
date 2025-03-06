@@ -264,6 +264,12 @@ jobs:
           path: ${{ runner.temp }}
           pattern: digests-${{ matrix.arch.name }}
 
+      - name: Create Google Drive Credentials File
+        run: |
+          mkdir ./secrets
+          google_service_account_json_secret_file=./secrets/test_google_service_account.json
+          echo '${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}' > ${google_service_account_json_secret_file}
+
       # This sets the environment variable referenced in the docker-compose file
       # for the image to use for the scripts container to the digest of the image
       # that was built in the build job.
@@ -353,12 +359,9 @@ jobs:
 
       - name: Create Google Drive Credentials File
         run: |
-          json_file=/tmp/palace_google_service_account_info.json
-          echo $PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON > ${json_file}
-          echo "PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH=${json_file}" >> $GITHUB_ENV
-        env:
-          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: ${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}
-
+          mkdir ./secrets
+          google_service_account_json_secret_file=./secrets/test_google_service_account.json
+          echo '${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}' > ${google_service_account_json_secret_file}
 
       - name: Run unit tests
         run: >
@@ -392,6 +395,12 @@ jobs:
         with:
           path: ${{ runner.temp }}
           pattern: digests-amd64
+
+      - name: Create Google Drive Credentials File
+        run: |
+          mkdir ./secrets
+          google_service_account_json_secret_file=./secrets/test_google_service_account.json
+          echo '${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}' > ${google_service_account_json_secret_file}
 
       # This sets the environment variable referenced in the docker-compose file
       # for the image to use for the scripts container to the digest of the image
