@@ -810,9 +810,9 @@ class TestPlaytimeEntriesEmailReportsScript:
         assert len(loan_identifiers) == sum(
             [x.args[0][7] if isinstance(x.args[0][7], int) else 0 for x in call_args]
         )
-        assert mock_google_drive_service.store_stream.call_count == 2
+        assert mock_google_drive_service.create_file.call_count == 2
 
-        store_stream_call_list = mock_google_drive_service.store_stream.call_args_list
+        store_stream_call_list = mock_google_drive_service.create_file.call_args_list
         assert (
             f"playtime-summary-test_cm-collection_a-{cutoff.year}"
             in store_stream_call_list[0].kwargs["file_name"]
@@ -821,8 +821,6 @@ class TestPlaytimeEntriesEmailReportsScript:
             f"playtime-summary-test_cm-collection_b-{cutoff.year}"
             in store_stream_call_list[1].kwargs["file_name"]
         )
-
-        assert mock_google_drive_service.store_stream.call_args_list
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
         assert nested_method.call_count == 1
