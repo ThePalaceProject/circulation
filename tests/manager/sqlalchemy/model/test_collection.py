@@ -20,6 +20,7 @@ from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfig
 from palace.manager.sqlalchemy.model.licensing import Hold, License, LicensePool, Loan
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 
@@ -577,8 +578,13 @@ class TestCollection:
         hold, is_new = pool.on_hold_to(patron2)
 
         # And a CirculationEvent.
-        CirculationEvent.log(
-            db.session, pool, CirculationEvent.DISTRIBUTOR_TITLE_ADD, 0, 1
+        get_one_or_create(
+            db.session,
+            CirculationEvent,
+            license_pool=pool,
+            type=CirculationEvent.DISTRIBUTOR_TITLE_ADD,
+            start=utc_now(),
+            end=utc_now(),
         )
 
         # There's a second Work which has _two_ LicensePools from two

@@ -1,36 +1,41 @@
-from datetime import datetime
-
 from sqlalchemy.orm.session import Session
 
+from palace.manager.service.analytics.eventdata import AnalyticsEventData
+from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.log import LoggerMixin
 
 
-class LocalAnalyticsProvider(LoggerMixin):
-    def collect_event(
+class LocalAnalyticsProvider(AnalyticsProvider, LoggerMixin):
+    def collect(
         self,
-        library: Library,
-        license_pool: LicensePool | None,
-        event_type: str,
-        time: datetime,
-        old_value: int | None = None,
-        new_value: int | None = None,
-        user_agent: str | None = None,
-        patron: Patron | None = None,
-        neighborhood: str | None = None,
+        event: AnalyticsEventData,
+        session: Session | None = None,
     ) -> None:
-        _db = Session.object_session(library)
+        if session is None:
+            self.log.error("No session provided unable to collect event")
+            return
 
-        CirculationEvent.log(
-            _db,
-            license_pool,
-            event_type,
-            old_value,
-            new_value,
-            start=time,
-            library=library,
-            location=neighborhood,
+        """Log a CirculationEvent to the database, assuming it
+         hasn't already been recorded.
+         """
+        circ_event, was_new = get_one_or_create(
+            session,
+            CirculationEvent,
+            license_pool_id=event.license_pool_id,
+            type=event.type,
+            start=event.start,
+            library_id=event.library_id,
+            create_method_kwargs=dict(
+                old_value=event.old_value,
+                new_value=event.new_value,
+                delta=event.delta,
+                end=event.end,
+                location=event.location,
+            ),
         )
+        if was_new:
+            self.log.info(
+                "EVENT %s %s=>%s", event.type, event.old_value, event.new_value
+            )
