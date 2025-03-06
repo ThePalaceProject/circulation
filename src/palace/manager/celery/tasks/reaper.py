@@ -131,7 +131,7 @@ def collection_reaper(task: Task) -> None:
             )
         ).scalar()
 
-    if collections_awaiting_delete > 0:
+    if collections_awaiting_delete and collections_awaiting_delete > 0:
         task.log.info(
             f"{collections_awaiting_delete} {_pluralize(collections_awaiting_delete, 'collection')}"
             f" waiting for delete. Re-queueing the reaper."
