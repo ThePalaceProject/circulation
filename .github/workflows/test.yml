@@ -44,16 +44,8 @@ jobs:
         env:
           POETRY_VIRTUALENVS_CREATE: false
 
-      - name: Create Google Drive Credentials File
-        run: |
-          echo $PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON > /tmp/palace_google_service_account_info.json
-        env:
-          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: ${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}
-
       - name: Run Tests
         run: tox
-        env:
-          PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH: "/tmp/palace_google_service_account_info.json"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

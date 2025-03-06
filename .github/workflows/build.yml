@@ -351,6 +351,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Create Google Drive Credentials File
+        run: |
+          echo $PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON > /tmp/palace_google_service_account_info.json
+        env:
+          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: ${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON }}
+
+
       - name: Run unit tests
         run: >
           docker compose run webapp
@@ -360,6 +367,9 @@ jobs:
             poetry install --without ci --no-root --sync &&
             pytest --no-cov tests
           "
+        env:
+          PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH: "/tmp/palace_google_service_account_info.json"
+
 
       - name: Stop container
         if: always()
