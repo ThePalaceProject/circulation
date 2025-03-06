@@ -120,6 +120,7 @@ module = [
     "palace.manager.service.*",
     "palace.manager.sqlalchemy.hassessioncache",
     "palace.manager.sqlalchemy.model.announcements",
+    "palace.manager.sqlalchemy.model.circulationevent",
     "palace.manager.sqlalchemy.model.classification",
     "palace.manager.sqlalchemy.model.collection",
     "palace.manager.sqlalchemy.model.datasource",

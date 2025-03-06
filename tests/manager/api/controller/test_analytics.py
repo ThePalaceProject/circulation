@@ -57,7 +57,5 @@ class TestAnalyticsController:
                 license_pool=analytics_fixture.lp,
             )
             assert circulation_event is not None
-            assert (
-                circulation_event.location == None
-            )  # We no longer use the location source
+            assert circulation_event.location == "Mars Grid 4810579"
             db.session.delete(circulation_event)

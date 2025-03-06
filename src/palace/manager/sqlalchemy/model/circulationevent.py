@@ -1,11 +1,12 @@
 # CirculationEvent
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, Session, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one_or_create
@@ -129,16 +130,16 @@ class CirculationEvent(Base):
     @classmethod
     def log(
         cls,
-        _db,
-        license_pool,
-        event_name,
-        old_value,
-        new_value,
-        start=None,
-        end=None,
-        library=None,
-        location=None,
-    ):
+        _db: Session,
+        license_pool: LicensePool | None,
+        event_name: str,
+        old_value: int | None,
+        new_value: int | None,
+        start: datetime.datetime | None = None,
+        end: datetime.datetime | None = None,
+        library: Library | None = None,
+        location: str | None = None,
+    ) -> tuple[CirculationEvent, bool]:
         """Log a CirculationEvent to the database, assuming it
         hasn't already been recorded.
         """

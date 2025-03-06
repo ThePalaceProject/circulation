@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import flask
 
@@ -41,8 +41,10 @@ class Analytics(LoggerMixin):
         license_pool: LicensePool | None,
         event_type: str,
         time: datetime | None = None,
+        old_value: int | None = None,
+        new_value: int | None = None,
         patron: Patron | None = None,
-        **kwargs: Any,
+        neighborhood: str | None = None,
     ) -> None:
         if not time:
             time = utc_now()
@@ -61,9 +63,11 @@ class Analytics(LoggerMixin):
                 license_pool,
                 event_type,
                 time,
+                old_value=old_value,
+                new_value=new_value,
                 user_agent=user_agent,
                 patron=patron,
-                **kwargs,
+                neighborhood=neighborhood,
             )
 
     def is_configured(self) -> bool:
