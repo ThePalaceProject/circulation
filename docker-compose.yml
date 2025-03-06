@@ -28,6 +28,10 @@ x-cm-variables: &cm
     PALACE_TEST_MINIO_USER: "palace"
     PALACE_TEST_MINIO_PASSWORD: "test123456789"
     PALACE_TEST_REDIS_URL: "redis://redis:6379/3"
+    PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH: /run/secrets/test_google_service_account_json
+  secrets:
+    - test_google_service_account_json
+
   depends_on:
     pg:
       condition: service_healthy
@@ -45,6 +49,10 @@ x-cm-build: &cm-build
     - BASE_IMAGE=${BUILD_BASE_IMAGE-ghcr.io/thepalaceproject/circ-baseimage:latest}
   cache_from:
     - ${BUILD_CACHE_FROM-ghcr.io/thepalaceproject/circ-webapp:main}
+
+secrets:
+  test_google_service_account_json:
+    file: ./secrets/test_google_service_account.json
 
 services:
   # example docker compose configuration for testing and development
