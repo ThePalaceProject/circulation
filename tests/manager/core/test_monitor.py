@@ -9,44 +9,31 @@ from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.core.monitor import (
-    CirculationEventLocationScrubber,
     CollectionMonitor,
-    CollectionReaper,
     CoverageProvidersFailed,
-    CredentialReaper,
     CustomListEntrySweepMonitor,
     CustomListEntryWorkUpdateMonitor,
     EditionSweepMonitor,
     IdentifierSweepMonitor,
     MakePresentationReadyMonitor,
-    MeasurementReaper,
     Monitor,
     NotPresentationReadyWorkSweepMonitor,
-    PatronNeighborhoodScrubber,
-    PatronRecordReaper,
     PermanentWorkIDRefreshMonitor,
     PresentationReadyWorkSweepMonitor,
-    ReaperMonitor,
     SubjectSweepMonitor,
     SweepMonitor,
     TimelineMonitor,
-    WorkReaper,
     WorkSweepMonitor,
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.service import container
-from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
-from palace.manager.sqlalchemy.model.classification import Genre, Subject
-from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
-from palace.manager.sqlalchemy.model.coverage import Timestamp, WorkCoverageRecord
-from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.classification import Subject
+from palace.manager.sqlalchemy.model.collection import CollectionMissing
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
+from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
@@ -1031,298 +1018,3 @@ class TestCustomListEntryWorkUpdateMonitor:
         monitor = CustomListEntryWorkUpdateMonitor(db.session)
         monitor.process_item(entry)
         assert old_work == entry.work
-
-
-class MockReaperMonitor(ReaperMonitor):
-    MODEL_CLASS = Timestamp
-    TIMESTAMP_FIELD = "timestamp"
-
-
-class TestReaperMonitor:
-    def test_cutoff(self, db: DatabaseTransactionFixture):
-        """Test that cutoff behaves correctly when given different values for
-        ReaperMonitor.MAX_AGE.
-        """
-        m = MockReaperMonitor(db.session)
-
-        # A number here means a number of days.
-        for value in [1, 1.5, -1]:
-            m.MAX_AGE = value
-            expect = utc_now() - datetime.timedelta(days=value)
-            Time.time_eq(m.cutoff, expect)
-
-        # But you can pass in a timedelta instead.
-        m.MAX_AGE = datetime.timedelta(seconds=99)
-        Time.time_eq(m.cutoff, utc_now() - m.MAX_AGE)
-
-    def test_specific_reapers(self, db: DatabaseTransactionFixture):
-        assert Credential.expires == CredentialReaper(db.session).timestamp_field
-        assert 1 == CredentialReaper.MAX_AGE
-        assert (
-            Patron.authorization_expires
-            == PatronRecordReaper(db.session).timestamp_field
-        )
-        assert 60 == PatronRecordReaper.MAX_AGE
-
-    def test_run_once(self, db: DatabaseTransactionFixture):
-        # Create four Credentials: two expired, two valid.
-        expired1 = db.credential()
-        expired2 = db.credential()
-        now = utc_now()
-        expiration_date = now - datetime.timedelta(days=CredentialReaper.MAX_AGE + 1)
-        for e in [expired1, expired2]:
-            e.expires = expiration_date
-
-        active = db.credential()
-        active.expires = now - datetime.timedelta(days=CredentialReaper.MAX_AGE - 1)
-
-        eternal = db.credential()
-
-        m = CredentialReaper(db.session)
-
-        # Set the batch size to 1 to make sure this works even
-        # when there are multiple batches.
-        m.BATCH_SIZE = 1
-
-        assert "Reaper for Credential.expires" == m.SERVICE_NAME
-        result = m.run_once()
-        assert "Items deleted: 2" == result.achievements
-
-        # The expired credentials have been reaped; the others
-        # are still in the database.
-        remaining = set(db.session.query(Credential).all())
-        assert {active, eternal} == remaining
-
-    def test_reap_patrons(self, db: DatabaseTransactionFixture):
-        m = PatronRecordReaper(db.session)
-        expired = db.patron()
-        credential = db.credential(patron=expired)
-        now = utc_now()
-        expired.authorization_expires = now - datetime.timedelta(
-            days=PatronRecordReaper.MAX_AGE + 1
-        )
-        active = db.patron()
-        active.authorization_expires = now - datetime.timedelta(
-            days=PatronRecordReaper.MAX_AGE - 1
-        )
-        result = m.run_once()
-        assert "Items deleted: 1" == result.achievements
-        remaining = db.session.query(Patron).all()
-        assert [active] == remaining
-
-        assert [] == db.session.query(Credential).all()
-
-
-class TestWorkReaper:
-    def test_end_to_end(self, db: DatabaseTransactionFixture):
-        # Search mock
-        class MockSearchIndex:
-            removed = []
-
-            def remove_work(self, work):
-                self.removed.append(work)
-
-        # First, create three works.
-
-        # This work has a license pool.
-        has_license_pool = db.work(with_license_pool=True)
-
-        # This work had a license pool and then lost it.
-        had_license_pool = db.work(with_license_pool=True)
-        db.session.delete(had_license_pool.license_pools[0])
-
-        # This work never had a license pool.
-        never_had_license_pool = db.work(with_license_pool=False)
-
-        # Each work has a presentation edition -- keep track of these
-        # for later.
-        works = db.session.query(Work)
-        presentation_editions = [x.presentation_edition for x in works]
-
-        # If and when Work gets database-level cascading deletes, this
-        # is where they will all be triggered, with no chance that an
-        # ORM-level delete is doing the work. So let's verify that all
-        # of the cascades work.
-
-        # First, set up some related items for each Work.
-
-        # Each work is assigned to a genre.
-        genre, ignore = Genre.lookup(db.session, "Science Fiction")
-        for work in works:
-            work.genres = [genre]
-
-        # Each work is on the same CustomList.
-        l, ignore = db.customlist("a list", num_entries=0)
-        for work in works:
-            l.add_entry(work)
-
-        # Each work has a WorkCoverageRecord.
-        for work in works:
-            WorkCoverageRecord.add_for(work, operation="some operation")
-
-        # Run the reaper.
-        s = MockSearchIndex()
-        m = WorkReaper(db.session, search_index_client=s)
-        m.run_once()
-
-        # Search index was updated
-        assert 2 == len(s.removed)
-        assert has_license_pool not in s.removed
-        assert had_license_pool in s.removed
-        assert never_had_license_pool in s.removed
-
-        # Only the work with a license pool remains.
-        assert [has_license_pool] == [x for x in works]
-
-        # The presentation editions are still around, since they might
-        # theoretically be used by other parts of the system.
-        all_editions = db.session.query(Edition).all()
-        for e in presentation_editions:
-            assert e in all_editions
-
-        # The surviving work is still assigned to the Genre, and still
-        # has WorkCoverageRecords.
-        assert [has_license_pool] == genre.works
-        surviving_records = db.session.query(WorkCoverageRecord)
-        assert surviving_records.count() > 0
-        assert all(x.work == has_license_pool for x in surviving_records)
-
-        # The CustomListEntries still exist, but two of them have lost
-        # their work.
-        assert 2 == len([x for x in l.entries if not x.work])
-        assert [has_license_pool] == [x.work for x in l.entries if x.work]
-
-
-class TestCollectionReaper:
-    def test_query(self, db: DatabaseTransactionFixture):
-        # This reaper is looking for collections that are marked for
-        # deletion.
-        collection = db.default_collection()
-        reaper = CollectionReaper(db.session)
-        assert [] == reaper.query().all()
-
-        collection.marked_for_deletion = True
-        assert [collection] == reaper.query().all()
-
-    def test_reaper_delete_calls_collection_delete(
-        self, db: DatabaseTransactionFixture
-    ):
-        # Unlike most ReaperMonitors, CollectionReaper.delete()
-        # is overridden to call delete() on the object it was passed,
-        # rather than just doing a database delete.
-        class MockCollection:
-            def delete(self):
-                self.was_called = True
-
-        collection = MockCollection()
-        reaper = CollectionReaper(db.session)
-        reaper.delete(collection)
-        assert True == collection.was_called
-
-    @pytest.mark.parametrize(
-        "is_inactive",
-        (
-            pytest.param(True, id="inactive"),
-            pytest.param(False, id="active"),
-        ),
-    )
-    def test_run_once(self, db: DatabaseTransactionFixture, is_inactive: bool):
-        # End-to-end test
-        c1 = db.collection()
-        c2 = db.collection(inactive=is_inactive)
-        c2.marked_for_deletion = True
-        reaper = CollectionReaper(db.session)
-        result = reaper.run_once()
-
-        # The Collection marked for deletion has been deleted; the other
-        # one is unaffected.
-        assert [c1] == db.session.query(Collection).all()
-        assert "Items deleted: 1" == result.achievements
-
-
-class TestMeasurementReaper:
-    def test_query(self, db: DatabaseTransactionFixture):
-        # This reaper is looking for measurements that are not current.
-        measurement, created = get_one_or_create(
-            db.session, Measurement, is_most_recent=True
-        )
-        reaper = MeasurementReaper(db.session)
-        assert [] == reaper.query().all()
-        measurement.is_most_recent = False
-        assert [measurement] == reaper.query().all()
-
-    def test_run_once(self, db: DatabaseTransactionFixture):
-        # End-to-end test
-        measurement1, created = get_one_or_create(
-            db.session,
-            Measurement,
-            quantity_measured="answer",
-            value=12,
-            is_most_recent=True,
-        )
-        measurement2, created = get_one_or_create(
-            db.session,
-            Measurement,
-            quantity_measured="answer",
-            value=42,
-            is_most_recent=False,
-        )
-        reaper = MeasurementReaper(db.session)
-        result = reaper.run_once()
-        assert [measurement1] == db.session.query(Measurement).all()
-        assert "Items deleted: 1" == result.achievements
-
-
-class TestScrubberMonitor:
-    def test_run_once(self, db: DatabaseTransactionFixture):
-        # ScrubberMonitor is basically an abstract class, with
-        # subclasses doing nothing but define missing constants. This
-        # is an end-to-end test using a specific subclass,
-        # CirculationEventLocationScrubber.
-
-        m = CirculationEventLocationScrubber(db.session)
-        assert "Scrubber for CirculationEvent.location" == m.SERVICE_NAME
-
-        # CirculationEvents are only scrubbed if they have a location
-        # *and* are older than MAX_AGE.
-        now = utc_now()
-        not_long_ago = m.cutoff + datetime.timedelta(days=1)
-        long_ago = m.cutoff - datetime.timedelta(days=1)
-
-        new, ignore = create(db.session, CirculationEvent, start=now, location="loc")
-        recent, ignore = create(
-            db.session, CirculationEvent, start=not_long_ago, location="loc"
-        )
-        old, ignore = create(
-            db.session, CirculationEvent, start=long_ago, location="loc"
-        )
-        already_scrubbed, ignore = create(
-            db.session, CirculationEvent, start=long_ago, location=None
-        )
-
-        # Only the old unscrubbed CirculationEvent is eligible
-        # to be scrubbed.
-        assert [old] == m.query().all()
-
-        # Other reapers say items were 'deleted'; we say they were
-        # 'scrubbed'.
-        timestamp = m.run_once()
-        assert "Items scrubbed: 1" == timestamp.achievements
-
-        # Only the old unscrubbed CirculationEvent has been scrubbed.
-        assert None == old.location
-        for untouched in (new, recent):
-            assert "loc" == untouched.location
-
-    def test_specific_scrubbers(self, db: DatabaseTransactionFixture):
-        # Check that all specific ScrubberMonitors are set up
-        # correctly.
-        circ = CirculationEventLocationScrubber(db.session)
-        assert CirculationEvent.start == circ.timestamp_field
-        assert CirculationEvent.location == circ.scrub_field
-        assert 365 == circ.MAX_AGE
-
-        patron = PatronNeighborhoodScrubber(db.session)
-        assert Patron.last_external_sync == patron.timestamp_field
-        assert Patron.cached_neighborhood == patron.scrub_field
-        assert Patron.MAX_SYNC_TIME == patron.MAX_AGE
