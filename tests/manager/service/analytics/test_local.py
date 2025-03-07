@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.util.datetime_helpers import utc_now
 

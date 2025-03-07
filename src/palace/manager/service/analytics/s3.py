@@ -4,10 +4,10 @@ import datetime
 import json
 import random
 import string
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
+from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -34,7 +34,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         neighborhood: str | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Create a Python dict containing required information about the event.
 
         :param library: Library associated with the event
@@ -149,8 +149,8 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         new_value: int | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
-        **kwargs,
-    ):
+        neighborhood: str | None = None,
+    ) -> None:
         """Log the event using the appropriate for the specific provider's mechanism.
 
         :param library: Library associated with the event
@@ -187,7 +187,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
             new_value,
             user_agent=user_agent,
             patron=patron,
-            **kwargs,
+            neighborhood=neighborhood,
         )
         content = json.dumps(
             event,
@@ -211,7 +211,7 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
         event_type: str,
         end_time: datetime.datetime,
         start_time: datetime.datetime | None = None,
-    ):
+    ) -> str:
         """The path to the analytics data file for the given library, license
         pool and date range."""
         root = library.short_name

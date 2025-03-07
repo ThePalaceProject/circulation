@@ -176,6 +176,7 @@ class TestCirculationEvent:
             end=end,
             location=location,
         )
+        assert event.start is not None
         assert (utc_now() - event.start).total_seconds() < 2
         assert True == is_new
         assert pool == event.license_pool

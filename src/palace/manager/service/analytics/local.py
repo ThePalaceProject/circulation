@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy.orm.session import Session
 
@@ -17,15 +16,15 @@ class LocalAnalyticsProvider(LoggerMixin):
         license_pool: LicensePool | None,
         event_type: str,
         time: datetime,
-        old_value: Any = None,
-        new_value: Any = None,
+        old_value: int | None = None,
+        new_value: int | None = None,
         user_agent: str | None = None,
         patron: Patron | None = None,
-        **kwargs
-    ):
+        neighborhood: str | None = None,
+    ) -> None:
         _db = Session.object_session(library)
 
-        return CirculationEvent.log(
+        CirculationEvent.log(
             _db,
             license_pool,
             event_type,
@@ -33,4 +32,5 @@ class LocalAnalyticsProvider(LoggerMixin):
             new_value,
             start=time,
             library=library,
+            location=neighborhood,
         )

@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.api.s3_analytics_provider import S3AnalyticsProvider
-from palace.manager.core.local_analytics_provider import LocalAnalyticsProvider
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.service.analytics.local import LocalAnalyticsProvider
+from palace.manager.service.analytics.s3 import S3AnalyticsProvider
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
