@@ -244,6 +244,20 @@ class TestCollectionReaper:
         # Make sure we called the delete method on the collection
         mock_delete.assert_called_once()
 
+    def test_reaper_no_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        # Some collections that don't need to be deleted
+        collections = {db.collection() for idx in range(3)}
+
+        # Run reaper
+        collection_reaper.delay().wait()
+
+        # Make sure no collections were deleted
+        assert set(db.session.query(Collection).all()) == collections
+
 
 def test_measurement_reaper(
     db: DatabaseTransactionFixture,
