@@ -343,12 +343,12 @@ def test_annotation_reaper(
     assert "Deleted 1 outdated idling annotation." in caplog.messages
 
     # The annotation that should have been reaped is gone
-    assert db.session.query(Annotation).all() == [
+    assert set(db.session.query(Annotation).all()) == {
         old_loan,
         old_hold,
         not_idling,
         new_idling,
-    ]
+    }
 
 
 def test_hold_reaper(
