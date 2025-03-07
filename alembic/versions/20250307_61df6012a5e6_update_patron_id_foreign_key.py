@@ -16,7 +16,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_constraint("annotations_patron_id_fkey", "annotations", type_="foreignkey")
+    op.drop_constraint(
+        "annotations_patron_id_fkey",
+        "annotations",
+        type_="foreignkey",
+    )
     op.create_foreign_key(
         "annotations_patron_id_fkey",
         "annotations",
@@ -25,7 +29,11 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
-    op.drop_constraint("credentials_patron_id_fkey", "credentials", type_="foreignkey")
+    op.drop_constraint(
+        "credentials_patron_id_fkey",
+        "credentials",
+        type_="foreignkey",
+    )
     op.create_foreign_key(
         "credentials_patron_id_fkey",
         "credentials",
@@ -34,7 +42,11 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
-    op.drop_constraint("holds_patron_id_fkey", "holds", type_="foreignkey")
+    op.drop_constraint(
+        "holds_patron_id_fkey",
+        "holds",
+        type_="foreignkey",
+    )
     op.create_foreign_key(
         "holds_patron_id_fkey",
         "holds",
@@ -43,7 +55,11 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
-    op.drop_constraint("loans_patron_id_fkey", "loans", type_="foreignkey")
+    op.drop_constraint(
+        "loans_patron_id_fkey",
+        "loans",
+        type_="foreignkey",
+    )
     op.create_foreign_key(
         "loans_patron_id_fkey",
         "loans",
@@ -55,19 +71,51 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("loans_patron_id_fkey", "loans", type_="foreignkey")
-    op.create_foreign_key(
-        "loans_patron_id_fkey", "loans", "patrons", ["patron_id"], ["id"]
+    op.drop_constraint(
+        "loans_patron_id_fkey",
+        "loans",
+        type_="foreignkey",
     )
-    op.drop_constraint("holds_patron_id_fkey", "holds", type_="foreignkey")
     op.create_foreign_key(
-        "holds_patron_id_fkey", "holds", "patrons", ["patron_id"], ["id"]
+        "loans_patron_id_fkey",
+        "loans",
+        "patrons",
+        ["patron_id"],
+        ["id"],
     )
-    op.drop_constraint("credentials_patron_id_fkey", "credentials", type_="foreignkey")
-    op.create_foreign_key(
-        "credentials_patron_id_fkey", "credentials", "patrons", ["patron_id"], ["id"]
+    op.drop_constraint(
+        "holds_patron_id_fkey",
+        "holds",
+        type_="foreignkey",
     )
-    op.drop_constraint("annotations_patron_id_fkey", "annotations", type_="foreignkey")
     op.create_foreign_key(
-        "annotations_patron_id_fkey", "annotations", "patrons", ["patron_id"], ["id"]
+        "holds_patron_id_fkey",
+        "holds",
+        "patrons",
+        ["patron_id"],
+        ["id"],
+    )
+    op.drop_constraint(
+        "credentials_patron_id_fkey",
+        "credentials",
+        type_="foreignkey",
+    )
+    op.create_foreign_key(
+        "credentials_patron_id_fkey",
+        "credentials",
+        "patrons",
+        ["patron_id"],
+        ["id"],
+    )
+    op.drop_constraint(
+        "annotations_patron_id_fkey",
+        "annotations",
+        type_="foreignkey",
+    )
+    op.create_foreign_key(
+        "annotations_patron_id_fkey",
+        "annotations",
+        "patrons",
+        ["patron_id"],
+        ["id"],
     )
