@@ -52,9 +52,7 @@ class TestLocalAnalyticsExporter:
         ]
         num = len(types)
         time = datetime.now() - timedelta(minutes=len(types))
-        location = "11377"
-        # Create a bunch of circulation events of different types,
-        # all with the same .location.
+        # Create a bunch of circulation events of different types
         for type in types:
             get_one_or_create(
                 db.session,
@@ -63,12 +61,10 @@ class TestLocalAnalyticsExporter:
                 type=type,
                 start=time,
                 end=time,
-                location=location,
             )
             time += timedelta(minutes=1)
 
-        # Create a circulation event for a different book,
-        # with no .location.
+        # Create a circulation event for a different book
         get_one_or_create(
             db.session,
             CirculationEvent,
@@ -106,7 +102,6 @@ class TestLocalAnalyticsExporter:
             edition1.language,
             w1.target_age_string or "",
             ordered_genre_string,
-            location,
             c1.name,
             "",
             "",
@@ -115,7 +110,7 @@ class TestLocalAnalyticsExporter:
             "true",
         ]
 
-        expected_column_count = 20
+        expected_column_count = 19
         for row in rows:
             assert expected_column_count == len(row)
             assert constant == row[2:]
@@ -137,8 +132,7 @@ class TestLocalAnalyticsExporter:
             assert constant == row[2:]
 
         # Now let's look at the last row. It's got metadata from a
-        # different book, and notably, there is no location.
-        no_location = ""
+        # different book
         assert [
             types[3],
             identifier2.identifier,
@@ -152,7 +146,6 @@ class TestLocalAnalyticsExporter:
             edition2.language,
             w2.target_age_string or "",
             genres[1].name,
-            no_location,
             c2.name,
             "",
             "",
@@ -185,7 +178,6 @@ class TestLocalAnalyticsExporter:
                 start=time,
                 end=time,
                 library=library,
-                location=location,
             )
             time += timedelta(minutes=1)
 
@@ -210,8 +202,8 @@ class TestLocalAnalyticsExporter:
 
         # There are five events with a library ID.
         constant_with_library = constant.copy()
-        constant_with_library[13] = library_short_name
-        constant_with_library[14] = library_name
+        constant_with_library[12] = library_short_name
+        constant_with_library[13] = library_name
 
         assert num == len(rows)
         assert types == [row[1] for row in rows]
@@ -230,97 +222,3 @@ class TestLocalAnalyticsExporter:
         rows = [row for row in reader][1::]  # skip header row
 
         assert 0 == len(rows)
-
-        # Add example events that will be used to report by location
-        user_added_locations = "11377,10018,11378"
-
-        # The CM_HOLD_PLACE event should not be returned since it's not in the
-        # list of events to gather when there is a list of locations.
-        new_types = [
-            CirculationEvent.CM_FULFILL,
-            CirculationEvent.CM_CHECKOUT,
-            CirculationEvent.OPEN_BOOK,
-            CirculationEvent.CM_HOLD_PLACE,
-        ]
-
-        # Only information from the first three events should be returned.
-        num = len(new_types) - 1
-        time = datetime.now() - timedelta(minutes=num)
-        for type in new_types:
-            get_one_or_create(
-                db.session,
-                CirculationEvent,
-                license_pool=lp1,
-                type=type,
-                start=time,
-                end=time,
-            )
-            time += timedelta(minutes=1)
-
-        output = exporter.export(
-            db.session, today, time + timedelta(minutes=1), user_added_locations
-        )
-        reader = csv.reader(
-            [row for row in output.split("\r\n") if row], dialect=csv.excel
-        )
-        rows = [row for row in reader][1::]  # skip header row
-
-        # No location was associated with each event so none will be returned
-        assert 0 == len(rows)
-
-        for type in new_types:
-            get_one_or_create(
-                db.session,
-                CirculationEvent,
-                license_pool=lp1,
-                type=type,
-                start=time,
-                end=time,
-                location="10001",
-            )
-            time += timedelta(minutes=1)
-
-        output = exporter.export(
-            db.session, today, time + timedelta(minutes=1), user_added_locations
-        )
-        reader = csv.reader(
-            [row for row in output.split("\r\n") if row], dialect=csv.excel
-        )
-        rows = [row for row in reader][1::]  # skip header row
-
-        # Some events have a location but not in the list of locations that was passed
-        assert 0 == len(rows)
-
-        for type in new_types:
-            get_one_or_create(
-                db.session,
-                CirculationEvent,
-                license_pool=lp1,
-                type=type,
-                start=time,
-                end=time,
-                location="11377",
-            )
-            time += timedelta(minutes=1)
-
-        output = exporter.export(
-            db.session, today, time + timedelta(minutes=1), user_added_locations
-        )
-        reader = csv.reader(
-            [row for row in output.split("\r\n") if row], dialect=csv.excel
-        )
-        rows = [row for row in reader][1::]  # skip header row
-
-        # These events have a location that is in the list of acceptable
-        # locations. The CM_HOLD_PLACE event is not in the list of event types
-        # to gather information from, so it should not be returned even though
-        # it has a location.
-        assert num == len(rows)
-        # The last event in new_types should not be returned
-        assert new_types[:-1] == [row[1] for row in rows]
-
-        # After the start time and event type, the rest of the row is
-        # the same content we've come to expect.
-        for row in rows:
-            assert expected_column_count == len(row)
-            assert constant == row[2:]

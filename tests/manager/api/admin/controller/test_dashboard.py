@@ -140,13 +140,13 @@ class TestDashboardController:
         # Now verify that this works by passing incoming query
         # parameters into a LocalAnalyticsExporter object.
         class MockLocalAnalyticsExporter:
-            def export(self, _db, date_start, date_end, locations, library):
-                self.called_with = (_db, date_start, date_end, locations, library)
+            def export(self, _db, date_start, date_end, library):
+                self.called_with = (_db, date_start, date_end, library)
                 return "A CSV file"
 
         exporter = MockLocalAnalyticsExporter()
         with dashboard_fixture.ctrl.request_context_with_library(
-            "/?date=2018-01-01&dateEnd=2018-01-04&locations=loc1,loc2"
+            "/?date=2018-01-01&dateEnd=2018-01-04"
         ):
             (
                 response,
@@ -166,7 +166,6 @@ class TestDashboardController:
             # specified -- we want all events that happened _before_
             # 2018-01-05.
             assert datetime.date(2018, 1, 5) == args.pop(0)
-            assert "loc1,loc2" == args.pop(0)
             assert dashboard_fixture.ctrl.db.default_library() == args.pop(0)
             assert [] == args
 

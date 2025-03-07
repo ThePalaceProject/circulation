@@ -40,7 +40,6 @@ class TestAnalyticsController:
             assert INVALID_ANALYTICS_EVENT_TYPE.uri == response.uri
 
         patron = db.patron()
-        patron.neighborhood = "Mars Grid 4810579"
         with analytics_fixture.request_context_with_library("/") as ctx:
             setattr(ctx.request, "patron", patron)
             response = analytics_fixture.manager.analytics_controller.track_event(
@@ -57,5 +56,4 @@ class TestAnalyticsController:
                 license_pool=analytics_fixture.lp,
             )
             assert circulation_event is not None
-            assert circulation_event.location == "Mars Grid 4810579"
             db.session.delete(circulation_event)

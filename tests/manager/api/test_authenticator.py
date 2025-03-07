@@ -249,7 +249,6 @@ class TestPatronData:
 
     def test_apply(self, patron_data: PatronData, db: DatabaseTransactionFixture):
         patron = db.patron()
-        patron_data.cached_neighborhood = "Little Homeworld"
 
         patron_data.apply(patron)
         assert patron_data.permanent_id == patron.external_identifier
@@ -258,17 +257,12 @@ class TestPatronData:
         assert patron_data.authorization_expires == patron.authorization_expires
         assert patron_data.fines == patron.fines
         assert None == patron.block_reason
-        assert "Little Homeworld" == patron.cached_neighborhood
 
         # This data is stored in PatronData but not applied to Patron.
         assert "4" == patron_data.personal_name
         assert False == hasattr(patron, "personal_name")
         assert "5" == patron_data.email_address
         assert False == hasattr(patron, "email_address")
-
-        # This data is stored on the Patron object as a convenience,
-        # but it's not stored in the database.
-        assert "Little Homeworld" == patron.neighborhood
 
     def test_apply_block_reason(
         self, patron_data: PatronData, db: DatabaseTransactionFixture
@@ -423,13 +417,6 @@ class TestPatronData:
         assert analytics.last_event_type == CirculationEvent.NEW_PATRON
         assert analytics.count == 1
 
-        # Patron.neighborhood was set, even though there is no
-        # value and that's not a database field.
-        assert patron.neighborhood is None
-
-        # Set a neighborhood and try again.
-        patron_data.neighborhood = "Achewood"
-
         # The same patron is returned, and no analytics
         # event was sent.
         patron, is_new = patron_data.get_or_create_patron(
@@ -437,7 +424,6 @@ class TestPatronData:
         )
         assert patron.authorization_identifier == "2"
         assert is_new is False
-        assert patron.neighborhood == "Achewood"
         assert analytics.count == 1
 
     def test_to_response_parameters(self, patron_data: PatronData):
@@ -848,7 +834,6 @@ class TestLibraryAuthenticator:
             permanent_id=patron.external_identifier,
             authorization_identifier=patron.authorization_identifier,
             username=patron.username,
-            neighborhood="Achewood",
         )
         basic = mock_basic(patrondata=patrondata)
         basic.authenticate = MagicMock(return_value=patron)
@@ -864,12 +849,6 @@ class TestLibraryAuthenticator:
             db.session,
             Authorization(auth_type="basic", data=dict(username="foo", password="bar")),
         )
-
-        # Neighborhood information is being temporarily stored in the
-        # Patron object for use elsewhere in request processing. It
-        # won't be written to the database because there's no field in
-        # `patrons` to store it.
-        assert "Achewood" == patron.neighborhood
 
         # OAuth doesn't work.
         problem = authenticator.authenticated_patron(
@@ -1325,7 +1304,6 @@ class TestBasicAuthenticationProvider:
             permanent_id=patron.external_identifier,
             authorization_identifier=barcode,
             username=username,
-            cached_neighborhood="Little Homeworld",
             complete=True,
         )
 
@@ -1340,11 +1318,6 @@ class TestBasicAuthenticationProvider:
         # We updated their metadata.
         assert "user" == patron.username
         assert barcode == patron.authorization_identifier
-        assert "Little Homeworld" == patron.cached_neighborhood
-
-        # .cached_neighborhood (stored in the database) was reused as
-        # .neighborhood (destroyed at the end of the request)
-        assert "Little Homeworld" == patron.neighborhood
 
         # We did a patron lookup, which means we updated
         # .last_external_sync.
@@ -1363,11 +1336,6 @@ class TestBasicAuthenticationProvider:
         assert last_sync == patron.last_external_sync
         assert barcode == patron.authorization_identifier
         assert username == patron.username
-
-        # Here, patron.neighborhood was copied over from
-        # patron.cached_neighborhood. It couldn't have been set by a
-        # metadata refresh, because there was no refresh.
-        assert "Little Homeworld" == patron.neighborhood
 
         # If we somehow authenticate with an identifier other than
         # the ones in the Patron record, we trigger another metadata
@@ -1557,7 +1525,7 @@ class TestBasicAuthenticationProvider:
         assert patron.last_external_sync is None
         assert patron.username is None
 
-        patrondata = PatronData(username="user", neighborhood="Little Homeworld")
+        patrondata = PatronData(username="user")
         provider = mock_basic(lookup_patrondata=patrondata)
         provider.update_patron_metadata(patron)
 
@@ -1566,12 +1534,6 @@ class TestBasicAuthenticationProvider:
 
         # last_external_sync has been updated.
         assert patron.last_external_sync is not None
-
-        # .neighborhood was not stored in .cached_neighborhood.  In
-        # this case, it must be cheap to get .neighborhood every time,
-        # and it's better not to store information we can get cheaply.
-        assert "Little Homeworld" == patron.neighborhood
-        assert patron.cached_neighborhood is None
 
     def test_update_patron_metadata_noop_if_no_remote_metadata(
         self, db: DatabaseTransactionFixture, mock_basic: MockBasicFixture

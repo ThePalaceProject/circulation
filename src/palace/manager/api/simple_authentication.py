@@ -41,13 +41,6 @@ class SimpleAuthSettings(BasicAuthProviderSettings):
             type=ConfigurationFormItemType.LIST,
         ),
     )
-    neighborhood: str | None = FormField(
-        None,
-        form=ConfigurationFormItem(
-            label="Test neighborhood",
-            description="For analytics purposes, all patrons will be 'from' this neighborhood.",
-        ),
-    )
 
 
 class SimpleAuthenticationProvider(
@@ -100,8 +93,6 @@ class SimpleAuthenticationProvider(
             for identifier in additional_identifiers:
                 self.test_identifiers += [identifier, identifier + "_username"]
 
-        self.test_neighborhood = settings.neighborhood
-
     def remote_authenticate(
         self, username: str | None, password: str | None
     ) -> PatronData | None:
@@ -112,12 +103,10 @@ class SimpleAuthenticationProvider(
         if not self.valid_patron(username, password):
             return None
 
-        return self.generate_patrondata(username, self.test_neighborhood)
+        return self.generate_patrondata(username)
 
     @classmethod
-    def generate_patrondata(
-        cls, authorization_identifier: str, neighborhood: str | None = None
-    ) -> PatronData:
+    def generate_patrondata(cls, authorization_identifier: str) -> PatronData:
         if authorization_identifier.endswith("_username"):
             username = authorization_identifier
             identifier = authorization_identifier[:-9]
@@ -134,7 +123,6 @@ class SimpleAuthenticationProvider(
             personal_name=personal_name,
             authorization_expires=None,
             fines=None,
-            neighborhood=neighborhood,
         )
         return patrondata
 

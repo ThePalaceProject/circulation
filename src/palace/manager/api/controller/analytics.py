@@ -22,9 +22,6 @@ class AnalyticsController(CirculationManagerController):
             # Authentication on the AnalyticsController is optional,
             # so we may not have a patron.
             patron = get_request_patron(default=None)
-            neighborhood = None
-            if patron:
-                neighborhood = getattr(patron, "neighborhood", None)
             pools = self.load_licensepools(library, identifier_type, identifier)
             if isinstance(pools, ProblemDetail):
                 return pools
@@ -33,7 +30,6 @@ class AnalyticsController(CirculationManagerController):
                 pools[0],
                 event_type,
                 utc_now(),
-                neighborhood=neighborhood,
                 patron=patron,
             )
             return Response({}, 200)

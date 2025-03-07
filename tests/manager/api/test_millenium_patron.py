@@ -14,7 +14,6 @@ from palace.manager.api.millenium_patron import (
     MilleniumPatronAPI,
     MilleniumPatronLibrarySettings,
     MilleniumPatronSettings,
-    NeighborhoodMode,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
@@ -653,33 +652,6 @@ class TestMilleniumPatronAPI:
         content = patron.sample_data("dump.success.html")
         patrondata = patron.patron_dump_to_patrondata("alice", content)
         assert "10" == patrondata.library_identifier
-
-    def test_neighborhood(
-        self,
-        create_provider: Callable[..., MockAPI],
-        create_settings: Callable[..., MilleniumPatronSettings],
-    ):
-        # The value of PatronData.neighborhood depends on the 'neighborhood mode' setting.
-
-        # Default behavior is not to gather neighborhood information at all.
-        settings = create_settings()
-        provider = create_provider(settings=settings)
-        content = provider.sample_data("dump.success.html")
-        patrondata = provider.patron_dump_to_patrondata("alice", content)
-        assert PatronData.NO_VALUE == patrondata.neighborhood
-
-        # Patron neighborhood may be the identifier of their home library branch.
-        settings = create_settings(neighborhood_mode=NeighborhoodMode.HOME_BRANCH)
-        provider = create_provider(settings=settings)
-        content = provider.sample_data("dump.success.html")
-        patrondata = provider.patron_dump_to_patrondata("alice", content)
-        assert "mm" == patrondata.neighborhood
-
-        # Or it may be the ZIP code of their home address.
-        settings = create_settings(neighborhood_mode=NeighborhoodMode.POSTAL_CODE)
-        provider = create_provider(settings=settings)
-        patrondata = provider.patron_dump_to_patrondata("alice", content)
-        assert "10001" == patrondata.neighborhood
 
     def test_authorization_identifier_blacklist(
         self,
