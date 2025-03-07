@@ -81,10 +81,12 @@ def list_identifiers_for_import(
                 task.log.error(f"Collection not found:  {collection_id} : ignoring...")
                 return None
 
+            collection_name = collection.name
+
             if not locked:
                 # we want to log
                 task.log.warning(
-                    f'Skipping list_identifiers_for_import for "{collection.name}"({collection_id}) because another '
+                    f'Skipping list_identifiers_for_import for "{collection_name}"({collection_id}) because another '
                     f"task holds its lock. This means that a previously spawned instance of this task is taking an "
                     f"unexpectedly long time. It is likely that  this collection is being processed for the first time "
                     f"and therefore must read the entire list of identifiers for this collection."
@@ -111,7 +113,7 @@ def list_identifiers_for_import(
             # processing
             api = create_api(collection, session)
             task.log.info(
-                f"Starting process of queuing items in collection {collection.name} (id={collection_id} "
+                f"Starting process of queuing items in collection {collection_name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
             )
             # start stopwatch
@@ -130,7 +132,7 @@ def list_identifiers_for_import(
             )
             # log the end of the run
             task.log.info(
-                f"Finished listing identifiers in collection {collection.name} (id={collection_id} "
+                f"Finished listing identifiers in collection {collection_name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
                 f"{achievements}"
             )
@@ -228,17 +230,17 @@ def import_identifiers(
                 wait_time = exponential_backoff(task.request.retries)
                 task.log.exception(
                     f"Something unexpected went wrong while processing a batch of titles for collection "
-                    f'"{collection.name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
+                    f'"{collection_name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
                 )
                 raise task.retry(countdown=wait_time)
 
             batch_length = len(batch)
             task.log.info(
-                f"Imported {batch_length} identifiers for collection ({collection.name}, id={collection_id})"
+                f"Imported {batch_length} identifiers for collection ({collection_name}, id={collection_id})"
             )
             total_imported_in_current_task += batch_length
             task.log.info(
-                f"Total imported {total_imported_in_current_task} identifiers in current task for collection ({collection.name}, id={collection_id})"
+                f"Total imported {total_imported_in_current_task} identifiers in current task for collection ({collection_name}, id={collection_id})"
             )
 
             # remove identifiers processed in previous batch
@@ -268,7 +270,7 @@ def import_identifiers(
 
         raise task.replace(
             import_identifiers.s(
-                collection_id=collection.id,
+                collection_id=collection_id,
                 identifiers=identifiers,
                 batch_size=batch_size,
                 processed_count=processed_count,
