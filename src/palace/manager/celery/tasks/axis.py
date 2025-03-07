@@ -190,9 +190,11 @@ def import_identifiers(
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
             return None
 
+        collection_name = collection.name
+
         def log_run_end_message() -> None:
             task.log.info(
-                f"Finished importing identifiers for collection ({collection.name}, id={collection_id}), "
+                f"Finished importing identifiers for collection ({collection_name}, id={collection_id}), "
                 f"task(id={task.request.id})"
             )
 
@@ -255,13 +257,13 @@ def import_identifiers(
     processed_count += total_imported_in_current_task
 
     task.log.info(
-        f"Imported {processed_count} identifiers in run for collection ({collection.name}, id={collection_id})"
+        f"Imported {processed_count} identifiers in run for collection ({collection_name}, id={collection_id})"
     )
 
     if len(identifiers) > 0:
         task.log.info(
             f"Replacing task to continue importing remaining {len(identifiers)} identifier{'' if len(identifiers) == 1 else 's'} "
-            f"for collection ({collection.name}, id={collection.id})"
+            f"for collection ({collection_name}, id={collection_id})"
         )
 
         raise task.replace(
@@ -352,6 +354,8 @@ def reap_collection(
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
             return None
 
+        collection_name = collection.name
+
         api = create_api(session=session, collection=collection)
 
         identifiers = (
@@ -372,14 +376,14 @@ def reap_collection(
             api.update_licensepools_for_identifiers(identifiers=identifiers)
 
     task.log.info(
-        f'Reaper updated {identifier_count} books in collection (name="{collection.name}", id={collection.id}.'
+        f'Reaper updated {identifier_count} books in collection (name="{collection_name}", id={collection_id}.'
     )
     # Requeue at the next offset if the batch of identifiers was full otherwise do nothing since
     # the run is complete.
 
     task.log.info(
         f"reap_collection task at offset={offset} with {identifier_count} identifiers for collection "
-        f'(name="{collection.name}", id={collection.id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
+        f'(name="{collection_name}", id={collection_id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
     )
 
     if identifier_count >= batch_size:
@@ -387,7 +391,7 @@ def reap_collection(
 
         task.log.info(
             f"Re-queuing reap_collection task at offset={new_offset} for collection "
-            f'(name="{collection.name}", id={collection.id}).'
+            f'(name="{collection_name}", id={collection_id}).'
         )
 
         raise task.replace(
@@ -400,5 +404,5 @@ def reap_collection(
 
     else:
         task.log.info(
-            f'Reaping of collection (name="{collection.name}", id={collection.id}) complete.'
+            f'Reaping of collection (name="{collection_name}", id={collection_id}) complete.'
         )
