@@ -240,6 +240,8 @@ class OPDS2WithODLImporter(OPDS2Importer):
                         )
                     )
 
+        # metadata.circulation was set in an earlier step and shouldn't be None.
+        # We assert this explicitly to satisfy mypy and fail fast if something changes.
         assert metadata.circulation is not None
         metadata.circulation.licenses = licenses
         metadata.circulation.licenses_owned = None
