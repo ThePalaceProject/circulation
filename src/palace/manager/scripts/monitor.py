@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.monitor import CollectionMonitor, ReaperMonitor
+from palace.manager.core.monitor import CollectionMonitor
 from palace.manager.scripts.base import Script
 from palace.manager.scripts.input import CollectionArgumentsScript
 from palace.manager.sqlalchemy.session import production_session
@@ -81,15 +81,6 @@ class RunMultipleMonitorsScript(Script):
                     e,
                     exc_info=e,
                 )
-
-
-class RunReaperMonitorsScript(RunMultipleMonitorsScript):
-    """Run all the monitors found in ReaperMonitor.REGISTRY"""
-
-    name = "Run all reaper monitors"
-
-    def monitors(self, **kwargs):
-        return [cls(self._db, **kwargs) for cls in ReaperMonitor.REGISTRY]
 
 
 class RunCollectionMonitorScript(RunMultipleMonitorsScript, CollectionArgumentsScript):

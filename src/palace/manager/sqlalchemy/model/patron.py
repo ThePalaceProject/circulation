@@ -168,7 +168,11 @@ class Patron(Base, RedisKeyMixin):
     neighborhood: str | None = None
 
     loans: Mapped[list[Loan]] = relationship(
-        "Loan", back_populates="patron", cascade="delete", uselist=True
+        "Loan",
+        back_populates="patron",
+        cascade="delete",
+        uselist=True,
+        passive_deletes=True,
     )
     holds: Mapped[list[Hold]] = relationship(
         "Hold",
@@ -176,6 +180,7 @@ class Patron(Base, RedisKeyMixin):
         cascade="delete",
         uselist=True,
         order_by="Hold.id",
+        passive_deletes=True,
     )
 
     annotations: Mapped[list[Annotation]] = relationship(
@@ -183,15 +188,16 @@ class Patron(Base, RedisKeyMixin):
         back_populates="patron",
         order_by="desc(Annotation.timestamp)",
         cascade="delete",
+        passive_deletes=True,
     )
 
     # One Patron can have many associated Credentials.
     credentials: Mapped[list[Credential]] = relationship(
-        "Credential", back_populates="patron", cascade="delete"
+        "Credential", back_populates="patron", cascade="delete", passive_deletes=True
     )
 
     device_tokens: Mapped[list[DeviceToken]] = relationship(
-        "DeviceToken", back_populates="patron", passive_deletes=True
+        "DeviceToken", back_populates="patron", cascade="delete", passive_deletes=True
     )
 
     __table_args__ = (
@@ -519,7 +525,10 @@ class Loan(Base, LoanAndHoldMixin):
     id: Mapped[int] = Column(Integer, primary_key=True)
 
     patron_id: Mapped[int] = Column(
-        Integer, ForeignKey("patrons.id"), index=True, nullable=False
+        Integer,
+        ForeignKey("patrons.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     patron: Mapped[Patron] = relationship("Patron", back_populates="loans")
 
@@ -573,7 +582,10 @@ class Hold(Base, LoanAndHoldMixin):
     __tablename__ = "holds"
     id: Mapped[int] = Column(Integer, primary_key=True)
     patron_id: Mapped[int] = Column(
-        Integer, ForeignKey("patrons.id"), index=True, nullable=False
+        Integer,
+        ForeignKey("patrons.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
     )
     patron: Mapped[Patron] = relationship(
         "Patron", back_populates="holds", lazy="joined"
@@ -724,7 +736,9 @@ class Annotation(Base):
 
     __tablename__ = "annotations"
     id: Mapped[int] = Column(Integer, primary_key=True)
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(
+        Integer, ForeignKey("patrons.id", ondelete="CASCADE"), index=True
+    )
     patron: Mapped[Patron] = relationship("Patron", back_populates="annotations")
 
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)

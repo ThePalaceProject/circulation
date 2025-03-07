@@ -92,6 +92,62 @@ def beat_schedule() -> dict[str, Any]:
                 hour="4",
             ),  # Once a day at 4:00 AM
         },
+        "credential_reaper": {
+            "task": "reaper.credential_reaper",
+            "schedule": crontab(
+                minute="5",
+                hour="2",
+            ),  # Once a day at 2:05 AM
+        },
+        "patron_reaper": {
+            "task": "reaper.patron_reaper",
+            "schedule": crontab(
+                minute="10",
+                hour="2",
+            ),  # Once a day at 2:10 AM
+        },
+        "collection_reaper": {
+            "task": "reaper.collection_reaper",
+            "schedule": crontab(
+                minute="15",
+                hour="2",
+            ),  # Once a day at 2:15 AM
+        },
+        "work_reaper": {
+            "task": "reaper.work_reaper",
+            "schedule": crontab(
+                minute="20",
+                hour="2",
+            ),  # Once a day at 2:20 AM
+        },
+        "measurement_reaper": {
+            "task": "reaper.measurement_reaper",
+            "schedule": crontab(
+                minute="25",
+                hour="2",
+            ),  # Once a day at 2:25 AM
+        },
+        "annotation_reaper": {
+            "task": "reaper.annotation_reaper",
+            "schedule": crontab(
+                minute="30",
+                hour="2",
+            ),  # Once a day at 2:30 AM
+        },
+        "hold_reaper": {
+            "task": "reaper.hold_reaper",
+            "schedule": crontab(
+                minute="35",
+                hour="2",
+            ),  # Once a day at 2:35 AM
+        },
+        "loan_reaper": {
+            "task": "reaper.loan_reaper",
+            "schedule": crontab(
+                minute="40",
+                hour="2",
+            ),  # Once a day at 2:40 AM
+        },
     }
 
 
