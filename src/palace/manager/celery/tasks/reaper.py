@@ -17,6 +17,7 @@ from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.log import pluralize
 
 
 def _execute_delete(session: Session, deletion_query: Delete) -> int:
@@ -36,12 +37,6 @@ def _execute_delete(session: Session, deletion_query: Delete) -> int:
     return result.rowcount  # type: ignore[attr-defined,no-any-return]
 
 
-def _pluralize(count: int, singular: str, plural: str | None = None) -> str:
-    if plural is None:
-        plural = singular + "s"
-    return singular if count == 1 else plural
-
-
 @shared_task(queue=QueueNames.default, bind=True)
 def credential_reaper(task: Task) -> None:
     """
@@ -51,9 +46,7 @@ def credential_reaper(task: Task) -> None:
     deletion_query = delete(Credential).where(Credential.expires < cutoff)
     with task.transaction() as session:
         rows_removed = _execute_delete(session, deletion_query)
-    task.log.info(
-        f"Deleted {rows_removed} expired {_pluralize(rows_removed, 'credential')}."
-    )
+    task.log.info(f"Deleted {pluralize(rows_removed, 'expired credential')}.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -65,9 +58,7 @@ def patron_reaper(task: Task) -> None:
     deletion_query = delete(Patron).where(Patron.authorization_expires < cutoff)
     with task.transaction() as session:
         rows_removed = _execute_delete(session, deletion_query)
-    task.log.info(
-        f"Deleted {rows_removed} expired patron {_pluralize(rows_removed, 'record')}."
-    )
+    task.log.info(f"Deleted {pluralize(rows_removed, 'expired patron record')}.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -99,7 +90,7 @@ def work_reaper(task: Task, batch_size: int = 1000) -> None:
 
     removed = len(works)
     task.log.info(
-        f"Deleted {removed} {_pluralize(removed, 'Work')} with no associated LicensePools."
+        f"Deleted {pluralize(removed, 'Work')} with no associated LicensePools."
     )
     if len(works) == batch_size:
         task.log.info("There may be more Works to delete. Re-queueing the reaper.")
@@ -133,7 +124,7 @@ def collection_reaper(task: Task) -> None:
 
     if collections_awaiting_delete and collections_awaiting_delete > 0:
         task.log.info(
-            f"{collections_awaiting_delete} {_pluralize(collections_awaiting_delete, 'collection')}"
+            f"{pluralize(collections_awaiting_delete, 'collection')}"
             f" waiting for delete. Re-queueing the reaper."
         )
         raise task.replace(collection_reaper.s())
@@ -147,9 +138,7 @@ def measurement_reaper(task: Task) -> None:
     deletion_query = delete(Measurement).where(Measurement.is_most_recent == False)
     with task.transaction() as session:
         rows_removed = _execute_delete(session, deletion_query)
-    task.log.info(
-        f"Deleted {rows_removed} outdated {_pluralize(rows_removed, 'measurement')}."
-    )
+    task.log.info(f"Deleted {pluralize(rows_removed, 'outdated measurement')}.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -185,9 +174,7 @@ def annotation_reaper(task: Task) -> None:
 
     with task.transaction() as session:
         rows_removed = _execute_delete(session, deletion_query)
-    task.log.info(
-        f"Deleted {rows_removed} outdated idling {_pluralize(rows_removed, 'annotation')}."
-    )
+    task.log.info(f"Deleted {pluralize(rows_removed, 'outdated idling annotation')}.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -218,7 +205,7 @@ def hold_reaper(task: Task, batch_size: int = 100) -> None:
             session.delete(hold)
 
     count = len(holds)
-    task.log.info(f"Deleted {count} expired {_pluralize(count, 'hold')}.")
+    task.log.info(f"Deleted {pluralize(count, 'expired hold')}.")
 
     with task.transaction() as session:
         for event in events_to_be_logged:
@@ -249,4 +236,4 @@ def loan_reaper(task: Task) -> None:
     with task.transaction() as session:
         rows_removed = _execute_delete(session, deletion_query)
 
-    task.log.info(f"Deleted {rows_removed} expired {_pluralize(rows_removed, 'loan')}.")
+    task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
