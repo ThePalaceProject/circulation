@@ -211,7 +211,6 @@ class ControllerFixture:
             settings = SimpleAuthenticationProvider.settings_class()(
                 test_identifier="unittestuser",
                 test_password="unittestpassword",
-                neighborhood="Unit Test West",
             )
             integration, _ = create(
                 _db,

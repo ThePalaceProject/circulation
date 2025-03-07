@@ -6,7 +6,6 @@ from urllib import parse
 import dateutil
 from flask_babel import lazy_gettext as _
 from lxml import etree
-from pydantic import field_validator
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authentication.basic import (
@@ -27,30 +26,12 @@ from palace.manager.util.http import HTTP
 from palace.manager.util.pydantic import HttpUrl
 
 
-class NeighborhoodMode(Enum):
-    DISABLED = "disabled"
-    HOME_BRANCH = "home_branch"
-    POSTAL_CODE = "postal_code"
-
-
 class AuthenticationMode(Enum):
     PIN = "pin"
     FAMILY_NAME = "family_name"
 
 
 class MilleniumPatronSettings(BasicAuthProviderSettings):
-    @field_validator("neighborhood_mode", mode="before")
-    @classmethod
-    def validate_neighborhood_mode(cls, v):
-        # TODO: We should fix this in the admin ui interface.
-        #  For the neighborhood_mode setting, the admin UI isn't sending the
-        #  default value, unless the user has changed it. Which causes us to
-        #  fail validation. So if no option is selected, we use the default.
-        if v is None:
-            return NeighborhoodMode.DISABLED
-        else:
-            return v
-
     url: HttpUrl = FormField(
         ...,
         form=ConfigurationFormItem(
@@ -104,21 +85,6 @@ class MilleniumPatronSettings(BasicAuthProviderSettings):
             options={
                 AuthenticationMode.PIN: "PIN",
                 AuthenticationMode.FAMILY_NAME: "Family Name",
-            },
-        ),
-    )
-    neighborhood_mode: NeighborhoodMode = FormField(
-        NeighborhoodMode.DISABLED,
-        form=ConfigurationFormItem(
-            label="Patron neighborhood field",
-            description="It's sometimes possible to guess a patron's neighborhood from their ILS record. "
-            "You can use this when analyzing circulation activity by neighborhood. If you don't need to do "
-            "this, it's better for patron privacy to disable this feature.",
-            type=ConfigurationFormItemType.SELECT,
-            options={
-                NeighborhoodMode.DISABLED: "Disable this feature",
-                NeighborhoodMode.HOME_BRANCH: "Patron's home library branch is their neighborhood.",
-                NeighborhoodMode.POSTAL_CODE: "Patron's postal code is their neighborhood.",
             },
         ),
     )
@@ -187,8 +153,6 @@ class MilleniumPatronAPI(
     RECORD_NUMBER_FIELD = "p81"  # e.g., "RECORD #[p81]"
     PATRON_TYPE_FIELD = "p47"  # e.g., "P TYPE[p47]"
     EXPIRATION_FIELD = "p43"  # e.g., "EXP DATE[p43]"
-    HOME_BRANCH_FIELD = "p53"  # e.g., "HOME LIBR[p53]"
-    ADDRESS_FIELD = "pa"  # e.g., "ADDRESS[pa]"
     BARCODE_FIELD = "pb"  # e.g., "P BARCODE[pb]"
     USERNAME_FIELD = "pu"  # e.g., "UNIV ID[pu]"
     FINES_FIELD = "p96"  # e.g., "MONEY OWED[p96]"
@@ -230,7 +194,6 @@ class MilleniumPatronAPI(
 
         self.auth_mode = settings.authentication_mode
         self.block_types = settings.block_types
-        self.neighborhood_mode = settings.neighborhood_mode
         self.field_used_as_patron_identifier = settings.field_used_as_patron_identifier
         self.use_post = settings.use_post_requests
 
@@ -434,7 +397,6 @@ class MilleniumPatronAPI(
         username = authorization_expires = personal_name = PatronData.NO_VALUE
         email_address = fines = external_type = PatronData.NO_VALUE
         block_reason = PatronData.NO_VALUE
-        neighborhood = PatronData.NO_VALUE
 
         potential_identifiers = []
         for f, v in self._extract_text_nodes(content):
@@ -495,16 +457,6 @@ class MilleniumPatronAPI(
                     )
             elif k == self.PATRON_TYPE_FIELD:
                 external_type = v
-            elif (
-                k == self.HOME_BRANCH_FIELD
-                and self.neighborhood_mode == NeighborhoodMode.HOME_BRANCH
-            ):
-                neighborhood = v.strip()
-            elif (
-                k == self.ADDRESS_FIELD
-                and self.neighborhood_mode == NeighborhoodMode.POSTAL_CODE
-            ):
-                neighborhood = self.extract_postal_code(v)
             elif k == self.ERROR_MESSAGE_FIELD:
                 # An error has occurred. Most likely the patron lookup
                 # failed.
@@ -552,11 +504,6 @@ class MilleniumPatronAPI(
             fines=fines,
             block_reason=block_reason,
             library_identifier=library_identifier,
-            neighborhood=neighborhood,
-            # We must cache neighborhood information in the patron's
-            # database record because syncing with the ILS is so
-            # expensive.
-            cached_neighborhood=neighborhood,
             complete=True,
         )
         return data

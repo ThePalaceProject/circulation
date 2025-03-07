@@ -943,7 +943,6 @@ class CirculationAPI(LoggerMixin):
         patron: Patron | None,
         licensepool: LicensePool | None,
         name: str,
-        include_neighborhood: bool = False,
     ) -> None:
         """Collect an analytics event.
 
@@ -952,19 +951,12 @@ class CirculationAPI(LoggerMixin):
             patron will be used.
         :param licensepool: The LicensePool associated with the event.
         :param name: The name of the event.
-        :param include_neighborhood: If this is True, _and_ the
-            current request's authenticated patron is the same as the
-            patron in `patron`, _and_ the authenticated patron has
-            associated neighborhood information obtained from the ILS,
-            then that neighborhood information (but not the patron's
-            identity) will be associated with the circulation event.
         """
         if not self.analytics:
             return
 
-        # It would be really useful to know which patron caused this
-        # this event -- this will help us get a library and
-        # potentially a neighborhood.
+        # It would be really useful to know which patron caused
+        # this event -- this will help us get a library
         if flask.request:
             request_patron = getattr(flask.request, "patron", None)
         else:
@@ -983,20 +975,10 @@ class CirculationAPI(LoggerMixin):
             # have a library associated with it.
             library = get_request_library(default=self.library)
 
-        neighborhood = None
-        if (
-            include_neighborhood
-            and flask.request
-            and request_patron
-            and request_patron == patron
-        ):
-            neighborhood = getattr(request_patron, "neighborhood", None)
-
         self.analytics.collect_event(
             library,
             licensepool,
             name,
-            neighborhood=neighborhood,
             patron=patron,
         )
 
@@ -1006,9 +988,7 @@ class CirculationAPI(LoggerMixin):
         This is called in two different places -- one when loaning
         licensed books and one when 'loaning' open-access books.
         """
-        return self._collect_event(
-            patron, licensepool, CirculationEvent.CM_CHECKOUT, include_neighborhood=True
-        )
+        return self._collect_event(patron, licensepool, CirculationEvent.CM_CHECKOUT)
 
     def borrow(
         self,
@@ -1179,7 +1159,6 @@ class CirculationAPI(LoggerMixin):
                     patron=patron,
                     licensepool=licensepool,
                     name=CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN,
-                    include_neighborhood=True,
                 )
 
                 # Delete the record of the hold.
@@ -1412,9 +1391,7 @@ class CirculationAPI(LoggerMixin):
         # Send out an analytics event to record the fact that
         # a fulfillment was initiated through the circulation
         # manager.
-        self._collect_event(
-            patron, licensepool, CirculationEvent.CM_FULFILL, include_neighborhood=True
-        )
+        self._collect_event(patron, licensepool, CirculationEvent.CM_FULFILL)
 
         # Make sure the delivery mechanism we just used is associated
         # with the loan, if any.

@@ -53,7 +53,6 @@ class Analytics(LoggerMixin, AnalyticsProvider):
         old_value: int | None = None,
         new_value: int | None = None,
         patron: Patron | None = None,
-        neighborhood: str | None = None,
     ) -> None:
         session = Session.object_session(library)
         event = AnalyticsEventData.create(
@@ -64,7 +63,6 @@ class Analytics(LoggerMixin, AnalyticsProvider):
             old_value,
             new_value,
             patron,
-            neighborhood,
         )
         self.collect(event, session=session)
 

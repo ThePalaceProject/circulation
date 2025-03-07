@@ -175,8 +175,6 @@ class PatronData:
         fines=None,
         block_reason=None,
         library_identifier=None,
-        neighborhood=None,
-        cached_neighborhood=None,
         complete=True,
     ):
         """Store basic information about a patron.
@@ -232,24 +230,6 @@ class PatronData:
         :param library_identifier: A string pulled from the ILS that
         is used to determine if this user belongs to the current library.
 
-        :param neighborhood: A string pulled from the ILS that
-        identifies the patron's geographic location in a deliberately
-        imprecise way that makes sense to the library -- maybe the
-        patron's ZIP code or the name of their home branch. This data
-        is never stored in a way that can be associated with an
-        individual patron. Depending on library policy, this data may
-        be associated with circulation events -- but a circulation
-        event is not associated with the patron who triggered it.
-
-        :param cached_neighborhood: This is the same as neighborhood,
-        but it _will_ be cached in the patron's database record, for
-        up to twelve hours. This should only be used by ILS systems
-        that would have performance problems fetching patron
-        neighborhood on demand.
-
-        If cached_neighborhood is set but neighborhood is not,
-        cached_neighborhood will be used as neighborhood.
-
         :param complete: Does this PatronData represent the most
         complete data we are likely to get for this patron from this
         data source, or is it an abbreviated version of more complete
@@ -273,12 +253,6 @@ class PatronData:
         # We do not store email address in the database, but we need
         # to have it available for notifications.
         self.email_address = email_address
-
-        # If cached_neighborhood (cached in the database) is provided
-        # but neighborhood (destroyed at end of request) is not, use
-        # cached_neighborhood as neighborhood.
-        self.neighborhood = neighborhood or cached_neighborhood
-        self.cached_neighborhood = cached_neighborhood
 
     def __eq__(self, other):
         """
@@ -305,8 +279,6 @@ class PatronData:
             and self.complete == other.complete
             and self.personal_name == other.personal_name
             and self.email_address == other.email_address
-            and self.neighborhood == other.neighborhood
-            and self.cached_neighborhood == other.cached_neighborhood
         )
 
     def __repr__(self):
@@ -336,11 +308,6 @@ class PatronData:
         self.set_value(patron, "authorization_expires", self.authorization_expires)
         self.set_value(patron, "fines", self.fines)
         self.set_value(patron, "block_reason", self.block_reason)
-        self.set_value(patron, "cached_neighborhood", self.cached_neighborhood)
-
-        # Patron neighborhood (not a database field) is set as a
-        # convenience.
-        patron.neighborhood = self.neighborhood or self.cached_neighborhood
 
         # Now handle authorization identifier.
         if self.complete:

@@ -79,7 +79,6 @@ class TestLocalAnalyticsProvider:
         old_value = 10
         new_value = 8
         start = datetime_utc(2019, 1, 1)
-        location = "Westgate Branch"
 
         session = db.session
         event_data = AnalyticsEventData.create(
@@ -89,7 +88,6 @@ class TestLocalAnalyticsProvider:
             old_value=old_value,
             new_value=new_value,
             time=start,
-            neighborhood=location,
         )
         local_analytics_provider_fixture.provider.collect(
             event_data,
@@ -101,7 +99,6 @@ class TestLocalAnalyticsProvider:
         assert -2 == event.delta  # calculated from old_value and new_value
         assert start == event.start
         assert start == event.end
-        assert location == event.location
 
         # If collect finds another event with the same license pool,
         # library, event name, and time, the new event is not recorded
@@ -114,7 +111,6 @@ class TestLocalAnalyticsProvider:
             # These values will be ignored.
             old_value=500,
             new_value=200,
-            neighborhood="another location",
         )
         local_analytics_provider_fixture.provider.collect(
             event_data,
@@ -125,7 +121,6 @@ class TestLocalAnalyticsProvider:
         assert library == event.library
         assert -2 == event.delta
         assert start == event.start
-        assert location == event.location
 
         # If no timestamp is provided, the current time is used. This
         # is the most common case, so basically a new event will be
@@ -137,7 +132,6 @@ class TestLocalAnalyticsProvider:
                 event_type=event_name,
                 old_value=old_value,
                 new_value=new_value,
-                neighborhood=location,
             )
             local_analytics_provider_fixture.provider.collect(
                 event_data,
@@ -151,4 +145,3 @@ class TestLocalAnalyticsProvider:
             assert pool == event.license_pool
             assert library == event.library
             assert -2 == event.delta
-            assert location == event.location

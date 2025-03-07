@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
@@ -45,13 +45,6 @@ class CirculationEvent(Base):
     library: Mapped[Library | None] = relationship(
         "Library", back_populates="circulation_events"
     )
-
-    # The geographic location associated with the event. This string
-    # may mean different things for different libraries. It might be a
-    # measurement of latitude and longitude, or it might be taken from
-    # a controlled vocabulary -- a list of library branch codes, for
-    # instance.
-    location = Column(Unicode, index=True)
 
     __table_args__ = (
         # Make it easy to list circulation events in descending
