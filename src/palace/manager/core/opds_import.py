@@ -475,7 +475,7 @@ class BaseOPDSImporter(
             replace=policy,
         )
 
-        return edition  # type: ignore[no-any-return]
+        return edition
 
     def update_work_for_edition(
         self,
@@ -565,7 +565,13 @@ class BaseOPDSImporter(
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
                 data_source = self.data_source
-                primary_id: IdentifierData = metadata.primary_identifier
+                primary_id = metadata.primary_identifier
+                if primary_id is None:
+                    # This should never happen, but we'll handle it gracefully
+                    self.log.error(
+                        "No primary identifier found for metadata during OPDS import"
+                    )
+                    continue
                 identifier, ignore = Identifier.for_foreign_id(
                     self._db, primary_id.type, primary_id.identifier
                 )
@@ -732,12 +738,12 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
             xml_data_dict = xml_data_meta.get(_id, {})
 
             external_identifier = None
+            dcterms_ids = xml_data_dict.pop("dcterms_identifiers", [])
             if self.primary_identifier_source == IdentifierSource.DCTERMS_IDENTIFIER:
                 # If it should use <dcterms:identifier> as the primary identifier, it must use the
                 # first value from the dcterms identifier, that came from the metadata as an
                 # IdentifierData object and it must be validated as a foreign_id before be used
                 # as and external_identifier.
-                dcterms_ids = xml_data_dict.get("dcterms_identifiers", [])
                 if len(dcterms_ids) > 0:
                     external_identifier, ignore = Identifier.for_foreign_id(
                         self._db, dcterms_ids[0].type, dcterms_ids[0].identifier
@@ -797,9 +803,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
                 combined_circ["primary_identifier"] = identifier_obj
 
-                combined_circ["should_track_playtime"] = xml_data_dict.get(
-                    "should_track_playtime", False
-                )
                 if (
                     combined_circ["should_track_playtime"]
                     and xml_data_dict["medium"] != Edition.AUDIO_MEDIUM
@@ -1363,10 +1366,14 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 # This entry had an issued tag, but it was in a format we couldn't parse.
                 pass
 
-        data["should_track_playtime"] = False
+        circulation_data = data.get("circulation", {})
+        circulation_data["should_track_playtime"] = False
         time_tracking_tag = parser._xpath(entry_tag, "palace:timeTracking")
         if time_tracking_tag:
-            data["should_track_playtime"] = time_tracking_tag[0].text.lower() == "true"
+            circulation_data["should_track_playtime"] = (
+                time_tracking_tag[0].text.lower() == "true"
+            )
+        data["circulation"] = circulation_data
         return data
 
     @classmethod

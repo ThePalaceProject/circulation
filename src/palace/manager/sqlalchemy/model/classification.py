@@ -355,7 +355,7 @@ class Classification(Base):
     # trust the distributor to have accurate classifications), we
     # should give it this weight. This lets us keep the weights
     # consistent across distributors.
-    TRUSTED_DISTRIBUTOR_WEIGHT = 100.0
+    TRUSTED_DISTRIBUTOR_WEIGHT = 100
 
     @property
     def scaled_weight(self) -> float:

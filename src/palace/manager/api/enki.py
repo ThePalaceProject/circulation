@@ -908,9 +908,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
                 if metadata:
                     self.process_book(metadata)
             else:
-                license_pool, made_changes = circulation.apply(
-                    self._db, self.collection
-                )
+                circulation.apply(self._db, self.collection)
 
         return circulation_changes
 
@@ -924,6 +922,9 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             presentation-ready Work will be created for the LicensePool.
         """
         availability = bibliographic.circulation
+        # We should always have circulation data, but mypy doesn't know that, so we assert it here
+        # so we fail fast if it's missing.
+        assert availability is not None
         edition, _ = bibliographic.edition(self._db)
         policy = ReplacementPolicy(
             identifiers=False,

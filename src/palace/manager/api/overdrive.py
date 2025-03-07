@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 import re
+import traceback
 import urllib.parse
 from collections.abc import Iterable
 from json import JSONDecodeError
@@ -1968,7 +1969,7 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
                 book_changed = self.process_book(book, progress)
                 self._db.commit()
             except Exception as e:
-                progress.exception = e
+                progress.exception = "".join(traceback.format_exception(e))
 
             if self.should_stop(start, book, book_changed):
                 break

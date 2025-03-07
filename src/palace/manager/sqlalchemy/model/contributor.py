@@ -499,5 +499,5 @@ class Contribution(Base):
         "Contributor", back_populates="contributions"
     )
 
-    role = Column(Unicode, index=True, nullable=False)
+    role: Mapped[str] = Column(Unicode, index=True, nullable=False)
     __table_args__ = (UniqueConstraint("edition_id", "contributor_id", "role"),)

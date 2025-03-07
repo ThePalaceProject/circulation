@@ -235,7 +235,9 @@ class NoveListAPI(
         """Ensures that all metadata objects have the same NoveList ID"""
 
         novelist_ids = {
-            metadata.primary_identifier.identifier for metadata in metadata_objects
+            metadata.primary_identifier.identifier
+            for metadata in metadata_objects
+            if metadata.primary_identifier
         }
         return len(novelist_ids) == 1
 
@@ -255,9 +257,10 @@ class NoveListAPI(
 
         # One or more of the equivalents did not return the same NoveList work
         self.log.warning("%r has inaccurate ISBN equivalents", identifier)
-        counter: Counter[Identifier] = Counter()
+        counter: Counter[IdentifierData] = Counter()
         for metadata in metadata_objects:
-            counter[metadata.primary_identifier] += 1
+            if metadata.primary_identifier is not None:
+                counter[metadata.primary_identifier] += 1
 
         [(target_identifier, most_amount), (ignore, secondmost)] = counter.most_common(
             2

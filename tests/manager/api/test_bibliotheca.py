@@ -1295,6 +1295,7 @@ class TestBibliothecaPurchaseMonitor:
             service_type=Timestamp.MONITOR_TYPE,
             collection=monitor.collection,
         )
+        assert isinstance(ts.finish, datetime)
         start_time_from_ts = ts.finish - BibliothecaPurchaseMonitor.OVERLAP
         expected_actual_start_time = (
             expected_start if monitor.override_timestamp else start_time_from_ts
@@ -1885,7 +1886,7 @@ class TestItemListParser:
         assert "Rowland, Laura Joh" == author.sort_name
         assert [Contributor.Role.AUTHOR] == author.roles
 
-        subjects = [x.name for x in cooked.subjects]
+        subjects = [x.name for x in cooked.subjects if x.name is not None]
         assert ["Children's Health", "Mystery & Detective"] == sorted(subjects)
 
         [pages] = cooked.measurements
@@ -1899,6 +1900,7 @@ class TestItemListParser:
         # We have a full-size image...
         assert Hyperlink.IMAGE == image.rel
         assert Representation.JPEG_MEDIA_TYPE == image.media_type
+        assert image.href is not None
         assert image.href.startswith("http://ebook.3m.com/delivery")
         assert "documentID=ddf4gr9" in image.href
         assert "&size=NORMAL" not in image.href
@@ -1912,6 +1914,7 @@ class TestItemListParser:
 
         # We have a description.
         assert Hyperlink.DESCRIPTION == description.rel
+        assert isinstance(description.content, str)
         assert description.content.startswith("<b>Winner")
 
     def test_multiple_contributor_roles(

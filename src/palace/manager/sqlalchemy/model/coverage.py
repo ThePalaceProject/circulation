@@ -1,7 +1,8 @@
 # BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import datetime
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import (
     Column,
@@ -22,6 +23,7 @@ from palace.manager.sqlalchemy.bulk_operation import SessionBulkOperation
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
@@ -109,10 +111,8 @@ class Timestamp(Base):
     COVERAGE_PROVIDER_TYPE = "coverage_provider"
     SCRIPT_TYPE = "script"
 
-    # A stand-in value used to indicate that a field in the timestamps
-    # table should be explicitly set to None. Passing in None for most
-    # fields will use default values.
-    CLEAR_VALUE = object()
+    # We use SentinelType.ClearValue as a stand-in value used to indicate that a field in the timestamps
+    # table should be explicitly set to None. Passing in None for most fields will use default values.
 
     service_type_enum = Enum(
         MONITOR_TYPE,
@@ -210,16 +210,16 @@ class Timestamp(Base):
     @classmethod
     def stamp(
         cls,
-        _db,
-        service,
-        service_type,
-        collection=None,
-        start=None,
-        finish=None,
-        achievements=None,
-        counter=None,
-        exception=None,
-    ):
+        _db: Session,
+        service: str,
+        service_type: str | None,
+        collection: Collection | None = None,
+        start: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        finish: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        achievements: str | None | Literal[SentinelType.ClearValue] = None,
+        counter: int | None | Literal[SentinelType.ClearValue] = None,
+        exception: str | None | Literal[SentinelType.ClearValue] = None,
+    ) -> Timestamp:
         """Set a Timestamp, creating it if necessary.
 
         This should be called once a service has stopped running,
@@ -264,38 +264,43 @@ class Timestamp(Base):
         return stamp
 
     def update(
-        self, start=None, finish=None, achievements=None, counter=None, exception=None
-    ):
+        self,
+        start: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        finish: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        achievements: str | None | Literal[SentinelType.ClearValue] = None,
+        counter: int | None | Literal[SentinelType.ClearValue] = None,
+        exception: str | None | Literal[SentinelType.ClearValue] = None,
+    ) -> None:
         """Use a single method to update all the fields that aren't
         used to identify a Timestamp.
         """
 
         if start is not None:
-            if start is self.CLEAR_VALUE:
+            if start is SentinelType.ClearValue:
                 # In most cases, None is not a valid value for
                 # Timestamp.start, but this can be overridden.
                 start = None
             self.start = start
         if finish is not None:
-            if finish is self.CLEAR_VALUE:
+            if finish is SentinelType.ClearValue:
                 # In most cases, None is not a valid value for
                 # Timestamp.finish, but this can be overridden.
                 finish = None
             self.finish = finish
         if achievements is not None:
-            if achievements is self.CLEAR_VALUE:
+            if achievements is SentinelType.ClearValue:
                 achievements = None
             self.achievements = achievements
         if counter is not None:
-            if counter is self.CLEAR_VALUE:
+            if counter is SentinelType.ClearValue:
                 counter = None
             self.counter = counter
 
         # Unlike the other fields, None is the default value for
         # .exception, so passing in None to mean "use the default" and
         # None to mean "no exception" mean the same thing. But we'll
-        # support CLEAR_VALUE anyway.
-        if exception is self.CLEAR_VALUE:
+        # support SentinelType.ClearValue anyway.
+        if exception is SentinelType.ClearValue:
             exception = None
         self.exception = exception
 

@@ -35,6 +35,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Query
@@ -188,7 +189,7 @@ class Monitor:
         this_run_start = utc_now()
         exception = None
 
-        ignorable = (None, TimestampData.CLEAR_VALUE)
+        ignorable = (None, SentinelType.ClearValue)
         try:
             new_timestamp = self.run_once(progress)
             this_run_finish = utc_now()

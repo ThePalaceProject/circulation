@@ -218,6 +218,8 @@ class TestBaseCoverageProvider:
         # didn't provide anything.
         assert isinstance(result, CoverageProviderProgress)
         now = utc_now()
+        assert isinstance(result.start, datetime.datetime)
+        assert isinstance(result.finish, datetime.datetime)
         assert result.start < result.finish
         for time in (result.start, result.finish):
             assert (now - time).total_seconds() < 5

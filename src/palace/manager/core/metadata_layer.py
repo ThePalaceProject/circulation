@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+from sqlalchemy import Boolean
+from sqlalchemy.orm import Query
+from sqlalchemy.sql import ColumnElement
+
+from palace.manager.util.sentinel import SentinelType
+
 """An abstract way of representing incoming metadata and applying it
 to Identifiers and Editions.
 
@@ -11,18 +19,22 @@ import csv
 import datetime
 import logging
 from collections import defaultdict
+from collections.abc import Generator, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from dateutil.parser import parse
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
+from typing_extensions import Self, TypedDict, Unpack
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord, Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -41,46 +53,44 @@ from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import to_utc, utc_now
 from palace.manager.util.languages import LanguageCodes
+from palace.manager.util.log import LoggerMixin
 from palace.manager.util.median import median
 from palace.manager.util.personal_names import display_name_to_sort_name
 
 
+class _ReplacementPolicyKwargs(TypedDict, total=False):
+    even_if_not_apparently_updated: bool
+    link_content: bool
+    presentation_calculation_policy: PresentationCalculationPolicy
+
+
+@dataclass(kw_only=True)
 class ReplacementPolicy:
     """How serious should we be about overwriting old metadata with
     this new metadata?
     """
 
-    def __init__(
-        self,
-        identifiers=False,
-        subjects=False,
-        contributions=False,
-        links=False,
-        formats=False,
-        rights=False,
-        link_content=False,
-        analytics=None,
-        even_if_not_apparently_updated=False,
-        presentation_calculation_policy=None,
-    ):
-        self.identifiers = identifiers
-        self.subjects = subjects
-        self.contributions = contributions
-        self.links = links
-        self.rights = rights
-        self.formats = formats
-        self.link_content = link_content
-        self.even_if_not_apparently_updated = even_if_not_apparently_updated
-        self.analytics = analytics
-        self.presentation_calculation_policy = (
-            presentation_calculation_policy or PresentationCalculationPolicy()
-        )
+    identifiers: bool = False
+    subjects: bool = False
+    contributions: bool = False
+    links: bool = False
+    formats: bool = False
+    rights: bool = False
+    link_content: bool = False
+    analytics: Analytics | None = None
+    even_if_not_apparently_updated: bool = False
+    presentation_calculation_policy: PresentationCalculationPolicy = field(
+        default_factory=PresentationCalculationPolicy
+    )
 
     @classmethod
     @inject
     def from_license_source(
-        cls, _db, analytics: Analytics = Provide["analytics.analytics"], **args
-    ):
+        cls,
+        _db: Session,
+        analytics: Analytics = Provide["analytics.analytics"],
+        **kwargs: Unpack[_ReplacementPolicyKwargs],
+    ) -> Self:
         """When gathering data from the license source, overwrite all old data
         from this source with new data from the same source. Also
         overwrite an old rights status with an updated status and update
@@ -95,11 +105,11 @@ class ReplacementPolicy:
             rights=True,
             formats=True,
             analytics=analytics,
-            **args,
+            **kwargs,
         )
 
     @classmethod
-    def from_metadata_source(cls, **args):
+    def from_metadata_source(cls, **kwargs: Unpack[_ReplacementPolicyKwargs]) -> Self:
         """When gathering data from a metadata source, overwrite all old data
         from this source, but do not overwrite the rights status or
         the available formats. License sources are the authority on rights
@@ -112,11 +122,11 @@ class ReplacementPolicy:
             links=True,
             rights=False,
             formats=False,
-            **args,
+            **kwargs,
         )
 
     @classmethod
-    def append_only(cls, **args):
+    def append_only(cls, **kwargs: Unpack[_ReplacementPolicyKwargs]) -> Self:
         """Don't overwrite any information, just append it.
 
         This should probably never be used.
@@ -128,12 +138,18 @@ class ReplacementPolicy:
             links=False,
             rights=False,
             formats=False,
-            **args,
+            **kwargs,
         )
 
 
 class SubjectData:
-    def __init__(self, type, identifier, name=None, weight=1):
+    def __init__(
+        self,
+        type: str,
+        identifier: str | None,
+        name: str | None = None,
+        weight: int = 1,
+    ) -> None:
         self.type = type
 
         # Because subjects are sometimes evaluated according to keyword
@@ -150,10 +166,10 @@ class SubjectData:
         self.weight = weight
 
     @property
-    def key(self):
+    def key(self) -> tuple[str, str | None, str | None, int]:
         return self.type, self.identifier, self.name, self.weight
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<SubjectData type="%s" identifier="%s" name="%s" weight=%d>' % (
             self.type,
             self.identifier,
@@ -162,20 +178,20 @@ class SubjectData:
         )
 
 
-class ContributorData:
+class ContributorData(LoggerMixin):
     def __init__(
         self,
-        sort_name=None,
-        display_name=None,
-        family_name=None,
-        wikipedia_name=None,
-        roles=None,
-        lc=None,
-        viaf=None,
-        biography=None,
-        aliases=None,
-        extra=None,
-    ):
+        sort_name: str | None = None,
+        display_name: str | None = None,
+        family_name: str | None = None,
+        wikipedia_name: str | None = None,
+        roles: str | list[str] | None = None,
+        lc: str | None = None,
+        viaf: str | None = None,
+        biography: str | None = None,
+        aliases: list[str] | None = None,
+        extra: dict[str, str] | None = None,
+    ) -> None:
         self.sort_name = sort_name
         self.display_name = display_name
         self.family_name = family_name
@@ -193,7 +209,7 @@ class ContributorData:
         self.extra = extra or dict()
         # TODO:  consider if it's time for ContributorData to connect back to Contributions
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>'
             % (
@@ -208,7 +224,7 @@ class ContributorData:
         )
 
     @classmethod
-    def from_contribution(cls, contribution):
+    def from_contribution(cls, contribution: Contribution) -> Self:
         """Create a ContributorData object from a data-model Contribution
         object.
         """
@@ -226,15 +242,24 @@ class ContributorData:
         )
 
     @classmethod
-    def lookup(cls, _db, sort_name=None, display_name=None, lc=None, viaf=None):
+    def lookup(
+        cls,
+        _db: Session,
+        sort_name: str | None = None,
+        display_name: str | None = None,
+        lc: str | None = None,
+        viaf: str | None = None,
+    ) -> Self | None:
         """Create a (potentially synthetic) ContributorData based on
         the best available information in the database.
 
         :return: A ContributorData.
         """
-        clauses = []
+        clauses: list[ColumnElement[Boolean]] = []
         if sort_name:
-            clauses.append(Contributor.sort_name == sort_name)
+            # Mypy doesn't like this one because Contributor.sort_name is a HybridProperty, so we just
+            # ignore the type check here, since it is a valid comparison.
+            clauses.append(Contributor.sort_name == sort_name)  # type: ignore[arg-type, comparison-overlap]
         if display_name:
             clauses.append(Contributor.display_name == display_name)
         if lc:
@@ -253,7 +278,10 @@ class ContributorData:
 
         # We found at least one matching Contributor. Let's try to
         # build a composite ContributorData for the person.
-        values_by_field = defaultdict(set)
+        sort_name_values = set()
+        display_name_values = set()
+        lc_values = set()
+        viaf_values = set()
 
         # If all the people we found share (e.g.) a VIAF field, then
         # we can use that as a clue when doing a search -- anyone with
@@ -261,38 +289,41 @@ class ContributorData:
         # name doesn't match.
         for c in contributors:
             if c.sort_name:
-                values_by_field["sort_name"].add(c.sort_name)
+                sort_name_values.add(c.sort_name)
             if c.display_name:
-                values_by_field["display_name"].add(c.display_name)
+                display_name_values.add(c.display_name)
             if c.lc:
-                values_by_field["lc"].add(c.lc)
+                lc_values.add(c.lc)
             if c.viaf:
-                values_by_field["viaf"].add(c.viaf)
+                viaf_values.add(c.viaf)
 
         # Use any passed-in values as default values for the
-        # ContributorData. Below, missing values may be filled in and
-        # inaccurate values may be replaced.
-        kwargs = dict(sort_name=sort_name, display_name=display_name, lc=lc, viaf=viaf)
-        for k, values in list(values_by_field.items()):
-            if len(values) == 1:
-                # All the Contributors we found have the same
-                # value for this field. We can use it.
-                kwargs[k] = list(values)[0]
+        # ContributorData. If all the Contributors we found have the
+        # same value for a field, we can use it to supplement the
+        # default values.
+        if len(sort_name_values) == 1:
+            sort_name = sort_name_values.pop()
+        if len(display_name_values) == 1:
+            display_name = display_name_values.pop()
+        if len(lc_values) == 1:
+            lc = lc_values.pop()
+        if len(viaf_values) == 1:
+            viaf = viaf_values.pop()
 
-        return ContributorData(roles=[], **kwargs)
+        return cls(
+            roles=[], sort_name=sort_name, display_name=display_name, lc=lc, viaf=viaf
+        )
 
-    def apply(self, destination, replace=None):
+    def apply(self, destination: Contributor) -> tuple[Contributor, bool]:
         """Update the passed-in Contributor-type object with this
         ContributorData's information.
 
         :param: destination -- the Contributor or ContributorData object to
             write this ContributorData object's metadata to.
-        :param: replace -- Replacement policy (not currently used).
 
         :return: the possibly changed Contributor object and a flag of whether it's been changed.
         """
-        log = logging.getLogger("Abstract metadata layer")
-        log.debug(
+        self.log.debug(
             "Applying %r (%s) into %r (%s)",
             self,
             self.viaf,
@@ -306,8 +337,8 @@ class ContributorData:
             destination.sort_name = self.sort_name
             made_changes = True
 
-        existing_aliases = set(destination.aliases)
-        new_aliases = list(destination.aliases)
+        existing_aliases = set(destination.aliases or [])
+        new_aliases = list(destination.aliases or [])
         for name in [self.sort_name] + self.aliases:
             if name != destination.sort_name and name not in existing_aliases:
                 new_aliases.append(name)
@@ -346,7 +377,7 @@ class ContributorData:
 
         return destination, made_changes
 
-    def find_sort_name(self, _db):
+    def find_sort_name(self, _db: Session) -> bool:
         """Try as hard as possible to find this person's sort name."""
         if self.sort_name:
             return True
@@ -373,7 +404,9 @@ class ContributorData:
         return self.sort_name is not None
 
     @classmethod
-    def display_name_to_sort_name_from_existing_contributor(self, _db, display_name):
+    def display_name_to_sort_name_from_existing_contributor(
+        self, _db: Session, display_name: str
+    ) -> str | None:
         """Find the sort name for this book's author, assuming it's easy.
 
         'Easy' means we already have an established sort name for a
@@ -396,40 +429,40 @@ class ContributorData:
                 display_name,
                 contributors[0].sort_name,
             )
-            return contributors[0].sort_name
+            return contributors[0].sort_name  # type: ignore[no-any-return]
         return None
 
 
+@dataclass(frozen=True)
 class IdentifierData:
-    def __init__(self, type, identifier, weight=1):
-        self.type = type
-        self.weight = weight
-        self.identifier = identifier
+    type: str
+    identifier: str
+    weight: float = 1
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<IdentifierData type="{}" identifier="{}" weight="{}">'.format(
             self.type,
             self.identifier,
             self.weight,
         )
 
-    def load(self, _db):
+    def load(self, _db: Session) -> tuple[Identifier, bool]:
         return Identifier.for_foreign_id(_db, self.type, self.identifier)
 
 
 class LinkData:
     def __init__(
         self,
-        rel,
-        href=None,
-        media_type=None,
-        content=None,
-        thumbnail=None,
-        rights_uri=None,
-        rights_explanation=None,
-        original=None,
-        transformation_settings=None,
-    ):
+        rel: str | None,
+        href: str | None = None,
+        media_type: str | None = None,
+        content: bytes | str | None = None,
+        thumbnail: LinkData | None = None,
+        rights_uri: str | None = None,
+        rights_explanation: str | None = None,
+        original: LinkData | None = None,
+        transformation_settings: dict[str, str] | None = None,
+    ) -> None:
         if not rel:
             raise ValueError("rel is required")
 
@@ -450,7 +483,7 @@ class LinkData:
         self.transformation_settings = transformation_settings or {}
 
     @property
-    def guessed_media_type(self):
+    def guessed_media_type(self) -> str | None:
         """If the media type of a link is unknown, take a guess."""
         if self.media_type:
             # We know.
@@ -458,14 +491,14 @@ class LinkData:
 
         if self.href:
             # Take a guess.
-            return Representation.guess_url_media_type_from_path(self.href)
+            return Representation.guess_url_media_type_from_path(self.href)  # type: ignore[no-any-return]
 
         # No idea.
         # TODO: We might be able to take a further guess based on the
         # content and the link relation.
         return None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.content:
             content = ", %d bytes content" % len(self.content)
         else:
@@ -484,7 +517,13 @@ class LinkData:
 
 
 class MeasurementData:
-    def __init__(self, quantity_measured, value, weight=1, taken_at=None):
+    def __init__(
+        self,
+        quantity_measured: str,
+        value: float | int | str,
+        weight: float = 1,
+        taken_at: datetime.datetime | None = None,
+    ):
         if not quantity_measured:
             raise ValueError("quantity_measured is required.")
         if value is None:
@@ -496,7 +535,7 @@ class MeasurementData:
         self.weight = weight
         self.taken_at = taken_at or utc_now()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<MeasurementData quantity="%s" value=%f weight=%d taken=%s>' % (
             self.quantity_measured,
             self.value,
@@ -506,7 +545,13 @@ class MeasurementData:
 
 
 class FormatData:
-    def __init__(self, content_type, drm_scheme, link=None, rights_uri=None):
+    def __init__(
+        self,
+        content_type: str | None,
+        drm_scheme: str | None,
+        link: LinkData | None = None,
+        rights_uri: str | None = None,
+    ):
         self.content_type = content_type
         self.drm_scheme = drm_scheme
         if link and not isinstance(link, LinkData):
@@ -554,11 +599,14 @@ class LicenseData(LicenseFunctions):
 
 
 class TimestampData:
-    CLEAR_VALUE = Timestamp.CLEAR_VALUE
-
     def __init__(
-        self, start=None, finish=None, achievements=None, counter=None, exception=None
-    ):
+        self,
+        start: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        finish: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        achievements: str | None | Literal[SentinelType.ClearValue] = None,
+        counter: int | None | Literal[SentinelType.ClearValue] = None,
+        exception: str | None | Literal[SentinelType.ClearValue] = None,
+    ) -> None:
         """A constructor intended to be used by a service to customize its
         eventual Timestamp.
 
@@ -580,9 +628,9 @@ class TimestampData:
         """
 
         # These are set by finalize().
-        self.service = None
-        self.service_type = None
-        self.collection_id = None
+        self.service: str | None = None
+        self.service_type: str | None = None
+        self.collection_id: int | None = None
 
         self.start = start
         self.finish = finish
@@ -591,37 +639,36 @@ class TimestampData:
         self.exception = exception
 
     @property
-    def is_failure(self):
+    def is_failure(self) -> bool:
         """Does this TimestampData represent an unrecoverable failure?"""
-        return self.exception not in (None, self.CLEAR_VALUE)
+        return self.exception not in (None, SentinelType.ClearValue)
 
     @property
-    def is_complete(self):
+    def is_complete(self) -> bool:
         """Does this TimestampData represent an operation that has
         completed?
 
         An operation is completed if it has failed, or if the time of its
         completion is known.
         """
-        return self.is_failure or self.finish not in (None, self.CLEAR_VALUE)
+        return self.is_failure or self.finish not in (None, SentinelType.ClearValue)
 
     def finalize(
         self,
-        service,
-        service_type,
-        collection,
-        start=None,
-        finish=None,
-        achievements=None,
-        counter=None,
-        exception=None,
-    ):
+        service: str,
+        service_type: str,
+        collection: Collection | None,
+        start: datetime.datetime | None = None,
+        finish: datetime.datetime | None = None,
+        counter: int | None = None,
+        exception: str | None = None,
+    ) -> None:
         """Finalize any values that were not set during the constructor.
 
         This is intended to be run by the code that originally ran the
         service.
 
-        The given values for `start`, `finish`, `achievements`,
+        The given values for `start`, `finish`,
         `counter`, and `exception` will be used only if the service
         did not specify its own values for those fields.
         """
@@ -644,11 +691,11 @@ class TimestampData:
         if self.exception is None:
             self.exception = exception
 
-    def collection(self, _db):
+    def collection(self, _db: Session) -> Collection | None:
         return get_one(_db, Collection, id=self.collection_id)
 
-    def apply(self, _db):
-        if any(x is None for x in [self.service, self.service_type]):
+    def apply(self, _db: Session) -> Timestamp:
+        if self.service is None or self.service_type is None:
             raise ValueError(
                 "Not enough information to write TimestampData to the database."
             )
@@ -666,7 +713,7 @@ class TimestampData:
         )
 
 
-class CirculationData:
+class CirculationData(LoggerMixin):
     """Information about actual copies of a book that can be delivered to
     patrons.
 
@@ -677,23 +724,21 @@ class CirculationData:
         Metadata : Edition :: CirculationData : Licensepool
     """
 
-    log = logging.getLogger("Abstract metadata layer - Circulation data")
-
     def __init__(
         self,
-        data_source,
-        primary_identifier,
-        licenses_owned=None,
-        licenses_available=None,
-        licenses_reserved=None,
-        patrons_in_hold_queue=None,
-        formats=None,
-        default_rights_uri=None,
-        links=None,
-        licenses=None,
-        last_checked=None,
-        should_track_playtime=False,
-    ):
+        data_source: str | DataSource | None,
+        primary_identifier: Identifier | IdentifierData | None,
+        licenses_owned: int | None = None,
+        licenses_available: int | None = None,
+        licenses_reserved: int | None = None,
+        patrons_in_hold_queue: int | None = None,
+        formats: list[FormatData] | None = None,
+        default_rights_uri: str | None = None,
+        links: list[LinkData] | None = None,
+        licenses: list[LicenseData] | None = None,
+        last_checked: datetime.datetime | None = None,
+        should_track_playtime: bool = False,
+    ) -> None:
         """Constructor.
 
         :param data_source: The authority providing the lending licenses.
@@ -702,16 +747,16 @@ class CirculationData:
             how the lending authority distinguishes this book from others.
         """
         self._data_source = data_source
-
         if isinstance(self._data_source, DataSource):
-            self.data_source_obj = self._data_source
-            self.data_source_name = self.data_source_obj.name
+            self.data_source_obj: DataSource | None = self._data_source
+            self.data_source_name: str | None = self.data_source_obj.name
         else:
             self.data_source_obj = None
-            self.data_source_name = data_source
+            self.data_source_name = self._data_source
+
         if isinstance(primary_identifier, Identifier):
-            self.primary_identifier_obj = primary_identifier
-            self._primary_identifier = IdentifierData(
+            self.primary_identifier_obj: Identifier | None = primary_identifier
+            self._primary_identifier: IdentifierData | None = IdentifierData(
                 primary_identifier.type, primary_identifier.identifier
             )
         else:
@@ -724,34 +769,38 @@ class CirculationData:
 
         # If no 'last checked' data was provided, assume the data was
         # just gathered.
-        self.last_checked = last_checked or utc_now()
+        self.last_checked: datetime.datetime = last_checked or utc_now()
 
         # format contains pdf/epub, drm, link
-        self.formats = formats or []
+        self.formats: list[FormatData] = formats or []
 
-        self.default_rights_uri = None
+        self.default_rights_uri: str | None = None
         self.set_default_rights_uri(
             data_source_name=self.data_source_name,
             default_rights_uri=default_rights_uri,
         )
 
-        self.__links = None
-        self.links = links
+        self.__links: list[LinkData] | None = None
+        # The type ignore here is necessary because mypy does not like when a property setter and
+        # getter have different types. A PR just went in to fix this in mypy, so this should be able
+        # to be removed once mypy 1.16 is released.
+        # See: https://github.com/python/mypy/pull/18510
+        self.links = links  # type: ignore[assignment]
 
         # Information about individual terms for each license in a pool. If we are
         # given licenses then they are used to calculate values for the LicensePool
         # instead of directly using the values that are given to CirculationData.
-        self.licenses = licenses
+        self.licenses: list[LicenseData] | None = licenses
 
         # Whether the license should contain a playtime tracking link
-        self.should_track_playtime = should_track_playtime
+        self.should_track_playtime: bool = should_track_playtime
 
     @property
-    def links(self):
-        return self.__links
+    def links(self) -> Sequence[LinkData]:
+        return self.__links or []
 
     @links.setter
-    def links(self, arg_links):
+    def links(self, arg_links: list[LinkData] | None) -> None:
         """If got passed all links, indiscriminately, filter out to only those relevant to
         pools (the rights-related links).
         """
@@ -807,14 +856,14 @@ class CirculationData:
                             )
                         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         description_string = "<CirculationData primary_identifier=%(primary_identifier)r| licenses_owned=%(licenses_owned)s|"
         description_string += " licenses_available=%(licenses_available)s| default_rights_uri=%(default_rights_uri)s|"
         description_string += (
             " links=%(links)r| formats=%(formats)r| data_source=%(data_source)s|>"
         )
 
-        description_data = {"licenses_owned": self.licenses_owned}
+        description_data: dict[str, Any] = {"licenses_owned": self.licenses_owned}
         if self._primary_identifier:
             description_data["primary_identifier"] = self._primary_identifier
         else:
@@ -827,11 +876,11 @@ class CirculationData:
 
         return description_string % description_data
 
-    def data_source(self, _db):
+    def data_source(self, _db: Session) -> DataSource | None:
         """Find the DataSource associated with this circulation information."""
         if not self.data_source_obj:
-            if self._data_source:
-                obj = DataSource.lookup(_db, self._data_source)
+            if self.data_source_name:
+                obj = DataSource.lookup(_db, self.data_source_name)
                 if not obj:
                     raise ValueError("Data source %s not found!" % self._data_source)
             else:
@@ -839,7 +888,7 @@ class CirculationData:
             self.data_source_obj = obj
         return self.data_source_obj
 
-    def primary_identifier(self, _db):
+    def primary_identifier(self, _db: Session) -> Identifier | None:
         """Find the Identifier associated with this circulation information."""
         if not self.primary_identifier_obj:
             if self._primary_identifier:
@@ -849,7 +898,9 @@ class CirculationData:
             self.primary_identifier_obj = obj
         return self.primary_identifier_obj
 
-    def license_pool(self, _db, collection):
+    def license_pool(
+        self, _db: Session, collection: Collection | None
+    ) -> tuple[LicensePool, bool]:
         """Find or create a LicensePool object for this CirculationData.
 
         :param collection: The LicensePool object will be associated with
@@ -881,7 +932,7 @@ class CirculationData:
         return license_pool, is_new
 
     @property
-    def has_open_access_link(self):
+    def has_open_access_link(self) -> bool:
         """Does this Circulation object have an associated open-access link?"""
         return any(
             [
@@ -893,7 +944,9 @@ class CirculationData:
             ]
         )
 
-    def set_default_rights_uri(self, data_source_name, default_rights_uri=None):
+    def set_default_rights_uri(
+        self, data_source_name: str | None, default_rights_uri: str | None = None
+    ) -> None:
         if default_rights_uri:
             self.default_rights_uri = default_rights_uri
 
@@ -911,10 +964,10 @@ class CirculationData:
 
     def apply(
         self,
-        _db,
-        collection,
-        replace=None,
-    ):
+        _db: Session,
+        collection: Collection | None,
+        replace: ReplacementPolicy | None = None,
+    ) -> tuple[LicensePool | None, bool]:
         """Update the title with this CirculationData's information.
 
         :param collection: A Collection representing actual copies of
@@ -953,9 +1006,9 @@ class CirculationData:
 
         # TODO: be able to handle the case where the URL to a link changes or
         # a link disappears.
-        link_objects = {}
+        link_objects: dict[LinkData, Hyperlink] = {}
         for link in self.links:
-            if link.rel in Hyperlink.CIRCULATION_ALLOWED:
+            if link.rel in Hyperlink.CIRCULATION_ALLOWED and identifier is not None:
                 link_obj, ignore = identifier.add_link(
                     rel=link.rel,
                     href=link.href,
@@ -968,7 +1021,8 @@ class CirculationData:
 
         # Next, make sure the DeliveryMechanisms associated
         # with the book reflect the formats in self.formats.
-        old_lpdms = new_lpdms = []
+        old_lpdms: list[LicensePoolDeliveryMechanism] = []
+        new_lpdms: list[LicensePoolDeliveryMechanism] = []
         if pool:
             pool.should_track_playtime = self.should_track_playtime
             old_lpdms = list(pool.delivery_mechanisms)
@@ -976,7 +1030,7 @@ class CirculationData:
         # Before setting and unsetting delivery mechanisms, which may
         # change the open-access status of the work, see what it the
         # status currently is.
-        pools = identifier.licensed_through
+        pools = identifier.licensed_through if identifier is not None else []
         old_open_access = any(pool.open_access for pool in pools)
 
         for format in self.formats:
@@ -1067,7 +1121,7 @@ class CirculationData:
 
         return pool, made_changes
 
-    def _availability_needs_update(self, pool):
+    def _availability_needs_update(self, pool: LicensePool) -> bool:
         """Does this CirculationData represent information more recent than
         what we have for the given LicensePool?
         """
@@ -1081,12 +1135,10 @@ class CirculationData:
         return self.last_checked >= pool.last_checked
 
 
-class Metadata:
+class Metadata(LoggerMixin):
     """A (potentially partial) set of metadata for a published work."""
 
-    log = logging.getLogger("Abstract metadata layer")
-
-    BASIC_EDITION_FIELDS = [
+    BASIC_EDITION_FIELDS: list[str] = [
         "title",
         "sort_title",
         "subtitle",
@@ -1103,38 +1155,40 @@ class Metadata:
 
     def __init__(
         self,
-        data_source,
-        title=None,
-        subtitle=None,
-        sort_title=None,
-        language=None,
-        medium=None,
-        series=None,
-        series_position=None,
-        publisher=None,
-        imprint=None,
-        issued=None,
-        published=None,
-        primary_identifier=None,
-        identifiers=None,
-        recommendations=None,
-        subjects=None,
-        contributors=None,
-        measurements=None,
-        links=None,
-        data_source_last_updated=None,
-        duration=None,
+        data_source: str | DataSource | None,
+        *,
+        title: str | None = None,
+        subtitle: str | None = None,
+        sort_title: str | None = None,
+        language: str | None = None,
+        medium: str | None = None,
+        series: str | None = None,
+        series_position: int | None = None,
+        publisher: str | None = None,
+        imprint: str | None = None,
+        issued: datetime.date | None = None,
+        published: datetime.date | None = None,
+        primary_identifier: IdentifierData | Identifier | None = None,
+        identifiers: list[IdentifierData] | None = None,
+        recommendations: list[IdentifierData | Identifier] | None = None,
+        subjects: list[SubjectData] | None = None,
+        contributors: list[ContributorData] | None = None,
+        measurements: list[MeasurementData] | None = None,
+        links: list[LinkData] | None = None,
+        data_source_last_updated: datetime.datetime | None = None,
+        duration: float | None = None,
         # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
-        circulation=None,
-        **kwargs,
-    ):
+        circulation: CirculationData | None = None,
+    ) -> None:
         # data_source is where the data comes from (e.g. overdrive, admin interface),
         # and not necessarily where the associated Identifier's LicencePool's lending licenses are coming from.
         self._data_source = data_source
         if isinstance(self._data_source, DataSource):
-            self.data_source_obj = self._data_source
+            self.data_source_obj: DataSource | None = self._data_source
+            self.data_source_name: str | None = self.data_source_obj.name
         else:
             self.data_source_obj = None
+            self.data_source_name = self._data_source
 
         self.title = title
         self.sort_title = sort_title
@@ -1152,9 +1206,13 @@ class Metadata:
         self.published = published
         self.duration = duration
 
+        if isinstance(primary_identifier, Identifier):
+            primary_identifier = IdentifierData(
+                primary_identifier.type, primary_identifier.identifier
+            )
         self.primary_identifier = primary_identifier
         self.identifiers = identifiers or []
-        self.permanent_work_id = None
+        self.permanent_work_id: str | None = None
         if self.primary_identifier and self.primary_identifier not in self.identifiers:
             self.identifiers.append(self.primary_identifier)
         self.recommendations = recommendations or []
@@ -1167,15 +1225,19 @@ class Metadata:
         # renamed last_update_time to data_source_last_updated
         self.data_source_last_updated = data_source_last_updated
 
-        self.__links = None
-        self.links = links
+        self.__links: list[LinkData] = []
+        # The type ignore here is necessary because mypy does not like when a property setter and
+        # getter have different types. A PR just went in to fix this in mypy, so this should be able
+        # to be removed once mypy 1.16 is released.
+        # See: https://github.com/python/mypy/pull/18510
+        self.links = links  # type: ignore[assignment]
 
     @property
-    def links(self):
+    def links(self) -> list[LinkData]:
         return self.__links
 
     @links.setter
-    def links(self, arg_links):
+    def links(self, arg_links: list[LinkData] | None) -> None:
         """If got passed all links, undiscriminately, filter out to only those relevant to
         editions (the image/cover/etc links).
         """
@@ -1191,17 +1253,17 @@ class Metadata:
                 self.__links.append(link)
 
     @classmethod
-    def from_edition(cls, edition):
+    def from_edition(cls, edition: Edition) -> Metadata:
         """Create a basic Metadata object for the given Edition.
 
         This doesn't contain everything but it contains enough
         information to run guess_license_pools.
         """
-        kwargs = dict()
+        kwargs: dict[str, Any] = dict()
         for field in cls.BASIC_EDITION_FIELDS:
             kwargs[field] = getattr(edition, field)
 
-        contributors = []
+        contributors: list[ContributorData] = []
         for contribution in edition.contributions:
             contributor = ContributorData.from_contribution(contribution)
             contributors.append(contributor)
@@ -1223,13 +1285,13 @@ class Metadata:
             type=i.type, identifier=i.identifier, weight=1
         )
 
-        links = []
+        links: list[LinkData] = []
         for link in i.links:
             link_data = LinkData(link.rel, link.resource.url)
             links.append(link_data)
 
         return Metadata(
-            data_source=edition.data_source.name,
+            data_source=edition.data_source,
             primary_identifier=primary_identifier,
             contributors=contributors,
             links=links,
@@ -1237,7 +1299,7 @@ class Metadata:
         )
 
     @property
-    def primary_author(self):
+    def primary_author(self) -> ContributorData | None:
         primary_author = None
         for tier in Contributor.author_contributor_tiers():
             for c in self.contributors:
@@ -1251,7 +1313,7 @@ class Metadata:
                 break
         return primary_author
 
-    def update(self, metadata):
+    def update(self, metadata: Metadata) -> None:
         """Update this Metadata object with values from the given Metadata
         object.
 
@@ -1271,21 +1333,23 @@ class Metadata:
             if not (old_value and new_value[0].sort_name == Edition.UNKNOWN_AUTHOR):
                 setattr(self, "contributors", new_value)
 
-    def calculate_permanent_work_id(self, _db):
+    def calculate_permanent_work_id(self, _db: Session) -> str | None:
         """Try to calculate a permanent work ID from this metadata."""
         primary_author = self.primary_author
 
         if not primary_author:
-            return None, None
+            return None
 
         sort_author = primary_author.sort_name
         pwid = Edition.calculate_permanent_work_id_for_title_and_author(
             self.title, sort_author, "book"
         )
         self.permanent_work_id = pwid
-        return pwid
+        return pwid  # type: ignore[no-any-return]
 
-    def associate_with_identifiers_based_on_permanent_work_id(self, _db):
+    def associate_with_identifiers_based_on_permanent_work_id(
+        self, _db: Session
+    ) -> None:
         """Try to associate this object's primary identifier with
         the primary identifiers of Editions in the database which share
         a permanent work ID.
@@ -1328,16 +1392,16 @@ class Metadata:
                     self.data_source(_db), same_work_id, 0.85
                 )
 
-    def data_source(self, _db):
+    def data_source(self, _db: Session) -> DataSource:
         if not self.data_source_obj:
-            if not self._data_source:
+            if not self.data_source_name:
                 raise ValueError("No data source specified!")
-            self.data_source_obj = DataSource.lookup(_db, self._data_source)
+            self.data_source_obj = DataSource.lookup(_db, self.data_source_name)
         if not self.data_source_obj:
-            raise ValueError("Data source %s not found!" % self._data_source)
+            raise ValueError("Data source %s not found!" % self.data_source_name)
         return self.data_source_obj
 
-    def edition(self, _db, create_if_not_exists=True):
+    def edition(self, _db: Session) -> tuple[Edition, bool]:
         """Find or create the edition described by this Metadata object."""
         if not self.primary_identifier:
             raise ValueError("Cannot find edition: metadata has no primary identifier.")
@@ -1349,23 +1413,22 @@ class Metadata:
             data_source,
             self.primary_identifier.type,
             self.primary_identifier.identifier,
-            create_if_not_exists=create_if_not_exists,
         )
 
-    def consolidate_identifiers(self):
-        by_weight = defaultdict(list)
+    def consolidate_identifiers(self) -> None:
+        by_weight: defaultdict[tuple[str, str], list[float]] = defaultdict(list)
         for i in self.identifiers:
             by_weight[(i.type, i.identifier)].append(i.weight)
-        new_identifiers = []
+        new_identifiers: list[IdentifierData] = []
         for (type, identifier), weights in list(by_weight.items()):
             new_identifiers.append(
                 IdentifierData(type=type, identifier=identifier, weight=median(weights))
             )
         self.identifiers = new_identifiers
 
-    def guess_license_pools(self, _db):
+    def guess_license_pools(self, _db: Session) -> dict[LicensePool, float]:
         """Try to find existing license pools for this Metadata."""
-        potentials = {}
+        potentials: dict[LicensePool, float] = {}
         for contributor in self.contributors:
             if not any(
                 x in contributor.roles
@@ -1407,7 +1470,12 @@ class Metadata:
                 success = self._run_query(base, potentials, 0.3)
         return potentials
 
-    def _run_query(self, qu, potentials, confidence):
+    def _run_query(
+        self,
+        qu: Query[Edition],
+        potentials: dict[LicensePool, float],
+        confidence: float,
+    ) -> bool:
         success = False
         for i in qu:
             pools = i.license_pools
@@ -1417,29 +1485,29 @@ class Metadata:
                     success = True
         return success
 
-    REL_REQUIRES_NEW_PRESENTATION_EDITION = [
+    REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
         LinkRelations.IMAGE,
         LinkRelations.THUMBNAIL_IMAGE,
     ]
-    REL_REQUIRES_FULL_RECALCULATION = [LinkRelations.DESCRIPTION]
+    REL_REQUIRES_FULL_RECALCULATION: list[str] = [LinkRelations.DESCRIPTION]
 
     # TODO: We need to change all calls to apply() to use a ReplacementPolicy
     # instead of passing in individual `replace` arguments. Once that's done,
     # we can get rid of the `replace` arguments.
     def apply(
         self,
-        edition,
-        collection,
-        replace=None,
-        replace_identifiers=False,
-        replace_subjects=False,
-        replace_contributions=False,
-        replace_links=False,
-        replace_formats=False,
-        replace_rights=False,
-        force=False,
-        db=None,
-    ):
+        edition: Edition,
+        collection: Collection | None,
+        replace: ReplacementPolicy | None = None,
+        replace_identifiers: bool = False,
+        replace_subjects: bool = False,
+        replace_contributions: bool = False,
+        replace_links: bool = False,
+        replace_formats: bool = False,
+        replace_rights: bool = False,
+        force: bool = False,
+        db: Session | None = None,
+    ) -> tuple[Edition, bool]:
         """Apply this metadata to the given edition.
 
         :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes
@@ -1554,7 +1622,9 @@ class Metadata:
             # are also in the list of new subjects.
             surviving_classifications = []
 
-            def _key(classification):
+            def _key(
+                classification: Classification,
+            ) -> tuple[str, str | None, str | None, int]:
                 s = classification.subject
                 return s.type, s.identifier, s.name, classification.weight
 
@@ -1700,7 +1770,6 @@ class Metadata:
                     primary_author.display_name,
                 )
                 edition.sort_author = primary_author.sort_name
-                edition.display_author = primary_author.display_name
                 work_requires_new_presentation_edition = True
 
         # The Metadata object may include a CirculationData object which
@@ -1763,7 +1832,9 @@ class Metadata:
 
         return edition, work_requires_new_presentation_edition
 
-    def make_thumbnail(self, _db, data_source, link, link_obj):
+    def make_thumbnail(
+        self, _db: Session, data_source: DataSource, link: LinkData, link_obj: Hyperlink
+    ) -> Hyperlink | None:
         """Make sure a Hyperlink representing an image is connected
         to its thumbnail.
         """
@@ -1798,7 +1869,9 @@ class Metadata:
             )
         return thumbnail_obj
 
-    def update_contributions(self, _db, edition, replace=True):
+    def update_contributions(
+        self, _db: Session, edition: Edition, replace: bool = True
+    ) -> bool:
         contributors_changed = False
         old_contributors = []
         new_contributors = []
@@ -1811,11 +1884,10 @@ class Metadata:
         if replace and self.contributors:
             # Remove any old Contributions from this data source --
             # we're about to add a new set
-            surviving_contributions = []
             for contribution in edition.contributions:
                 old_contributors.append(contribution.contributor.id)
                 _db.delete(contribution)
-            edition.contributions = surviving_contributions
+            edition.contributions = []
 
         for contributor_data in self.contributors:
             contributor_data.find_sort_name(_db)
@@ -1854,12 +1926,12 @@ class Metadata:
 
         return contributors_changed
 
-    def filter_recommendations(self, _db):
+    def filter_recommendations(self, _db: Session) -> None:
         """Filters out recommended identifiers that don't exist in the db.
         Any IdentifierData objects will be replaced with Identifiers.
         """
 
-        by_type = defaultdict(list)
+        by_type: defaultdict[str, list[str]] = defaultdict(list)
         for identifier in self.recommendations:
             by_type[identifier.type].append(identifier.identifier)
 
@@ -1872,8 +1944,10 @@ class Metadata:
             )
             recommendations.update(existing_identifiers.all())
 
-        if self.primary_identifier in recommendations:
-            recommendations.remove(self.primary_identifier)
+        if self.primary_identifier:
+            primary_identifier_obj, _ = self.primary_identifier.load(_db)
+            if primary_identifier_obj in recommendations:
+                recommendations.remove(primary_identifier_obj)
 
         self.recommendations = list(recommendations)
 
@@ -1882,10 +1956,8 @@ class CSVFormatError(csv.Error):
     pass
 
 
-class CSVMetadataImporter:
+class CSVMetadataImporter(LoggerMixin):
     """Turn a CSV file into a list of Metadata objects."""
-
-    log = logging.getLogger("CSV metadata importer")
 
     IDENTIFIER_PRECEDENCE = [
         Identifier.AXIS_360_ID,
@@ -1914,22 +1986,24 @@ class CSVMetadataImporter:
 
     def __init__(
         self,
-        data_source_name,
-        title_field="title",
-        language_field="language",
-        default_language="eng",
-        medium_field="medium",
-        default_medium=Edition.BOOK_MEDIUM,
-        series_field="series",
-        publisher_field="publisher",
-        imprint_field="imprint",
-        issued_field="issued",
-        published_field=["published", "publication year"],
-        identifier_fields=DEFAULT_IDENTIFIER_FIELD_NAMES,
-        subject_fields=DEFAULT_SUBJECT_FIELD_NAMES,
-        sort_author_field="file author as",
-        display_author_field=["author", "display author as"],
-    ):
+        data_source_name: str,
+        title_field: str = "title",
+        language_field: str = "language",
+        default_language: str = "eng",
+        medium_field: str = "medium",
+        default_medium: str = Edition.BOOK_MEDIUM,
+        series_field: str = "series",
+        publisher_field: str = "publisher",
+        imprint_field: str = "imprint",
+        issued_field: str = "issued",
+        published_field: Sequence[str] | str = ["published", "publication year"],
+        identifier_fields: Mapping[
+            str, tuple[str, float]
+        ] = DEFAULT_IDENTIFIER_FIELD_NAMES,
+        subject_fields: Mapping[str, tuple[str, int]] = DEFAULT_SUBJECT_FIELD_NAMES,
+        sort_author_field: str = "file author as",
+        display_author_field: Sequence[str] | str = ["author", "display author as"],
+    ) -> None:
         self.data_source_name = data_source_name
         self.title_field = title_field
         self.language_field = language_field
@@ -1946,17 +2020,20 @@ class CSVMetadataImporter:
         self.sort_author_field = sort_author_field
         self.display_author_field = display_author_field
 
-    def to_metadata(self, dictreader):
+    def to_metadata(self, dictreader: csv.DictReader[str]) -> Generator[Metadata]:
         """Turn the CSV file in `dictreader` into a sequence of Metadata.
 
         :yield: A sequence of Metadata objects.
         """
         fields = dictreader.fieldnames
+        if fields is None:
+            # fields is none if the CSV file is empty, so we just return
+            return
 
         # Make sure this CSV file has some way of identifying books.
         found_identifier_field = False
         possibilities = []
-        for field_name, weight in list(self.identifier_fields.values()):
+        for field_name, weight in self.identifier_fields.values():
             possibilities.append(field_name)
             if field_name in fields:
                 found_identifier_field = True
@@ -1970,11 +2047,11 @@ class CSVMetadataImporter:
         for row in dictreader:
             yield self.row_to_metadata(row)
 
-    def row_to_metadata(self, row):
+    def row_to_metadata(self, row: dict[str, str]) -> Metadata:
         title = self._field(row, self.title_field)
         language = self._field(row, self.language_field, self.default_language)
         medium = self._field(row, self.medium_field, self.default_medium)
-        if medium not in list(Edition.medium_to_additional_type.keys()):
+        if medium not in Edition.medium_to_additional_type.keys():
             self.log.warning("Ignored unrecognized medium %s" % medium)
             medium = Edition.BOOK_MEDIUM
         series = self._field(row, self.series_field)
@@ -1988,12 +2065,7 @@ class CSVMetadataImporter:
         # TODO: This is annoying and could use some work.
         for identifier_type in self.IDENTIFIER_PRECEDENCE:
             correct_type = False
-            for target_type, v in list(self.identifier_fields.items()):
-                if isinstance(v, tuple):
-                    field_name, weight = v
-                else:
-                    field_name = v
-                    weight = 1
+            for target_type, (field_name, weight) in self.identifier_fields.items():
                 if target_type == identifier_type:
                     correct_type = True
                     break
@@ -2043,57 +2115,51 @@ class CSVMetadataImporter:
             subjects=subjects,
             contributors=contributors,
         )
-        metadata.csv_row = row
         return metadata
 
-    @property
-    def identifier_field_names(self):
-        """All potential field names that would identify an identifier."""
-        for identifier_type in self.IDENTIFIER_PRECEDENCE:
-            field_names = self.identifier_fields.get(identifier_type, [])
-            if isinstance(field_names, (bytes, str)):
-                field_names = [field_names]
-            yield from field_names
-
-    def list_field(self, row, names):
+    def list_field(self, row: dict[str, str], names: str | Sequence[str]) -> list[str]:
         """Parse a string into a list by splitting on commas."""
         value = self._field(row, names)
         if not value:
             return []
         return [item.strip() for item in value.split(",")]
 
-    def _field(self, row, names, default=None):
+    def _field(
+        self,
+        row: dict[str, str],
+        names: str | Sequence[str],
+        default: str | None = None,
+    ) -> str | None:
         """Get a value from one of the given fields and ensure it comes in as
         Unicode.
         """
         if isinstance(names, (bytes, str)):
             return self.__field(row, names, default)
-        if not names:
-            return default
         for name in names:
             v = self.__field(row, name)
             if v:
                 return v
-        else:
-            return default
+        return default
 
-    def __field(self, row, name, default=None):
+    def __field(
+        self, row: dict[str, str], name: str, default: str | None = None
+    ) -> str | None:
         """Get a value from the given field and ensure it comes in as
         Unicode.
         """
         value = row.get(name, default)
         if isinstance(value, bytes):
-            value = value.decode("utf8")
+            value = value.decode("utf8")  # type: ignore[unreachable]
         return value
 
-    def _date_field(self, row, field_name):
+    def _date_field(
+        self, row: dict[str, str], field_name: str | Sequence[str]
+    ) -> datetime.datetime | None:
         """Attempt to parse a field as a date."""
-        date = None
         value = self._field(row, field_name)
         if value:
             try:
-                value = to_utc(parse(value))
+                return to_utc(parse(value))
             except ValueError:
                 self.log.warning('Could not parse date "%s"' % value)
-                value = None
-        return value
+        return None

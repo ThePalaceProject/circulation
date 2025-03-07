@@ -688,7 +688,8 @@ class TestRecommendationLane:
     def generate_mock_api(self, lane_fixture: LaneFixture):
         """Prep an empty NoveList result."""
         source = DataSource.lookup(lane_fixture.db.session, DataSource.OVERDRIVE)
-        metadata = Metadata(source)
+        source_name = source.name if source else DataSource.OVERDRIVE
+        metadata = Metadata(source_name)
 
         mock_api = create_autospec(NoveListAPI)
         mock_api.lookup.return_value = metadata

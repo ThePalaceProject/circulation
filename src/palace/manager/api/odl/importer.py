@@ -94,6 +94,9 @@ class OPDS2WithODLImporter(OPDS2Importer):
         # if the feed is protected by OAuth. So we need to add a BEARER_TOKEN delivery mechanism
         # to the formats, so we know we are able to fulfill these items indirectly via a bearer token.
         circulation = metadata.circulation
+        # There should be no way that circulation data can be None here, but mypy can't
+        # know that, so we assert it here to fail quickly if it is None.
+        assert circulation is not None
         supported_media_types = {
             format
             for format, drm in DeliveryMechanism.default_client_can_fulfill_lookup
@@ -113,7 +116,10 @@ class OPDS2WithODLImporter(OPDS2Importer):
                 create_format_data(format)
                 if format.content_type in supported_media_types
                 and format.drm_scheme is None
-                and format.link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+                and (
+                    format.link
+                    and format.link.rel == Hyperlink.GENERIC_OPDS_ACQUISITION
+                )
                 else format
             )
             for format in circulation.formats
@@ -125,7 +131,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
     def _extract_publication_metadata(
         self,
         publication: opds2.BasePublication,
-        data_source_name: str | None,
+        data_source_name: str,
         feed_self_url: str,
     ) -> Metadata:
         """Extract a Metadata object from webpub-manifest-parser's publication.
@@ -234,6 +240,9 @@ class OPDS2WithODLImporter(OPDS2Importer):
                         )
                     )
 
+        # metadata.circulation was set in an earlier step and shouldn't be None.
+        # We assert this explicitly to satisfy mypy and fail fast if something changes.
+        assert metadata.circulation is not None
         metadata.circulation.licenses = licenses
         metadata.circulation.licenses_owned = None
         metadata.circulation.licenses_available = None

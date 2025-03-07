@@ -794,9 +794,9 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         self,
         rel: str,
         href: str | None,
-        data_source: DataSource,
+        data_source: DataSource | None,
         media_type: str | None = None,
-        content: bytes | None = None,
+        content: bytes | str | None = None,
         content_path: str | None = None,
         rights_status_uri: str | None = None,
         rights_explanation: str | None = None,
@@ -888,7 +888,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         data_source: DataSource,
         quantity_measured: str,
         value: float,
-        weight: int = 1,
+        weight: float = 1,
         taken_at: datetime.datetime | None = None,
     ) -> Measurement:
         """Associate a new Measurement with this Identifier."""
@@ -941,7 +941,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         self,
         data_source: DataSource,
         subject_type: str,
-        subject_identifier: str,
+        subject_identifier: str | None,
         subject_name: str | None = None,
         weight: int = 1,
     ) -> Classification:
