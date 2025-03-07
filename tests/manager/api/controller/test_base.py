@@ -173,11 +173,6 @@ class TestBaseController:
             )
             assert isinstance(value, Patron)
 
-            # The test neighborhood configured in the SimpleAuthenticationProvider
-            # has been associated with the authenticated Patron object for the
-            # duration of this request.
-            assert "Unit Test West" == value.neighborhood
-
     def test_authentication_sends_proper_headers(
         self, circulation_fixture: CirculationControllerFixture
     ):

@@ -32,7 +32,6 @@ class LocalAnalyticsProvider(AnalyticsProvider, LoggerMixin):
                 new_value=event.new_value,
                 delta=event.delta,
                 end=event.end,
-                location=event.location,
             ),
         )
         if was_new:

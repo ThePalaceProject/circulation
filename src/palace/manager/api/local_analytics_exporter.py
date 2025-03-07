@@ -19,9 +19,9 @@ from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 class LocalAnalyticsExporter:
     """Export large numbers of analytics events in CSV format."""
 
-    def export(self, _db, start, end, locations=None, library=None):
+    def export(self, _db, start, end, library=None):
         # Get the results from the database.
-        query = self.analytics_query(start, end, locations, library)
+        query = self.analytics_query(start, end, library)
         results = _db.execute(query)
 
         # Write the CSV file to a BytesIO.
@@ -39,7 +39,6 @@ class LocalAnalyticsExporter:
             "language",
             "target_age",
             "genres",
-            "location",
             "collection_name",
             "library_short_name",
             "library_name",
@@ -53,7 +52,7 @@ class LocalAnalyticsExporter:
         writer.writerows(results)
         return output.getvalue().decode("utf-8")
 
-    def analytics_query(self, start, end, locations=None, library=None):
+    def analytics_query(self, start, end, library=None):
         """Build a database query that fetches rows of analytics data.
 
         This method uses low-level SQLAlchemy code to do all
@@ -69,19 +68,6 @@ class LocalAnalyticsExporter:
             CirculationEvent.start >= start,
             CirculationEvent.start < end,
         ]
-
-        if locations:
-            event_types = [
-                CirculationEvent.CM_CHECKOUT,
-                CirculationEvent.CM_FULFILL,
-                CirculationEvent.OPEN_BOOK,
-            ]
-            locations = locations.strip().split(",")
-
-            clauses += [
-                CirculationEvent.type.in_(event_types),
-                CirculationEvent.location.in_(locations),
-            ]
 
         if library:
             clauses += [CirculationEvent.library == library]
@@ -109,7 +95,6 @@ class LocalAnalyticsExporter:
                     Edition.publisher,
                     Edition.imprint,
                     Edition.language,
-                    CirculationEvent.location,
                     IntegrationConfiguration.name.label("collection_name"),
                     Library.short_name.label("library_short_name"),
                     Library.name.label("library_name"),
@@ -213,7 +198,6 @@ class LocalAnalyticsExporter:
                 events.language,
                 target_age_string.label("target_age"),
                 genres.label("genres"),
-                events.location,
                 events.collection_name,
                 events.library_short_name,
                 events.library_name,

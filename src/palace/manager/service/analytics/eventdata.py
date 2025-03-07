@@ -55,7 +55,10 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
             return None
         return self.new_value - self.old_value
 
-    location: str | None
+    # TODO: This field has been removed from the database model, but is still included
+    #   in the response for backwards compatibility. It should be removed in a future
+    #   release.
+    location: None = None
     license_pool_id: int | None
     publisher: str | None
     imprint: str | None
@@ -117,7 +120,6 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
         old_value: int | None = None,
         new_value: int | None = None,
         patron: Patron | None = None,
-        neighborhood: str | None = None,
         user_agent: str | None = None,
     ) -> Self:
         if user_agent is None:
@@ -147,7 +149,6 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
             library_short_name=library.short_name,
             old_value=old_value,
             new_value=new_value,
-            location=neighborhood,
             license_pool_id=license_pool.id if license_pool else None,
             publisher=edition.publisher if edition else None,
             imprint=edition.imprint if edition else None,
