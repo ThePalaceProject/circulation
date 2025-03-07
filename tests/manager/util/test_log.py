@@ -2,7 +2,7 @@ import pytest
 from pytest import LogCaptureFixture
 
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.log import LoggerMixin, log_elapsed_time
+from palace.manager.util.log import LoggerMixin, log_elapsed_time, pluralize
 
 
 class MockClass(LoggerMixin):
@@ -51,3 +51,12 @@ def test_log_elapsed_time_invalid(caplog: LogCaptureFixture):
     with pytest.raises(RuntimeError):
         log_elapsed_time(log_level=LogLevel.info, message_prefix="Test")(lambda: None)()
     assert len(caplog.records) == 0
+
+
+def test_pluralize():
+    assert pluralize(1, "dingo") == "1 dingo"
+    assert pluralize(2, "dingo") == "2 dingos"
+    assert pluralize(0, "dingo") == "0 dingos"
+
+    assert pluralize(1, "foo", "bar") == "1 foo"
+    assert pluralize(2, "foo", "bar") == "2 bar"
