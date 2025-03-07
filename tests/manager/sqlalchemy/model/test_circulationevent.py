@@ -8,7 +8,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import create, get_one_or_create
-from palace.manager.util.datetime_helpers import datetime_utc, strptime_utc, utc_now
+from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -106,84 +106,6 @@ class TestCirculationEvent:
         # The creator of a circulation event is responsible for also
         # updating the dataset.
         assert 0 == event.license_pool.licenses_owned
-
-    def test_log(self, db: DatabaseTransactionFixture):
-        # Basic test of CirculationEvent.log.
-
-        pool = db.licensepool(edition=None)
-        library = db.default_library()
-        event_name = CirculationEvent.DISTRIBUTOR_CHECKOUT
-        old_value = 10
-        new_value = 8
-        start = datetime_utc(2019, 1, 1)
-        end = datetime_utc(2019, 1, 2)
-        location = "Westgate Branch"
-
-        m = CirculationEvent.log
-        session = db.session
-        event, is_new = m(
-            session,
-            license_pool=pool,
-            event_name=event_name,
-            library=library,
-            old_value=old_value,
-            new_value=new_value,
-            start=start,
-            end=end,
-            location=location,
-        )
-        assert True == is_new
-        assert pool == event.license_pool
-        assert library == event.library
-        assert -2 == event.delta  # calculated from old_value and new_value
-        assert start == event.start
-        assert end == event.end
-        assert location == event.location
-
-        # If log finds another event with the same license pool,
-        # library, event name, and start date, that event is returned
-        # unchanged.
-        event, is_new = m(
-            session,
-            license_pool=pool,
-            event_name=event_name,
-            library=library,
-            start=start,
-            # These values will be ignored.
-            old_value=500,
-            new_value=200,
-            end=utc_now(),
-            location="another location",
-        )
-        assert False == is_new
-        assert pool == event.license_pool
-        assert library == event.library
-        assert -2 == event.delta
-        assert start == event.start
-        assert end == event.end
-        assert location == event.location
-
-        # If no timestamp is provided, the current time is used. This
-        # is the most common case, so basically a new event will be
-        # created each time you call log().
-        event, is_new = m(
-            session,
-            license_pool=pool,
-            event_name=event_name,
-            library=library,
-            old_value=old_value,
-            new_value=new_value,
-            end=end,
-            location=location,
-        )
-        assert event.start is not None
-        assert (utc_now() - event.start).total_seconds() < 2
-        assert True == is_new
-        assert pool == event.license_pool
-        assert library == event.library
-        assert -2 == event.delta
-        assert end == event.end
-        assert location == event.location
 
     def test_uniqueness_constraints_no_library(self, db: DatabaseTransactionFixture):
         # If library is null, then license_pool + type + start must be

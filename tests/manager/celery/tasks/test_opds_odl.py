@@ -9,13 +9,13 @@ from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.overdrive import OverdriveAPI
 from palace.manager.celery.tasks import opds_odl
 from palace.manager.celery.tasks.opds_odl import (
+    _licensepool_ids_with_holds,
+    _recalculate_holds_for_licensepool,
     _redis_lock_recalculate_holds,
-    licensepool_ids_with_holds,
+    _remove_expired_holds_for_collection,
     recalculate_hold_queue,
     recalculate_hold_queue_collection,
-    recalculate_holds_for_licensepool,
     remove_expired_holds,
-    remove_expired_holds_for_collection,
     remove_expired_holds_for_collection_task,
 )
 from palace.manager.service.logging.configuration import LogLevel
@@ -134,7 +134,7 @@ def _hold_sort_key(hold: Hold) -> int:
     return position
 
 
-def test_remove_expired_holds_for_collection(
+def test__remove_expired_holds_for_collection(
     db: DatabaseTransactionFixture,
     opds_task_fixture: OpdsTaskFixture,
     celery_fixture: CeleryFixture,
@@ -153,7 +153,7 @@ def test_remove_expired_holds_for_collection(
 
     # Remove the expired holds
     assert collection.id is not None
-    events = remove_expired_holds_for_collection(
+    events = _remove_expired_holds_for_collection(
         db.session,
         collection.id,
     )
@@ -176,11 +176,11 @@ def test_remove_expired_holds_for_collection(
     # verify that the correct analytics calls were made
     assert len(events) == 10
     for event in events:
-        assert event.event_type == CirculationEvent.CM_HOLD_EXPIRED
-        assert event.library == db.default_library()
+        assert event.type == CirculationEvent.CM_HOLD_EXPIRED
+        assert event.library_id == db.default_library().id
 
 
-def test_licensepools_with_holds(
+def test__licensepools_with_holds(
     db: DatabaseTransactionFixture, opds_task_fixture: OpdsTaskFixture
 ):
     collection1 = db.collection(protocol=OPDS2WithODLApi)
@@ -204,7 +204,7 @@ def test_licensepools_with_holds(
 
     # Query the license pools with holds
     assert collection1.id is not None
-    while license_pools := licensepool_ids_with_holds(
+    while license_pools := _licensepool_ids_with_holds(
         db.session,
         collection1.id,
         batch_size=2,
@@ -219,7 +219,7 @@ def test_licensepools_with_holds(
 
 
 @freeze_time()
-def test_recalculate_holds_for_licensepool(
+def test__recalculate_holds_for_licensepool(
     db: DatabaseTransactionFixture, opds_task_fixture: OpdsTaskFixture
 ):
     collection = db.collection(protocol=OPDS2WithODLApi)
@@ -227,7 +227,7 @@ def test_recalculate_holds_for_licensepool(
 
     analytics = opds_task_fixture.services.analytics_fixture.analytics_mock
     # Recalculate the hold queue
-    recalculate_holds_for_licensepool(pool, timedelta(days=5))
+    _recalculate_holds_for_licensepool(pool, timedelta(days=5))
 
     current_holds = pool.get_active_holds()
     assert len(current_holds) == 20
@@ -238,7 +238,7 @@ def test_recalculate_holds_for_licensepool(
     license1.checkouts_available = 1
     license2.checkouts_available = 2
     reservation_time = timedelta(days=5)
-    _, events = recalculate_holds_for_licensepool(pool, reservation_time)
+    _, events = _recalculate_holds_for_licensepool(pool, reservation_time)
 
     assert pool.licenses_reserved == 3
     assert pool.licenses_available == 0
@@ -270,7 +270,7 @@ def test_recalculate_holds_for_licensepool(
     # verify that the correct analytics events were returned
     assert len(events) == 3
     for event in events:
-        assert event.event_type == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
+        assert event.type == CirculationEvent.CM_HOLD_READY_FOR_CHECKOUT
 
 
 def test_remove_expired_holds_for_collection_task(
@@ -434,7 +434,7 @@ class TestRecalculateHoldQueueCollection:
         assert pool.licenses_reserved != 1
 
         with patch.object(
-            opds_odl, "licensepool_ids_with_holds"
+            opds_odl, "_licensepool_ids_with_holds"
         ) as mock_licensepool_ids_with_holds:
             mock_licensepool_ids_with_holds.return_value = [deleted_pool_id, pool.id]
             recalculate_hold_queue_collection.delay(collection.id).wait()

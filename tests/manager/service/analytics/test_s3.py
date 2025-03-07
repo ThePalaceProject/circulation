@@ -9,11 +9,13 @@ import pytest
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
 from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from tests.fixtures.database import DatabaseTransactionFixture
@@ -28,15 +30,8 @@ class S3AnalyticsFixture:
             self.analytics_storage,
         )
 
-
-@pytest.fixture(scope="function")
-def s3_analytics_fixture(db: DatabaseTransactionFixture):
-    return S3AnalyticsFixture(db)
-
-
-class TestS3AnalyticsProvider:
     @staticmethod
-    def timestamp_to_string(timestamp):
+    def timestamp_to_string(timestamp: datetime.datetime) -> str:
         """Return a string representation of a datetime object.
 
         :param timestamp: datetime object storing a timestamp
@@ -47,40 +42,42 @@ class TestS3AnalyticsProvider:
         """
         return str(timestamp)
 
+
+@pytest.fixture(scope="function")
+def s3_analytics_fixture(db: DatabaseTransactionFixture):
+    return S3AnalyticsFixture(db)
+
+
+class TestS3AnalyticsProvider:
     def test_exception_is_raised_when_no_analytics_bucket_configured(
         self, s3_analytics_fixture: S3AnalyticsFixture
-    ):
+    ) -> None:
         # The services container returns None when there is no analytics storage service configured
         provider = S3AnalyticsProvider(None)
 
         # Act, Assert
         with pytest.raises(CannotLoadConfiguration):
-            provider.collect_event(
-                s3_analytics_fixture.db.default_library(),
-                None,
-                CirculationEvent.NEW_PATRON,
-                datetime.datetime.utcnow(),
-            )
+            provider.collect(MagicMock())
 
     def test_analytics_data_without_associated_license_pool_is_correctly_stored_in_s3(
-        self, s3_analytics_fixture: S3AnalyticsFixture
-    ):
+        self, s3_analytics_fixture: S3AnalyticsFixture, db: DatabaseTransactionFixture
+    ) -> None:
         # Set up event's metadata
-        event_time = datetime.datetime.utcnow()
-        event_time_formatted = self.timestamp_to_string(event_time)
+        event_time = utc_now()
+        event_time_formatted = s3_analytics_fixture.timestamp_to_string(event_time)
         event_type = CirculationEvent.NEW_PATRON
 
-        s3_analytics_fixture.analytics_provider._get_file_key = MagicMock()
+        mock_get_file_key = MagicMock()
+        s3_analytics_fixture.analytics_provider._get_file_key = mock_get_file_key
 
         # Act
-        s3_analytics_fixture.analytics_provider.collect_event(
-            s3_analytics_fixture.db.default_library(), None, event_type, event_time
+        event_data = AnalyticsEventData.create(
+            db.default_library(), None, event_type, event_time
         )
+        s3_analytics_fixture.analytics_provider.collect(event_data)
 
         # Assert
-        s3_analytics_fixture.analytics_provider._get_file_key.assert_called_once_with(
-            s3_analytics_fixture.db.default_library(), None, event_type, event_time
-        )
+        mock_get_file_key.assert_called_once_with(event_data)
         s3_analytics_fixture.analytics_storage.store.assert_called_once()
         (
             key,
@@ -89,7 +86,7 @@ class TestS3AnalyticsProvider:
         ) = s3_analytics_fixture.analytics_storage.store.call_args.args
 
         assert content_type == MediaTypes.APPLICATION_JSON_MEDIA_TYPE
-        assert key == s3_analytics_fixture.analytics_provider._get_file_key.return_value
+        assert key == mock_get_file_key.return_value
         event = json.loads(content)
 
         assert event["type"] == event_type
@@ -98,12 +95,12 @@ class TestS3AnalyticsProvider:
         assert event["library_id"] == s3_analytics_fixture.db.default_library().id
 
     def test_analytics_data_with_associated_license_pool_is_correctly_stored_in_s3(
-        self, s3_analytics_fixture: S3AnalyticsFixture
-    ):
-        patron = s3_analytics_fixture.db.patron()
+        self, s3_analytics_fixture: S3AnalyticsFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        patron = db.patron()
 
         # Create a test book
-        work = s3_analytics_fixture.db.work(
+        work = db.work(
             data_source_name=DataSource.GUTENBERG,
             title="Test Book",
             authors=("Test Author 1", "Test Author 2"),
@@ -118,15 +115,15 @@ class TestS3AnalyticsProvider:
         edition = work.presentation_edition
 
         # Set up event's metadata
-        event_time = datetime.datetime.utcnow()
-        event_time_formatted = self.timestamp_to_string(event_time)
+        event_time = utc_now()
+        event_time_formatted = s3_analytics_fixture.timestamp_to_string(event_time)
         event_type = CirculationEvent.CM_CHECKOUT
         user_agent = "the-user-agent"
         s3_analytics_fixture.analytics_provider._get_file_key = MagicMock()
 
         # Act
-        s3_analytics_fixture.analytics_provider.collect_event(
-            s3_analytics_fixture.db.default_library(),
+        event_data = AnalyticsEventData.create(
+            db.default_library(),
             license_pool,
             event_type,
             event_time,
@@ -134,6 +131,7 @@ class TestS3AnalyticsProvider:
             patron=patron,
             neighborhood=neighborhood,
         )
+        s3_analytics_fixture.analytics_provider.collect(event_data)
 
         # Assert
         s3_analytics_fixture.analytics_storage.store.assert_called_once()
@@ -156,7 +154,7 @@ class TestS3AnalyticsProvider:
         assert event["type"] == event_type
         assert event["start"] == event_time_formatted
         assert event["end"] == event_time_formatted
-        assert event["library_id"] == s3_analytics_fixture.db.default_library().id
+        assert event["library_id"] == db.default_library().id
         assert event["license_pool_id"] == license_pool.id
         assert event["publisher"] == edition.publisher
         assert event["imprint"] == edition.imprint
@@ -164,6 +162,7 @@ class TestS3AnalyticsProvider:
         assert event["published"] == edition.published
         assert event["medium"] == edition.medium
         assert event["collection"] == collection.name
+        assert event.get("collection_id") is None
         assert event["identifier_type"] == identifier.type
         assert event["identifier"] == identifier.identifier
         assert event["data_source"] == data_source.name
@@ -174,7 +173,7 @@ class TestS3AnalyticsProvider:
         assert event["rating"] == work.rating
         assert event["popularity"] == work.popularity
         assert event["genre"] == work.genres[0].name
-        assert event["availability_time"] == self.timestamp_to_string(
+        assert event["availability_time"] == s3_analytics_fixture.timestamp_to_string(
             license_pool.availability_time
         )
         assert event["licenses_owned"] == license_pool.licenses_owned
