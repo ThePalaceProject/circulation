@@ -26,10 +26,7 @@ class S3AnalyticsProvider(AnalyticsProvider):
         event: AnalyticsEventData,
         session: Session | None = None,
     ) -> None:
-        # We exclude the collection_id from the json because it wasn't included
-        # in our pre-pydantic implementation, it was only used in the file key.
-        # TODO: See if adding collection_id will cause any issue with the ingest process.
-        content = event.model_dump_json(exclude={"collection_id"})
+        content = event.model_dump_json()
 
         storage = self._get_storage()
         analytics_file_key = self._get_file_key(event)

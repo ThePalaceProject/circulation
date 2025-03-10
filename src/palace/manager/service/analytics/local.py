@@ -36,6 +36,4 @@ class LocalAnalyticsProvider(AnalyticsProvider, LoggerMixin):
             ),
         )
         if was_new:
-            self.log.info(
-                "EVENT %s %s=>%s", event.type, event.old_value, event.new_value
-            )
+            self.log.info(f"EVENT {event.type} {event.old_value}=>{event.new_value}")

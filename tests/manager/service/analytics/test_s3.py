@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from pydantic import TypeAdapter
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import CannotLoadConfiguration
@@ -30,8 +31,9 @@ class S3AnalyticsFixture:
             self.analytics_storage,
         )
 
-    @staticmethod
-    def timestamp_to_string(timestamp: datetime.datetime) -> str:
+        self.timestamp_adapter = TypeAdapter(datetime.datetime)
+
+    def timestamp_to_string(self, timestamp: datetime.datetime) -> str:
         """Return a string representation of a datetime object.
 
         :param timestamp: datetime object storing a timestamp
@@ -40,7 +42,8 @@ class S3AnalyticsFixture:
         :return: String representation of the timestamp
         :rtype: str
         """
-        return str(timestamp)
+
+        return self.timestamp_adapter.dump_python(timestamp, mode="json")
 
 
 @pytest.fixture(scope="function")
@@ -162,7 +165,7 @@ class TestS3AnalyticsProvider:
         assert event["published"] == edition.published
         assert event["medium"] == edition.medium
         assert event["collection"] == collection.name
-        assert event.get("collection_id") is None
+        assert event["collection_id"] == collection.id
         assert event["identifier_type"] == identifier.type
         assert event["identifier"] == identifier.identifier
         assert event["data_source"] == data_source.name

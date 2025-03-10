@@ -5,14 +5,7 @@ from functools import cached_property
 from uuid import UUID
 
 import flask
-from pydantic import (
-    AwareDatetime,
-    BaseModel,
-    ConfigDict,
-    computed_field,
-    field_serializer,
-)
-from pydantic_core.core_schema import FieldSerializationInfo
+from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field
 from typing_extensions import Self
 
 from palace.manager.sqlalchemy.model.library import Library
@@ -97,15 +90,6 @@ class AnalyticsEventData(BaseModel, LoggerMixin):
     model_config = ConfigDict(
         frozen=True,
     )
-
-    # We serialize the datetime fields as strings in the JSON output, to match what
-    # the output looked like before we switched to Pydantic.
-    # TODO: It would be nice to be able to drop this and just use the default
-    #   which is to serialize datetimes as ISO8601 strings. Need to see if the
-    #   analytics consumers can handle that.
-    @field_serializer("start", "end", "availability_time", when_used="json")
-    def serialize_dt(self, value: datetime, _info: FieldSerializationInfo) -> str:
-        return str(value)
 
     @classmethod
     def create(
