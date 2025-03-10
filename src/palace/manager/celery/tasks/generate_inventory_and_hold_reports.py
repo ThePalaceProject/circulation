@@ -202,6 +202,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 e.title,
                 e.author,
                 i.identifier,
+                COALESCE(
+                    CASE
+                        WHEN i.type = 'ISBN' THEN i.identifier
+                        ELSE isbn.identifier
+                    END,
+                    ''
+                ) AS isbn,
                 e.language,
                 e.publisher,
                 e.medium AS format,
@@ -220,6 +227,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 END AS shared_active_loan_count
             FROM licensepools lp
             JOIN identifiers i ON lp.identifier_id = i.id
+            LEFT OUTER JOIN (
+                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+                FROM equivalents eq
+                JOIN identifiers isbn ON eq.output_id = isbn.id
+                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
+                ORDER BY eq.input_id, eq.strength DESC
+            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
             JOIN editions e ON e.primary_identifier_id = i.id
             JOIN works w ON lp.work_id = w.id
             JOIN datasources d ON e.data_source_id = d.id
@@ -254,7 +268,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 FROM licenses
                 WHERE status = 'available'
             ) l ON lp.id = l.license_pool_id
-            WHERE ic.id IN (:integration_ids) AND lib.id = :library_id
+            WHERE ic.id IN :integration_ids AND lib.id = :library_id
             ORDER BY e.title, e.author
         """
 
@@ -265,6 +279,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 e.title,
                 e.author,
                 i.identifier,
+                COALESCE(
+                    CASE
+                        WHEN i.type = 'ISBN' THEN i.identifier
+                        ELSE isbn.identifier
+                    END,
+                    ''
+                ) AS isbn,
                 e.language,
                 e.publisher,
                 e.medium AS format,
@@ -279,6 +300,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 END AS shared_active_hold_count
             FROM licensepools lp
             JOIN identifiers i ON lp.identifier_id = i.id
+            LEFT OUTER JOIN (
+                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+                FROM equivalents eq
+                JOIN identifiers isbn ON eq.output_id = isbn.id
+                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
+                ORDER BY eq.input_id, eq.strength DESC
+            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
             JOIN editions e ON e.primary_identifier_id = i.id
             JOIN works w ON lp.work_id = w.id
             JOIN datasources d ON e.data_source_id = d.id
@@ -307,7 +335,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 JOIN collections c ON i.id = c.integration_configuration_id
                 GROUP BY ilc.parent_id
             ) collection_sharing ON ic.id = collection_sharing.parent_id
-            WHERE ic.id IN (:integration_ids) AND lib.id = :library_id
+            WHERE ic.id IN :integration_ids AND lib.id = :library_id
             ORDER BY e.title, e.author
         """
 
