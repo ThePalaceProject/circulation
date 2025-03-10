@@ -1,8 +1,9 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from celery import shared_task
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
@@ -25,14 +26,16 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 
-DEFAULT_BATCH_SIZE: int = 25
+DEFAULT_BATCH_SIZE: int = 10
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
-TARGET_MAX_EXECUTION_SECONDS = 120
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def import_all_collections(
-    task: Task, import_all: bool = False, batch_size: int = DEFAULT_BATCH_SIZE
+    task: Task,
+    import_all: bool = False,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    sub_task_execution_interval_in_secs: int = 10,
 ) -> None:
     """
     A shared task that loops through all Axis360 Api based collections and kick off an
@@ -43,11 +46,19 @@ def import_all_collections(
         for collection in get_collections_by_protocol(
             task=task, session=session, protocol_class=Axis360API
         ):
+            # since collections will likely have overlapping identifiers, minimize the possibility
+            # of deadlocks by staggering the execution of the list_identifiers_for_import task
+            # by sub_task_execution_interval_in_secs.
+            eta = utc_now() + timedelta(
+                seconds=(sub_task_execution_interval_in_secs * count)
+            )
+
             task.log.info(
-                f'Queued collection("{collection.name}" [id={collection.id}] for importing...'
+                f'Queued collection("{collection.name}" [id={collection.id}] for importing to begin execution at {eta}...'
             )
             list_identifiers_for_import.apply_async(
                 kwargs={"collection_id": collection.id},
+                eta=eta,
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
@@ -177,7 +188,6 @@ def import_identifiers(
     collection_id: int,
     processed_count: int = 0,
     batch_size: int = DEFAULT_BATCH_SIZE,
-    target_max_execution_time_in_seconds: float = TARGET_MAX_EXECUTION_SECONDS,
 ) -> None:
     """
     This method creates new or updates new editions and license pools for each identifier in the list of identifiers.
@@ -197,7 +207,7 @@ def import_identifiers(
         def log_run_end_message() -> None:
             task.log.info(
                 f"Finished importing identifiers for collection ({collection_name}, id={collection_id}), "
-                f"task(id={task.request.id})"
+                f"processed_count={processed_count}, task(id={task.request.id})"
             )
 
         if identifiers is None:
@@ -214,19 +224,17 @@ def import_identifiers(
             )
             log_run_end_message()
             return
-
         api = create_api(session=session, collection=collection)
         start_seconds = time.perf_counter()
-        total_imported_in_current_task = 0
-        while len(identifiers) > 0:
-            batch = identifiers[:batch_size]
-
+        batch = identifiers[:batch_size]
+        batch_length = len(batch)
+        if batch_length > 0:
             try:
                 for metadata, circulation in api.availability_by_title_ids(
                     title_ids=batch
                 ):
                     process_book(task, session, api, metadata, circulation)
-            except (ObjectDeletedError, StaleDataError) as e:
+            except (ObjectDeletedError, StaleDataError, OperationalError) as e:
                 wait_time = exponential_backoff(task.request.retries)
                 task.log.exception(
                     f"Something unexpected went wrong while processing a batch of titles for collection "
@@ -234,33 +242,16 @@ def import_identifiers(
                 )
                 raise task.retry(countdown=wait_time)
 
-            batch_length = len(batch)
-            task.log.info(
-                f"Imported {batch_length} identifiers for collection ({collection_name}, id={collection_id})"
-            )
-            total_imported_in_current_task += batch_length
-            task.log.info(
-                f"Total imported {total_imported_in_current_task} identifiers in current task for collection ({collection_name}, id={collection_id})"
-            )
+        # measure elapsed seconds
+        elapsed_seconds = time.perf_counter() - start_seconds
 
-            # remove identifiers processed in previous batch
-            identifiers = identifiers[len(batch) :]
-            identifiers_list_length = len(identifiers)
-            # measure elapsed seconds
-            elapsed_seconds = time.perf_counter() - start_seconds
+        # remove identifiers processed in previous batch
+        identifiers = identifiers[len(batch) :]
+        processed_count += batch_length
 
-            if elapsed_seconds > target_max_execution_time_in_seconds:
-                task.log.info(
-                    f"Execution time exceeded max allowable seconds (max={target_max_execution_time_in_seconds}): "
-                    f"elapsed seconds={elapsed_seconds}"
-                )
-                break
-
-    processed_count += total_imported_in_current_task
-
-    task.log.info(
-        f"Imported {processed_count} identifiers in run for collection ({collection_name}, id={collection_id})"
-    )
+        task.log.info(
+            f'Batch of {batch_length} identifiers for collection (name="{collection_name}", id={collection_id}) imported in {elapsed_seconds} seconds.'
+        )
 
     if len(identifiers) > 0:
         task.log.info(
@@ -325,23 +316,41 @@ def get_collections_by_protocol(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def reap_all_collections(task: Task) -> None:
+def reap_all_collections(
+    task: Task, sub_task_execution_interval_in_secs: int = 10
+) -> None:
     """
     A shared task that  kicks off a reap collection task for each Axis 360 collection.
     """
+
+    count = 0
     with task.session() as session:
         for collection in get_collections_by_protocol(task, session, Axis360API):
-            task.log.info(
-                f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
+
+            # since collections will likely have overlapping identifiers, minimize the possibility
+            # of deadlocks by staggering the execution of the list_identifiers_for_import task
+            # by sub_task_execution_interval_in_secs.
+            eta = utc_now() + timedelta(
+                seconds=(sub_task_execution_interval_in_secs * count)
             )
-            reap_collection.delay(collection_id=collection.id)
+
+            task.log.info(
+                f'Queued collection("{collection.name}" [id={collection.id}] for reaping at {eta}.'
+            )
+            reap_collection.apply_async(
+                kwargs={"collection_id": collection.id}, eta=eta
+            )
+            count += 1
 
         task.log.info(f"Finished queuing reap collection tasks.")
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_collection(
-    task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
+    task: Task,
+    collection_id: int,
+    offset: int = 0,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> None:
     """
     Update the license pools associated with a subset of identifiers in a collection

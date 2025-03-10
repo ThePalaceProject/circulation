@@ -79,7 +79,10 @@ def test_import_all_collections(
     with patch.object(
         axis, "list_identifiers_for_import"
     ) as mock_list_identifiers_for_import:
-        import_all_collections.delay().wait()
+        # turn off subtask execution interval.
+        import_all_collections.apply_async(
+            kwargs={"sub_task_execution_interval_in_secs": 0}
+        ).wait()
 
         assert mock_list_identifiers_for_import.apply_async.call_count == 1
         assert (
@@ -217,7 +220,10 @@ def test_import_items(
         f"Finished importing identifiers for collection ({collection.name}, id={collection.id})"
         in caplog.text
     )
-    assert f"Imported {len(title_ids)} identifiers" in caplog.text
+    assert (
+        f'Batch of 2 identifiers for collection (name="{collection.name}", '
+        f"id={collection.id}) imported"
+    ) in caplog.text
 
 
 def test_import_identifiers_with_requeue(
@@ -248,7 +254,6 @@ def test_import_identifiers_with_requeue(
             identifiers=identifiers,
             collection_id=collection.id,
             batch_size=1,
-            target_max_execution_time_in_seconds=0,
         ).wait()
 
     assert mock_api.availability_by_title_ids.call_count == 2
@@ -277,12 +282,17 @@ def test_reap_all_collections(
     db.default_collection()
     collection2 = db.collection(name="test_collection", protocol=Axis360API.label())
     with patch.object(axis, "reap_collection") as mock_reap_collection:
-        reap_all_collections.delay().wait()
+        reap_all_collections.apply_async(
+            kwargs={"sub_task_execution_interval_in_secs": 0}
+        ).wait()
 
-        assert mock_reap_collection.delay.call_count == 1
-        assert mock_reap_collection.delay.call_args_list[0].kwargs == {
-            "collection_id": collection2.id,
-        }
+        assert mock_reap_collection.apply_async.call_count == 1
+        assert (
+            mock_reap_collection.apply_async.call_args_list[0].kwargs["kwargs"][
+                "collection_id"
+            ]
+            == collection2.id
+        )
         assert "Finished queuing reap collection tasks" in caplog.text
 
 
