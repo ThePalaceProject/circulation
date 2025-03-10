@@ -1,16 +1,12 @@
 # CirculationEvent
 from __future__ import annotations
 
-import datetime
-import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
-from sqlalchemy.orm import Mapped, Session, relationship
+from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
-from palace.manager.sqlalchemy.util import get_one_or_create
-from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.library import Library
@@ -126,46 +122,3 @@ class CirculationEvent(Base):
 
     # The time format used when exporting to JSON.
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%S+00:00"
-
-    @classmethod
-    def log(
-        cls,
-        _db: Session,
-        license_pool: LicensePool | None,
-        event_name: str,
-        old_value: int | None,
-        new_value: int | None,
-        start: datetime.datetime | None = None,
-        end: datetime.datetime | None = None,
-        library: Library | None = None,
-        location: str | None = None,
-    ) -> tuple[CirculationEvent, bool]:
-        """Log a CirculationEvent to the database, assuming it
-        hasn't already been recorded.
-        """
-        if new_value is None or old_value is None:
-            delta = None
-        else:
-            delta = new_value - old_value
-        if not start:
-            start = utc_now()
-        if not end:
-            end = start
-        event, was_new = get_one_or_create(
-            _db,
-            CirculationEvent,
-            license_pool=license_pool,
-            type=event_name,
-            start=start,
-            library=library,
-            create_method_kwargs=dict(
-                old_value=old_value,
-                new_value=new_value,
-                delta=delta,
-                end=end,
-                location=location,
-            ),
-        )
-        if was_new:
-            logging.info("EVENT %s %s=>%s", event_name, old_value, new_value)
-        return event, was_new

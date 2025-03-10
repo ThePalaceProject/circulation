@@ -1,202 +1,35 @@
 from __future__ import annotations
 
-import datetime
-import json
 import random
 import string
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from sqlalchemy.orm import Session
 
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.service.analytics.local import LocalAnalyticsProvider
+from palace.manager.service.analytics.eventdata import AnalyticsEventData
+from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Patron
 
 if TYPE_CHECKING:
     from palace.manager.service.storage.s3 import S3Service
 
 
-class S3AnalyticsProvider(LocalAnalyticsProvider):
+class S3AnalyticsProvider(AnalyticsProvider):
     """Analytics provider storing data in a S3 bucket."""
 
     def __init__(self, s3_service: S3Service | None):
         self.s3_service = s3_service
 
-    @staticmethod
-    def _create_event_object(
-        library: Library,
-        license_pool: LicensePool | None,
-        event_type: str,
-        time: datetime.datetime,
-        old_value: int | None = None,
-        new_value: int | None = None,
-        neighborhood: str | None = None,
-        user_agent: str | None = None,
-        patron: Patron | None = None,
-    ) -> dict[str, Any]:
-        """Create a Python dict containing required information about the event.
-
-        :param library: Library associated with the event
-
-        :param license_pool: License pool associated with the event
-
-        :param event_type: Type of the event
-
-        :param time: Event's timestamp
-
-        :param old_value: Old value of the metric changed by the event
-
-        :param new_value: New value of the metric changed by the event
-
-        :param neighborhood: Geographic location of the event
-
-        :param user_agent: the user agent string of the caller
-
-        :return: Python dict containing required information about the event
-        """
-        start = time
-        if not start:
-            start = datetime.datetime.utcnow()
-        end = start
-
-        if new_value is None or old_value is None:
-            delta = None
-        else:
-            delta = new_value - old_value
-
-        data_source = license_pool.data_source if license_pool else None
-        identifier = license_pool.identifier if license_pool else None
-        collection = license_pool.collection if license_pool else None
-        work = license_pool.work if license_pool else None
-        edition = work.presentation_edition if work else None
-        if not edition and license_pool:
-            edition = license_pool.presentation_edition
-
-        event = {
-            "type": event_type,
-            "start": start,
-            "end": end,
-            "library_id": library.id,
-            "library_name": library.name,
-            "library_short_name": library.short_name,
-            "old_value": old_value,
-            "new_value": new_value,
-            "delta": delta,
-            "location": neighborhood,
-            "license_pool_id": license_pool.id if license_pool else None,
-            "publisher": edition.publisher if edition else None,
-            "imprint": edition.imprint if edition else None,
-            "issued": edition.issued if edition else None,
-            "published": (
-                datetime.datetime.combine(
-                    edition.published, datetime.datetime.min.time()
-                )
-                if edition and edition.published
-                else None
-            ),
-            "medium": edition.medium if edition else None,
-            "collection": collection.name if collection else None,
-            "identifier_type": identifier.type if identifier else None,
-            "identifier": identifier.identifier if identifier else None,
-            "data_source": data_source.name if data_source else None,
-            "distributor": data_source.name if data_source else None,
-            "audience": work.audience if work else None,
-            "fiction": work.fiction if work else None,
-            "summary_text": work.summary_text if work else None,
-            "quality": work.quality if work else None,
-            "rating": work.rating if work else None,
-            "popularity": work.popularity if work else None,
-            "genre": (
-                ", ".join(map(lambda genre: genre.name, work.genres)) if work else None
-            ),
-            "availability_time": (
-                license_pool.availability_time if license_pool else None
-            ),
-            "licenses_owned": license_pool.licenses_owned if license_pool else None,
-            "licenses_available": (
-                license_pool.licenses_available if license_pool else None
-            ),
-            "licenses_reserved": (
-                license_pool.licenses_reserved if license_pool else None
-            ),
-            "patrons_in_hold_queue": (
-                license_pool.patrons_in_hold_queue if license_pool else None
-            ),
-            # TODO: We no longer support self-hosted books, so this should always be False.
-            #  this value is still included in the response for backwards compatibility,
-            #  but should be removed in a future release.
-            "self_hosted": False,
-            "title": work.title if work else None,
-            "author": work.author if work else None,
-            "series": work.series if work else None,
-            "series_position": work.series_position if work else None,
-            "language": work.language if work else None,
-            "open_access": license_pool.open_access if license_pool else None,
-            "user_agent": user_agent,
-            "patron_uuid": str(patron.uuid) if patron else None,
-        }
-
-        return event
-
-    def collect_event(
+    def collect(
         self,
-        library: Library,
-        license_pool: LicensePool | None,
-        event_type: str,
-        time: datetime.datetime,
-        old_value: int | None = None,
-        new_value: int | None = None,
-        user_agent: str | None = None,
-        patron: Patron | None = None,
-        neighborhood: str | None = None,
+        event: AnalyticsEventData,
+        session: Session | None = None,
     ) -> None:
-        """Log the event using the appropriate for the specific provider's mechanism.
-
-        :param library: Library associated with the event
-        :type library: core.model.library.Library
-
-        :param license_pool: License pool associated with the event
-        :type license_pool: core.model.licensing.LicensePool
-
-        :param event_type: Type of the event
-        :type event_type: str
-
-        :param time: Event's timestamp
-        :type time: datetime.datetime
-
-        :param old_value: Old value of the metric changed by the event
-        :type old_value: Any
-
-        :param new_value: New value of the metric changed by the event
-        :type new_value: Any
-
-        :param user_agent: The user_agent of the caller.
-        :type user_agent:  str
-
-        :param patron: The patron associated with the event, where applicable
-        :type patron: Patron
-        """
-
-        event = self._create_event_object(
-            library,
-            license_pool,
-            event_type,
-            time,
-            old_value,
-            new_value,
-            user_agent=user_agent,
-            patron=patron,
-            neighborhood=neighborhood,
-        )
-        content = json.dumps(
-            event,
-            default=str,
-            ensure_ascii=True,
-        )
+        content = event.model_dump_json()
 
         storage = self._get_storage()
-        analytics_file_key = self._get_file_key(library, license_pool, event_type, time)
+        analytics_file_key = self._get_file_key(event)
 
         storage.store(
             analytics_file_key,
@@ -206,31 +39,24 @@ class S3AnalyticsProvider(LocalAnalyticsProvider):
 
     def _get_file_key(
         self,
-        library: Library,
-        license_pool: LicensePool | None,
-        event_type: str,
-        end_time: datetime.datetime,
-        start_time: datetime.datetime | None = None,
+        event: AnalyticsEventData,
     ) -> str:
-        """The path to the analytics data file for the given library, license
-        pool and date range."""
-        root = library.short_name
-        if start_time:
-            time_part = str(start_time) + "-" + str(end_time)
-        else:
-            time_part = str(end_time)
+        """The path to the analytics data file."""
+        root = event.library_short_name
+        time_part = str(event.start)
 
         # ensure the uniqueness of file name (in case of overlapping events)
-        collection = license_pool.collection_id if license_pool else "NONE"
+        collection = event.collection_id if event.collection_id else "NONE"
         random_string = "".join(random.choices(string.ascii_lowercase, k=10))
-        file_name = "-".join([time_part, event_type, str(collection), random_string])
+        file_name = "-".join([time_part, event.type, str(collection), random_string])
+
         # nest file in directories that allow for easy purging by year, month or day
         return "/".join(
             [
                 str(root),
-                str(end_time.year),
-                str(end_time.month),
-                str(end_time.day),
+                str(event.start.year),
+                str(event.start.month),
+                str(event.start.day),
                 file_name + ".json",
             ]
         )
