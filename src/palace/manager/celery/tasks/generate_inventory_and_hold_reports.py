@@ -241,13 +241,13 @@ class GenerateInventoryAndHoldsReportsJob(Job):
             JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
             JOIN integration_library_configurations il ON ic.id = il.parent_id
             JOIN libraries lib ON il.library_id = lib.id
-            LEFT JOIN (
+            LEFT OUTER JOIN (
                 SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
                 FROM genres g
                 JOIN workgenres wg ON g.id = wg.genre_id
                 GROUP BY wg.work_id
             ) wg ON w.id = wg.work_id
-            LEFT JOIN (
+            LEFT OUTER JOIN (
                 SELECT lp.presentation_edition_id, p.library_id, COUNT(ln.id) AS active_loan_count
                 FROM loans ln
                 JOIN licensepools lp ON ln.license_pool_id = lp.id
@@ -263,7 +263,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 JOIN collections c ON i.id = c.integration_configuration_id
                 GROUP BY ilc.parent_id
             ) collection_sharing ON ic.id = collection_sharing.parent_id
-            LEFT JOIN (
+            LEFT OUTER JOIN (
                 SELECT license_pool_id, checkouts_left, expires, terms_concurrency
                 FROM licenses
                 WHERE status = 'available'
