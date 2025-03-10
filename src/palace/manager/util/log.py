@@ -113,3 +113,12 @@ class LoggerMixin:
         so it is easier to access the logger from an instance.
         """
         return self.logger()
+
+
+def pluralize(count: int, singular: str, plural: str | None = None) -> str:
+    """
+    Return a string that pluralizes the given word based on the count.
+    """
+    if plural is None:
+        plural = singular + "s"
+    return f"{count} {singular if count == 1 else plural}"

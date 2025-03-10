@@ -30,9 +30,6 @@ HOME=/var/www/circulation
 # those works.
 30 22 * * * root bin/run work_classify_unchecked_subjects >> /var/log/cron.log 2>&1
 
-# Remove miscellaneous expired things from the database
-0 2 * * * root bin/run database_reaper >> /var/log/cron.log 2>&1
-
 # Sync a library's collection with NoveList
 0 0 * * 0 root bin/run -d 60 novelist_update >> /var/log/cron.log 2>&1
 

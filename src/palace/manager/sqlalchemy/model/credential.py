@@ -30,7 +30,9 @@ class Credential(Base):
     data_source: Mapped[DataSource | None] = relationship(
         "DataSource", back_populates="credentials"
     )
-    patron_id = Column(Integer, ForeignKey("patrons.id"), index=True)
+    patron_id = Column(
+        Integer, ForeignKey("patrons.id", ondelete="CASCADE"), index=True
+    )
     patron: Mapped[Patron | None] = relationship("Patron", back_populates="credentials")
     collection_id = Column(Integer, ForeignKey("collections.id"), index=True)
     collection: Mapped[Collection | None] = relationship(
