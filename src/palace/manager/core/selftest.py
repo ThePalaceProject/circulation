@@ -31,7 +31,7 @@ class SelfTestResult:
     HasSelfTest.run_self_tests() returns a list of these
     """
 
-    def __init__(self, name: str | None):
+    def __init__(self, name: str) -> None:
         # Name of the test.
         self.name = name
 

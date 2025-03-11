@@ -6,8 +6,9 @@ import json
 import logging
 import os
 import random
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
@@ -53,7 +54,7 @@ from palace.manager.api.overdrive import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.metadata_layer import LinkData, TimestampData
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
@@ -396,7 +397,7 @@ class TestOverdriveAPI:
 
         # But trying to access the collection token will cause it.
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            api.collection_token()
+            api.collection_token
         assert (
             "Overdrive credentials are valid but could not fetch library: Some message."
             in str(excinfo.value)
@@ -582,7 +583,7 @@ class TestOverdriveAPI:
             extractor = MockExtractor()
             fixture.api.queue_response(200, content=content)
             result = fixture.api._get_book_list_page(
-                "http://first-page/", "some-rel", extractor
+                "http://first-page/", "some-rel", extractor  # type: ignore[arg-type]
             )
 
             # A single request was made to the requested page.
@@ -927,8 +928,8 @@ class TestOverdriveAPI:
                 self.extract_expiration_date_called_with.append(loan)
                 return self.MOCK_EXPIRATION_DATE
 
-        patron = object()
-        pin = object()
+        patron = MagicMock()
+        pin = MagicMock()
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
         identifier = pool.identifier
         api = Mock(db.session, overdrive_api_fixture.collection)
@@ -1049,8 +1050,8 @@ class TestOverdriveAPI:
 
         # First, test the case where no notification email address is
         # provided and there is no default.
-        patron = object()
-        pin = object()
+        patron = MagicMock()
+        pin = MagicMock()
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
         api = Mock(db.session, overdrive_api_fixture.collection)
         response = api.place_hold(patron, pin, pool, None)
@@ -1157,7 +1158,7 @@ class TestOverdriveAPI:
         # we're going to return a HoldInfo object and potentially make
         # another API request.
         patron = db.patron()
-        pin = object()
+        pin = MagicMock()
         licensepool = db.licensepool(edition=None)
 
         # Finally, let's test the case where there was no hold and now
@@ -1192,7 +1193,7 @@ class TestOverdriveAPI:
         # perform_early_return; we just call patron_request.
         pool = db.licensepool(None)
         patron = db.patron()
-        pin = object()
+        pin = MagicMock()
         expect_url = overdrive.endpoint(
             overdrive.CHECKOUT_ENDPOINT, overdrive_id=pool.identifier.identifier
         )
@@ -1271,7 +1272,7 @@ class TestOverdriveAPI:
         # This patron has a loan.
         pool = db.licensepool(None)
         patron = db.patron()
-        pin = object()
+        pin = MagicMock()
         loan, ignore = pool.loan_to(patron)
 
         # The loan has been fulfilled and now the patron wants to
@@ -1739,6 +1740,25 @@ class TestOverdriveAPI:
         assert 1 == pool.licenses_available
         assert 0 == pool.patrons_in_hold_queue
         assert pool.last_checked is not None
+
+    def test_collection_token(self, db: DatabaseTransactionFixture) -> None:
+        api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
+        mock_get_library = MagicMock(return_value={"collectionToken": "abc"})
+        api.get_library = mock_get_library
+
+        # If the collection token is set, we just return that
+        api._collection_token = "123"
+        assert api.collection_token == "123"
+        mock_get_library.assert_not_called()
+
+        # If its not we get it from the get_library method
+        api._collection_token = None
+        assert api.collection_token == "abc"
+        mock_get_library.assert_called_once()
+
+        # Calling again returns the cached value
+        assert api.collection_token == "abc"
+        mock_get_library.assert_called_once()
 
     def test_circulation_lookup(self, overdrive_api_fixture: OverdriveAPIFixture):
         """Test the method that actually looks up Overdrive circulation
@@ -2966,10 +2986,10 @@ class TestOverdriveCirculationMonitor:
         monitor = MockMonitor(
             db.session,
             overdrive_api_fixture.collection,
-            api_class=MockAPI,
+            api_class=MockAPI,  # type: ignore[arg-type]
             analytics=MockAnalytics(),
         )
-        api = monitor.api
+        api = cast(MockAPI, monitor.api)
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
@@ -2982,15 +3002,15 @@ class TestOverdriveCirculationMonitor:
         lp1.last_checked = utc_now()
         lp2 = db.licensepool(None)
         lp3 = db.licensepool(None)
-        lp4 = object()
+        lp4 = MagicMock()
         api.licensepools.append((lp1, True, True))
         api.licensepools.append((lp2, False, False))
         api.licensepools.append((lp3, False, True))
         api.licensepools.append(lp4)
 
         progress = TimestampData()
-        start = object()
-        cutoff = object()
+        start = MagicMock()
+        cutoff = MagicMock()
         monitor.catch_up_from(start, cutoff, progress)
 
         # The monitor called recently_changed_ids with the start and
@@ -3074,10 +3094,10 @@ class TestOverdriveCirculationMonitor:
         monitor = OverdriveCirculationMonitor(
             db.session,
             overdrive_api_fixture.collection,
-            api_class=MockAPI,
+            api_class=MockAPI,  # type: ignore[arg-type]
             analytics=MockAnalytics(),
         )
-        api = monitor.api
+        api = cast(MockAPI, monitor.api)
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
@@ -3092,8 +3112,8 @@ class TestOverdriveCirculationMonitor:
         api.licensepools.append((lp3, False, True))
 
         progress = TimestampData()
-        start = object()
-        cutoff = object()
+        start = MagicMock()
+        cutoff = MagicMock()
         monitor.catch_up_from(start, cutoff, progress)
 
         assert api.tries["1"] == 2
@@ -3133,11 +3153,11 @@ class TestOverdriveCirculationMonitor:
         monitor = OverdriveCirculationMonitor(
             db.session,
             overdrive_api_fixture.collection,
-            api_class=MockAPI,
+            api_class=MockAPI,  # type: ignore[arg-type]
             analytics=MockAnalytics(),
         )
 
-        api = monitor.api
+        api = cast(MockAPI, monitor.api)
 
         # A MockAnalytics object was created and is ready to receive analytics
         # events.
@@ -3152,8 +3172,8 @@ class TestOverdriveCirculationMonitor:
         api.licensepools.append((lp3, False, True))
 
         progress = TimestampData()
-        start = object()
-        cutoff = object()
+        start = MagicMock()
+        cutoff = MagicMock()
         monitor.catch_up_from(start, cutoff, progress)
 
         assert api.tries["1"] == 1
@@ -3195,10 +3215,10 @@ class TestOverdriveCirculationMonitor:
         monitor = OverdriveCirculationMonitor(
             db.session,
             overdrive_api_fixture.collection,
-            api_class=MockAPI,
+            api_class=MockAPI,  # type: ignore[arg-type]
         )
 
-        api = monitor.api
+        api = cast(MockAPI, monitor.api)
 
         lp1 = db.licensepool(None)
         lp1.last_checked = utc_now()
@@ -3207,8 +3227,8 @@ class TestOverdriveCirculationMonitor:
         api.licensepools.append((lp2, False, False))
 
         progress = TimestampData()
-        start = object()
-        cutoff = object()
+        start = MagicMock()
+        cutoff = MagicMock()
         monitor.catch_up_from(start, cutoff, progress)
 
         for b in [book1, book2]:
@@ -3230,7 +3250,9 @@ class TestNewTitlesOverdriveCollectionMonitor:
         monitor = NewTitlesOverdriveCollectionMonitor(
             db.session, overdrive_api_fixture.collection, api_class=MockAPI
         )
-        assert "all of the ids" == monitor.recently_changed_ids(object(), object())
+        assert "all of the ids" == monitor.recently_changed_ids(
+            MagicMock(), MagicMock()
+        )
 
     def test_should_stop(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
@@ -3246,25 +3268,25 @@ class TestNewTitlesOverdriveCollectionMonitor:
 
         # If the monitor has never run before, we need to keep going
         # until we run out of books.
-        assert False == m(None, object(), object())
-        assert False == m(monitor.NEVER, object(), object())
+        assert False == m(None, MagicMock(), MagicMock())
+        assert False == m(monitor.NEVER, MagicMock(), MagicMock())  # type: ignore[arg-type]
 
         # If information is missing or invalid, we assume that we
         # should keep going.
         start = datetime_utc(2018, 1, 1)
-        assert False == m(start, {}, object())
-        assert False == m(start, {"date_added": None}, object())
-        assert False == m(start, {"date_added": "Not a date"}, object())
+        assert False == m(start, {}, MagicMock())
+        assert False == m(start, {"date_added": None}, MagicMock())
+        assert False == m(start, {"date_added": "Not a date"}, MagicMock())
 
         # Here, we're actually comparing real dates, using the date
         # format found in the Overdrive API. A date that's after the
         # `start` date means we should keep going backwards. A date before
         # the `start` date means we should stop.
         assert False == m(
-            start, {"date_added": "2019-07-12T11:06:38.157+01:00"}, object()
+            start, {"date_added": "2019-07-12T11:06:38.157+01:00"}, MagicMock()
         )
         assert True == m(
-            start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, object()
+            start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, MagicMock()
         )
 
     def test_should_stop_with_consecutive_data_threshold_gt_zero(
@@ -3286,18 +3308,18 @@ class TestNewTitlesOverdriveCollectionMonitor:
 
         # in scope - should continue
         in_scope_properties = {"date_added": "2019-07-12T11:06:38.157+01:00"}
-        assert False == m(start, in_scope_properties, object())
+        assert False == m(start, in_scope_properties, MagicMock())
 
         assert "Date added: 2019-07-12 11:06:38.157000+01:00" in caplog.messages[-1]
 
         # out of scope but counter threshold not yet exceeded: should continue
         out_of_scope_properties = {"date_added": "2017-07-12T11:06:38.157-04:00"}
-        assert not m(start, out_of_scope_properties, object())
+        assert not m(start, out_of_scope_properties, MagicMock())
 
         assert "Date added: 2017-07-12 11:06:38.157000-04:00" in caplog.messages[-1]
 
         # in scope - should continue, expect reset
-        assert not m(start, in_scope_properties, object())
+        assert not m(start, in_scope_properties, MagicMock())
 
         assert (
             "We encountered a title that was added within our scope that "
@@ -3305,10 +3327,10 @@ class TestNewTitlesOverdriveCollectionMonitor:
         ) in caplog.messages[-1]
 
         # out of scope but counter threshold not yet exceeded: should continue
-        assert not m(start, out_of_scope_properties, object())
+        assert not m(start, out_of_scope_properties, MagicMock())
 
         # second out of scope:  threshold exceeded:  should stop
-        assert m(start, out_of_scope_properties, object())
+        assert m(start, out_of_scope_properties, MagicMock())
 
         assert (
             "Max consecutive out of scope date threshold of 1 breached!"
@@ -3327,14 +3349,14 @@ class TestNewTitlesOverdriveCollectionMonitor2:
 
         # This book hasn't been changed, but we're under the limit, so we should
         # keep going.
-        assert False == m(object(), object(), False)
+        assert False == m(MagicMock(), MagicMock(), False)
         assert 1 == monitor.consecutive_unchanged_books
 
-        assert False == m(object(), object(), False)
+        assert False == m(MagicMock(), MagicMock(), False)
         assert 2 == monitor.consecutive_unchanged_books
 
         # This book has changed, so our counter gets reset.
-        assert False == m(object(), object(), True)
+        assert False == m(MagicMock(), MagicMock(), True)
         assert 0 == monitor.consecutive_unchanged_books
 
         # When we're at the limit, and another book comes along that hasn't
@@ -3342,7 +3364,7 @@ class TestNewTitlesOverdriveCollectionMonitor2:
         monitor.consecutive_unchanged_books = (
             monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS
         )
-        assert True == m(object(), object(), False)
+        assert True == m(MagicMock(), MagicMock(), False)
         assert (
             monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS + 1
             == monitor.consecutive_unchanged_books
@@ -3356,11 +3378,12 @@ class TestOverdriveFormatSweep:
         monitor = OverdriveFormatSweep(
             db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
         )
-        monitor.api.queue_collection_token()
+        mock_api = cast(MockOverdriveAPI, monitor.api)
+        mock_api.queue_collection_token()
         # We're not testing that the work actually gets done (that's
         # tested in test_update_formats), only that the monitor
         # implements the expected process_item API without crashing.
-        monitor.api.queue_response(404)
+        mock_api.queue_response(404)
         edition, pool = db.edition(with_license_pool=True)
         monitor.process_item(pool.identifier)
 
@@ -3380,8 +3403,9 @@ class TestOverdriveFormatSweep:
         monitor = OverdriveFormatSweep(
             db.session, overdrive_api_fixture.collection, api_class=MockApi
         )
-        monitor.api.queue_collection_token()
-        monitor.api.queue_response(404)
+        mock_api = cast(MockApi, monitor.api)
+        mock_api.queue_collection_token()
+        mock_api.queue_response(404)
 
         edition = db.edition()
         collection1 = db.collection(name="Collection 1")
@@ -3391,7 +3415,7 @@ class TestOverdriveFormatSweep:
         pool2 = db.licensepool(edition, collection=collection2)
 
         monitor.process_item(pool1.identifier)
-        assert 1 == monitor.api.update_format_calls
+        assert 1 == mock_api.update_format_calls
 
 
 class TestReaper:
@@ -3487,12 +3511,9 @@ class TestOverdriveRepresentationExtractor:
         assert 10 == consortial_data.licenses_owned
         assert 10 == consortial_data.licenses_available
 
-        class MockAPI:
-            # Pretend to be an API for an Overdrive Advantage collection with
-            # library ID 61.
-            advantage_library_id = 61
-
-        extractor = OverdriveRepresentationExtractor(MockAPI())
+        # Pretend to be an API for an Overdrive Advantage collection with
+        # library ID 61.
+        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=61))
         advantage_data = extractor.book_info_to_circulation(info)
         assert 1 == advantage_data.licenses_owned
         assert 1 == advantage_data.licenses_available
@@ -3510,22 +3531,14 @@ class TestOverdriveRepresentationExtractor:
         # TODO: It would probably be better not to return a
         # CirculationData object at all, but this shouldn't happen in
         # a real scenario.
-        class MockAPI2:
-            # Pretend to be an API for an Overdrive Advantage collection with
-            # library ID 62.
-            advantage_library_id = 62
-
-        extractor = OverdriveRepresentationExtractor(MockAPI2())
+        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=62))
         advantage_data = extractor.book_info_to_circulation(info)
         assert 0 == advantage_data.licenses_owned
         assert 0 == advantage_data.licenses_available
 
-        class MockAPI3:
-            # Pretend to be an API for an Overdrive Advantage collection with
-            # library ID 63 which contains shared copies.
-            advantage_library_id = 63
-
-        extractor = OverdriveRepresentationExtractor(MockAPI3())
+        # Pretend to be an API for an Overdrive Advantage collection with
+        # library ID 63 which contains shared copies.
+        extractor = OverdriveRepresentationExtractor(MagicMock(advantage_library_id=63))
         advantage_data = extractor.book_info_to_circulation(info)
         # since these copies are shared and counted as part of the main
         # context we do not count them here.
@@ -3544,7 +3557,10 @@ class TestOverdriveRepresentationExtractor:
         # was that wasn't found.
         extractor = OverdriveRepresentationExtractor(fixture.api)
         m = extractor.book_info_to_circulation
-        assert None == m(info)
+        with pytest.raises(
+            PalaceValueError, match="Book must have an id to be processed"
+        ):
+            m(info)
 
         # However, if an ID was added to `info` ahead of time (as the
         # circulation code does), we do know, and we can create a
@@ -3716,7 +3732,7 @@ class TestOverdriveRepresentationExtractor:
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
-        epub_sample, manifest_sample = sorted(samples, key=lambda x: x.media_type)
+        epub_sample, manifest_sample = sorted(samples, key=lambda x: x.media_type or "")
 
         # Here's the direct download.
         assert (
@@ -3755,7 +3771,9 @@ class TestOverdriveRepresentationExtractor:
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
         grade_levels = sorted(
-            x.identifier for x in metadata.subjects if x.type == Subject.GRADE_LEVEL
+            x.identifier or "fail"
+            for x in metadata.subjects
+            if x.type == Subject.GRADE_LEVEL
         )
         assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
@@ -3857,7 +3875,7 @@ class TestOverdriveAdvantageAccount:
         """
         fixture = overdrive_api_fixture
         fixture.api.queue_collection_token()
-        assert [] == fixture.api.get_advantage_accounts()
+        assert [] == list(fixture.api.get_advantage_accounts())
 
     def test_from_representation(self, overdrive_api_fixture: OverdriveAPIFixture):
         """Test the creation of OverdriveAdvantageAccount objects
@@ -3925,6 +3943,7 @@ class TestOverdriveAdvantageAccount:
         assert f"{parent.name} / {account.name}" == collection.name
 
 
+@dataclass
 class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
@@ -3935,13 +3954,12 @@ class OverdriveBibliographicCoverageProviderFixture:
 def overdrive_biblio_provider_fixture(
     overdrive_api_fixture: OverdriveAPIFixture,
 ) -> OverdriveBibliographicCoverageProviderFixture:
-    fix = OverdriveBibliographicCoverageProviderFixture()
-    fix.overdrive = overdrive_api_fixture
-    fix.provider = OverdriveBibliographicCoverageProvider(
+    overdrive = overdrive_api_fixture
+    provider = OverdriveBibliographicCoverageProvider(
         overdrive_api_fixture.collection, api_class=MockOverdriveAPI
     )
-    fix.api = fix.provider.api
-    return fix
+    api = cast(MockOverdriveAPI, provider.api)
+    return OverdriveBibliographicCoverageProviderFixture(overdrive, provider, api)
 
 
 class TestOverdriveBibliographicCoverageProvider:
