@@ -1741,6 +1741,25 @@ class TestOverdriveAPI:
         assert 0 == pool.patrons_in_hold_queue
         assert pool.last_checked is not None
 
+    def test_collection_token(self, db: DatabaseTransactionFixture) -> None:
+        api = OverdriveAPI(db.session, db.collection(protocol=OverdriveAPI))
+        mock_get_library = MagicMock(return_value={"collectionToken": "abc"})
+        api.get_library = mock_get_library
+
+        # If the collection token is set, we just return that
+        api._collection_token = "123"
+        assert api.collection_token == "123"
+        mock_get_library.assert_not_called()
+
+        # If its not we get it from the get_library method
+        api._collection_token = None
+        assert api.collection_token == "abc"
+        mock_get_library.assert_called_once()
+
+        # Calling again returns the cached value
+        assert api.collection_token == "abc"
+        mock_get_library.assert_called_once()
+
     def test_circulation_lookup(self, overdrive_api_fixture: OverdriveAPIFixture):
         """Test the method that actually looks up Overdrive circulation
         information.
