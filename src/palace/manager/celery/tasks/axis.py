@@ -179,7 +179,7 @@ def import_identifiers(
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> None:
     """
-    This method creates new or updates new editions and license pools for each identifier in the list of identifiers.
+    This method creates or updates editions and license pools for each identifier in the list of identifiers.
     It will query the axis availability api in batches of {batch_size} IDs and process each result in a single database
     transaction.  If it has not finished processing the list of identifiers, it will requeue the task with the
     remaining unprocessed identifiers.
@@ -351,8 +351,9 @@ def reap_collection(
     task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
     """
-    Update the license pools associated with a subset of identifiers in a collection
-    defined by the offset and batch size.
+    Update the editions and license pools (and in the process reap where appropriate)
+    associated with a collection.  This task will process {batch_size} books (each in
+    a separate task) and requeue itself for further processing.
     """
 
     start_seconds = time.perf_counter()
@@ -364,8 +365,6 @@ def reap_collection(
             return
 
         collection_name = collection.name
-
-        api = create_api(session=session, collection=collection)
 
         identifiers = (
             session.scalars(
@@ -383,13 +382,13 @@ def reap_collection(
     for identifier in identifiers:
         with task.transaction() as session:
             collection = Collection.by_id(session, collection_id)
-            api = create_api(session=session, collection=collection)
+            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
             api.update_licensepools_for_identifiers(identifiers=[identifier])
 
     task.log.info(
         f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
     )
-    # Requeue at the next offset if the batch of identifiers was full otherwise do nothing since
+    # Requeue at the next offset if the batch if identifiers list was full otherwise do nothing since
     # the run is complete.
 
     task.log.info(
