@@ -72,23 +72,6 @@ class TestSimpleAuth:
         assert "barcode" == user.authorization_identifier
         assert "barcode_id" == user.permanent_id
         assert "barcode_username" == user.username
-        assert user.neighborhood is None
-
-    def test_neighborhood(
-        self,
-        create_settings: Callable[..., SimpleAuthSettings],
-        create_provider: Callable[..., SimpleAuthenticationProvider],
-    ):
-        settings = create_settings(
-            neighborhood="neighborhood",
-        )
-        provider = create_provider(settings=settings)
-
-        # User can also authenticate by their 'username'
-        user = provider.remote_authenticate("barcode_username", "pass")
-        assert isinstance(user, PatronData)
-        assert "barcode" == user.authorization_identifier
-        assert "neighborhood" == user.neighborhood
 
     def test_no_password_authentication(
         self,
@@ -162,7 +145,6 @@ class TestSimpleAuth:
         assert result.authorization_identifier == "1234"
         assert result.personal_name == "PersonalName1234"
         assert result.username == "1234_username"
-        assert result.neighborhood == None
 
         # Pass in username as identifier
         result = m("1234_username")
@@ -170,11 +152,6 @@ class TestSimpleAuth:
         assert result.authorization_identifier == "1234"
         assert result.personal_name == "PersonalName1234"
         assert result.username == "1234_username"
-        assert result.neighborhood == None
-
-        # Pass in a neighborhood.
-        result = m("1234", "Echo Park")
-        assert result.neighborhood == "Echo Park"
 
     def test_remote_patron_lookup(
         self,

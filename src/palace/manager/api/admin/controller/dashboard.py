@@ -93,14 +93,11 @@ class DashboardController(CirculationManagerController):
         # though, we should use the date provided by the user.
         date_end_label = get_date("dateEnd")
         date_end = date_end_label + timedelta(days=1)
-        locations = flask.request.args.get("locations", None)
         library = get_request_library(default=None)
         library_short_name = library.short_name if library else None
 
         analytics_exporter = analytics_exporter or LocalAnalyticsExporter()
-        data = analytics_exporter.export(
-            self._db, date_start, date_end, locations, library
-        )
+        data = analytics_exporter.export(self._db, date_start, date_end, library)
         return (
             data,
             date_start.strftime(date_format),

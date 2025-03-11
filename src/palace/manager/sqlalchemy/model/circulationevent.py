@@ -46,12 +46,10 @@ class CirculationEvent(Base):
         "Library", back_populates="circulation_events"
     )
 
-    # The geographic location associated with the event. This string
-    # may mean different things for different libraries. It might be a
-    # measurement of latitude and longitude, or it might be taken from
-    # a controlled vocabulary -- a list of library branch codes, for
-    # instance.
-    location = Column(Unicode, index=True)
+    # This column is no longer used and will be removed in a future
+    # release. Its left temporarily for backwards compatibility.
+    # TODO: Remove this column.
+    _location_deprecated = Column("location", Unicode, index=True)
 
     __table_args__ = (
         # Make it easy to list circulation events in descending
