@@ -64,7 +64,11 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
-from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.core.exceptions import (
+    BasePalaceException,
+    IntegrationException,
+    PalaceValueError,
+)
 from palace.manager.core.metadata_layer import (
     CirculationData,
     ContributorData,
@@ -1876,7 +1880,6 @@ class OverdriveAPI(
         """
         extractor = OverdriveRepresentationExtractor(self)
         circulation = extractor.book_info_to_circulation(book)
-        assert circulation is not None
         lp, circulation_changed = circulation.apply(self._db, license_pool.collection)
         if lp is not None:
             license_pool = lp
@@ -2462,7 +2465,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 processed.append(cls.overdrive_role_to_simplified_role[x])
         return processed
 
-    def book_info_to_circulation(self, book: dict[str, Any]) -> CirculationData | None:
+    def book_info_to_circulation(self, book: dict[str, Any]) -> CirculationData:
         """Note:  The json data passed into this method is from a different file/stream
         from the json data that goes into the book_info_to_metadata() method.
         """
@@ -2481,7 +2484,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         if "reserveId" in book and not "id" in book:
             book["id"] = book["reserveId"]
         if not "id" in book:
-            return None
+            self.log.error("Book has no ID: %r", book)
+            raise PalaceValueError("Book must have an id to be processed")
         overdrive_id = book["id"]
         primary_identifier = IdentifierData(Identifier.OVERDRIVE_ID, overdrive_id)
         # TODO: We might be able to use this information to avoid the

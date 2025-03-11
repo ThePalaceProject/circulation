@@ -54,7 +54,7 @@ from palace.manager.api.overdrive import (
 )
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, PalaceValueError
 from palace.manager.core.metadata_layer import LinkData, TimestampData
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
@@ -3538,7 +3538,10 @@ class TestOverdriveRepresentationExtractor:
         # was that wasn't found.
         extractor = OverdriveRepresentationExtractor(fixture.api)
         m = extractor.book_info_to_circulation
-        assert None == m(info)
+        with pytest.raises(
+            PalaceValueError, match="Book must have an id to be processed"
+        ):
+            m(info)
 
         # However, if an ID was added to `info` ahead of time (as the
         # circulation code does), we do know, and we can create a
