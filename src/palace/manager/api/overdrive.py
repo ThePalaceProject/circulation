@@ -493,7 +493,8 @@ class OverdriveAPI(
         As a side effect, this will verify that the Overdrive
         credentials are working.
         """
-        if not self._collection_token:
+        collection_token = self._collection_token
+        if not collection_token:
             library = self.get_library()
             error = library.get("errorCode")
             if error:
@@ -502,8 +503,9 @@ class OverdriveAPI(
                     "Overdrive credentials are valid but could not fetch library: %s"
                     % message
                 )
-            self._collection_token = library["collectionToken"]
-        return cast(str, self._collection_token)
+            collection_token = cast(str, library["collectionToken"])
+            self._collection_token = collection_token
+        return collection_token
 
     @property
     def source(self) -> DataSource:
