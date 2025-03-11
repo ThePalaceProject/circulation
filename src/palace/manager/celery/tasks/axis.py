@@ -380,26 +380,25 @@ def reap_collection(
             .all()
         )
 
-    with task.transaction() as session:
-        collection = Collection.by_id(session, collection_id)
-        api = create_api(session=session, collection=collection)
-        identifier_count = len(identifiers)
-        for identifier in identifiers:
+    for identifier in identifiers:
+        with task.transaction() as session:
+            collection = Collection.by_id(session, collection_id)
+            api = create_api(session=session, collection=collection)
             api.update_licensepools_for_identifiers(identifiers=[identifier])
 
     task.log.info(
-        f'Reaper updated {identifier_count} books in collection (name="{collection_name}", id={collection_id}.'
+        f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
     )
     # Requeue at the next offset if the batch of identifiers was full otherwise do nothing since
     # the run is complete.
 
     task.log.info(
-        f"reap_collection task at offset={offset} with {identifier_count} identifiers for collection "
+        f"reap_collection task at offset={offset} with {len(identifiers)} identifiers for collection "
         f'(name="{collection_name}", id={collection_id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
     )
 
-    if identifier_count >= batch_size:
-        new_offset = offset + identifier_count
+    if len(identifiers) >= batch_size:
+        new_offset = offset + len(identifiers)
 
         task.log.info(
             f"Re-queuing reap_collection task at offset={new_offset} for collection "
