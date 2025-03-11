@@ -217,7 +217,10 @@ def test_import_items(
         f"Finished importing identifiers for collection ({collection.name}, id={collection.id})"
         in caplog.text
     )
-    assert f"Imported {len(title_ids)} identifiers" in caplog.text
+    assert (
+        f"Import run complete for collection ({collection.name}, id={collection.id}:  {len(title_ids)} identifiers imported successfully"
+        in caplog.text
+    )
 
 
 def test_import_identifiers_with_requeue(
@@ -248,7 +251,6 @@ def test_import_identifiers_with_requeue(
             identifiers=identifiers,
             collection_id=collection.id,
             batch_size=1,
-            target_max_execution_time_in_seconds=0,
         ).wait()
 
     assert mock_api.availability_by_title_ids.call_count == 2
@@ -311,12 +313,15 @@ def test_reap_collection_with_requeue(
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
 
         update_license_pools = mock_api.update_licensepools_for_identifiers
-        assert update_license_pools.call_count == 2
+        assert update_license_pools.call_count == 3
 
         assert update_license_pools.call_args_list[0].kwargs == {
-            "identifiers": identifiers[0:2]
+            "identifiers": identifiers[0:1]
         }
         assert update_license_pools.call_args_list[1].kwargs == {
+            "identifiers": identifiers[1:2]
+        }
+        assert update_license_pools.call_args_list[2].kwargs == {
             "identifiers": identifiers[2:]
         }
         assert f"Re-queuing reap_collection task at offset=2" in caplog.text
