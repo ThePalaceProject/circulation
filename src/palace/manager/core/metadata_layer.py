@@ -185,11 +185,11 @@ class ContributorData(LoggerMixin):
         display_name: str | None = None,
         family_name: str | None = None,
         wikipedia_name: str | None = None,
-        roles: str | list[str] | None = None,
+        roles: str | Sequence[str] | None = None,
         lc: str | None = None,
         viaf: str | None = None,
         biography: str | None = None,
-        aliases: list[str] | None = None,
+        aliases: Sequence[str] | None = None,
         extra: dict[str, str] | None = None,
     ) -> None:
         self.sort_name = sort_name
@@ -197,14 +197,14 @@ class ContributorData(LoggerMixin):
         self.family_name = family_name
         self.wikipedia_name = wikipedia_name
         if roles is None:
-            roles = Contributor.Role.AUTHOR
-        if not isinstance(roles, list):
+            roles = [Contributor.Role.AUTHOR]
+        if isinstance(roles, str):
             roles = [roles]
-        self.roles = roles
+        self.roles = list(roles)
         self.lc = lc
         self.viaf = viaf
         self.biography = biography
-        self.aliases = aliases or []
+        self.aliases = list(aliases) if aliases is not None else []
         # extra is a dictionary of stuff like birthdates
         self.extra = extra or dict()
         # TODO:  consider if it's time for ContributorData to connect back to Contributions

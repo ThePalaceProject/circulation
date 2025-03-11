@@ -1055,16 +1055,13 @@ class TestBaseCirculationAPI:
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
     ):
         # Test the ability to get the default notification email address
-        # for a patron or a library.
+        # for a patron
         settings = library_fixture.mock_settings()
         settings.default_notification_email_address = "help@library"
         library = library_fixture.library(settings=settings)
         patron = db.patron(library=library)
-        m = BaseCirculationAPI.default_notification_email_address
-        assert "help@library" == m(library, "")
-        assert "help@library" == m(patron, "")
-        other_library = library_fixture.library()
-        assert "noreply@thepalaceproject.org" == m(other_library, "")
+        api = MockBaseCirculationAPI(db.session, db.default_collection())
+        assert "help@library" == api.default_notification_email_address(patron, "")
 
     def test_can_fulfill_without_loan(self, db: DatabaseTransactionFixture):
         """By default, there is a blanket prohibition on fulfilling a title

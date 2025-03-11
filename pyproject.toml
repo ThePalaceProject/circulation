@@ -99,6 +99,7 @@ module = [
     "palace.manager.api.metadata.*",
     "palace.manager.api.odl.*",
     "palace.manager.api.opds_for_distributors",
+    "palace.manager.api.overdrive",
     "palace.manager.api.util.flask",
     "palace.manager.core.metadata_layer",
     "palace.manager.core.opds2_import",
