@@ -145,6 +145,11 @@ class Patron(Base, RedisKeyMixin):
     # library server).
     _synchronize_annotations = Column("synchronize_annotations", Boolean, default=None)
 
+    # This column is no longer used and will be removed in a future
+    # release. Its left temporarily for backwards compatibility.
+    # TODO: Remove this column.
+    _cached_neighborhood_deprecated = Column("cached_neighborhood", Unicode, index=True)
+
     loans: Mapped[list[Loan]] = relationship(
         "Loan",
         back_populates="patron",
