@@ -176,31 +176,33 @@ def import_identifiers(
     collection_id: int,
     processed_count: int = 0,
     batch_size: int = DEFAULT_BATCH_SIZE,
-    target_max_execution_time_in_seconds: float = TARGET_MAX_EXECUTION_SECONDS,
 ) -> None:
     """
-    This method creates new or updates new editions and license pools for each identifier in the list of identifiers.
+    This method creates or updates editions and license pools for each identifier in the list of identifiers.
     It will query the axis availability api in batches of {batch_size} IDs and process each result in a single database
-    transaction.  It will continue in this way until it has finished the list or exceeded the max execution time
-    which defaults to 2 minutes.  If it has not finished in the target time, it will requeue the task with the
+    transaction.  If it has not finished processing the list of identifiers, it will requeue the task with the
     remaining unprocessed identifiers.
     """
+    count = 0
+    total_imported_in_current_task = 0
+
+    def log_run_end_message() -> None:
+        task.log.info(
+            f"Finished importing identifiers for collection ({collection_name}, id={collection_id}), "
+            f"task(id={task.request.id})"
+        )
+
+    start_seconds = time.perf_counter()
+
     with task.transaction() as session:
         collection = Collection.by_id(session, id=collection_id)
         if not collection:
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
-            return None
+            return
 
         collection_name = collection.name
 
-        def log_run_end_message() -> None:
-            task.log.info(
-                f"Finished importing identifiers for collection ({collection_name}, id={collection_id}), "
-                f"task(id={task.request.id})"
-            )
-
         if identifiers is None:
-
             task.log.info(
                 f"Identifiers list is None: the list_identifiers_for_import "
                 f"must have been locked. Ignoring import run for collection_id={collection_id}"
@@ -215,16 +217,21 @@ def import_identifiers(
             return
 
         api = create_api(session=session, collection=collection)
-        start_seconds = time.perf_counter()
-        total_imported_in_current_task = 0
-        while len(identifiers) > 0:
-            batch = identifiers[:batch_size]
 
+        identifier_batch = identifiers[:batch_size]
+        circ_data = [
+            (metadata, circulation)
+            for metadata, circulation in api.availability_by_title_ids(
+                title_ids=identifier_batch
+            )
+        ]
+
+    for metadata, circulation in circ_data:
+        with task.transaction() as session:
+            api = create_api(session=session, collection=collection)
             try:
-                for metadata, circulation in api.availability_by_title_ids(
-                    title_ids=batch
-                ):
-                    process_book(task, session, api, metadata, circulation)
+                process_book(task, session, api, metadata, circulation)
+                total_imported_in_current_task += 1
             except (ObjectDeletedError, StaleDataError) as e:
                 wait_time = exponential_backoff(task.request.retries)
                 task.log.exception(
@@ -233,37 +240,33 @@ def import_identifiers(
                 )
                 raise task.retry(countdown=wait_time)
 
-            batch_length = len(batch)
-            task.log.info(
-                f"Imported {batch_length} identifiers for collection ({collection_name}, id={collection_id})"
-            )
-            total_imported_in_current_task += batch_length
-            task.log.info(
-                f"Total imported {total_imported_in_current_task} identifiers in current task for collection ({collection_name}, id={collection_id})"
-            )
+    task.log.info(
+        f"Total imported {total_imported_in_current_task} identifiers in current task"
+        f" for collection ({collection_name}, id={collection_id})"
+    )
 
-            # remove identifiers processed in previous batch
-            identifiers = identifiers[len(batch) :]
-            identifiers_list_length = len(identifiers)
-            # measure elapsed seconds
-            elapsed_seconds = time.perf_counter() - start_seconds
+    # remove the processed identifiers from the list
+    identifiers = identifiers[len(identifier_batch) :]
+    identifiers_list_length = len(identifiers)
 
-            if elapsed_seconds > target_max_execution_time_in_seconds:
-                task.log.info(
-                    f"Execution time exceeded max allowable seconds (max={target_max_execution_time_in_seconds}): "
-                    f"elapsed seconds={elapsed_seconds}"
-                )
-                break
+    elapsed_seconds = time.perf_counter() - start_seconds
+
+    task.log.info(
+        f'Imported {total_imported_in_current_task} books into collection(name="{collection_name}", '
+        f"id={collection_id} in {elapsed_seconds:.2f} secs or "
+        f"{(elapsed_seconds/total_imported_in_current_task):.2f} secs / book"
+    )
 
     processed_count += total_imported_in_current_task
 
-    task.log.info(
-        f"Imported {processed_count} identifiers in run for collection ({collection_name}, id={collection_id})"
-    )
-
     if len(identifiers) > 0:
         task.log.info(
-            f"Replacing task to continue importing remaining {len(identifiers)} identifier{'' if len(identifiers) == 1 else 's'} "
+            f"Imported {processed_count} identifiers so far in run for "
+            f"collection ({collection_name}, id={collection_id})"
+        )
+        task.log.info(
+            f"Replacing task to continue importing remaining "
+            f"{identifiers_list_length} identifier{'' if identifiers_list_length == 1 else 's'} "
             f"for collection ({collection_name}, id={collection_id})"
         )
 
@@ -276,6 +279,10 @@ def import_identifiers(
             )
         )
     else:
+        task.log.info(
+            f"Import run complete for collection ({collection_name}, id={collection_id}:  "
+            f"{processed_count} identifiers imported successfully"
+        )
         log_run_end_message()
 
 
@@ -343,8 +350,9 @@ def reap_collection(
     task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
     """
-    Update the license pools associated with a subset of identifiers in a collection
-    defined by the offset and batch size.
+    Update the editions and license pools (and in the process reap where appropriate)
+    associated with a collection.  This task will process {batch_size} books (each in
+    a separate task) and requeue itself for further processing.
     """
 
     start_seconds = time.perf_counter()
@@ -353,11 +361,9 @@ def reap_collection(
         collection = Collection.by_id(session, collection_id)
         if not collection:
             task.log.error(f"Collection not found:  {collection_id} : ignoring...")
-            return None
+            return
 
         collection_name = collection.name
-
-        api = create_api(session=session, collection=collection)
 
         identifiers = (
             session.scalars(
@@ -372,23 +378,25 @@ def reap_collection(
             .all()
         )
 
-        identifier_count = len(identifiers)
-        if identifier_count > 0:
-            api.update_licensepools_for_identifiers(identifiers=identifiers)
+    for identifier in identifiers:
+        with task.transaction() as session:
+            collection = Collection.by_id(session, collection_id)
+            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
+            api.update_licensepools_for_identifiers(identifiers=[identifier])
 
     task.log.info(
-        f'Reaper updated {identifier_count} books in collection (name="{collection_name}", id={collection_id}.'
+        f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
     )
-    # Requeue at the next offset if the batch of identifiers was full otherwise do nothing since
+    # Requeue at the next offset if the batch if identifiers list was full otherwise do nothing since
     # the run is complete.
 
     task.log.info(
-        f"reap_collection task at offset={offset} with {identifier_count} identifiers for collection "
+        f"reap_collection task at offset={offset} with {len(identifiers)} identifiers for collection "
         f'(name="{collection_name}", id={collection_id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
     )
 
-    if identifier_count >= batch_size:
-        new_offset = offset + identifier_count
+    if len(identifiers) >= batch_size:
+        new_offset = offset + len(identifiers)
 
         task.log.info(
             f"Re-queuing reap_collection task at offset={new_offset} for collection "
