@@ -198,139 +198,145 @@ class GenerateInventoryAndHoldsReportsJob(Job):
     @staticmethod
     def inventory_report_query() -> str:
         return """
-            select
-               e.title,
-               e.author,
-               i.identifier,
-               e.language,
-               e.publisher,
-               e.medium as format,
-               w.audience,
-               wg.genres,
-               d.name data_source,
-               ic.name collection_name,
-               l.expires license_expiration,
-               DATE_PART('day', l.expires - now()) days_remaining_on_license,
-               l.checkouts_left remaining_loans,
-               l.terms_concurrency allowed_concurrent_users,
-               coalesce(lib_loans.active_loan_count, 0) library_active_loan_count,
-               CASE WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
+            SELECT
+                e.title,
+                e.author,
+                i.identifier,
+                COALESCE(
+                    CASE
+                        WHEN i.type = 'ISBN' THEN i.identifier
+                        ELSE isbn.identifier
+                    END,
+                    ''
+                ) AS isbn,
+                e.language,
+                e.publisher,
+                e.medium AS format,
+                w.audience,
+                wg.genres,
+                d.name AS data_source,
+                ic.name AS collection_name,
+                l.expires AS license_expiration,
+                DATE_PART('day', l.expires - NOW()) AS days_remaining_on_license,
+                l.checkouts_left AS remaining_loans,
+                l.terms_concurrency AS allowed_concurrent_users,
+                COALESCE(lib_loans.active_loan_count, 0) AS library_active_loan_count,
+                CASE
+                    WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
                     ELSE -1
-               END shared_active_loan_count
-        from datasources d,
-             collections c,
-             integration_configurations ic,
-             integration_library_configurations il,
-             libraries lib,
-             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
-                                     from genres g,
-                                     workgenres wg
-                                     where g.id = wg.genre_id
-                                     group by wg.work_id) wg on w.id = wg.work_id,
-             editions e left outer join (select lp.presentation_edition_id,
-                                         p.library_id,
-                                         count(ln.id) active_loan_count
-                                  from loans ln,
-                                       licensepools lp,
-                                       patrons p,
-                                       libraries l
-                                  where p.id = ln.patron_id and
-                                        p.library_id = l.id and
-                                        ln.license_pool_id = lp.id and
-                                        l.id = :library_id
-                                  group by p.library_id, lp.presentation_edition_id) lib_loans
-                                  on e.id = lib_loans.presentation_edition_id,
-             identifiers i,
-             (select ilc.parent_id,
-                      count(ilc.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ilc,
-                   integration_configurations i,
-                   collections c
-              where c.integration_configuration_id = i.id  and
-                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
-             licensepools lp left outer join (select license_pool_id,
-                                                     checkouts_left,
-                                                     expires,
-                                                     terms_concurrency
-                                              from licenses where status = 'available') l on lp.id = l.license_pool_id
-        where lp.identifier_id = i.id and
-              e.primary_identifier_id = i.id and
-              w.id = lp.work_id and
-              d.id = e.data_source_id and
-              c.id = lp.collection_id and
-              c.integration_configuration_id = ic.id and
-              ic.id = il.parent_id and
-              ic.id = collection_sharing.parent_id and
-              ic.id in :integration_ids and
-              il.library_id = lib.id and
-              lib.id = :library_id
-         order by title, author
+                END AS shared_active_loan_count
+            FROM licensepools lp
+            JOIN identifiers i ON lp.identifier_id = i.id
+            LEFT OUTER JOIN (
+                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+                FROM equivalents eq
+                JOIN identifiers isbn ON eq.output_id = isbn.id
+                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
+                ORDER BY eq.input_id, eq.strength DESC
+            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
+            JOIN editions e ON e.primary_identifier_id = i.id
+            JOIN works w ON lp.work_id = w.id
+            JOIN datasources d ON e.data_source_id = d.id
+            JOIN collections c ON lp.collection_id = c.id
+            JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
+            JOIN integration_library_configurations il ON ic.id = il.parent_id
+            JOIN libraries lib ON il.library_id = lib.id
+            LEFT OUTER JOIN (
+                SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
+                FROM genres g
+                JOIN workgenres wg ON g.id = wg.genre_id
+                GROUP BY wg.work_id
+            ) wg ON w.id = wg.work_id
+            LEFT OUTER JOIN (
+                SELECT lp.presentation_edition_id, p.library_id, COUNT(ln.id) AS active_loan_count
+                FROM loans ln
+                JOIN licensepools lp ON ln.license_pool_id = lp.id
+                JOIN patrons p ON ln.patron_id = p.id
+                JOIN libraries l ON p.library_id = l.id
+                WHERE l.id = :library_id
+                GROUP BY p.library_id, lp.presentation_edition_id
+            ) lib_loans ON e.id = lib_loans.presentation_edition_id
+            JOIN (
+                SELECT ilc.parent_id, COUNT(ilc.parent_id) > 1 AS is_shared_collection
+                FROM integration_library_configurations ilc
+                JOIN integration_configurations i ON ilc.parent_id = i.id
+                JOIN collections c ON i.id = c.integration_configuration_id
+                GROUP BY ilc.parent_id
+            ) collection_sharing ON ic.id = collection_sharing.parent_id
+            LEFT OUTER JOIN (
+                SELECT license_pool_id, checkouts_left, expires, terms_concurrency
+                FROM licenses
+                WHERE status = 'available'
+            ) l ON lp.id = l.license_pool_id
+            WHERE ic.id IN :integration_ids AND lib.id = :library_id
+            ORDER BY e.title, e.author
         """
 
     @staticmethod
     def holds_report_query() -> str:
         return """
-            select
-               e.title,
-               e.author,
-               i.identifier,
-               e.language,
-               e.publisher,
-               e.medium as format,
-               w.audience,
-               wg.genres,
-               d.name data_source,
-               ic.name collection_name,
-               coalesce(lib_holds.active_hold_count, 0) library_active_hold_count,
-               CASE WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
+            SELECT
+                e.title,
+                e.author,
+                i.identifier,
+                COALESCE(
+                    CASE
+                        WHEN i.type = 'ISBN' THEN i.identifier
+                        ELSE isbn.identifier
+                    END,
+                    ''
+                ) AS isbn,
+                e.language,
+                e.publisher,
+                e.medium AS format,
+                w.audience,
+                wg.genres,
+                d.name AS data_source,
+                ic.name AS collection_name,
+                COALESCE(lib_holds.active_hold_count, 0) AS library_active_hold_count,
+                CASE
+                    WHEN collection_sharing.is_shared_collection THEN lp.patrons_in_hold_queue
                     ELSE -1
-               END shared_active_hold_count
-        from datasources d,
-             collections c,
-             integration_configurations ic,
-             integration_library_configurations il,
-             libraries lib,
-             works w left outer join (select wg.work_id, string_agg(g.name, ',' order by g.name) as genres
-                                     from genres g,
-                                     workgenres wg
-                                     where g.id = wg.genre_id
-                                     group by wg.work_id) wg on w.id = wg.work_id,
-             editions e,
-             (select lp.presentation_edition_id,
-                                         p.library_id,
-                                         count(h.id) active_hold_count
-                                  from holds h,
-                                       licensepools lp,
-                                       patrons p
-                                  where p.id = h.patron_id and
-                                        h.license_pool_id = lp.id and
-                                        p.library_id = :library_id and
-                                        (h.end is null or
-                                        h.end > now() or
-                                        h.position > 0)
-                                  group by p.library_id, lp.presentation_edition_id) lib_holds,
-             identifiers i,
-             (select ilc.parent_id,
-                      count(ilc.parent_id) > 1 is_shared_collection
-              from integration_library_configurations ilc,
-                   integration_configurations i,
-                   collections c
-              where c.integration_configuration_id = i.id  and
-                    i.id = ilc.parent_id group by ilc.parent_id) collection_sharing,
-             licensepools lp
-        where lp.identifier_id = i.id and
-              e.primary_identifier_id = i.id and
-              e.id = lib_holds.presentation_edition_id and
-              w.id = lp.work_id and
-              d.id = e.data_source_id and
-              c.id = lp.collection_id and
-              c.integration_configuration_id = ic.id and
-              ic.id = il.parent_id and
-              ic.id = collection_sharing.parent_id and
-              ic.id in :integration_ids and
-              il.library_id = lib.id and
-              lib.id = :library_id
-         order by title, author
+                END AS shared_active_hold_count
+            FROM licensepools lp
+            JOIN identifiers i ON lp.identifier_id = i.id
+            LEFT OUTER JOIN (
+                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+                FROM equivalents eq
+                JOIN identifiers isbn ON eq.output_id = isbn.id
+                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
+                ORDER BY eq.input_id, eq.strength DESC
+            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
+            JOIN editions e ON e.primary_identifier_id = i.id
+            JOIN works w ON lp.work_id = w.id
+            JOIN datasources d ON e.data_source_id = d.id
+            JOIN collections c ON lp.collection_id = c.id
+            JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
+            JOIN integration_library_configurations il ON ic.id = il.parent_id
+            JOIN libraries lib ON il.library_id = lib.id
+            LEFT OUTER JOIN (
+                SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
+                FROM genres g
+                JOIN workgenres wg ON g.id = wg.genre_id
+                GROUP BY wg.work_id
+            ) wg ON w.id = wg.work_id
+            JOIN (
+                SELECT lp.presentation_edition_id,  p.library_id, COUNT(h.id) AS active_hold_count
+                FROM holds h
+                JOIN licensepools lp ON h.license_pool_id = lp.id
+                JOIN patrons p ON h.patron_id = p.id
+                WHERE p.library_id = :library_id AND (h.end IS NULL OR h.end > NOW() OR h.position > 0)
+                GROUP BY p.library_id, lp.presentation_edition_id
+            ) lib_holds ON e.id = lib_holds.presentation_edition_id
+            JOIN (
+                SELECT ilc.parent_id, COUNT(ilc.parent_id) > 1 AS is_shared_collection
+                FROM integration_library_configurations ilc
+                JOIN integration_configurations i ON ilc.parent_id = i.id
+                JOIN collections c ON i.id = c.integration_configuration_id
+                GROUP BY ilc.parent_id
+            ) collection_sharing ON ic.id = collection_sharing.parent_id
+            WHERE ic.id IN :integration_ids AND lib.id = :library_id
+            ORDER BY e.title, e.author
         """
 
 

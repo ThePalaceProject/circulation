@@ -17,6 +17,7 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
 from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicenseStatus
 from palace.manager.sqlalchemy.model.patron import Hold
@@ -78,11 +79,13 @@ def test_job_run(
     od_collection_not_to_include.associated_libraries = [library]
 
     ds = collection.data_source
-    assert ds
+    assert ds is not None
+
     title = "展翅高飞 : Whistling Wings"
     author = "Laura Goering"
     language = "eng"
     publisher = "My Publisher"
+    identifier_value = "urn:identifier-1"
     checkouts_left = 10
     terms_concurrency = 5
     edition = db.edition(data_source_name=ds.name)
@@ -91,6 +94,16 @@ def test_job_run(
     edition.title = title
     edition.medium = edition.BOOK_MEDIUM
     edition.author = author
+
+    # Grab identifier and give it an ISBN equivalent.
+    identifier = edition.primary_identifier
+    identifier_value = identifier.identifier
+    isbn_identifier = db.identifier(identifier_type=Identifier.ISBN)
+    isbn = isbn_identifier.identifier
+    identifier.equivalent_to(edition.data_source, isbn_identifier, strength=1)
+    assert identifier.type != Identifier.ISBN
+    assert len(isbn) > 0
+
     work = db.work(
         language="eng",
         fiction=True,
@@ -230,9 +243,11 @@ def test_job_run(
 
                 assert len(inventory_report_csv) == 1
                 for row in inventory_report_csv:
+                    assert len(row) == 17
                     assert row["title"] == title
                     assert row["author"] == author
-                    assert row["identifier"]
+                    assert row["identifier"] == identifier_value
+                    assert row["isbn"] == isbn
                     assert row["language"] == language
                     assert row["publisher"] == publisher
                     assert row["audience"] == "young adult"
@@ -259,9 +274,11 @@ def test_job_run(
                 assert len(holds_report_csv) == 1
 
                 for row in holds_report_csv:
+                    assert len(row) == 13
                     assert row["title"] == title
                     assert row["author"] == author
-                    assert row["identifier"]
+                    assert row["identifier"] == identifier_value
+                    assert row["isbn"] == isbn
                     assert row["language"] == language
                     assert row["publisher"] == publisher
                     assert row["audience"] == "young adult"
