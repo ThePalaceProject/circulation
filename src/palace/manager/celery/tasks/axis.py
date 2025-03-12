@@ -228,7 +228,8 @@ def import_identifiers(
 
     for metadata, circulation in circ_data:
         with task.transaction() as session:
-            api = create_api(session=session, collection=collection)
+            collection = Collection.by_id(session, id=collection_id)
+            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
             try:
                 process_book(task, session, api, metadata, circulation)
                 total_imported_in_current_task += 1
