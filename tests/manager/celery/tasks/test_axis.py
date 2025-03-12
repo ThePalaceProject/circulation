@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.orm.exc import ObjectDeletedError
 
 from palace.manager.api.axis import Axis360API
+from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
     DEFAULT_BATCH_SIZE,
@@ -19,6 +20,7 @@ from palace.manager.celery.tasks.axis import (
     timestamp,
 )
 from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
@@ -450,8 +452,8 @@ def test_transient_failure_if_requested_book_not_mentioned(
 
 
 def test__check_api_credentials():
-    mock_task = MagicMock()
-    mock_collection = MagicMock()
+    mock_task = create_autospec(Task)
+    mock_collection = create_autospec(Collection)
     mock_api = create_autospec(Axis360API)
 
     # If api.bearer_token() runs successfully, the function should return True
