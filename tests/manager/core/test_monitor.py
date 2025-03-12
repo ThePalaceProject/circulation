@@ -6,7 +6,7 @@ from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.core.monitor import (
     CollectionMonitor,

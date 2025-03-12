@@ -16,7 +16,7 @@ from palace.manager.api.circulation_exceptions import (
     FormatNotAvailable,
     NotOnHold,
 )
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.api.saml.metadata.model import (
     SAMLAttributeStatement,

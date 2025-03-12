@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """Monitor the Overdrive collections by looking for books with lost licenses."""
 
-
-from palace.manager.api.overdrive import OverdriveCollectionReaper
+from palace.manager.api.overdrive.monitor import OverdriveCollectionReaper
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(OverdriveCollectionReaper).run()

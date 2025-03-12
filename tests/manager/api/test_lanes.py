@@ -28,7 +28,7 @@ from palace.manager.api.lanes import (
 )
 from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSettings
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.core.metadata_layer import ContributorData, Metadata

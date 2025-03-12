@@ -28,7 +28,8 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.api.axis import Axis360API
 from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.overdrive import OverdriveAPI, OverdriveLibrarySettings
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.api.selftest import HasCollectionSelfTests
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.goals import Goals
