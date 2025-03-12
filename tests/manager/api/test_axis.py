@@ -161,7 +161,7 @@ class TestAxis360API:
             "Mock every method used by Axis360API._run_self_tests."
 
             # First we will refresh the bearer token.
-            def refresh_bearer_token(self):
+            def _refresh_bearer_token(self):
                 return "the new token"
 
             # Then we will count the number of events in the past
@@ -244,7 +244,7 @@ class TestAxis360API:
         # self-tests aren't even run.
 
         class Mock(MockAxis360API):
-            def refresh_bearer_token(self):
+            def _refresh_bearer_token(self):
                 raise Exception("no way")
 
         # Now that everything is set up, run the self-test. Only one
@@ -298,7 +298,7 @@ class TestAxis360API:
         api = MockAxis360API(axis360.db.session, axis360.collection, with_token=False)
         api.queue_response(412)
         with pytest.raises(RemoteIntegrationException) as excinfo:
-            api.refresh_bearer_token()
+            api._refresh_bearer_token()
         assert (
             "Bad response from http://axis.test/accesstoken: Got status code 412 from external server, but can only continue on: 200."
             in str(excinfo.value)

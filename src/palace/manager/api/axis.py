@@ -229,7 +229,7 @@ class Axis360API(
         if not self.library_id or not self.username or not self.password:
             raise CannotLoadConfiguration("Axis 360 configuration is incomplete.")
 
-        self.token: str | None = None
+        self._cached_bearer_token: str | None = None
         self.verify_certificate: bool = (
             settings.verify_certificate
             if settings.verify_certificate is not None
@@ -250,7 +250,7 @@ class Axis360API(
         return dict(Authorization="Basic " + authorization_b64)
 
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
-        result = self.run_test("Refreshing bearer token", self.refresh_bearer_token)
+        result = self.run_test("Refreshing bearer token", self._refresh_bearer_token)
         yield result
         if not result.success:
             # If we can't get a bearer token, there's no point running
@@ -289,13 +289,18 @@ class Axis360API(
         for result in super()._run_self_tests(_db):
             yield result
 
-    def refresh_bearer_token(self) -> str:
+    def _refresh_bearer_token(self) -> str:
         url = self.base_url + self.access_token_endpoint
         headers = self.authorization_headers
         response = self._make_request(
             url, "post", headers, allowed_response_codes=[200]
         )
         return self.parse_token(response.content)
+
+    def bearer_token(self) -> str:
+        if not self._cached_bearer_token:
+            self._cached_bearer_token = self._refresh_bearer_token()
+        return self._cached_bearer_token
 
     def request(
         self,
@@ -310,12 +315,10 @@ class Axis360API(
         """Make an HTTP request, acquiring/refreshing a bearer token
         if necessary.
         """
-        if not self.token:
-            self.token = self.refresh_bearer_token()
         if not extra_headers:
             extra_headers = {}
         headers = dict(extra_headers)
-        headers["Authorization"] = "Bearer " + self.token
+        headers["Authorization"] = "Bearer " + self.bearer_token()
         headers["Library"] = self.library_id
         response = self._make_request(
             url=url,
@@ -332,7 +335,7 @@ class Axis360API(
                 # Axis 360's status codes mean:
                 #   1001: Invalid token
                 #   1002: Token expired
-                self.token = None
+                self._cached_bearer_token = None
                 return self.request(
                     url=url,
                     method=method,

@@ -24,6 +24,7 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.http import BadResponseException
 
 DEFAULT_BATCH_SIZE: int = 25
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
@@ -112,6 +113,9 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             api = create_api(collection, session)
+            if not _check_api_credentials(task, collection, api):
+                return None
+
             task.log.info(
                 f"Starting process of queuing items in collection {collection_name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
@@ -141,6 +145,21 @@ def list_identifiers_for_import(
 
 def create_api(collection: Collection, session: Session) -> Axis360API:
     return Axis360API(session, collection)
+
+
+def _check_api_credentials(task: Task, collection: Collection, api: Axis360API) -> bool:
+    # Try to get a bearer token, to make sure the collection is configured correctly.
+    try:
+        api.bearer_token()
+        return True
+    except BadResponseException as e:
+        if e.response.status_code == 401:
+            task.log.error(
+                f"Failed to authenticate with Axis 360 API for collection {collection.name} "
+                f"(id={collection.id}). Please check the collection configuration."
+            )
+            return False
+        raise
 
 
 def timestamp(
@@ -382,7 +401,13 @@ def reap_collection(
     for identifier in identifiers:
         with task.transaction() as session:
             collection = Collection.by_id(session, collection_id)
-            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
+            # We just checked that the collection exists, so it should still exist. Assert
+            # that is does for the sake of the type checker.
+            assert collection is not None
+            api = create_api(session=session, collection=collection)
+            if not _check_api_credentials(task, collection, api):
+                return
+
             api.update_licensepools_for_identifiers(identifiers=[identifier])
 
     task.log.info(

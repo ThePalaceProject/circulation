@@ -36,7 +36,7 @@ class MockAxis360API(Axis360API):
         """
         super().__init__(_db, collection, **kwargs)
         if with_token:
-            self.token = "mock token"
+            self._cached_bearer_token = "mock token"
         self.responses = []
         self.requests = []
 
