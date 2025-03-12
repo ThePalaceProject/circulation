@@ -313,7 +313,7 @@ class TestOverdriveRepresentationExtractor:
         assert metadata.publisher == "Candlewick Press"
         assert metadata.imprint == "Walker Books US"
 
-        # Test case with weird series data
+        # Test case with some weird series data I've seen in OD feeds
         info["readingOrder"] = "5-11"
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         assert metadata.series == "Loki: A Bad God's Guide"
