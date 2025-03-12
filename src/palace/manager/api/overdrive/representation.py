@@ -376,6 +376,15 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             sort_title = book.get("sortTitle")
             subtitle = book.get("subtitle", None)
             series = book.get("series", None)
+            series_position = book.get("readingOrder")
+            if series_position is not None:
+                try:
+                    series_position = int(series_position)
+                except ValueError:
+                    cls.logger().exception(
+                        f"Unable to parse series position '{series_position}' for ID '{overdrive_id}'"
+                    )
+                    series_position = None
             publisher = book.get("publisher", None)
             imprint = book.get("imprint", None)
 
@@ -632,6 +641,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 language=language,
                 medium=medium,
                 series=series,
+                series_position=series_position,
                 publisher=publisher,
                 imprint=imprint,
                 published=published,

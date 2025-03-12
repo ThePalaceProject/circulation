@@ -182,6 +182,7 @@ class TestOverdriveRepresentationExtractor:
         )
         assert Edition.BOOK_MEDIUM == metadata.medium
         assert "Wiley Software Patterns" == metadata.series
+        assert metadata.series_position is None
         assert "eng" == metadata.language
         assert "Wiley" == metadata.publisher
         assert "John Wiley & Sons, Inc." == metadata.imprint
@@ -291,6 +292,53 @@ class TestOverdriveRepresentationExtractor:
 
         assert Representation.PDF_MEDIA_TYPE == pdf.content_type
         assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
+
+    def test_book_info_with_metadata_with_series(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Tests that can convert an overdrive json block into a Metadata object with series information.
+        raw, info = overdrive_api_fixture.sample_json("overdrive_metadata_series.json")
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+
+        # Test normal case
+        assert metadata.title == "A Bad God's Guide to Ruling the World"
+        assert metadata.sort_title == "Bad Gods Guide to Ruling the World"
+        assert metadata.subtitle is None
+        assert metadata.medium == Edition.BOOK_MEDIUM
+        assert metadata.series == "Loki: A Bad God's Guide"
+        assert metadata.series_position == 3
+        assert metadata.language == "eng"
+        assert metadata.publisher == "Candlewick Press"
+        assert metadata.imprint == "Walker Books US"
+
+        # Test case with weird series data
+        info["readingOrder"] = "5-11"
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        assert metadata.series == "Loki: A Bad God's Guide"
+        assert metadata.series_position is None
+        assert (
+            "Unable to parse series position '5-11' for ID '586eb029-c0fc-437f-98d0-2585c101cebe'"
+            in caplog.messages
+        )
+
+        info["readingOrder"] = "52.56"
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        assert metadata.series == "Loki: A Bad God's Guide"
+        assert metadata.series_position is None
+        assert (
+            "Unable to parse series position '52.56' for ID '586eb029-c0fc-437f-98d0-2585c101cebe'"
+            in caplog.messages
+        )
+
+        # Missing series data is fine
+        caplog.clear()
+        info.pop("readingOrder")
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        assert metadata.series == "Loki: A Bad God's Guide"
+        assert metadata.series_position is None
+        assert "Unable to parse series position" not in caplog.text
 
     def test_audiobook_info(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book will be available in three formats: a link to the

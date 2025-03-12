@@ -1,0 +1,234 @@
+{
+    "isOwnedByCollections": true,
+    "id": "586eb029-c0fc-437f-98d0-2585c101cebe",
+    "crossRefId": 10188193,
+    "mediaType": "eBook",
+    "title": "A Bad God's Guide to Ruling the World",
+    "sortTitle": "Bad Gods Guide to Ruling the World",
+    "series": "Loki: A Bad God's Guide",
+    "seriesId": 749724,
+    "readingOrder": "3",
+    "publisher": "Candlewick Press",
+    "imprint": "Walker Books US",
+    "publishDate": "2024-05-07T00:00:00Z",
+    "publishDateText": "05/07/2024",
+    "creators": [
+        {
+            "role": "Author",
+            "name": "Louie Stowell",
+            "fileAs": "Stowell, Louie"
+        },
+        {
+            "role": "Illustrator",
+            "name": "Louie Stowell",
+            "fileAs": "Stowell, Louie"
+        }
+    ],
+    "links": {
+        "self": {
+            "href": "https://api.overdrive.com/v1/collections/v1L1B-QAAAA2F/products/586eb029-c0fc-437f-98d0-2585c101cebe/metadata",
+            "type": "application/vnd.overdrive.api+json"
+        },
+        "shareInLibby": {
+            "href": "https://link.overdrive.com/share?q=oXWbAO4fwHk",
+            "type": "text/HTML"
+        }
+    },
+    "images": {
+        "thumbnail": {
+            "href": "https://img1.od-cdn.com/ImageType-200/1874-1/{586EB029-C0FC-437F-98D0-2585C101CEBE}IMG200.JPG",
+            "type": "image/jpeg"
+        },
+        "cover150Wide": {
+            "href": "https://img1.od-cdn.com/ImageType-150/1874-1/{586EB029-C0FC-437F-98D0-2585C101CEBE}IMG150.JPG",
+            "type": "image/jpeg"
+        },
+        "cover": {
+            "href": "https://img1.od-cdn.com/ImageType-100/1874-1/{586EB029-C0FC-437F-98D0-2585C101CEBE}IMG100.JPG",
+            "type": "image/jpeg"
+        },
+        "cover300Wide": {
+            "href": "https://img1.od-cdn.com/ImageType-400/1874-1/{586EB029-C0FC-437F-98D0-2585C101CEBE}IMG400.JPG",
+            "type": "image/jpeg"
+        }
+    },
+    "languages": [
+        {
+            "code": "en",
+            "name": "English"
+        }
+    ],
+    "isPublicDomain": false,
+    "isPublicPerformanceAllowed": false,
+    "shortDescription": "<p><b>The spotlight is on trickster god Loki, still stuck as a peevish eleven-year-old, as he grapples with whether he will play the part of the hero or the villain in the school play&#8212;and in his mortal life. </b><br>Norse god Loki's been able to avoid eternity in a pit of angry snakes, but living on Earth as an eleven-year-old is still a drag. When Thor and Loki's \"parents\" abandon them to go on holiday, Odin sends Balder&#8212;Thor's half brother and god of making Loki look bad&#8212;to babysit. Then there's the school play. Despite Loki's acting genius (it's lying, after all), Thor is cast as the wonderful prince, while Loki is the villain. What?! At least Loki's found a cool ring to wear with his costume. One that looks suspiciously like the cursed ring of Andvari. It's probably a coincidence that when Loki wears it, everyone gives him the same adoring look they give Balder. And that new voice telling Loki to give in to his deepest, darkest desires is just his conscience,...",
+    "fullDescription": "<p><b>The spotlight is on trickster god Loki, still stuck as a peevish eleven-year-old, as he grapples with whether he will play the part of the hero or the villain in the school play&#8212;and in his mortal life. </b><br>Norse god Loki's been able to avoid eternity in a pit of angry snakes, but living on Earth as an eleven-year-old is still a drag. When Thor and Loki's \"parents\" abandon them to go on holiday, Odin sends Balder&#8212;Thor's half brother and god of making Loki look bad&#8212;to babysit. Then there's the school play. Despite Loki's acting genius (it's lying, after all), Thor is cast as the wonderful prince, while Loki is the villain. What?! At least Loki's found a cool ring to wear with his costume. One that looks suspiciously like the cursed ring of Andvari. It's probably a coincidence that when Loki wears it, everyone gives him the same adoring look they give Balder. And that new voice telling Loki to give in to his deepest, darkest desires is just his conscience, right? Loki starts to wonder: What's the point of being good if everyone's already decided you're bad? Drama and hilarity ensue in this third doodle-packed diary that will have readers giving Loki a standing ovation.</p>",
+    "starRating": 4.5,
+    "popularity": 0,
+    "subjects": [
+        {
+            "value": "Juvenile Fiction"
+        },
+        {
+            "value": "Juvenile Literature"
+        },
+        {
+            "value": "Mythology"
+        },
+        {
+            "value": "Humor (Fiction)"
+        }
+    ],
+    "bisacCodes": [
+        {
+            "code": "JUV019000",
+            "description": "Juvenile Fiction / Humorous Stories"
+        },
+        {
+            "code": "JUV022030",
+            "description": "Juvenile Fiction / Legends, Myths, Fables / Norse"
+        }
+    ],
+    "keywords": [
+        {
+            "value": "family"
+        },
+        {
+            "value": "Halloween"
+        },
+        {
+            "value": "Norse Mythology"
+        },
+        {
+            "value": "Friendship"
+        },
+        {
+            "value": "Teen Fiction"
+        },
+        {
+            "value": "Mythology"
+        },
+        {
+            "value": "Thor"
+        },
+        {
+            "value": "asgard"
+        },
+        {
+            "value": "Disney"
+        },
+        {
+            "value": "marvel"
+        },
+        {
+            "value": "Siblings"
+        },
+        {
+            "value": "Magic"
+        },
+        {
+            "value": "fantasy"
+        },
+        {
+            "value": "school play"
+        },
+        {
+            "value": "funny books"
+        },
+        {
+            "value": "Loki"
+        },
+        {
+            "value": "ya books"
+        },
+        {
+            "value": "kids books ages 9-12"
+        },
+        {
+            "value": "books for kids age 9 12"
+        },
+        {
+            "value": "books for 11 year old boys"
+        },
+        {
+            "value": "books for 12 year old boys"
+        },
+        {
+            "value": "books for 8 year old boys"
+        },
+        {
+            "value": "books for boys age 9 12"
+        },
+        {
+            "value": "historical fiction for children 9-12"
+        },
+        {
+            "value": "fantasy books for kids age 9 12"
+        }
+    ],
+    "reviews": [
+        {
+            "source": "<a href=\"http://www.kirkusreviews.com\" target=\"blank\"><img src=\"https://images.contentreserve.com/kirkus_logo.png\" alt=\"Kirkus\" border=\"0\" /></a>",
+            "content": "<p>March 15, 2024<br/>A magic ring threatens to derail the efforts of the god of mischief to mend his ways and so be allowed to return to Asgard. Exiled to Midgard (Earth) in the guise of a human middle schooler by (as he puts it with characteristic maturity) \"smelly bum-bum Odin,\" Loki finds his progress grinding to a halt in this third series entry. He steals a ring that turns out to bear a legendary curse that feeds on his vanity and lingering resentment, bespelling his nascent conscience and egging him on to kill Thor, who's come along for the quest in the role of pesky older brother. In the ramp-up to the climax, the laughable boasts and comeuppances of this most unreliable of narrators give way to some scary moments as the two disguised gods confront one another as hero and villain in a school play. Thanks to some timely onstage intervention by Loki's human friends Valerie and Georgina--and with his own better judgment making a tardy but welcome entrance--violence is narrowly averted. By the end, Loki has a lot of apologizing to do, but he's at least inched closer to making good on his highly aspirational claim to be a \"Good God(TM) now.\" Ample illustrations and a varied visual layout add to the humor and reader appeal. Central characters present white; Georgina is Black. More hilarious mythological tweaks and narrow squeaks. (Graphic adventure. 9-12) <p>COPYRIGHT(2024) Kirkus Reviews, ALL RIGHTS RESERVED.</p></p>",
+            "premium": true
+        }
+    ],
+    "classifications": {},
+    "formats": [
+        {
+            "id": "ebook-kindle",
+            "name": "Kindle Book",
+            "fileName": "ABadGodsGuidetoRulin_10188193",
+            "identifiers": [
+                {
+                    "type": "ASIN",
+                    "value": "B0CKF4VC8S"
+                }
+            ],
+            "fileSize": 0,
+            "partCount": 0,
+            "onSaleDate": "5/7/2024",
+            "rights": [
+                {
+                    "type": "Kindle",
+                    "value": 1
+                }
+            ],
+            "samples": [
+                {
+                    "source": "From the book",
+                    "formatType": "ebook-overdrive",
+                    "url": "https://samples.overdrive.com/?crid=586eb029-c0fc-437f-98d0-2585c101cebe&.epub-sample.overdrive.com"
+                }
+            ],
+            "isReadAlong": false
+        },
+        {
+            "id": "ebook-overdrive",
+            "name": "OverDrive Read",
+            "fileName": "ABadGodsGuidetoRulin_9781536237535_10188193",
+            "identifiers": [
+                {
+                    "type": "ISBN",
+                    "value": "9781536237535"
+                }
+            ],
+            "fileSize": 0,
+            "partCount": 0,
+            "onSaleDate": "5/7/2024",
+            "samples": [
+                {
+                    "source": "From the book",
+                    "formatType": "ebook-overdrive",
+                    "url": "https://samples.overdrive.com/?crid=586eb029-c0fc-437f-98d0-2585c101cebe&.epub-sample.overdrive.com"
+                }
+            ],
+            "isReadAlong": false
+        }
+    ],
+    "otherFormatIdentifiers": [
+        {
+            "type": "ISBN",
+            "value": "9781536226317"
+        }
+    ]
+}
