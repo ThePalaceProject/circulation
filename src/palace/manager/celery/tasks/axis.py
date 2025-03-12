@@ -13,6 +13,7 @@ from palace.manager.api.circulation import (
     SettingsType,
 )
 from palace.manager.celery.task import Task
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.metadata_layer import CirculationData, Metadata
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -112,6 +113,7 @@ def list_identifiers_for_import(
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
             api = create_api(collection, session)
+
             task.log.info(
                 f"Starting process of queuing items in collection {collection_name} (id={collection_id} "
                 f"for import that have changed since {start_time_of_last_scan}. "
@@ -119,9 +121,20 @@ def list_identifiers_for_import(
             # start stopwatch
             start_seconds = time.perf_counter()
             title_ids: list[str] = []
-            for metadata, circulation in api.recent_activity(start_time_of_last_scan):
-                if metadata.primary_identifier is not None:
-                    title_ids.append(metadata.primary_identifier.identifier)
+            try:
+                for metadata, circulation in api.recent_activity(
+                    start_time_of_last_scan
+                ):
+                    if metadata.primary_identifier is not None:
+                        title_ids.append(metadata.primary_identifier.identifier)
+            except IntegrationException as e:
+                task.log.exception(
+                    f"Task[{task.request.id} failed: Unable to retrieve recent activity on collection "
+                    f'(name="{collection_name}", id={collection_id}) due to integration error: '
+                    f"{e.message}. Please check that the configuration is correct."
+                )
+                return None
+
             elapsed_time = time.perf_counter() - start_seconds
             achievements = (
                 f"Total items queued for import:  {len(title_ids)}; "
@@ -384,8 +397,16 @@ def reap_collection(
         with task.transaction() as session:
             collection = Collection.by_id(session, collection_id)
             api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
-            api.update_licensepools_for_identifiers(identifiers=[identifier])
 
+            try:
+                api.update_licensepools_for_identifiers(identifiers=[identifier])
+            except IntegrationException as e:
+                task.log.exception(
+                    f"Task[{task.request.id} failed: Unable to retrieve recent activity on collection "
+                    f'(name="{collection_name}", id={collection_id}) due to integration error: '
+                    f"{e.message}. Please check that the configuration is correct."
+                )
+                return
     task.log.info(
         f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
     )
