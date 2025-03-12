@@ -65,6 +65,21 @@ def test_queue_collection_import_lock(
     assert "Skipping list_identifiers_for_import" in caplog.text
 
 
+def test_list_identifiers_for_import_configuration_error(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    collection = db.collection(name="test_collection", protocol=Axis360API)
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
+            "service", "uh oh", MockRequestsResponse(401)
+        )
+        list_identifiers_for_import.delay(collection_id=collection.id).wait()
+    assert "Failed to authenticate with Axis 360 API" in caplog.text
+
+
 def set_caplog_level_to_info(caplog):
     caplog.set_level(
         logging.INFO,
@@ -290,6 +305,28 @@ def test_reap_all_collections(
             "collection_id": collection2.id,
         }
         assert "Finished queuing reap collection tasks" in caplog.text
+
+
+def test_reap_collection_configuration_error(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    db.edition(
+        with_license_pool=True,
+        identifier_type=Identifier.AXIS_360_ID,
+        collection=collection,
+    )
+
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
+            "service", "uh oh", MockRequestsResponse(401)
+        )
+        reap_collection.delay(collection_id=collection.id).wait()
+
+    assert "Failed to authenticate with Axis 360 API" in caplog.text
 
 
 def test_reap_collection_with_requeue(
