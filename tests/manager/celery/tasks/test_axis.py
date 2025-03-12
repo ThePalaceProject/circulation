@@ -1,6 +1,6 @@
 import logging
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from sqlalchemy.orm.exc import ObjectDeletedError
@@ -21,12 +21,14 @@ from palace.manager.celery.tasks.axis import (
 from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
+from tests.mocks.mock import MockRequestsResponse
 
 
 class QueueCollectionImportLockFixture:
@@ -445,3 +447,31 @@ def test_transient_failure_if_requested_book_not_mentioned(
         )
         assert [] == identifier.licensed_through
         assert [] == identifier.primarily_identifies
+
+
+def test__check_api_credentials():
+    mock_task = MagicMock()
+    mock_collection = MagicMock()
+    mock_api = create_autospec(Axis360API)
+
+    # If api.bearer_token() runs successfully, the function should return True
+    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is True
+    mock_api.bearer_token.assert_called_once()
+
+    # If a BadResponseException is raised with a 401 status code, the function should return False
+    mock_api.bearer_token.side_effect = BadResponseException(
+        "service", "uh oh", MockRequestsResponse(401)
+    )
+    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is False
+
+    # If a BadResponseException is raised with a status code other than 401, the function should raise the exception
+    mock_api.bearer_token.side_effect = BadResponseException(
+        "service", "uh oh", MockRequestsResponse(500)
+    )
+    with pytest.raises(BadResponseException):
+        axis._check_api_credentials(mock_task, mock_collection, mock_api)
+
+    # Any other exception should be raised
+    mock_api.bearer_token.side_effect = ValueError
+    with pytest.raises(ValueError):
+        axis._check_api_credentials(mock_task, mock_collection, mock_api)
