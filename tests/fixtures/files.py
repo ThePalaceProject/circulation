@@ -106,3 +106,16 @@ def sample_covers_fixture(
     db: DatabaseTransactionFixture,
 ) -> SampleCoversFixture:
     return SampleCoversFixture(db)
+
+
+class OverdriveFilesFixture(FilesFixture):
+    """A fixture providing access to Overdrive files."""
+
+    def __init__(self):
+        super().__init__("overdrive")
+
+
+@pytest.fixture()
+def overdrive_files_fixture() -> OverdriveFilesFixture:
+    """A fixture providing access to Overdrive files."""
+    return OverdriveFilesFixture()

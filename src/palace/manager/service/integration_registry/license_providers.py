@@ -21,7 +21,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
         from palace.manager.api.enki import EnkiAPI
         from palace.manager.api.odl.api import OPDS2WithODLApi
         from palace.manager.api.opds_for_distributors import OPDSForDistributorsAPI
-        from palace.manager.api.overdrive import OverdriveAPI
+        from palace.manager.api.overdrive.api import OverdriveAPI
         from palace.manager.core.opds2_import import OPDS2API
         from palace.manager.core.opds_import import OPDSAPI
 

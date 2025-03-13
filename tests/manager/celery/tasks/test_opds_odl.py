@@ -6,7 +6,7 @@ from freezegun import freeze_time
 from sqlalchemy import func, select
 
 from palace.manager.api.odl.api import OPDS2WithODLApi
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks import opds_odl
 from palace.manager.celery.tasks.opds_odl import (
     _licensepool_ids_with_holds,

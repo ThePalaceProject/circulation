@@ -16,7 +16,7 @@ from palace.manager.api.opds_for_distributors import (
     OPDSForDistributorsReaperMonitor,
     OPDSForDistributorsSettings,
 )
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.metadata_layer import CirculationData, LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection

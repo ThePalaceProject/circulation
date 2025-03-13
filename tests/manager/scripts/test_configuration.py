@@ -5,7 +5,7 @@ from io import StringIO
 import pytest
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.scripts.configuration import (
     ConfigureCollectionScript,
     ConfigureLaneScript,
