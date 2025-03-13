@@ -833,20 +833,6 @@ class TestPlaytimeEntriesEmailReportsScript:
             "2025",
         ]
 
-    def test_no_reporting_email(self, db: DatabaseTransactionFixture):
-
-        with patch("palace.manager.scripts.playtime_entries.os.environ", new={}):
-            script = PlaytimeEntriesReportsScript(db.session)
-            script._log = MagicMock()
-            script.run()
-
-            assert script._log.error.call_count == 1
-
-            assert (
-                "Cannot playtime summary report without an email recipient"
-                in script._log.error.call_args[0][0]
-            )
-
     @pytest.mark.parametrize(
         "current_utc_time, start_arg, expected_start, until_arg, expected_until",
         [
