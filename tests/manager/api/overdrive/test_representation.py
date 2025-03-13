@@ -329,7 +329,7 @@ class TestOverdriveRepresentationExtractor:
         assert parse_series_position(series_position) == expected
         if expected is None and series_position not in (None, ""):
             assert (
-                f"Unable to parse series position '{series_position}' for Overdrive ID 'TEST_ID'"
+                f"Unable to parse series position '{series_position}' for OverDrive ID 'TEST_ID'"
                 in caplog.messages
             )
 
