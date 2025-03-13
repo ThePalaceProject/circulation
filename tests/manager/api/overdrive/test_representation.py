@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -182,6 +184,7 @@ class TestOverdriveRepresentationExtractor:
         )
         assert Edition.BOOK_MEDIUM == metadata.medium
         assert "Wiley Software Patterns" == metadata.series
+        assert metadata.series_position is None
         assert "eng" == metadata.language
         assert "Wiley" == metadata.publisher
         assert "John Wiley & Sons, Inc." == metadata.imprint
@@ -291,6 +294,65 @@ class TestOverdriveRepresentationExtractor:
 
         assert Representation.PDF_MEDIA_TYPE == pdf.content_type
         assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
+
+    @pytest.mark.parametrize(
+        "series_position, expected",
+        [
+            # These are examples I've seen in the wild.
+            pytest.param("1", 1, id="simple_number"),
+            pytest.param("5-11", 5, id="range_format"),
+            pytest.param("#22", 22, id="number_with_prefix"),
+            pytest.param("52.56", 52, id="decimal_number"),
+            pytest.param(None, None, id="none_value"),
+            pytest.param("   3", 3, id="leading_whitespace"),
+            pytest.param("3   ", 3, id="trailing_whitespace"),
+            pytest.param("Number 3", 3, id="text_with_number"),
+            # I've not seen these in the wild, but they're plausible and
+            # good tests for edge cases in the parsing code.
+            pytest.param("", None, id="empty_string"),
+            pytest.param("not a number", None, id="invalid_string"),
+            pytest.param(1, 1, id="integer_input"),
+            pytest.param(5.0, 5, id="float_input"),
+            pytest.param([12, "15"], 12, id="list_input"),
+        ],
+    )
+    def test___parse_series_position(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        series_position: Any,
+        expected: int | None,
+    ) -> None:
+        parse_series_position = partial(
+            OverdriveRepresentationExtractor._parse_series_position,
+            overdrive_id="TEST_ID",
+        )
+        assert parse_series_position(series_position) == expected
+        if expected is None and series_position not in (None, ""):
+            assert (
+                f"Unable to parse series position '{series_position}' for OverDrive ID 'TEST_ID'"
+                in caplog.messages
+            )
+
+    def test_book_info_with_metadata_with_series(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Tests that we can convert an overdrive json block into a Metadata object
+        # with series information.
+        raw, info = overdrive_api_fixture.sample_json("overdrive_metadata_series.json")
+        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+
+        # Test normal case
+        assert metadata.title == "A Bad God's Guide to Ruling the World"
+        assert metadata.sort_title == "Bad Gods Guide to Ruling the World"
+        assert metadata.subtitle is None
+        assert metadata.medium == Edition.BOOK_MEDIUM
+        assert metadata.series == "Loki: A Bad God's Guide"
+        assert metadata.series_position == 3
+        assert metadata.language == "eng"
+        assert metadata.publisher == "Candlewick Press"
+        assert metadata.imprint == "Walker Books US"
 
     def test_audiobook_info(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book will be available in three formats: a link to the
