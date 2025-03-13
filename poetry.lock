@@ -1509,14 +1509,14 @@ typing = ["typing-extensions (>=4.12.2) ; python_version < \"3.11\""]
 
 [[package]]
 name = "firebase-admin"
-version = "6.6.0"
+version = "6.7.0"
 description = "Firebase Admin Python SDK"
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "firebase_admin-6.6.0-py3-none-any.whl", hash = "sha256:4a55af17e0b4e3de05ba43ad25d92af29b48263622a913faea66e9c8ba50aeef"},
-    {file = "firebase_admin-6.6.0.tar.gz", hash = "sha256:9ce851ae71038acaaeffdcfc09b175dadc3b2e5aa8a0b65760e21bb10253b684"},
+    {file = "firebase_admin-6.7.0-py3-none-any.whl", hash = "sha256:2390e87cc4cdc4d459525290c7ca33c8556a2b1aade0094f125b3186eba0eb1d"},
+    {file = "firebase_admin-6.7.0.tar.gz", hash = "sha256:34de33e4ab3821e81544b966288408644f40713084e7e573bed8c0df257310ba"},
 ]
 
 [package.dependencies]
