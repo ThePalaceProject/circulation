@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from io import IOBase
 from typing import TYPE_CHECKING, Any
@@ -11,9 +12,9 @@ from googleapiclient.http import MediaIoBaseUpload
 from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
-    from typing import Self
+    pass
 else:
-    from typing_extensions import Self
+    pass
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3 import File, Permission
@@ -22,21 +23,21 @@ if TYPE_CHECKING:
 class GoogleDriveService(LoggerMixin):
     def __init__(
         self,
-        service_account_key_file_path: str,
+        service_account_info: dict[str, Any],
     ) -> None:
-        credentials = service_account.Credentials.from_service_account_file(
-            service_account_key_file_path,
-            scopes=["https://www.googleapis.com/auth/drive"],
+
+        scopes = ["https://www.googleapis.com/auth/drive"]
+        credentials = service_account.Credentials.from_service_account_info(
+            info=service_account_info, scopes=scopes
         )
 
         self.service = build("drive", "v3", credentials=credentials)
 
     @classmethod
-    def factory(
-        cls,
-        service_account_key_file_path: str,
-    ) -> Self:
-        return cls(service_account_key_file_path)
+    def factory(cls, service_account_info_json: str = "{}") -> GoogleDriveService:
+        return GoogleDriveService(
+            service_account_info=json.loads(service_account_info_json)
+        )
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
 

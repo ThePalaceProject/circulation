@@ -240,7 +240,6 @@ Flask-Babel = "^4.0"
 Flask-Cors = "5.0.1"
 fuzzywuzzy = "0.18.0"  # fuzzywuzzy is for author name manipulations
 google-api-python-client = "^2.162.0"
-google-api-python-client-stubs = "^1.29.0"
 google-auth = "^2.38.0"
 html-sanitizer = "^2.1.0"
 isbnlib = "^3.10.14"
@@ -299,6 +298,7 @@ tox-gh-actions = "^3.0"
 [tool.poetry.group.dev.dependencies]
 boto3-stubs = {version = "^1.28", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"]}
 freezegun = "~1.5.0"
+google-api-python-client-stubs = "^1.29.0"
 Jinja2 = "^3.1.2"
 mypy = "^1.4.1"
 psycopg2-binary = "~2.9.5"

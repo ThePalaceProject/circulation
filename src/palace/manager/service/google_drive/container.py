@@ -10,7 +10,7 @@ from palace.manager.service.google_drive.google_drive import GoogleDriveService
 class GoogleDrive(DeclarativeContainer):
     config = providers.Configuration()
 
-    palace_internal: Provider[GoogleDriveService] = providers.Singleton(
+    service: Provider[GoogleDriveService] = providers.Singleton(
         GoogleDriveService.factory,
-        service_account_key_file_path=config.service_account_key_file_path,
+        service_account_info_json=config.service_account_info_json,
     )

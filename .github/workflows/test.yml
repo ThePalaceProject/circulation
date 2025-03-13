@@ -44,8 +44,14 @@ jobs:
         env:
           POETRY_VIRTUALENVS_CREATE: false
 
+      - name: Configure Google Drive environment variable
+        run: |
+          echo 'PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON=${{ secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}}' >> $GITHUB_ENV
+
       - name: Run Tests
         run: tox
+        env:
+          PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: '${{secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON}}'
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

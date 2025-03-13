@@ -20,6 +20,9 @@ from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
+from palace.manager.service.google_drive.configuration import (
+    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
+)
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
@@ -118,7 +121,7 @@ class PlaytimeEntriesSummationScript(Script):
         self._db.commit()
 
 
-class PlaytimeEntriesEmailReportsScript(Script):
+class PlaytimeEntriesReportsScript(Script):
     REPORT_DATE_FORMAT = "%Y-%m-%d"
 
     @classmethod
@@ -167,14 +170,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
 
     def do_run(self):
         """Produce a report for the given (or default) date range."""
-        recipient = os.environ.get(Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE)
-
-        if not recipient:
-            self.log.error(
-                f"Cannot playtime summary report without an email recipient: "
-                f"missing environmental variable value {Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE}"
-            )
-            return
 
         parsed = self.parse_command_line()
         start: datetime = parsed.start
@@ -191,12 +186,12 @@ class PlaytimeEntriesEmailReportsScript(Script):
         link_extension = "csv"
         uid = uuid_encode(uuid.uuid4())
 
-        google_drive: GoogleDriveService = self.services.google_drive.palace_internal()
+        google_drive: GoogleDriveService = self.services.google_drive.service()
 
         # create directory hierarchy
         root_folders = os.environ.get(
-            Configuration.PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
-            "palace/no-env-specified",
+            PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
+            "",
         ).split("/")
         nested_folders = root_folders + [
             "usage_reports",
@@ -209,21 +204,6 @@ class PlaytimeEntriesEmailReportsScript(Script):
         # the root folder is the last path segment in the root folders list
         root_folder = folder_results[len(root_folders) - 1]
         leaf_folder = folder_results[-1]
-
-        # share root folder if not already shared
-        if recipient:
-            google_drive.share(
-                file_or_folder_id=root_folder["id"], email_addresses=[recipient]
-            )
-            self.log.info(
-                f"shared root folder ({'/'.join(root_folders)}) with {recipient} in Google Drive"
-            )
-        else:
-            self.log.warn(
-                f"unable to share root folder ({'/'.join(root_folders)}) "
-                f"Google Drive: no value for env variable: "
-                f"{Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE}."
-            )
 
         # get list of collections
         collection_names = [

@@ -20,6 +20,7 @@ x-cm-variables: &cm
     PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
     PALACE_CELERY_CLOUDWATCH_STATISTICS_DRYRUN: "true"
     PALACE_REDIS_URL: "redis://redis:6379/1"
+    PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: "${PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}"
 
     # Set up the environment variables used for testing as well
     PALACE_TEST_DATABASE_URL: "postgresql://palace:test@pg:5432/circ"
@@ -28,9 +29,7 @@ x-cm-variables: &cm
     PALACE_TEST_MINIO_USER: "palace"
     PALACE_TEST_MINIO_PASSWORD: "test123456789"
     PALACE_TEST_REDIS_URL: "redis://redis:6379/3"
-    PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH: /run/secrets/test_google_service_account_json
-  secrets:
-    - test_google_service_account_json
+    PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: "${PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}"
 
   depends_on:
     pg:
@@ -49,10 +48,6 @@ x-cm-build: &cm-build
     - BASE_IMAGE=${BUILD_BASE_IMAGE-ghcr.io/thepalaceproject/circ-baseimage:latest}
   cache_from:
     - ${BUILD_CACHE_FROM-ghcr.io/thepalaceproject/circ-webapp:main}
-
-secrets:
-  test_google_service_account_json:
-    file: ./secrets/test_google_service_account.json
 
 services:
   # example docker compose configuration for testing and development

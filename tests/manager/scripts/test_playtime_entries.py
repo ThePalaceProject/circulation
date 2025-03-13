@@ -16,8 +16,11 @@ from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
 from palace.manager.scripts.playtime_entries import (
-    PlaytimeEntriesEmailReportsScript,
+    PlaytimeEntriesReportsScript,
     PlaytimeEntriesSummationScript,
+)
+from palace.manager.service.google_drive.configuration import (
+    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
@@ -666,7 +669,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         reporting_name = "test cm"
 
         mock_google_drive_service = MagicMock()
-        services_fixture.services.google_drive.palace_internal.override(
+        services_fixture.services.google_drive.service.override(
             mock_google_drive_service
         )
 
@@ -675,14 +678,13 @@ class TestPlaytimeEntriesEmailReportsScript:
             patch(
                 "palace.manager.scripts.playtime_entries.os.environ",
                 new={
-                    Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE: "reporting@test.email",
                     Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
-                    Configuration.PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE: "palace-test",
+                    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE: "palace-test",
                 },
             ),
         ):
             # Act
-            PlaytimeEntriesEmailReportsScript(db.session).run()
+            PlaytimeEntriesReportsScript(db.session).run()
 
         # Assert
         assert (
@@ -834,7 +836,7 @@ class TestPlaytimeEntriesEmailReportsScript:
     def test_no_reporting_email(self, db: DatabaseTransactionFixture):
 
         with patch("palace.manager.scripts.playtime_entries.os.environ", new={}):
-            script = PlaytimeEntriesEmailReportsScript(db.session)
+            script = PlaytimeEntriesReportsScript(db.session)
             script._log = MagicMock()
             script.run()
 
@@ -919,9 +921,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         cmd_args = start_args + until_args
 
         with freeze_time(current_utc_time):
-            parsed = PlaytimeEntriesEmailReportsScript.parse_command_line(
-                cmd_args=cmd_args
-            )
+            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
         assert expected_start == parsed.start
         assert expected_until == parsed.until
         assert pytz.UTC == parsed.start.tzinfo
@@ -987,9 +987,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         cmd_args = start_args + until_args
 
         with freeze_time(current_utc_time), pytest.raises(SystemExit) as excinfo:
-            parsed = PlaytimeEntriesEmailReportsScript.parse_command_line(
-                cmd_args=cmd_args
-            )
+            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
         _, err = capsys.readouterr()
         assert 2 == excinfo.value.code
         assert re.search(r"start date \(.*\) must be before until date \(.*\).", err)

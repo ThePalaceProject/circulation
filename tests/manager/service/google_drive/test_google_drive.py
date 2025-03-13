@@ -1,34 +1,32 @@
 from __future__ import annotations
 
+import json
 import os
 import random
 import string
 from io import BytesIO
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-from pydantic_settings import SettingsConfigDict
 
-from palace.manager.service.google_drive.configuration import GoogleDriveConfiguration
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 
-skip = os.getenv("PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_FILE_PATH") is None
-pytestmark = pytest.mark.skipif(skip, reason="Google Drive tests not configured.")
-
-
-class GoogleDriveTestConfiguration(GoogleDriveConfiguration):
-    service_account_key_file_path: str
-    model_config = SettingsConfigDict(
-        env_prefix="PALACE_TEST_GOOGLE_DRIVE_",
-        extra="ignore",
-    )
+service_account_info_json = os.getenv(
+    "PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON"
+)
 
 
 class GoogleDriveTestFixture:
     def __init__(self):
-        config = GoogleDriveTestConfiguration()
-        self.google_drive_service = GoogleDriveService(
-            config.service_account_key_file_path
-        )
+
+        if not service_account_info_json:
+            # the only time this condition should be true is when testing locally and the above env variable is unset
+            # or the test coverage analysis is being performed.
+            self.google_drive_service = MagicMock()
+        else:
+            service_account_info: dict[str, Any] = json.loads(service_account_info_json)
+            self.google_drive_service = GoogleDriveService(service_account_info)
 
 
 @pytest.fixture
@@ -46,9 +44,8 @@ def generate_random_strings(length):
 class TestGoogleDriveService:
 
     def test_factory(self):
-        config = GoogleDriveTestConfiguration()
         google_drive_service = GoogleDriveService.factory(
-            config.service_account_key_file_path
+            service_account_info_json=service_account_info_json,
         )
         assert google_drive_service is not None
 
@@ -88,7 +85,7 @@ class TestGoogleDriveService:
         folder_info = service.get_file(parent_name)
         assert folder_info is None
 
-    def test_store_stream(self, google_drive_service_fixture: GoogleDriveTestFixture):
+    def test_create_file(self, google_drive_service_fixture: GoogleDriveTestFixture):
         service = google_drive_service_fixture.google_drive_service
         file_name = generate_random_strings(10) + ".txt"
 
