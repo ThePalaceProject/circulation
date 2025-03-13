@@ -371,7 +371,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             return int(match.groups()[0])
 
         cls.logger().error(
-            f"Unable to parse series position '{series_position}' for ID '{overdrive_id}'"
+            f"Unable to parse series position '{series_position}' for OverDrive ID '{overdrive_id}'"
         )
         return None
 

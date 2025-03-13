@@ -329,7 +329,7 @@ class TestOverdriveRepresentationExtractor:
         assert parse_series_position(series_position) == expected
         if expected is None and series_position not in (None, ""):
             assert (
-                f"Unable to parse series position '{series_position}' for ID 'TEST_ID'"
+                f"Unable to parse series position '{series_position}' for Overdrive ID 'TEST_ID'"
                 in caplog.messages
             )
 
@@ -338,7 +338,8 @@ class TestOverdriveRepresentationExtractor:
         overdrive_api_fixture: OverdriveAPIFixture,
         caplog: pytest.LogCaptureFixture,
     ):
-        # Tests that can convert an overdrive json block into a Metadata object with series information.
+        # Tests that we can convert an overdrive json block into a Metadata object
+        # with series information.
         raw, info = overdrive_api_fixture.sample_json("overdrive_metadata_series.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
 
