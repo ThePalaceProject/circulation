@@ -26,11 +26,11 @@
     ],
     "links": {
         "self": {
-            "href": "https://api.overdrive.com/v1/collections/v1L1B-QAAAA2F/products/586eb029-c0fc-437f-98d0-2585c101cebe/metadata",
+            "href": "https://api.overdrive.com/foo/bar",
             "type": "application/vnd.overdrive.api+json"
         },
         "shareInLibby": {
-            "href": "https://link.overdrive.com/share?q=oXWbAO4fwHk",
+            "href": "https://link.overdrive.com/share/foo/bar",
             "type": "text/HTML"
         }
     },

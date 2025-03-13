@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -293,6 +295,44 @@ class TestOverdriveRepresentationExtractor:
         assert Representation.PDF_MEDIA_TYPE == pdf.content_type
         assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
 
+    @pytest.mark.parametrize(
+        "series_position, expected",
+        [
+            # These are examples I've seen in the wild.
+            pytest.param("1", 1, id="simple_number"),
+            pytest.param("5-11", 5, id="range_format"),
+            pytest.param("#22", 22, id="number_with_prefix"),
+            pytest.param("52.56", 52, id="decimal_number"),
+            pytest.param(None, None, id="none_value"),
+            pytest.param("   3", 3, id="leading_whitespace"),
+            pytest.param("3   ", 3, id="trailing_whitespace"),
+            pytest.param("Number 3", 3, id="text_with_number"),
+            # I've not seen these in the wild, but they're plausible and
+            # good tests for edge cases in the parsing code.
+            pytest.param("", None, id="empty_string"),
+            pytest.param("not a number", None, id="invalid_string"),
+            pytest.param(1, 1, id="integer_input"),
+            pytest.param(5.0, 5, id="float_input"),
+            pytest.param([12, "15"], 12, id="list_input"),
+        ],
+    )
+    def test___parse_series_position(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        series_position: Any,
+        expected: int | None,
+    ) -> None:
+        parse_series_position = partial(
+            OverdriveRepresentationExtractor._parse_series_position,
+            overdrive_id="TEST_ID",
+        )
+        assert parse_series_position(series_position) == expected
+        if expected is None and series_position not in (None, ""):
+            assert (
+                f"Unable to parse series position '{series_position}' for ID 'TEST_ID'"
+                in caplog.messages
+            )
+
     def test_book_info_with_metadata_with_series(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
@@ -312,33 +352,6 @@ class TestOverdriveRepresentationExtractor:
         assert metadata.language == "eng"
         assert metadata.publisher == "Candlewick Press"
         assert metadata.imprint == "Walker Books US"
-
-        # Test case with some weird series data I've seen in OD feeds
-        info["readingOrder"] = "5-11"
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        assert metadata.series == "Loki: A Bad God's Guide"
-        assert metadata.series_position is None
-        assert (
-            "Unable to parse series position '5-11' for ID '586eb029-c0fc-437f-98d0-2585c101cebe'"
-            in caplog.messages
-        )
-
-        info["readingOrder"] = "52.56"
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        assert metadata.series == "Loki: A Bad God's Guide"
-        assert metadata.series_position is None
-        assert (
-            "Unable to parse series position '52.56' for ID '586eb029-c0fc-437f-98d0-2585c101cebe'"
-            in caplog.messages
-        )
-
-        # Missing series data is fine
-        caplog.clear()
-        info.pop("readingOrder")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        assert metadata.series == "Loki: A Bad God's Guide"
-        assert metadata.series_position is None
-        assert "Unable to parse series position" not in caplog.text
 
     def test_audiobook_info(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book will be available in three formats: a link to the

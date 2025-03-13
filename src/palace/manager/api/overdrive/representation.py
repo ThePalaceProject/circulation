@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
 
@@ -347,6 +348,33 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         media_type = link.get("type", None)
         return LinkData(rel=rel, href=href, media_type=media_type)
 
+    _SERIES_POSITION_REGEX = re.compile(r"^.*?(\d+)")
+
+    @classmethod
+    def _parse_series_position(
+        cls, series_position: Any, overdrive_id: str
+    ) -> int | None:
+        """
+        Parse the series position from Overdrive's JSON representation.
+
+        Overdrive provides the series position as a string, and the format seems to be
+        inconsistent from the examples we have seen. This method does its best to extract
+        an integer from the string, since we store series position as an integer.
+        """
+        if not series_position:
+            return None
+
+        if not isinstance(series_position, str):
+            series_position = str(series_position)
+        match = cls._SERIES_POSITION_REGEX.match(series_position)
+        if match:
+            return int(match.groups()[0])
+
+        cls.logger().error(
+            f"Unable to parse series position '{series_position}' for ID '{overdrive_id}'"
+        )
+        return None
+
     @classmethod
     def book_info_to_metadata(
         cls,
@@ -376,15 +404,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             sort_title = book.get("sortTitle")
             subtitle = book.get("subtitle", None)
             series = book.get("series", None)
-            series_position = book.get("readingOrder")
-            if series_position is not None:
-                try:
-                    series_position = int(series_position)
-                except ValueError:
-                    cls.logger().exception(
-                        f"Unable to parse series position '{series_position}' for ID '{overdrive_id}'"
-                    )
-                    series_position = None
+            series_position = cls._parse_series_position(
+                book.get("readingOrder"), overdrive_id
+            )
             publisher = book.get("publisher", None)
             imprint = book.get("imprint", None)
 
