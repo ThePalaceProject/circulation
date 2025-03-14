@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Unicode
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.sqlalchemy.model.base import Base
@@ -45,11 +45,6 @@ class CirculationEvent(Base):
     library: Mapped[Library | None] = relationship(
         "Library", back_populates="circulation_events"
     )
-
-    # This column is no longer used and will be removed in a future
-    # release. Its left temporarily for backwards compatibility.
-    # TODO: Remove this column.
-    _location_deprecated = Column("location", Unicode, index=True)
 
     __table_args__ = (
         # Make it easy to list circulation events in descending
