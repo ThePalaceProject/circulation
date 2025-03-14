@@ -5,7 +5,7 @@ import sys
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import IO, TYPE_CHECKING, BinaryIO, NamedTuple, Protocol
+from typing import IO, TYPE_CHECKING, NamedTuple, Protocol
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -29,6 +29,7 @@ else:
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
+    from mypy_boto3_s3.type_defs import FileobjTypeDef
 
 
 class MockS3ServiceUpload(NamedTuple):
@@ -114,7 +115,7 @@ class MockS3Service(S3Service):
     def store_stream(
         self,
         key: str,
-        stream: BinaryIO,
+        stream: FileobjTypeDef,
         content_type: str | None = None,
     ) -> str | None:
         self.uploads[key] = MockS3ServiceUpload(key, stream.read(), content_type)

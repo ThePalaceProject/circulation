@@ -156,7 +156,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     )
                     self.s3_service.store_stream(
                         key,
-                        report_zip,  # type: ignore[arg-type]
+                        report_zip,
                         content_type="application/zip",
                     )
 
