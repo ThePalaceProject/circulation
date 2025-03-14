@@ -401,6 +401,7 @@ def reap_collection(
 
     for identifier in identifiers:
         with task.transaction() as session:
+            identifier = session.merge(identifier)
             collection = Collection.by_id(session, collection_id)
             # We just checked that the collection exists, so it should still exist. Assert
             # that is does for the sake of the type checker.
