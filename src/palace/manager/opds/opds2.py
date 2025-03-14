@@ -379,7 +379,7 @@ class BasePublicationFeed(BaseOpdsModel, Generic[T]):
 
     metadata: FeedMetadata
     links: CompactCollection[StrictLink]
-    publications: Annotated[list[T], Field(min_length=1)]
+    publications: list[T]
 
     _validate_links = field_validator("links")(validate_self_link)
 
