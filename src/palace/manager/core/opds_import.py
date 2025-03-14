@@ -301,7 +301,7 @@ class BaseOPDSAPI(
     ) -> RedirectFulfillment:
         requested_mechanism = delivery_mechanism.delivery_mechanism
         rep = None
-        for lpdm in licensepool.delivery_mechanisms:
+        for lpdm in licensepool.available_delivery_mechanisms:
             if (
                 lpdm.resource is None
                 or lpdm.resource.representation is None
