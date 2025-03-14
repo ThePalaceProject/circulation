@@ -2343,14 +2343,19 @@ class DatabaseBackedWorkList(WorkList):
         # else who uses this.)
         qu = qu.options(
             # These speed up the process of generating acquisition links.
-            joinedload(license_pool_name, "delivery_mechanisms"),
-            joinedload(license_pool_name, "delivery_mechanisms", "delivery_mechanism"),
+            joinedload(license_pool_name, "available_delivery_mechanisms"),
+            joinedload(
+                license_pool_name, "available_delivery_mechanisms", "delivery_mechanism"
+            ),
             joinedload(license_pool_name, "identifier"),
             # These speed up the process of generating the open-access link
             # for open-access works.
-            joinedload(license_pool_name, "delivery_mechanisms", "resource"),
+            joinedload(license_pool_name, "available_delivery_mechanisms", "resource"),
             joinedload(
-                license_pool_name, "delivery_mechanisms", "resource", "representation"
+                license_pool_name,
+                "available_delivery_mechanisms",
+                "resource",
+                "representation",
             ),
         )
         return qu

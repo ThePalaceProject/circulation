@@ -175,7 +175,7 @@ class Annotator(LoggerMixin):
         # Since this depends on the pool, it might be better not to cache it.
         # But it's probably not a huge problem if it's outdated.
         # File formats: a=one format, m=multiple formats, u=unknown
-        if len(pool.delivery_mechanisms) == 1:
+        if len(pool.available_delivery_mechanisms) == 1:
             file_formats_code = "a"
         else:
             file_formats_code = "m"
@@ -479,7 +479,7 @@ class Annotator(LoggerMixin):
 
     @classmethod
     def add_formats(cls, record: Record, pool: LicensePool) -> None:
-        for lpdm in pool.delivery_mechanisms:
+        for lpdm in pool.available_delivery_mechanisms:
             dm = lpdm.delivery_mechanism
             format = cls.FORMAT_TERMS.get((dm.content_type, dm.drm_scheme))
             if format:

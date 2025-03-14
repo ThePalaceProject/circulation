@@ -754,7 +754,7 @@ class Opds2ApiFixture:
 
         self.pool = MagicMock(spec=LicensePool)
         self.mechanism = MagicMock(spec=LicensePoolDeliveryMechanism)
-        self.pool.delivery_mechanisms = [self.mechanism]
+        self.pool.available_delivery_mechanisms = [self.mechanism]
         self.pool.data_source = self.data_source
         self.mechanism.resource.representation.public_url = (
             "http://example.org/11234/fulfill?authToken={authentication_token}"

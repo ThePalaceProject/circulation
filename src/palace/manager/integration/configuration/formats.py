@@ -64,7 +64,7 @@ class FormatPriorities:
         :param pool: The license pool
         :return: A list of suitable delivery mechanisms in priority order, highest priority first
         """
-        return self.prioritize_mechanisms(pool.delivery_mechanisms)
+        return self.prioritize_mechanisms(pool.available_delivery_mechanisms)
 
     def prioritize_mechanisms(
         self, mechanisms: list[LicensePoolDeliveryMechanism]

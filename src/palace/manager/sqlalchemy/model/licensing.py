@@ -6,7 +6,6 @@ import datetime
 import logging
 from enum import Enum as PythonEnum
 from enum import IntEnum, auto
-from operator import and_
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import Boolean, Column, DateTime
@@ -18,8 +17,10 @@ from sqlalchemy import (
     String,
     Unicode,
     UniqueConstraint,
+    and_,
     or_,
     select,
+    true,
 )
 from sqlalchemy.orm import Mapped, lazyload, relationship
 from sqlalchemy.orm.session import Session
@@ -323,12 +324,33 @@ class LicensePool(Base):
         Index("ix_licensepools_collection_id_work_id", collection_id, work_id),
     )
 
+    # The available delivery mechanisms for this LicensePool. This is a read-only
+    # relationship -- to add or remove delivery mechanisms you should call the
+    # LicensePoolDeliveryMechanism.set() method.
+    available_delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = (
+        relationship(
+            "LicensePoolDeliveryMechanism",
+            primaryjoin=(
+                "and_(LicensePool.data_source_id == LicensePoolDeliveryMechanism.data_source_id,"
+                "LicensePool.identifier_id == LicensePoolDeliveryMechanism.identifier_id,"
+                "LicensePoolDeliveryMechanism.available == true())"
+            ),
+            foreign_keys=(data_source_id, identifier_id),
+            uselist=True,
+            viewonly=True,
+        )
+    )
+
+    # The delivery mechanisms for this LicensePool. This is also a read-only relationship.
     delivery_mechanisms: Mapped[list[LicensePoolDeliveryMechanism]] = relationship(
         "LicensePoolDeliveryMechanism",
-        primaryjoin="and_(LicensePool.data_source_id==LicensePoolDeliveryMechanism.data_source_id, LicensePool.identifier_id==LicensePoolDeliveryMechanism.identifier_id)",
+        primaryjoin=(
+            "and_(LicensePool.data_source_id == LicensePoolDeliveryMechanism.data_source_id,"
+            "LicensePool.identifier_id == LicensePoolDeliveryMechanism.identifier_id)"
+        ),
         foreign_keys=(data_source_id, identifier_id),
         uselist=True,
-        overlaps="data_source, identifier",
+        viewonly=True,
     )
 
     def __repr__(self):
@@ -482,7 +504,7 @@ class LicensePool(Base):
         """
         return (
             _db.query(LicensePool)
-            .outerjoin(LicensePool.delivery_mechanisms)
+            .outerjoin(LicensePool.available_delivery_mechanisms)
             .filter(LicensePoolDeliveryMechanism.id == None)
         )
 
@@ -492,7 +514,7 @@ class LicensePool(Base):
         return (self.open_access or self.licenses_owned > 0) and any(
             [
                 dm.delivery_mechanism.default_client_can_fulfill
-                for dm in self.delivery_mechanisms
+                for dm in self.available_delivery_mechanisms
             ]
         )
 
@@ -580,7 +602,7 @@ class LicensePool(Base):
         an open-access LicensePoolDeliveryMechanism for this LicensePool.
         """
         old_status = self.open_access
-        for dm in self.delivery_mechanisms:
+        for dm in self.available_delivery_mechanisms:
             if dm.is_open_access:
                 self.open_access = True
                 break
@@ -1510,6 +1532,7 @@ class LicensePool(Base):
         drm_scheme: str | None,
         rights_uri: str | None,
         resource: Resource | None = None,
+        available: bool | None = None,
         db: Session | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Ensure that this LicensePool (and any other LicensePools for the same
@@ -1523,6 +1546,7 @@ class LicensePool(Base):
             drm_scheme,
             rights_uri,
             resource,
+            available,
             db,
         )
 
@@ -1573,6 +1597,12 @@ class LicensePoolDeliveryMechanism(Base):
         back_populates="license_pool_delivery_mechanisms",
     )
 
+    # With some distributors we don't know for sure if a particular delivery
+    # mechanism is available until we try to use it. This tracks that, so that
+    # we can set the availability of a delivery mechanism to False if it fails,
+    # so we don't keep trying it.
+    available: Mapped[bool] = Column(Boolean, server_default=true(), nullable=False)
+
     resource_id = Column(Integer, ForeignKey("resources.id"), nullable=True)
     resource: Mapped[Resource | None] = relationship(
         "Resource", back_populates="licensepooldeliverymechanisms"
@@ -1596,6 +1626,7 @@ class LicensePoolDeliveryMechanism(Base):
         drm_scheme: str | None,
         rights_uri: str | None,
         resource: Resource | None = None,
+        available: bool | None = None,
         db: Session | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
@@ -1610,6 +1641,9 @@ class LicensePoolDeliveryMechanism(Base):
             title.
         :param resource: A Resource representing the book itself in
             a freely redistributable form.
+        :param available: Is this LicensePoolDeliveryMechanism currently
+            available? If None the availability won't be changed, and
+            will use the default value if its created.
         :param db: Use this database connection. If this is not supplied
             the database connection will be taken from the data_source.
         """
@@ -1630,6 +1664,9 @@ class LicensePoolDeliveryMechanism(Base):
             data_source=data_source,
             delivery_mechanism=delivery_mechanism,
             resource=resource,
+            create_method_kwargs={
+                "available": available,
+            },
         )
         if not lpdm.rights_status or rights_status.uri != RightsStatus.UNKNOWN:
             # We have better information available about the

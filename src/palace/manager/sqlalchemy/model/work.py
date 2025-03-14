@@ -1160,7 +1160,7 @@ class Work(Base, LoggerMixin):
                 continue
             if pool.open_access:
                 expect_downloads = True
-            for lpdm in pool.delivery_mechanisms:
+            for lpdm in pool.available_delivery_mechanisms:
                 if lpdm.resource and lpdm.resource.final_url:
                     downloads.append(lpdm.resource)
 

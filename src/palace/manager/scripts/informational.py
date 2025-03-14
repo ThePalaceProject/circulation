@@ -355,7 +355,10 @@ class Explain(IdentifierInputScript):
                     fulfillable = "Fulfillable"
                 else:
                     fulfillable = "Unfulfillable"
-                self.write(f"  {fulfillable} {dm.content_type}/{dm.drm_scheme}")
+                available = "Available" if lpdm.available else "Unavailable"
+                self.write(
+                    f"  {available} {fulfillable} {dm.content_type}/{dm.drm_scheme}"
+                )
         else:
             self.write(" No delivery mechanisms.")
         self.write(

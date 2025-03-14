@@ -551,6 +551,7 @@ class FormatData:
         drm_scheme: str | None,
         link: LinkData | None = None,
         rights_uri: str | None = None,
+        available: bool = True,
     ):
         self.content_type = content_type
         self.drm_scheme = drm_scheme
@@ -560,6 +561,7 @@ class FormatData:
         self.rights_uri = rights_uri
         if (not self.rights_uri) and self.link and self.link.rights_uri:
             self.rights_uri = self.link.rights_uri
+        self.available = available
 
 
 class LicenseData(LicenseFunctions):
@@ -1045,6 +1047,7 @@ class CirculationData(LoggerMixin):
                 format.drm_scheme,
                 format.rights_uri or self.default_rights_uri,
                 resource,
+                available=format.available,
                 db=_db,
             )
             new_lpdms.append(lpdm)
