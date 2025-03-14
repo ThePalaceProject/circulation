@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -57,6 +59,31 @@ def test_publication_feed(
     for publication, identifier in zip(feed.publications, publication_identifiers):
         assert isinstance(publication, Publication)
         assert publication.metadata.identifier == identifier
+
+
+def test_publication_feed_no_publications(
+    opds2_files_fixture: OPDS2FilesFixture,
+) -> None:
+
+    feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
+
+    # Remove the publications key from the feed
+    del feed_dict["publications"]
+
+    # This should raise an error because the feed is missing the publications key
+    with pytest.raises(ValidationError) as exc_info:
+        PublicationFeed.model_validate(feed_dict)
+
+    errors = exc_info.value.errors()
+    assert len(errors) == 1
+    assert errors[0].get("msg") == "Field required"
+
+    # But an empty list of publications should be fine, this can happen on the
+    # last page of a paginated feed
+    feed_dict["publications"] = []
+    feed = PublicationFeed.model_validate(feed_dict)
+    assert isinstance(feed.publications, list)
+    assert len(feed.publications) == 0
 
 
 def test_publication_feed_failures(
