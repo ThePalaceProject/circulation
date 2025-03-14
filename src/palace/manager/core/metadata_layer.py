@@ -879,9 +879,7 @@ class CirculationData(LoggerMixin):
     def data_source(self, _db: Session) -> DataSource:
         """Find the DataSource associated with this circulation information."""
         if not self.data_source_obj:
-            obj = DataSource.lookup(_db, self.data_source_name)
-            if not obj:
-                raise ValueError("Data source %s not found!" % self._data_source)
+            obj = DataSource.lookup(_db, self.data_source_name, autocreate=True)
             self.data_source_obj = obj
         return self.data_source_obj
 
