@@ -2194,7 +2194,7 @@ class TestOPDSAPI:
         mock_lpdm.delivery_mechanism = mock_mechanism
 
         # This license pool has no available formats.
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = []
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = []
         with pytest.raises(FormatNotAvailable):
             opds_api_fixture.api.fulfill(
                 opds_api_fixture.mock_patron,
@@ -2205,7 +2205,7 @@ class TestOPDSAPI:
 
         # This license pool has a delivery mechanism, but it's not the one
         # we're looking for.
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = [
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = [
             MagicMock(),
             MagicMock(),
         ]
@@ -2220,7 +2220,7 @@ class TestOPDSAPI:
         # This license pool has the delivery mechanism we're looking for, but
         # it does not have a resource.
         mock_lpdm.resource = None
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = [mock_lpdm]
         with pytest.raises(FormatNotAvailable):
             opds_api_fixture.api.fulfill(
                 opds_api_fixture.mock_patron,
@@ -2233,7 +2233,7 @@ class TestOPDSAPI:
         # it has a resource, but the resource doesn't have a representation.
         mock_lpdm.resource = MagicMock(spec=Resource)
         mock_lpdm.resource.representation = None
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = [mock_lpdm]
         with pytest.raises(FormatNotAvailable):
             opds_api_fixture.api.fulfill(
                 opds_api_fixture.mock_patron,
@@ -2247,7 +2247,7 @@ class TestOPDSAPI:
         # representation doesn't have a URL.
         mock_lpdm.resource.representation = MagicMock(spec=Representation)
         mock_lpdm.resource.representation.public_url = None
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = [mock_lpdm]
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = [mock_lpdm]
         with pytest.raises(FormatNotAvailable):
             opds_api_fixture.api.fulfill(
                 opds_api_fixture.mock_patron,
@@ -2258,7 +2258,7 @@ class TestOPDSAPI:
 
         # This license pool has everything we need, so we can fulfill.
         mock_lpdm.resource.representation.public_url = "http://foo.com/bar.epub"
-        opds_api_fixture.mock_licensepool.delivery_mechanisms = [
+        opds_api_fixture.mock_licensepool.available_delivery_mechanisms = [
             MagicMock(),
             MagicMock(),
             mock_lpdm,

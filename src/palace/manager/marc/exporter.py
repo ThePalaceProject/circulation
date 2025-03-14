@@ -242,7 +242,7 @@ class MarcExporter(
                             selectinload(Contribution.contributor)
                         )
                     ),
-                    selectinload(LicensePool.delivery_mechanisms).options(
+                    selectinload(LicensePool.available_delivery_mechanisms).options(
                         selectinload(LicensePoolDeliveryMechanism.delivery_mechanism)
                     ),
                     selectinload(LicensePool.data_source),
