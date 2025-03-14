@@ -726,7 +726,7 @@ class CirculationData(LoggerMixin):
 
     def __init__(
         self,
-        data_source: str | DataSource | None,
+        data_source: str | DataSource,
         primary_identifier: Identifier | IdentifierData | None,
         licenses_owned: int | None = None,
         licenses_available: int | None = None,
@@ -749,7 +749,7 @@ class CirculationData(LoggerMixin):
         self._data_source = data_source
         if isinstance(self._data_source, DataSource):
             self.data_source_obj: DataSource | None = self._data_source
-            self.data_source_name: str | None = self.data_source_obj.name
+            self.data_source_name = self.data_source_obj.name
         else:
             self.data_source_obj = None
             self.data_source_name = self._data_source
@@ -876,25 +876,20 @@ class CirculationData(LoggerMixin):
 
         return description_string % description_data
 
-    def data_source(self, _db: Session) -> DataSource | None:
+    def data_source(self, _db: Session) -> DataSource:
         """Find the DataSource associated with this circulation information."""
         if not self.data_source_obj:
-            if self.data_source_name:
-                obj = DataSource.lookup(_db, self.data_source_name)
-                if not obj:
-                    raise ValueError("Data source %s not found!" % self._data_source)
-            else:
-                obj = None
+            obj = DataSource.lookup(_db, self.data_source_name, autocreate=True)
             self.data_source_obj = obj
         return self.data_source_obj
 
-    def primary_identifier(self, _db: Session) -> Identifier | None:
+    def primary_identifier(self, _db: Session) -> Identifier:
         """Find the Identifier associated with this circulation information."""
         if not self.primary_identifier_obj:
             if self._primary_identifier:
                 obj, ignore = self._primary_identifier.load(_db)
             else:
-                obj = None
+                raise ValueError("No primary identifier provided!")
             self.primary_identifier_obj = obj
         return self.primary_identifier_obj
 
