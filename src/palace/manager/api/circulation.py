@@ -792,7 +792,7 @@ class PatronActivityCirculationAPI(
 
         self.sync_loans(patron, remote_loans, local_loans)
         self.sync_holds(patron, remote_holds, local_holds)
-        self.delete_loans_no_longer_available(patron)
+        self.delete_loans_and_holds_no_longer_available(patron)
 
     def delete_loans_and_holds_no_longer_available(self, patron: Patron) -> None:
         # get all loans and holds for patron
