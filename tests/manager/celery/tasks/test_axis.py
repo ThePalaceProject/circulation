@@ -1,11 +1,12 @@
 import logging
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from sqlalchemy.orm.exc import ObjectDeletedError
 
 from palace.manager.api.axis import Axis360API
+from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
     DEFAULT_BATCH_SIZE,
@@ -19,14 +20,17 @@ from palace.manager.celery.tasks.axis import (
     timestamp,
 )
 from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
+from tests.mocks.mock import MockRequestsResponse
 
 
 class QueueCollectionImportLockFixture:
@@ -59,6 +63,21 @@ def test_queue_collection_import_lock(
         collection_id=queue_collection_import_lock_fixture.collection.id
     ).wait()
     assert "Skipping list_identifiers_for_import" in caplog.text
+
+
+def test_list_identifiers_for_import_configuration_error(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    collection = db.collection(name="test_collection", protocol=Axis360API)
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
+            "service", "uh oh", MockRequestsResponse(401)
+        )
+        list_identifiers_for_import.delay(collection_id=collection.id).wait()
+    assert "Failed to authenticate with Axis 360 API" in caplog.text
 
 
 def set_caplog_level_to_info(caplog):
@@ -217,7 +236,10 @@ def test_import_items(
         f"Finished importing identifiers for collection ({collection.name}, id={collection.id})"
         in caplog.text
     )
-    assert f"Imported {len(title_ids)} identifiers" in caplog.text
+    assert (
+        f"Import run complete for collection ({collection.name}, id={collection.id}:  {len(title_ids)} identifiers imported successfully"
+        in caplog.text
+    )
 
 
 def test_import_identifiers_with_requeue(
@@ -248,7 +270,6 @@ def test_import_identifiers_with_requeue(
             identifiers=identifiers,
             collection_id=collection.id,
             batch_size=1,
-            target_max_execution_time_in_seconds=0,
         ).wait()
 
     assert mock_api.availability_by_title_ids.call_count == 2
@@ -286,6 +307,28 @@ def test_reap_all_collections(
         assert "Finished queuing reap collection tasks" in caplog.text
 
 
+def test_reap_collection_configuration_error(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    db.edition(
+        with_license_pool=True,
+        identifier_type=Identifier.AXIS_360_ID,
+        collection=collection,
+    )
+
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value.bearer_token.side_effect = BadResponseException(
+            "service", "uh oh", MockRequestsResponse(401)
+        )
+        reap_collection.delay(collection_id=collection.id).wait()
+
+    assert "Failed to authenticate with Axis 360 API" in caplog.text
+
+
 def test_reap_collection_with_requeue(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
@@ -311,12 +354,15 @@ def test_reap_collection_with_requeue(
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
 
         update_license_pools = mock_api.update_licensepools_for_identifiers
-        assert update_license_pools.call_count == 2
+        assert update_license_pools.call_count == 3
 
         assert update_license_pools.call_args_list[0].kwargs == {
-            "identifiers": identifiers[0:2]
+            "identifiers": identifiers[0:1]
         }
         assert update_license_pools.call_args_list[1].kwargs == {
+            "identifiers": identifiers[1:2]
+        }
+        assert update_license_pools.call_args_list[2].kwargs == {
             "identifiers": identifiers[2:]
         }
         assert f"Re-queuing reap_collection task at offset=2" in caplog.text
@@ -440,3 +486,31 @@ def test_transient_failure_if_requested_book_not_mentioned(
         )
         assert [] == identifier.licensed_through
         assert [] == identifier.primarily_identifies
+
+
+def test__check_api_credentials():
+    mock_task = create_autospec(Task)
+    mock_collection = create_autospec(Collection)
+    mock_api = create_autospec(Axis360API)
+
+    # If api.bearer_token() runs successfully, the function should return True
+    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is True
+    mock_api.bearer_token.assert_called_once()
+
+    # If a BadResponseException is raised with a 401 status code, the function should return False
+    mock_api.bearer_token.side_effect = BadResponseException(
+        "service", "uh oh", MockRequestsResponse(401)
+    )
+    assert axis._check_api_credentials(mock_task, mock_collection, mock_api) is False
+
+    # If a BadResponseException is raised with a status code other than 401, the function should raise the exception
+    mock_api.bearer_token.side_effect = BadResponseException(
+        "service", "uh oh", MockRequestsResponse(500)
+    )
+    with pytest.raises(BadResponseException):
+        axis._check_api_credentials(mock_task, mock_collection, mock_api)
+
+    # Any other exception should be raised
+    mock_api.bearer_token.side_effect = ValueError
+    with pytest.raises(ValueError):
+        axis._check_api_credentials(mock_task, mock_collection, mock_api)

@@ -398,6 +398,17 @@ class TestMetadataImporter:
 
 
 class TestContributorData:
+    def test__init__(self):
+        # Roles defaults to AUTHOR
+        assert ContributorData().roles == [Contributor.Role.AUTHOR]
+
+        # If roles is a string, it is converted into a list
+        assert ContributorData(roles="foo").roles == ["foo"]
+
+        # if roles is a sequence (tuple, list, etc), it is copied to a list
+        assert ContributorData(roles=("x", "y")).roles == ["x", "y"]
+        assert ContributorData(roles=["x", "y"]).roles == ["x", "y"]
+
     def test_from_contribution(self, db: DatabaseTransactionFixture):
         # Makes sure ContributorData.from_contribution copies all the fields over.
 

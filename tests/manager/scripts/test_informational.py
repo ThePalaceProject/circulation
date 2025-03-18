@@ -4,7 +4,7 @@ from io import StringIO
 from unittest.mock import call, create_autospec
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.integration.goals import Goals
 from palace.manager.scripts.informational import (
     Explain,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
 
-from palace.manager.api.overdrive import OverdriveAdvantageAccountListScript
+from palace.manager.api.overdrive.script import OverdriveAdvantageAccountListScript
 
 OverdriveAdvantageAccountListScript().run()

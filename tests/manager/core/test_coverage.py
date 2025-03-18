@@ -3,7 +3,7 @@ import datetime
 import pytest
 
 from palace.manager.api.axis import Axis360API
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.coverage import (
     BaseCoverageProvider,
     CoverageFailure,

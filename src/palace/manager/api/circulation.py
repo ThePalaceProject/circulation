@@ -636,19 +636,15 @@ class BaseCirculationAPI(
     def collection(self) -> Collection | None:
         return Collection.by_id(self._db, id=self.collection_id)
 
-    @classmethod
     def default_notification_email_address(
-        self, library_or_patron: Library | Patron, pin: str | None
-    ) -> str:
+        self, patron: Patron, pin: str | None
+    ) -> str | None:
         """What email address should be used to notify this library's
         patrons of changes?
 
-        :param library_or_patron: A Library or a Patron.
+        :param patron: a Patron.
         """
-        if isinstance(library_or_patron, Patron):
-            library = library_or_patron.library
-        else:
-            library = library_or_patron
+        library = patron.library
         return library.settings.default_notification_email_address
 
     def integration_configuration(self) -> IntegrationConfiguration:

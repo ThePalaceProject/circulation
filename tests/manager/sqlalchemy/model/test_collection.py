@@ -5,7 +5,8 @@ import pytest
 from sqlalchemy import select
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
-from palace.manager.api.overdrive import OverdriveAPI, OverdriveLibrarySettings
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals

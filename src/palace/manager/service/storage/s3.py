@@ -5,7 +5,7 @@ from functools import cached_property
 from io import BytesIO
 from string import Formatter
 from types import TracebackType
-from typing import IO, TYPE_CHECKING, BinaryIO
+from typing import IO, TYPE_CHECKING
 from urllib.parse import quote
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -21,6 +21,7 @@ else:
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
+    from mypy_boto3_s3.type_defs import FileobjTypeDef
 
 
 class MultipartS3UploadPart(BaseModel):
@@ -170,7 +171,7 @@ class S3Service(LoggerMixin):
     def store_stream(
         self,
         key: str,
-        stream: BinaryIO,
+        stream: FileobjTypeDef,
         content_type: str | None = None,
     ) -> str | None:
         try:

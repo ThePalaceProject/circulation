@@ -38,7 +38,8 @@ from palace.manager.api.discovery.opds_registration import (
 )
 from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.settings import OPDS2WithODLSettings
-from palace.manager.api.overdrive import OverdriveAPI, OverdriveSettings
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.settings import OverdriveSettings
 from palace.manager.api.simple_authentication import (
     SimpleAuthenticationProvider,
     SimpleAuthSettings,

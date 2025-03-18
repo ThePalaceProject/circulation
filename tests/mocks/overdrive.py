@@ -2,8 +2,8 @@ import json
 
 from sqlalchemy.orm import Session
 
-from palace.manager.api.overdrive import (
-    OverdriveAPI,
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.settings import (
     OverdriveLibrarySettings,
     OverdriveSettings,
 )

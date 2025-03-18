@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, create_autospec
 from pytest import LogCaptureFixture
 from sqlalchemy.orm import sessionmaker
 
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     GenerateInventoryAndHoldsReportsJob,
     generate_inventory_and_hold_reports,

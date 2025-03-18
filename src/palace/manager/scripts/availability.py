@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from palace.manager.api.bibliotheca import BibliothecaCirculationSweep
-from palace.manager.api.overdrive import OverdriveAPI
+from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.identifier import Identifier
 

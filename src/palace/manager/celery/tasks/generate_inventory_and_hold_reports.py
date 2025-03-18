@@ -156,7 +156,7 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     )
                     self.s3_service.store_stream(
                         key,
-                        report_zip,  # type: ignore[arg-type]
+                        report_zip,
                         content_type="application/zip",
                     )
 
@@ -198,97 +198,102 @@ class GenerateInventoryAndHoldsReportsJob(Job):
     @staticmethod
     def inventory_report_query() -> str:
         return """
-            SELECT
-                e.title,
-                e.author,
-                i.identifier,
+           SELECT
+                ed.title,
+                ed.author,
+                id.identifier,
                 COALESCE(
                     CASE
-                        WHEN i.type = 'ISBN' THEN i.identifier
+                        WHEN id.type = 'ISBN' THEN id.identifier
                         ELSE isbn.identifier
                     END,
                     ''
                 ) AS isbn,
-                e.language,
-                e.publisher,
-                e.medium AS format,
+                ed.language,
+                ed.publisher,
+                ed.medium AS format,
                 w.audience,
                 wg.genres,
-                d.name AS data_source,
+                ds.name AS data_source,
                 ic.name AS collection_name,
-                l.expires AS license_expiration,
-                DATE_PART('day', l.expires - NOW()) AS days_remaining_on_license,
-                l.checkouts_left AS remaining_loans,
-                l.terms_concurrency AS allowed_concurrent_users,
+                lic.expires AS license_expiration,
+                DATE_PART('day', lic.expires - NOW()) AS days_remaining_on_license,
+                lic.checkouts_left AS remaining_loans,
+                lic.terms_concurrency AS allowed_concurrent_users,
                 COALESCE(lib_loans.active_loan_count, 0) AS library_active_loan_count,
                 CASE
                     WHEN collection_sharing.is_shared_collection THEN lp.licenses_reserved
                     ELSE -1
                 END AS shared_active_loan_count
             FROM licensepools lp
-            JOIN identifiers i ON lp.identifier_id = i.id
-            LEFT OUTER JOIN (
-                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+            JOIN identifiers id ON lp.identifier_id = id.id
+            LEFT OUTER JOIN LATERAL (
+                -- Best matching ISBN for this item, if available.
+                -- Note: We do this only if primary identifier is not ISBN.
+                SELECT isbn_sub.identifier
                 FROM equivalents eq
-                JOIN identifiers isbn ON eq.output_id = isbn.id
-                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
-                ORDER BY eq.input_id, eq.strength DESC
-            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
-            JOIN editions e ON e.primary_identifier_id = i.id
+                JOIN identifiers isbn_sub ON eq.output_id = isbn_sub.id
+                WHERE eq.input_id = id.id
+                  AND isbn_sub.type = 'ISBN' AND isbn_sub.identifier IS NOT NULL
+                  AND eq.strength > 0.5 AND eq.enabled = true
+                ORDER BY eq.strength DESC
+                LIMIT 1
+            ) isbn ON id.type != 'ISBN'
+            JOIN editions ed ON ed.id = lp.presentation_edition_id
             JOIN works w ON lp.work_id = w.id
-            JOIN datasources d ON e.data_source_id = d.id
+            JOIN datasources ds ON lp.data_source_id = ds.id
             JOIN collections c ON lp.collection_id = c.id
             JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
-            JOIN integration_library_configurations il ON ic.id = il.parent_id
-            JOIN libraries lib ON il.library_id = lib.id
+            JOIN integration_library_configurations ilc ON ic.id = ilc.parent_id
+            JOIN libraries lib ON ilc.library_id = lib.id
             LEFT OUTER JOIN (
+                -- Comma-separated list of genres for this license pool's work.
                 SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
                 FROM genres g
                 JOIN workgenres wg ON g.id = wg.genre_id
                 GROUP BY wg.work_id
             ) wg ON w.id = wg.work_id
-            LEFT OUTER JOIN (
-                SELECT lp.presentation_edition_id, p.library_id, COUNT(ln.id) AS active_loan_count
+            LEFT OUTER JOIN LATERAL (
+                -- How many loans are active for this item in this library?
+                SELECT COUNT(ln.id) AS active_loan_count
                 FROM loans ln
-                JOIN licensepools lp ON ln.license_pool_id = lp.id
                 JOIN patrons p ON ln.patron_id = p.id
-                JOIN libraries l ON p.library_id = l.id
-                WHERE l.id = :library_id
-                GROUP BY p.library_id, lp.presentation_edition_id
-            ) lib_loans ON e.id = lib_loans.presentation_edition_id
-            JOIN (
-                SELECT ilc.parent_id, COUNT(ilc.parent_id) > 1 AS is_shared_collection
-                FROM integration_library_configurations ilc
-                JOIN integration_configurations i ON ilc.parent_id = i.id
-                JOIN collections c ON i.id = c.integration_configuration_id
-                GROUP BY ilc.parent_id
-            ) collection_sharing ON ic.id = collection_sharing.parent_id
-            LEFT OUTER JOIN (
-                SELECT license_pool_id, checkouts_left, expires, terms_concurrency
+                WHERE ln.license_pool_id = lp.id AND p.library_id = lib.id
+            ) lib_loans ON TRUE
+            JOIN LATERAL (
+                -- Do other libraries share this collection?
+                SELECT COUNT(ilc_sub.parent_id) > 1 AS is_shared_collection
+                FROM integration_library_configurations ilc_sub
+                WHERE ilc_sub.parent_id = ic.id
+            ) collection_sharing ON TRUE
+            LEFT OUTER JOIN LATERAL (
+                -- License information, if present.
+                -- Note that this may result in multiple rows.
+                SELECT checkouts_left, expires, terms_concurrency
                 FROM licenses
-                WHERE status = 'available'
-            ) l ON lp.id = l.license_pool_id
-            WHERE ic.id IN :integration_ids AND lib.id = :library_id
-            ORDER BY e.title, e.author
+                WHERE license_pool_id = lp.id AND status = 'available'
+            ) lic ON TRUE
+            WHERE lib.id = :library_id AND ic.id IN :integration_ids
+            ORDER BY ed.sort_title, ed.sort_author, ds.name, ic.name
         """
 
     @staticmethod
     def holds_report_query() -> str:
         return """
             SELECT
-                e.title,
-                e.author,
-                i.identifier,
+                ed.title,
+                ed.author,
+                id.identifier,
                 COALESCE(
                     CASE
-                        WHEN i.type = 'ISBN' THEN i.identifier
+                        WHEN id.type = 'ISBN' THEN id.identifier
                         ELSE isbn.identifier
                     END,
                     ''
                 ) AS isbn,
-                e.language,
-                e.publisher,
-                e.medium AS format,
+                ed.language,
+                ed.publisher,
+                ed.medium AS format,
                 w.audience,
                 wg.genres,
                 d.name AS data_source,
@@ -299,44 +304,49 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                     ELSE -1
                 END AS shared_active_hold_count
             FROM licensepools lp
-            JOIN identifiers i ON lp.identifier_id = i.id
-            LEFT OUTER JOIN (
-                SELECT DISTINCT ON (eq.input_id) eq.input_id, isbn.identifier
+            JOIN identifiers id ON lp.identifier_id = id.id
+            LEFT OUTER JOIN LATERAL (
+                -- Best matching ISBN for this item, if available.
+                -- Note: We do this only if primary identifier is not ISBN.
+                SELECT isbn_sub.identifier
                 FROM equivalents eq
-                JOIN identifiers isbn ON eq.output_id = isbn.id
-                WHERE isbn.type = 'ISBN' AND isbn.identifier IS NOT NULL
-                ORDER BY eq.input_id, eq.strength DESC
-            ) isbn ON i.type != 'ISBN' AND i.id = isbn.input_id
-            JOIN editions e ON e.primary_identifier_id = i.id
+                JOIN identifiers isbn_sub ON eq.output_id = isbn_sub.id
+                WHERE eq.input_id = id.id
+                  AND isbn_sub.type = 'ISBN' AND isbn_sub.identifier IS NOT NULL
+                  AND eq.strength > 0.5 AND eq.enabled = true
+                ORDER BY eq.strength DESC
+                LIMIT 1
+            ) isbn ON id.type != 'ISBN'
+            JOIN editions ed ON ed.id = lp.presentation_edition_id
             JOIN works w ON lp.work_id = w.id
-            JOIN datasources d ON e.data_source_id = d.id
+            JOIN datasources d ON lp.data_source_id = d.id
             JOIN collections c ON lp.collection_id = c.id
             JOIN integration_configurations ic ON c.integration_configuration_id = ic.id
             JOIN integration_library_configurations il ON ic.id = il.parent_id
             JOIN libraries lib ON il.library_id = lib.id
             LEFT OUTER JOIN (
+                -- Comma-separated list of genres for this license pool's work.
                 SELECT wg.work_id, STRING_AGG(g.name, ',' ORDER BY g.name) AS genres
                 FROM genres g
                 JOIN workgenres wg ON g.id = wg.genre_id
                 GROUP BY wg.work_id
             ) wg ON w.id = wg.work_id
-            JOIN (
-                SELECT lp.presentation_edition_id,  p.library_id, COUNT(h.id) AS active_hold_count
+            LEFT OUTER JOIN LATERAL (
+                -- How many holds are active for this item in this library?
+                SELECT COUNT(h.id) AS active_hold_count
                 FROM holds h
-                JOIN licensepools lp ON h.license_pool_id = lp.id
                 JOIN patrons p ON h.patron_id = p.id
-                WHERE p.library_id = :library_id AND (h.end IS NULL OR h.end > NOW() OR h.position > 0)
-                GROUP BY p.library_id, lp.presentation_edition_id
-            ) lib_holds ON e.id = lib_holds.presentation_edition_id
-            JOIN (
-                SELECT ilc.parent_id, COUNT(ilc.parent_id) > 1 AS is_shared_collection
+                WHERE h.license_pool_id = lp.id AND p.library_id = lib.id
+                  AND (h.end IS NULL OR h.end > NOW() OR h.position > 0)
+            ) lib_holds ON TRUE
+           JOIN LATERAL (
+                -- Do other libraries share this collection?
+                SELECT COUNT(ilc.parent_id) > 1 AS is_shared_collection
                 FROM integration_library_configurations ilc
-                JOIN integration_configurations i ON ilc.parent_id = i.id
-                JOIN collections c ON i.id = c.integration_configuration_id
-                GROUP BY ilc.parent_id
-            ) collection_sharing ON ic.id = collection_sharing.parent_id
-            WHERE ic.id IN :integration_ids AND lib.id = :library_id
-            ORDER BY e.title, e.author
+                WHERE ilc.parent_id = ic.id
+            ) collection_sharing ON TRUE
+            WHERE lib.id = :library_id AND ic.id IN :integration_ids
+            ORDER BY ed.sort_title, ed.sort_author, d.name, ic.name
         """
 
 

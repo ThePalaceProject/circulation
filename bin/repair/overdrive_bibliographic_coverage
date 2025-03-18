@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """Make sure all Overdrive books have bibliographic coverage."""
 
-
-from palace.manager.api.overdrive import OverdriveBibliographicCoverageProvider
+from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
 from palace.manager.scripts.coverage_provider import RunCoverageProviderScript
 
 RunCoverageProviderScript(OverdriveBibliographicCoverageProvider).run()

@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 """Sweep through our Overdrive collections updating delivery mechanisms."""
 
-
-from palace.manager.api.overdrive import OverdriveFormatSweep
+from palace.manager.api.overdrive.monitor import OverdriveFormatSweep
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 
 RunCollectionMonitorScript(OverdriveFormatSweep).run()
