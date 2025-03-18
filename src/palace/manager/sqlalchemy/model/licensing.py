@@ -1504,13 +1504,26 @@ class LicensePool(Base):
                 return pool, link
         return self, None
 
-    def set_delivery_mechanism(self, *args, **kwargs):
+    def set_delivery_mechanism(
+        self,
+        content_type: str | None,
+        drm_scheme: str | None,
+        rights_uri: str | None,
+        resource: Resource | None = None,
+        db: Session | None = None,
+    ) -> LicensePoolDeliveryMechanism:
         """Ensure that this LicensePool (and any other LicensePools for the same
         book) have a LicensePoolDeliveryMechanism for this media type,
         DRM scheme, rights status, and resource.
         """
         return LicensePoolDeliveryMechanism.set(
-            self.data_source, self.identifier, *args, **kwargs
+            self.data_source,
+            self.identifier,
+            content_type,
+            drm_scheme,
+            rights_uri,
+            resource,
+            db,
         )
 
 
@@ -1577,13 +1590,13 @@ class LicensePoolDeliveryMechanism(Base):
     @classmethod
     def set(
         cls,
-        data_source,
-        identifier,
-        content_type,
-        drm_scheme,
-        rights_uri,
-        resource=None,
-        db=None,
+        data_source: DataSource,
+        identifier: Identifier,
+        content_type: str | None,
+        drm_scheme: str | None,
+        rights_uri: str | None,
+        resource: Resource | None = None,
+        db: Session | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
         certain format.
@@ -1597,6 +1610,8 @@ class LicensePoolDeliveryMechanism(Base):
             title.
         :param resource: A Resource representing the book itself in
             a freely redistributable form.
+        :param db: Use this database connection. If this is not supplied
+            the database connection will be taken from the data_source.
         """
 
         if db:
@@ -1859,8 +1874,10 @@ class DeliveryMechanism(Base, HasSessionCache):
         return f"<Delivery mechanism: {self.name}, {fulfillable})>"
 
     @classmethod
-    def lookup(cls, _db, content_type, drm_scheme):
-        def lookup_hook():
+    def lookup(
+        cls, _db: Session, content_type: str | None, drm_scheme: str | None
+    ) -> tuple[DeliveryMechanism, bool]:
+        def lookup_hook() -> tuple[DeliveryMechanism, bool]:
             return get_one_or_create(
                 _db, DeliveryMechanism, content_type=content_type, drm_scheme=drm_scheme
             )
@@ -2093,7 +2110,7 @@ class RightsStatus(Base):
     )
 
     @classmethod
-    def lookup(cls, _db, uri):
+    def lookup(cls, _db: Session, uri: str | None) -> RightsStatus:
         if not uri in list(cls.NAMES.keys()):
             uri = cls.UNKNOWN
         name = cls.NAMES.get(uri)
