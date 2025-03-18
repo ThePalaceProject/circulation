@@ -1,7 +1,7 @@
 """Add LicensePoolDeliveryMechanism.available
 
 Revision ID: df27b4867e56
-Revises: 61df6012a5e6
+Revises: 16c016e599a0
 Create Date: 2025-03-14 18:22:01.825315+00:00
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "df27b4867e56"
-down_revision = "61df6012a5e6"
+down_revision = "16c016e599a0"
 branch_labels = None
 depends_on = None
 
