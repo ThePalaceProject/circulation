@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import datetime
 import json
-import re
-import urllib.parse
-from collections.abc import Callable, Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable
 from functools import partial
 from json import JSONDecodeError
 from threading import RLock
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple, TypeVar, cast, overload
+from urllib.parse import urlsplit
 
 import flask
 from requests import Response
@@ -27,29 +26,41 @@ from palace.manager.api.circulation import (
     RedirectFulfillment,
 )
 from palace.manager.api.circulation_exceptions import (
-    AlreadyOnHold,
+    AlreadyCheckedOut,
     CannotFulfill,
     CannotHold,
     CannotLoan,
     CannotReleaseHold,
-    CannotRenew,
+    CannotReturn,
+    DeliveryMechanismError,
     FormatNotAvailable,
     FulfilledOnIncompatiblePlatform,
     NoAcceptableFormat,
     NoActiveLoan,
-    NoAvailableCopies,
+    NotCheckedOut,
     PatronAuthorizationFailedException,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
 )
 from palace.manager.api.overdrive.advantage import OverdriveAdvantageAccount
 from palace.manager.api.overdrive.constants import (
+    OVERDRIVE_FORMATS,
+    OVERDRIVE_INCOMPATIBLE_FORMATS,
     OVERDRIVE_LABEL,
+    OVERDRIVE_LOCK_IN_FORMATS,
     OVERDRIVE_MAIN_ACCOUNT_ID,
+    OVERDRIVE_OPEN_FORMATS,
+    OVERDRIVE_PALACE_MANIFEST_FORMATS,
+    OVERDRIVE_STREAMING_FORMATS,
     OverdriveConstants,
 )
 from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
+from palace.manager.api.overdrive.exception import OverdriveResponseException
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
+from palace.manager.api.overdrive.model import (
+    BaseOverdriveModel,
+    Checkout,
+    Checkouts,
+    Format,
+)
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.settings import (
     OverdriveChildSettings,
@@ -59,7 +70,11 @@ from palace.manager.api.overdrive.settings import (
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
-from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.core.exceptions import (
+    BasePalaceException,
+    IntegrationException,
+    PalaceValueError,
+)
 from palace.manager.core.metadata_layer import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -74,7 +89,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.sqlalchemy.model.patron import Loan, Patron
+from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
@@ -109,59 +124,42 @@ class OverdriveAPI(
 
     # When a request comes in for a given DeliveryMechanism, what
     # do we tell Overdrive?
-    delivery_mechanism_to_internal_format = {
+    delivery_mechanism_to_internal_format: dict[tuple[str | None, str | None], str] = {
         (epub, no_drm): "ebook-epub-open",
         (epub, adobe_drm): "ebook-epub-adobe",
         (pdf, no_drm): "ebook-pdf-open",
-        (pdf, adobe_drm): "ebook-pdf-adobe",
         (streaming_text, streaming_drm): "ebook-overdrive",
         (streaming_audio, streaming_drm): "audiobook-overdrive",
         (overdrive_audiobook_manifest, libby_drm): "audiobook-overdrive-manifest",
     }
 
-    # Once you choose a non-streaming format you're locked into it and can't
-    # use other formats.
-    LOCK_IN_FORMATS = [
-        x
-        for x in OverdriveConstants.FORMATS
-        if x not in OverdriveConstants.STREAMING_FORMATS
-        and x not in OverdriveConstants.MANIFEST_INTERNAL_FORMATS
-    ]
-
     # TODO: This is a terrible choice but this URL should never be
     # displayed to a patron, so it doesn't matter much.
     DEFAULT_ERROR_URL = "http://thepalaceproject.org/"
-
-    # Map Overdrive's error messages to standard circulation manager
-    # exceptions.
-    ERROR_MESSAGE_TO_EXCEPTION = {
-        "PatronHasExceededCheckoutLimit": PatronLoanLimitReached,
-        "PatronHasExceededCheckoutLimit_ForCPC": PatronLoanLimitReached,
-    }
 
     # A lock for threaded usage.
     lock = RLock()
 
     # Production and testing have different host names for some of the
     # API endpoints. This is configurable on the collection level.
-    HOSTS = {
-        OverdriveConstants.PRODUCTION_SERVERS: dict(
-            host="https://api.overdrive.com",
-            patron_host="https://patron.api.overdrive.com",
-        ),
-        OverdriveConstants.TESTING_SERVERS: dict(
-            host="https://integration.api.overdrive.com",
-            patron_host="https://integration-patron.api.overdrive.com",
-        ),
-    }
-
     # Production and testing setups use the same URLs for Client
     # Authentication and Patron Authentication, but we use the same
     # system as for other hostnames to give a consistent look to the
     # templates.
-    for host in list(HOSTS.values()):
-        host["oauth_patron_host"] = "https://oauth-patron.overdrive.com"
-        host["oauth_host"] = "https://oauth.overdrive.com"
+    HOSTS = {
+        OverdriveConstants.PRODUCTION_SERVERS: dict(
+            host="https://api.overdrive.com",
+            patron_host="https://patron.api.overdrive.com",
+            oauth_patron_host="https://oauth-patron.overdrive.com",
+            oauth_host="https://oauth.overdrive.com",
+        ),
+        OverdriveConstants.TESTING_SERVERS: dict(
+            host="https://integration.api.overdrive.com",
+            patron_host="https://integration-patron.api.overdrive.com",
+            oauth_patron_host="https://oauth-patron.overdrive.com",
+            oauth_host="https://oauth.overdrive.com",
+        ),
+    }
 
     # Each of these endpoint URLs has a slot to plug in one of the
     # appropriate servers. This will be filled in either by a call to
@@ -187,12 +185,8 @@ class OverdriveAPI(
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
     CHECKOUT_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s"
-    FORMATS_ENDPOINT = (
-        "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s/formats"
-    )
     HOLDS_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds"
     HOLD_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds/%(product_id)s"
-    ME_ENDPOINT = "%(patron_host)s/v1/patrons/me"
 
     MAX_CREDENTIAL_AGE = 50 * 60
 
@@ -200,21 +194,6 @@ class OverdriveAPI(
     EVENT_SOURCE = "Overdrive"
 
     EVENT_DELAY = datetime.timedelta(minutes=120)
-
-    # The formats that can be read by the default Library Simplified reader.
-    DEFAULT_READABLE_FORMATS = {
-        "ebook-epub-open",
-        "ebook-epub-adobe",
-        "ebook-pdf-open",
-        "audiobook-overdrive",
-    }
-
-    # The formats that indicate the book has been fulfilled on an
-    # incompatible platform and just can't be fulfilled on Simplified
-    # in any format.
-    INCOMPATIBLE_PLATFORM_FORMATS = {"ebook-kindle"}
-
-    OVERDRIVE_READ_FORMAT = "ebook-overdrive"
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -282,7 +261,7 @@ class OverdriveAPI(
         # This is set by access to ._client_oauth_token
         self._cached_client_oauth_token: OverdriveToken | None = None
 
-        # This is set by an access to .collection_token
+        # This is set by access to .collection_token
         self._collection_token: str | None = None
         self.overdrive_bibliographic_coverage_provider = (
             OverdriveBibliographicCoverageProvider(collection, api=self)
@@ -467,9 +446,9 @@ class OverdriveAPI(
         except CannotLoadConfiguration as e:
             raise CannotFulfill() from e
 
-        s = b"%s:%s" % (
-            client_credentials["key"].encode(),
-            client_credentials["secret"].encode(),
+        s = "{}:{}".format(
+            client_credentials["key"],
+            client_credentials["secret"],
         )
         return "Basic " + base64.standard_b64encode(s).strip()
 
@@ -701,6 +680,34 @@ class OverdriveAPI(
                     task, self._get_patron_oauth_credential, patron, pin
                 )
 
+    TOverdriveModel = TypeVar("TOverdriveModel", bound=BaseOverdriveModel)
+
+    @overload
+    def patron_request(
+        self,
+        patron: Patron,
+        pin: str | None,
+        url: str,
+        extra_headers: dict[str, str] | None = ...,
+        data: str | None = ...,
+        method: str | None = ...,
+        response_type: None = ...,
+        exception_on_401: bool = ...,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def patron_request(
+        self,
+        patron: Patron,
+        pin: str | None,
+        url: str,
+        extra_headers: dict[str, str] | None = ...,
+        data: str | None = ...,
+        method: str | None = ...,
+        response_type: type[TOverdriveModel] = ...,
+        exception_on_401: bool = ...,
+    ) -> TOverdriveModel: ...
+
     def patron_request(
         self,
         patron: Patron,
@@ -708,9 +715,10 @@ class OverdriveAPI(
         url: str,
         extra_headers: dict[str, str] | None = None,
         data: str | None = None,
-        exception_on_401: bool = False,
         method: str | None = None,
-    ) -> Response:
+        response_type: type[TOverdriveModel] | None = None,
+        exception_on_401: bool = False,
+    ) -> dict[str, Any] | TOverdriveModel:
         """
         Make an HTTP request on behalf of a patron to Overdrive's API.
 
@@ -731,7 +739,16 @@ class OverdriveAPI(
             else:
                 method = "get"
         url = self.endpoint(url)
-        response = HTTP.request_with_timeout(method, url, headers=headers, data=data)
+        try:
+            response = self._do_patron_request(
+                method,
+                url,
+                headers=headers,
+                data=data,
+                allowed_response_codes=["2xx", 401],
+            )
+        except BadResponseException as e:
+            raise OverdriveResponseException.from_bad_response(e) from e
         if response.status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -741,13 +758,29 @@ class OverdriveAPI(
             else:
                 # Refresh the token and try again.
                 self._refresh_patron_oauth_token(patron_credential, patron, pin)
-                return self.patron_request(patron, pin, url, extra_headers, data, True)
+                return self.patron_request(
+                    patron,
+                    pin,
+                    url,
+                    extra_headers=extra_headers,
+                    data=data,
+                    method=method,
+                    exception_on_401=True,
+                )
+
+        if response_type is None:
+            return response.json()  # type: ignore[no-any-return]
         else:
-            # This is commented out because it may expose patron
-            # information.
-            #
-            # self.log.debug("%s: %s", url, response.status_code)
-            return response
+            return response_type.model_validate_json(response.content)
+
+    def _do_patron_request(self, http_method: str, url: str, **kwargs: Any) -> Response:
+        """This method is overridden in MockOverdriveAPI."""
+        url = self.endpoint(url)
+        return HTTP.request_with_timeout(
+            http_method,
+            url,
+            **kwargs,
+        )
 
     def _get_patron_oauth_credential(
         self, patron: Patron, pin: str | None
@@ -873,47 +906,19 @@ class OverdriveAPI(
         payload_dict = dict(fields=[dict(name="reserveId", value=overdrive_id)])
         payload = json.dumps(payload_dict)
 
-        response = self.patron_request(
-            patron, pin, self.CHECKOUTS_ENDPOINT, extra_headers=headers, data=payload
-        )
-        data = response.json()
-        if response.status_code == 400:
-            return self._process_checkout_error(patron, pin, licensepool, data)
-        else:
-            # Try to extract the expiration date from the response.
-            expires = self.extract_expiration_date(data)
-
-        # Create the loan info.
-        loan = LoanInfo.from_license_pool(
-            licensepool,
-            end_date=expires,
-        )
-        return loan
-
-    def _process_checkout_error(
-        self,
-        patron: Patron,
-        pin: str | None,
-        licensepool: LicensePool,
-        error: dict[str, Any] | str,
-    ) -> LoanInfo:
-        """Handle an error received by the API checkout endpoint.
-
-        :param patron: The Patron who tried to check out the book.
-        :param pin: The Patron's PIN; used in case follow-up
-            API requests are necessary.
-        :param licensepool: LicensePool for the book that was to be borrowed.
-        :param error: A dictionary representing the error response, parsed as JSON.
-        """
-        code = "Unknown Error"
-        identifier = licensepool.identifier
-        if isinstance(error, dict):
-            code = error.get("errorCode", code)
-        if code == "NoCopiesAvailable":
-            # Clearly our info is out of date.
-            raise NoAvailableCopies()
-
-        if code == "TitleAlreadyCheckedOut":
+        try:
+            checkout = self.patron_request(
+                patron,
+                pin,
+                self.CHECKOUTS_ENDPOINT,
+                extra_headers=headers,
+                data=payload,
+                response_type=Checkout,
+            )
+        except OverdriveResponseException as e:
+            code = e.error_code or "Unknown Error"
+            raise CannotLoan(code) from e
+        except AlreadyCheckedOut:
             # Client should have used a fulfill link instead, but
             # we can handle it.
             #
@@ -921,121 +926,54 @@ class OverdriveAPI(
             # happen if the patron borrows a book through Libby and
             # then immediately borrows the same book through SimplyE.
             loan = self.get_loan(patron, pin, identifier.identifier)
-            expires = self.extract_expiration_date(loan)
             return LoanInfo.from_license_pool(
                 licensepool,
-                end_date=expires,
+                end_date=loan.expires,
             )
 
-        if code in self.ERROR_MESSAGE_TO_EXCEPTION:
-            exc_class = self.ERROR_MESSAGE_TO_EXCEPTION[code]
-            raise exc_class()
+        # At this point we know what formats this book is available in. If this
+        # item has never been fulfilled, then this might be the first time we
+        # know this information. So we take the opportunity to update the licensepool
+        # with the new information.
+        self._set_licensepool_delivery_mechanism_availability(licensepool, checkout)
 
-        # All-purpose fallback
-        raise CannotLoan(code)
+        # Create the loan info.
+        return LoanInfo.from_license_pool(
+            licensepool,
+            end_date=checkout.expires,
+        )
+
+    def _set_licensepool_delivery_mechanism_availability(
+        self, licensepool: LicensePool, checkout: Checkout
+    ) -> None:
+        for delivery_mechanism in licensepool.delivery_mechanisms:
+            try:
+                internal_format = self.internal_format(delivery_mechanism)
+            except DeliveryMechanismError:
+                # This shouldn't happen, but if it does we just log the error
+                # and move on.
+                self.log.error(
+                    f"Could not find internal format for delivery mechanism {delivery_mechanism!r}"
+                )
+                continue
+
+            if internal_format in checkout.supported_formats:
+                delivery_mechanism.available = True
+            else:
+                delivery_mechanism.available = False
 
     def checkin(
         self, patron: Patron, pin: str | None, licensepool: LicensePool
     ) -> None:
-        # Get the loan for this patron to see whether or not they
-        # have a delivery mechanism recorded.
-        loan = None
-        loans = [l for l in patron.loans if l.license_pool == licensepool]
-        if loans:
-            loan = loans[0]
-        if (
-            loan
-            and loan.fulfillment
-            and loan.fulfillment.delivery_mechanism
-            and loan.fulfillment.delivery_mechanism.drm_scheme
-            == DeliveryMechanism.NO_DRM
-        ):
-            # This patron fulfilled this loan without DRM. That means we
-            # should be able to find a loanEarlyReturnURL and hit it.
-            if self.perform_early_return(patron, pin, loan):
-                # No need for the fallback strategy.
-                return
-
-        # Our fallback strategy is to DELETE the checkout endpoint.
-        # We do this if no loan can be found, no delivery mechanism is
-        # recorded, the delivery mechanism uses DRM, we are unable to
-        # locate the return URL, or we encounter a problem using the
-        # return URL.
-        #
-        # The only case where this is likely to work is when the
-        # loan exists but has not been locked to a delivery mechanism.
-        overdrive_id = licensepool.identifier.identifier
-        url = self.endpoint(self.CHECKOUT_ENDPOINT, overdrive_id=overdrive_id)
-        self.patron_request(patron, pin, url, method="DELETE")
-
-    def perform_early_return(
-        self,
-        patron: Patron,
-        pin: str | None,
-        loan: Loan,
-        http_get: Callable[..., Response] | None = None,
-    ) -> bool:
-        """Ask Overdrive for a loanEarlyReturnURL for the given loan
-        and try to hit that URL.
-
-        :param patron: A Patron
-        :param pin: Authorization PIN for the patron
-        :param loan: A Loan object corresponding to the title on loan.
-        :param http_get: You may pass in a mock of HTTP.get_with_timeout
-            for use in tests.
-        """
-        if loan.fulfillment is None:
-            return False
-        mechanism = loan.fulfillment.delivery_mechanism
-        internal_format = self.delivery_mechanism_to_internal_format.get(
-            (mechanism.content_type, mechanism.drm_scheme)
-        )
-        if not internal_format:
-            # Something's wrong in general, but in particular we don't know
-            # which fulfillment link to ask for. Bail out.
-            return False
-
-        # Ask Overdrive for a link that can be used to fulfill the book
-        # (but which may also contain an early return URL).
-        result = self.get_fulfillment_link(
-            patron, pin, loan.license_pool.identifier.identifier, internal_format
-        )
-        if isinstance(result, Fulfillment):
-            raise RuntimeError("Unexpected Fulfillment object: %r" % result)
-        url, media_type = result
-        # The URL comes from Overdrive, so it probably doesn't need
-        # interpolation, but just in case.
-        url = self.endpoint(url)
-
-        # Make a regular, non-authenticated request to the fulfillment link.
-        http_get = http_get or HTTP.get_with_timeout
-        response = http_get(url, allow_redirects=False)
-        location = response.headers.get("location")
-
-        # Try to find an early return URL in the Location header
-        # sent from the fulfillment request.
-        early_return_url = self._extract_early_return_url(location)
-        if early_return_url:
-            response = http_get(early_return_url)
-            if response.status_code == 200:
-                return True
-        return False
-
-    @classmethod
-    def _extract_early_return_url(cls, location: str | None) -> str | None:
-        """Extract an early return URL from the URL Overdrive sends to
-        fulfill a non-DRMed book.
-
-        :param location: A URL found in a Location header.
-        """
-        if not location:
-            return None
-        parsed = urllib.parse.urlparse(location)
-        query = urllib.parse.parse_qs(parsed.query)
-        urls = query.get("loanEarlyReturnUrl")
-        if urls:
-            return urls[0]
-        return None
+        # First we get the loan for this patron.
+        try:
+            loan = self.get_loan(patron, pin, licensepool.identifier.identifier)
+            make_request = partial(self.patron_request, patron, pin)
+            loan.action("earlyReturn", make_request)
+        except NoActiveLoan:
+            raise NotCheckedOut()
+        except OverdriveResponseException as e:
+            raise CannotReturn() from e
 
     def fill_out_form(self, **values: str) -> tuple[dict[str, str], str]:
         fields = []
@@ -1044,32 +982,7 @@ class OverdriveAPI(
         headers = {"Content-Type": "application/json; charset=utf-8"}
         return headers, json.dumps(dict(fields=fields))
 
-    error_to_exception = {
-        "TitleNotCheckedOut": NoActiveLoan,
-    }
-
-    def raise_exception_on_error(
-        self,
-        data: Mapping[str, str],
-        custom_error_to_exception: (
-            Mapping[str, type[BasePalaceException]] | None
-        ) = None,
-    ) -> None:
-        if not "errorCode" in data:
-            return
-        error = data["errorCode"]
-        message = data.get("message") or ""
-
-        if custom_error_to_exception is None:
-            custom_error_to_exception = {}
-
-        for d in custom_error_to_exception, self.error_to_exception:
-            if error in d:
-                raise d[error](message)
-
-    def get_loan(
-        self, patron: Patron, pin: str | None, overdrive_id: str
-    ) -> dict[str, Any]:
+    def get_loan(self, patron: Patron, pin: str | None, overdrive_id: str) -> Checkout:
         """Get patron's loan information for the identified item.
 
         :param patron: A patron.
@@ -1078,9 +991,7 @@ class OverdriveAPI(
         :return: Information about the loan.
         """
         url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        data = self.patron_request(patron, pin, url).json()
-        self.raise_exception_on_error(data)
-        return data  # type: ignore[no-any-return]
+        return self.patron_request(patron, pin, url, response_type=Checkout)
 
     def fulfill(
         self,
@@ -1091,44 +1002,40 @@ class OverdriveAPI(
     ) -> Fulfillment:
         """Get the actual resource file to the patron."""
         internal_format = self.internal_format(delivery_mechanism)
-        try:
-            result = self.get_fulfillment_link(
-                patron, pin, licensepool.identifier.identifier, internal_format
-            )
-            if isinstance(result, Fulfillment):
-                # The fulfillment process was short-circuited, probably
-                # by the creation of an OverdriveManifestFulfillment.
-                return result
+        format_info = self._get_fulfill_format_information(
+            patron, pin, licensepool.identifier.identifier, internal_format
+        )
 
-            url, media_type = result
-            if internal_format in self.STREAMING_FORMATS:
-                media_type += DeliveryMechanism.STREAMING_PROFILE
-        except FormatNotAvailable as e:
-            # It's possible the available formats for this book have changed and we
-            # have an inaccurate delivery mechanism. Try to update the formats, but
-            # reraise the error regardless.
-            self.log.info(
-                "Overdrive id %s was not available as %s, getting updated formats"
-                % (licensepool.identifier.identifier, internal_format)
-            )
+        if internal_format in OVERDRIVE_PALACE_MANIFEST_FORMATS:
+            return self._manifest_fulfillment(patron, pin, format_info)
+        else:
+            return self._download_fulfillment(patron, pin, internal_format, format_info)
 
-            try:
-                self.update_formats(licensepool)
-            except Exception as e2:
-                self.log.error(
-                    "Could not update formats for Overdrive ID %s"
-                    % licensepool.identifier.identifier
-                )
-
-            raise e
-
+    def _download_fulfillment(
+        self, patron: Patron, pin: str | None, internal_format: str, format_info: Format
+    ) -> Fulfillment:
+        # If this for Overdrive's streaming reader, and the link expires,
+        # the patron can go back to the circulation manager fulfill url
+        # again to get a new one.
+        if flask.request:
+            fulfill_url = flask.request.url
+        else:
+            fulfill_url = ""
+        download_link = format_info.template(
+            "downloadLink",
+            errorpageurl=self.DEFAULT_ERROR_URL,
+            odreadauthurl=fulfill_url,
+        )
+        download_response = self.patron_request(
+            patron, pin, download_link, response_type=Format
+        )
+        result = download_response.links["contentlink"]
+        url = result.href
+        media_type = result.type
+        if internal_format in OVERDRIVE_STREAMING_FORMATS:
+            media_type += DeliveryMechanism.STREAMING_PROFILE
         # In case we are a non-drm asset, we should just redirect the client to the asset directly
-        fulfillment_force_redirect = internal_format in [
-            "ebook-epub-open",
-            "ebook-pdf-open",
-        ]
-
-        if fulfillment_force_redirect:
+        if internal_format in OVERDRIVE_OPEN_FORMATS:
             return RedirectFulfillment(
                 content_link=url,
                 content_type=media_type,
@@ -1139,127 +1046,78 @@ class OverdriveAPI(
                 content_type=media_type,
             )
 
-    def get_fulfillment_link(
+    def _manifest_fulfillment(
+        self, patron: Patron, pin: str | None, format_info: Format
+    ) -> OverdriveManifestFulfillment:
+        download_link = format_info.link_templates["downloadLink"].href
+        download_link_split = urlsplit(download_link)
+        download_link_split = download_link_split._replace(query="contentfile=true")
+        download_link = download_link_split.geturl()
+        # The client must authenticate using its own
+        # credentials to fulfill this URL; we can't do it.
+        scope_string = self.scope_string(patron.library)
+        fulfillment_access_token = self._get_patron_oauth_credential(
+            patron,
+            pin,
+        ).credential
+        # The credential should never be None, but mypy doesn't know that, so
+        # we assert to be safe.
+        assert fulfillment_access_token is not None
+        return OverdriveManifestFulfillment(
+            download_link,
+            scope_string,
+            fulfillment_access_token,
+        )
+
+    def _get_fulfill_format_information(
         self, patron: Patron, pin: str | None, overdrive_id: str, format_type: str
-    ) -> OverdriveManifestFulfillment | tuple[str, str]:
-        """Get the link to the ACSM or manifest for an existing loan."""
+    ) -> Format:
         try:
             loan = self.get_loan(patron, pin, overdrive_id)
         except PatronAuthorizationFailedException as e:
             message = f"Error authenticating patron for fulfillment: {e.args[0]}"
             raise CannotFulfill(message, *e.args[1:]) from e
 
-        if not loan:
-            raise NoActiveLoan("Could not find active loan for %s" % overdrive_id)
-        download_link = None
-        if not loan.get("isFormatLockedIn") and format_type in self.LOCK_IN_FORMATS:
+        if not loan.locked_in and format_type in OVERDRIVE_LOCK_IN_FORMATS:
             # The format is not locked in. Lock it in.
             # This will happen the first time someone tries to fulfill
-            # a loan with a lock-in format (basically Adobe-gated formats)
-            response = self.lock_in_format(patron, pin, overdrive_id, format_type)
-            if response.status_code not in (201, 200):
-                if response.status_code == 400:
-                    message = response.json().get("message")
-                    if (
-                        message
-                        == "The selected format may not be available for this title."
-                    ):
-                        raise FormatNotAvailable(
-                            "This book is not available in the format you requested."
-                        )
-                else:
-                    raise CannotFulfill("Could not lock in format %s" % format_type)
-            response_json = response.json()
-            try:
-                download_link = self.extract_download_link(
-                    response_json, self.DEFAULT_ERROR_URL
+            # a loan with a lock-in format.
+            return self._lock_in_format(patron, pin, format_type, loan)
+
+        format_info = loan.get_format(format_type)
+        if format_info is None:
+            available_formats = loan.supported_formats
+            if OVERDRIVE_INCOMPATIBLE_FORMATS & available_formats:
+                # The most likely explanation is that the patron
+                # already had this book delivered to their Kindle.
+                raise FulfilledOnIncompatiblePlatform(
+                    "It looks like this loan was already fulfilled on another platform, most likely "
+                    "Amazon Kindle. We're not allowed to also send it to you as an EPUB."
                 )
-            except OSError as e:
-                # Get the loan fresh and see if that solves the problem.
-                loan = self.get_loan(patron, pin, overdrive_id)
+            else:
+                raise NoAcceptableFormat(
+                    f"Could not find specified format {format_type}. "
+                    f"Available formats: {', '.join(available_formats)}"
+                )
 
-        # TODO: Verify that the asked-for format type is the same as the
-        # one in the loan.
+        return format_info
 
-        if format_type and not download_link:
-            download_link = self.get_download_link(
-                loan, format_type, self.DEFAULT_ERROR_URL
+    def _lock_in_format(
+        self, patron: Patron, pin: str | None, format_type: str, loan: Checkout
+    ) -> Format:
+        make_request = partial(self.patron_request, patron, pin)
+        try:
+            format_data = loan.action("format", make_request, formatType=format_type)
+        except (PalaceValueError, OverdriveResponseException) as e:
+            self.log.exception(
+                f"Error locking in loan. Overdrive ID: {loan.reserve_id}, format: {format_type}",
             )
-            if not download_link:
-                raise CannotFulfill(
-                    "No download link for {}, format {}".format(
-                        overdrive_id, format_type
-                    )
+            if e.message and e.message.startswith("Invalid value for field formatType"):
+                raise FormatNotAvailable(
+                    "This book is not available in the format you requested."
                 )
-
-        if download_link:
-            if format_type in self.MANIFEST_INTERNAL_FORMATS:
-                # The client must authenticate using its own
-                # credentials to fulfill this URL; we can't do it.
-                scope_string = self.scope_string(patron.library)
-                fulfillment_access_token = self._get_patron_oauth_credential(
-                    patron,
-                    pin,
-                ).credential
-                # The credential should never be None, but mypy doesn't know that, so
-                # we assert to be safe.
-                assert fulfillment_access_token is not None
-                return OverdriveManifestFulfillment(
-                    download_link,
-                    scope_string,
-                    fulfillment_access_token,
-                )
-
-            return self.get_fulfillment_link_from_download_link(
-                patron, pin, download_link
-            )
-
-        raise CannotFulfill(
-            f"Cannot obtain a download link for patron {patron!r}, overdrive_id {overdrive_id}, format_type {format_type}"
-        )
-
-    def get_fulfillment_link_from_download_link(
-        self,
-        patron: Patron,
-        pin: str | None,
-        download_link: str,
-        fulfill_url: str | None = None,
-    ) -> tuple[str, str]:
-        # If this for Overdrive's streaming reader, and the link expires,
-        # the patron can go back to the circulation manager fulfill url
-        # again to get a new one.
-        if not fulfill_url and flask.request:
-            fulfill_url = flask.request.url
-        else:
-            fulfill_url = ""
-        download_link = download_link.replace("{odreadauthurl}", fulfill_url)
-        download_response = self.patron_request(patron, pin, download_link)
-        return self.extract_content_link(download_response.json())
-
-    def extract_content_link(
-        self, content_link_gateway_json: dict[str, Any]
-    ) -> tuple[str, str]:
-        link = content_link_gateway_json["links"]["contentlink"]
-        return link["href"], link["type"]
-
-    def lock_in_format(
-        self, patron: Patron, pin: str | None, overdrive_id: str, format_type: str
-    ) -> Response:
-        overdrive_id = overdrive_id.upper()
-        headers, document = self.fill_out_form(
-            reserveId=overdrive_id, formatType=format_type
-        )
-        url = self.endpoint(self.FORMATS_ENDPOINT, overdrive_id=overdrive_id)
-        return self.patron_request(patron, pin, url, headers, document)
-
-    @classmethod
-    def extract_data_from_checkout_response(
-        cls, checkout_response_json: dict[str, Any], format_type: str, error_url: str
-    ) -> tuple[datetime.datetime | None, str | None]:
-        expires = cls.extract_expiration_date(checkout_response_json)
-        return expires, cls.get_download_link(
-            checkout_response_json, format_type, error_url
-        )
+            raise CannotFulfill(f"Could not lock in format {format_type}") from e
+        return Format.model_validate(format_data)
 
     @classmethod
     def extract_data_from_hold_response(
@@ -1268,10 +1126,6 @@ class OverdriveAPI(
         position = hold_response_json["holdListPosition"]
         placed = cls._extract_date(hold_response_json, "holdPlacedDate")
         return position, placed
-
-    @classmethod
-    def extract_expiration_date(cls, data: dict[str, Any]) -> datetime.datetime | None:
-        return cls._extract_date(data, "expires")
 
     @classmethod
     def _extract_date(
@@ -1287,26 +1141,22 @@ class OverdriveAPI(
             # Wrong format
             return None
 
-    def get_patron_information(self, patron: Patron, pin: str | None) -> dict[str, Any]:
-        data = self.patron_request(patron, pin, self.ME_ENDPOINT).json()
-        self.raise_exception_on_error(data)
-        return data  # type: ignore[no-any-return]
-
-    def get_patron_checkouts(self, patron: Patron, pin: str | None) -> dict[str, Any]:
+    def get_patron_checkouts(self, patron: Patron, pin: str | None) -> Checkouts:
         """Get information for the given patron's loans.
 
         :param patron: A patron.
         :param pin: An optional PIN/password for the patron.
         :return: Information about the patron's loans.
         """
-        data = self.patron_request(patron, pin, self.CHECKOUTS_ENDPOINT).json()
-        self.raise_exception_on_error(data)
-        return data  # type: ignore[no-any-return]
+        return self.patron_request(
+            patron,
+            pin,
+            self.CHECKOUTS_ENDPOINT,
+            response_type=Checkouts,
+        )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> dict[str, Any]:
-        data = self.patron_request(patron, pin, self.HOLDS_ENDPOINT).json()
-        self.raise_exception_on_error(data)
-        return data  # type: ignore[no-any-return]
+        return self.patron_request(patron, pin, self.HOLDS_ENDPOINT)
 
     @classmethod
     def _pd(cls, d: str | None) -> datetime.datetime | None:
@@ -1329,7 +1179,7 @@ class OverdriveAPI(
             )
 
         try:
-            loans = self.get_patron_checkouts(patron, pin)
+            checkouts = self.get_patron_checkouts(patron, pin).checkouts
             holds = self.get_patron_holds(patron, pin)
         except PatronAuthorizationFailedException as e:
             # This frequently happens because Overdrive performs
@@ -1343,10 +1193,10 @@ class OverdriveAPI(
             self.log.info(
                 "Overdrive authentication failed, assuming no loans.", exc_info=e
             )
-            loans = {}
+            checkouts = []
             holds = {}
 
-        for checkout in loans.get("checkouts", []):
+        for checkout in checkouts:
             loan_info = self.process_checkout_data(checkout, collection.id)
             if loan_info is not None:
                 yield loan_info
@@ -1373,8 +1223,15 @@ class OverdriveAPI(
             )
 
     @classmethod
+    def _internal_format_to_delivery_mechanism(
+        cls, internal_format: str
+    ) -> tuple[str | None, str | None]:
+        lookup = {v: k for k, v in cls.delivery_mechanism_to_internal_format.items()}
+        return lookup[internal_format]
+
+    @classmethod
     def process_checkout_data(
-        cls, checkout: dict[str, Any], collection_id: int
+        cls, checkout: Checkout, collection_id: int
     ) -> LoanInfo | None:
         """Convert one checkout from Overdrive's list of checkouts
         into a LoanInfo object.
@@ -1382,28 +1239,11 @@ class OverdriveAPI(
         :return: A LoanInfo object if the book can be fulfilled
             by the default Library Simplified client, and None otherwise.
         """
-        overdrive_identifier = checkout["reserveId"].lower()
-        start = cls._pd(checkout.get("checkoutDate"))
-        end = cls._pd(checkout.get("expires"))
+        overdrive_identifier = checkout.reserve_id.lower()
+        start = checkout.checkout_date
+        end = checkout.expires
 
-        usable_formats = []
-
-        # If a format is already locked in, it will be in formats.
-        for format in checkout.get("formats", []):
-            format_type = format.get("formatType")
-            if format_type in cls.FORMATS:
-                usable_formats.append(format_type)
-
-        # If a format hasn't been selected yet, available formats are in actions.
-        actions = checkout.get("actions", {})
-        format_action = actions.get("format", {})
-        format_fields = format_action.get("fields", [])
-        for field in format_fields:
-            if field.get("name", "") == "formatType":
-                format_options = field.get("options", [])
-                for format_type in format_options:
-                    if format_type in cls.FORMATS:
-                        usable_formats.append(format_type)
+        usable_formats = checkout.supported_formats & OVERDRIVE_FORMATS
 
         if not usable_formats:
             # Either this book is not available in any format readable
@@ -1414,26 +1254,21 @@ class OverdriveAPI(
             return None
 
         locked_to = None
-        if len(usable_formats) == 1:
-            # Either the book has been locked into a specific format,
-            # or only one usable format is available. We don't know
-            # which case we're looking at, but for our purposes the
-            # book is locked -- unless, of course, what Overdrive
-            # considers "one format" corresponds to more than one
-            # format on our side.
-            [overdrive_format] = usable_formats
-
-            internal_formats = list(
-                OverdriveRepresentationExtractor.internal_formats(overdrive_format)
-            )
-
-            if len(internal_formats) == 1:
-                [(media_type, drm_scheme)] = internal_formats
-                # Make it clear that Overdrive will only deliver the content
-                # in one specific media type.
-                locked_to = DeliveryMechanismInfo(
-                    content_type=media_type, drm_scheme=drm_scheme
+        if checkout.locked_in:
+            locked_format = usable_formats & OVERDRIVE_LOCK_IN_FORMATS
+            if len(locked_format) == 1:
+                content_type, drm_scheme = cls._internal_format_to_delivery_mechanism(
+                    locked_format.pop()
                 )
+                locked_to = DeliveryMechanismInfo(
+                    content_type=content_type,
+                    drm_scheme=drm_scheme,
+                )
+        else:
+            # At this point we have an idea of the formats available, which we might not know
+            # otherwise, so we should update the license pool.
+            # TODO: Figure out DeliveryMechanismInfo in this new world
+            ...
 
         return LoanInfo(
             collection_id=collection_id,
@@ -1466,9 +1301,8 @@ class OverdriveAPI(
         # Instead, we will ask _Overdrive_ if this patron has a
         # preferred email address for notifications.
         address = None
-        response = self.patron_request(patron, pin, self.PATRON_INFORMATION_ENDPOINT)
-        if response.status_code == 200:
-            data = response.json()
+        try:
+            data = self.patron_request(patron, pin, self.PATRON_INFORMATION_ENDPOINT)
             address = data.get("lastHoldEmail")
 
             # Great! Except, it's possible that this address is the
@@ -1476,11 +1310,11 @@ class OverdriveAPI(
             # that address to Overdrive. If so, ignore it.
             if address == trash_everything_address:
                 address = None
-        else:
-            self.log.error(
+        except OverdriveResponseException as e:
+            self.log.exception(
                 "Unable to get patron information for %s: %s",
                 patron.authorization_identifier,
-                response.content,
+                e.response.text,
             )
         return address
 
@@ -1510,59 +1344,18 @@ class OverdriveAPI(
             form_fields["ignoreHoldEmail"] = True
 
         headers, document = self.fill_out_form(**form_fields)
-        response = self.patron_request(
-            patron, pin, self.HOLDS_ENDPOINT, headers, document
-        )
-        return self.process_place_hold_response(response, patron, pin, licensepool)
-
-    def process_place_hold_response(
-        self,
-        response: Response,
-        patron: Patron,
-        pin: str | None,
-        licensepool: LicensePool,
-    ) -> HoldInfo:
-        """Process the response to a HOLDS_ENDPOINT request.
-
-        :return: A HoldData object, if a hold was successfully placed,
-            or the book was already on hold.
-        :raise: A CirculationException explaining why no hold
-            could be placed.
-        """
-
-        family = response.status_code // 100
-
-        if family == 4:
-            error = response.json()
-            if not error or not "errorCode" in error:
-                raise CannotHold()
-            code = error["errorCode"]
-            if code == "AlreadyOnWaitList":
-                # The book is already on hold.
-                raise AlreadyOnHold()
-            elif code == "NotWithinRenewalWindow":
-                # The patron has this book checked out and cannot yet
-                # renew their loan.
-                raise CannotRenew()
-            elif code == "PatronExceededHoldLimit":
-                raise PatronHoldLimitReached()
-            else:
-                raise CannotHold(code)
-        elif family == 2:
-            # The book was successfully placed on hold. Return an
-            # appropriate HoldInfo.
-            data = response.json()
-            position, date = self.extract_data_from_hold_response(data)
-            return HoldInfo.from_license_pool(
-                licensepool,
-                start_date=date,
-                hold_position=position,
+        try:
+            data = self.patron_request(
+                patron, pin, self.HOLDS_ENDPOINT, headers, document
             )
-        else:
-            # Some other problem happened -- we don't know what.  It's
-            # not a 5xx error because the HTTP client would have been
-            # turned that into a RemoteIntegrationException.
-            raise CannotHold()
+        except OverdriveResponseException as e:
+            raise CannotHold(e.error_code) from e
+        position, date = self.extract_data_from_hold_response(data)
+        return HoldInfo.from_license_pool(
+            licensepool,
+            start_date=date,
+            hold_position=position,
+        )
 
     def release_hold(
         self, patron: Patron, pin: str | None, licensepool: LicensePool
@@ -1576,18 +1369,17 @@ class OverdriveAPI(
         url = self.endpoint(
             self.HOLD_ENDPOINT, product_id=licensepool.identifier.identifier
         )
-        response = self.patron_request(patron, pin, url, method="DELETE")
-        if response.status_code // 100 == 2 or response.status_code == 404:
-            return
-        if not response.content:
-            raise CannotReleaseHold()
-        data = response.json()
-        if not "errorCode" in data:
-            raise CannotReleaseHold()
-        if data["errorCode"] == "PatronDoesntHaveTitleOnHold":
-            # There was never a hold to begin with, so we're fine.
-            return
-        raise CannotReleaseHold(debug_info=response.text)
+        try:
+            self.patron_request(patron, pin, url, method="DELETE")
+        except OverdriveResponseException as e:
+            response = e.response
+            if (
+                response.status_code == 404
+                or e.error_code == "PatronDoesntHaveTitleOnHold"
+            ):
+                # Hold not found, this is fine
+                return
+            raise CannotReleaseHold(e.error_code, debug_info=response.text) from e
 
     def circulation_lookup(
         self, book: str | dict[str, str]
@@ -1718,115 +1510,3 @@ class OverdriveAPI(
             license_pool.open_access = False
             self.log.info("New Overdrive book discovered: %r", edition)
         return license_pool, is_new_pool, circulation_changed
-
-    @classmethod
-    def get_download_link(
-        self, checkout_response: dict[str, Any], format_type: str, error_url: str
-    ) -> str | None:
-        """Extract a download link from the given response.
-
-        :param checkout_response: A JSON document describing a checkout-type
-           response from the Overdrive API.
-        :param format_type: The internal (Overdrive-facing) format type
-           that should be retrieved. 'x-manifest' format types are treated
-           as a variant of the 'x' format type -- Overdrive doesn't recognise
-           'x-manifest' and uses 'x' for delivery of both streaming content
-           and manifests.
-        :param error_url: Value to interpolate for the {errorpageurl}
-           URI template value. This is ignored if you're fetching a manifest;
-           instead, the 'errorpageurl' variable is removed entirely.
-        """
-        link = None
-        format = None
-        available_formats = []
-        if format_type in self.MANIFEST_INTERNAL_FORMATS:
-            use_format_type = format_type.replace("-manifest", "")
-            fetch_manifest = True
-        else:
-            use_format_type = format_type
-            fetch_manifest = False
-        for f in checkout_response.get("formats", []):
-            this_type = f["formatType"]
-            available_formats.append(this_type)
-            if this_type == use_format_type:
-                format = f
-                break
-        if not format:
-            if any(
-                x in set(available_formats) for x in self.INCOMPATIBLE_PLATFORM_FORMATS
-            ):
-                # The most likely explanation is that the patron
-                # already had this book delivered to their Kindle.
-                raise FulfilledOnIncompatiblePlatform(
-                    "It looks like this loan was already fulfilled on another platform, most likely Amazon Kindle. We're not allowed to also send it to you as an EPUB."
-                )
-            else:
-                # We don't know what happened -- most likely our
-                # format data is bad.
-                msg = "Could not find specified format %s. Available formats: %s"
-                raise NoAcceptableFormat(
-                    msg % (use_format_type, ", ".join(available_formats))
-                )
-
-        return self.extract_download_link(format, error_url, fetch_manifest)
-
-    @classmethod
-    def extract_download_link(
-        cls, format: dict[str, Any], error_url: str, fetch_manifest: bool = False
-    ) -> str | None:
-        """Extract a download link from the given format descriptor.
-
-        :param format: A JSON document describing a specific format
-           in which Overdrive makes a book available.
-        :param error_url: Value to interpolate for the {errorpageurl}
-           URI template value. This is ignored if you're fetching a manifest;
-           instead, the 'errorpageurl' variable is removed entirely.
-        :param fetch_manifest: If this is true, the download link will be
-           modified to a URL that an authorized mobile client can use to fetch
-           a manifest file.
-        """
-
-        format_type = format.get("formatType", "(unknown)")
-        if not "linkTemplates" in format:
-            raise OSError("No linkTemplates for format %s" % format_type)
-        templates = format["linkTemplates"]
-        if not "downloadLink" in templates:
-            raise OSError("No downloadLink for format %s" % format_type)
-        download_link_data = templates["downloadLink"]
-        if not "href" in download_link_data:
-            raise OSError("No downloadLink href for format %s" % format_type)
-        download_link = download_link_data["href"]
-        if download_link:
-            if fetch_manifest:
-                download_link = cls.make_direct_download_link(download_link)
-            else:
-                download_link = download_link.replace("{errorpageurl}", error_url)
-            return download_link  # type: ignore[no-any-return]
-        else:
-            return None
-
-    @classmethod
-    def make_direct_download_link(cls, link: str) -> str:
-        """Convert an Overdrive Read or Overdrive Listen link template to a
-        direct-download link for the manifest.
-
-        This means removing any templated arguments for Overdrive Read
-        authentication URL and error URL; and adding a value for the
-        'contentfile' argument.
-
-        :param link: An Overdrive Read or Overdrive Listen template
-            link.
-        """
-        # Remove any Overdrive Read authentication URL and error URL.
-        for argument_name in ("odreadauthurl", "errorpageurl"):
-            argument_re = re.compile(f"{argument_name}={{{argument_name}}}&?")
-            link = argument_re.sub("", link)
-
-        # Add the contentfile=true argument.
-        if "?" not in link:
-            link += "?contentfile=true"
-        elif link.endswith("&") or link.endswith("?"):
-            link += "contentfile=true"
-        else:
-            link += "&contentfile=true"
-        return link

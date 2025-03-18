@@ -478,22 +478,6 @@ class TestOverdriveAPI:
             # this page) and a link to the next page.
             assert result == (["an availability queue"], "http://next-page/")
 
-    def test_lock_in_format(self, overdrive_api_fixture: OverdriveAPIFixture):
-        # Verify which formats do or don't need to be locked in before
-        # fulfillment.
-        needs_lock_in = overdrive_api_fixture.api.LOCK_IN_FORMATS
-
-        # Streaming and manifest-based formats are exempt; all
-        # other formats need lock-in.
-        exempt = list(overdrive_api_fixture.api.STREAMING_FORMATS) + list(
-            overdrive_api_fixture.api.MANIFEST_INTERNAL_FORMATS
-        )
-        for i in overdrive_api_fixture.api.FORMATS:
-            if i not in exempt:
-                assert i in needs_lock_in
-        for i in exempt:
-            assert i not in needs_lock_in
-
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,

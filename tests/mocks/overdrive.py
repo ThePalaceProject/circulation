@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from typing import Any
 
@@ -44,23 +45,6 @@ class MockOverdriveAPI(OverdriveAPI):
         )
 
     @override
-    def patron_request(
-        self,
-        patron: Patron,
-        pin: str | None,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-        data: str | None = None,
-        exception_on_401: bool = False,
-        method: str | None = None,
-    ) -> Response:
-        with self.mock_http.patch():
-            return super().patron_request(
-                patron,
-                pin,
-                url,
-                extra_headers,
-                data,
-                exception_on_401,
-                method,
-            )
+    def _do_patron_request(self, http_method: str, url: str, **kwargs: Any) -> Response:
+        url = self.endpoint(url)
+        return self.mock_http.do_request(http_method, url, **kwargs)

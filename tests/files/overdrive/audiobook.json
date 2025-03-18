@@ -1,1 +1,167 @@
-{"publisher": "Duke Classics", "popularity": 510, "links": {"self": {"href": "https://integration.api.overdrive.com/v1/collections/v1L1BBQ0AAA2_/products/13714f86-7a9c-4ba6-80b4-bc8a83de8615/metadata", "type": "application/vnd.overdrive.api+json"}}, "title": "Pride and Prejudice", "reviews": [{"content": "Juliet Stevenson delivers Austen's lovely prose with the grace and intelligence that it deserves. Most of the novel moves at a stately pace, even the most emotional peaks of the love story, and Stevenson delivers it with the measured cadence it demands. She isn't quite as strong when speaking the male dialogue, but when she's speaking as any of the female characters--especially the silly, breathy ones like Lydia or Mrs. Bennet--she strikes the perfect tone. However, this abridgment leaves much to be desired. Some of Austen's wittiest lines are cut, and so much is lost from some interactions that several characters come off far more flatly than written.  G.T.B. (c) AudioFile 2004, Portland, Maine", "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>", "premium": true}, {"content": "<p>June 4, 2018<br/>Collagist Fabe adds flair to Jane Austen\u2019s <em>Pride and Prejudice</em> with 39 original illustrations that accompany the unabridged text. Fabe\u2019s collages overlay bright, watercolor-washed scenes with retro cut-paper figures and objects sampled from fashion magazines from the 1930s to the \u201950s. Accompanying each tableau is a quote from the <em>Pride and Prejudice</em> passage that inspired it. Like Austen\u2019s book, Fabe\u2019s work explores arcane customs of beauty and courtship, pageantry and social artifice: in one collage, a housewife holds a tray of drinks while a man sits happily with a sandwich in hand in the distance. While tinged with irony and more than a dash of social commentary, the collages nevertheless have a spirit of glee and evidence deep reverence for the novel. As Fabe describes in a preface, Austen \u201cwas a little bit mean\u2014the way real people are mean\u2014so there are both heroes and nincompoops. Family is both beloved and annoying. That is Austen\u2019s genius, her ability to describe people in all their frailty and humor.\u201d This is a sweet and visually appealing homage. <em></em></p>", "source": "<a href=\"http://www.publishersweekly.com\" target=\"blank\"><img src=\"https://images.contentreserve.com/pw_logo.png\" alt=\"Publisher's Weekly\" border=\"0\" /></a>", "premium": true}], "crossRefId": 479501, "isPublicPerformanceAllowed": false, "mediaType": "Audiobook", "starRating": 4.5, "languages": [{"code": "en", "name": "English"}], "edition": "Unabridged", "isOwnedByCollections": true, "formats": [{"duration": "10:09:00", "partCount": 11, "rights": [{"type": "PlayOnPC", "value": 1}, {"type": "PlayOnPCCount", "value": -1}, {"type": "BurnToCD", "value": 1}, {"type": "BurnToCDCount", "value": -1}, {"type": "PlayOnPM", "value": 1}, {"type": "TransferToSDMI", "value": 1}, {"type": "TransferToNonSDMI", "value": 1}, {"type": "TransferCount", "value": -1}, {"type": "CollaborativePlay", "value": 0}, {"type": "PublicPerformance", "value": 0}, {"type": "TranscodeToAAC", "value": 1}], "fileName": "PrideandPrejudice", "fileSize": 355553350, "samples": [{"url": "https://excerpts.cdn.overdrive.com/FormatType-25/2389-1/479501-PrideAndPrejudice.wma", "source": "Introduction", "formatType": "audiobook-wma"}, {"url": "https://excerpts.cdn.overdrive.com/FormatType-425/2389-1/479501-PrideAndPrejudice.mp3", "source": "Part 1", "formatType": "audiobook-mp3"}, {"url": "https://samples.overdrive.com/?crid=13714F86-7A9C-4BA6-80B4-BC8A83DE8615&.epub-sample.overdrive.com", "source": "Part 1", "formatType": "audiobook-overdrive"}], "onSaleDate": "11/15/2010", "id": "audiobook-mp3", "name": "OverDrive MP3 Audiobook"}, {"duration": "10:09:01", "partCount": 0, "fileName": "PrideandPrejudice", "fileSize": 355506882, "samples": [{"url": "https://excerpts.cdn.overdrive.com/FormatType-25/2389-1/479501-PrideAndPrejudice.wma", "source": "Introduction", "formatType": "audiobook-wma"}, {"url": "https://excerpts.cdn.overdrive.com/FormatType-425/2389-1/479501-PrideAndPrejudice.mp3", "source": "Part 1", "formatType": "audiobook-mp3"}, {"url": "https://samples.overdrive.com/?crid=13714F86-7A9C-4BA6-80B4-BC8A83DE8615&.epub-sample.overdrive.com", "source": "Part 1", "formatType": "audiobook-overdrive"}], "onSaleDate": "11/15/2010", "id": "audiobook-overdrive", "name": "OverDrive Listen"}], "sortTitle": "Pride and Prejudice", "images": {"cover150Wide": {"href": "https://img1.od-cdn.com/ImageType-150/2389-1/137/14F/86/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img150.jpg", "type": "image/jpeg"}, "cover300Wide": {"href": "https://img1.od-cdn.com/ImageType-400/2389-1/137/14F/86/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img400.jpg", "type": "image/jpeg"}, "cover": {"href": "https://img1.od-cdn.com/ImageType-100/2389-1/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img100.jpg", "type": "image/jpeg"}, "thumbnail": {"href": "https://img1.od-cdn.com/ImageType-200/2389-1/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img200.jpg", "type": "image/jpeg"}}, "isPublicDomain": false, "subjects": [{"value": "Classic Literature"}, {"value": "Fiction"}], "creators": [{"fileAs": "Austen, Jane", "role": "Author", "name": "Jane Austen"}, {"fileAs": "Kellgren, Kate", "role": "Narrator", "name": "Kate Kellgren"}], "shortDescription": "<p><i>Pride and Prejudice</i> is one of the most beloved novels of all time. Elizabeth Bennett, the book's poverty-bound heroine has charmed readers with her wit and sincerity since the book was first published in 1813.  Its hero, the handsome and wealthy Mr. Darcy, infuriates Elizabeth \u2014 and women readers around the world \u2014 with his rude arrogance, but all fall in love with him anyway.<p>A comedy of manners, romance, and neighborhood drama \u2014 it's all there and more.", "id": "13714f86-7a9c-4ba6-80b4-bc8a83de8615"}
+{
+  "isOwnedByCollections": true,
+  "id": "13714f86-7a9c-4ba6-80b4-bc8a83de8615",
+  "crossRefId": 479501,
+  "mediaType": "Audiobook",
+  "title": "Pride and Prejudice",
+  "sortTitle": "Pride and Prejudice",
+  "edition": "Unabridged",
+  "publisher": "Duke Classics",
+  "creators": [
+      {
+          "role": "Author",
+          "name": "Jane Austen",
+          "fileAs": "Austen, Jane"
+      },
+      {
+          "role": "Narrator",
+          "name": "Kate Kellgren",
+          "fileAs": "Kellgren, Kate"
+      }
+  ],
+  "links": {
+      "self": {
+          "href": "https://api.overdrive.com/v1/collections/v1L1BBQ0AAA2_/products/13714f86-7a9c-4ba6-80b4-bc8a83de8615/metadata",
+          "type": "application/vnd.overdrive.api+json"
+      },
+      "shareInLibby": {
+          "href": "https://link.overdrive.com/share?q=DVEHAND6qsI",
+          "type": "text/HTML"
+      }
+  },
+  "images": {
+      "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/2389-1/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img200.jpg",
+          "type": "image/jpeg"
+      },
+      "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/2389-1/137/14F/86/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img150.jpg",
+          "type": "image/jpeg"
+      },
+      "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/2389-1/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img100.jpg",
+          "type": "image/jpeg"
+      },
+      "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/2389-1/137/14F/86/{13714F86-7A9C-4BA6-80B4-BC8A83DE8615}Img400.jpg",
+          "type": "image/jpeg"
+      }
+  },
+  "languages": [
+      {
+          "code": "en",
+          "name": "English"
+      }
+  ],
+  "isPublicDomain": false,
+  "isPublicPerformanceAllowed": false,
+  "gradeLevels": [
+      {
+          "value": "Grade 9"
+      },
+      {
+          "value": "Grade 10"
+      },
+      {
+          "value": "Grade 11"
+      },
+      {
+          "value": "Grade 12"
+      }
+  ],
+  "lexileScore": 1190,
+  "shortDescription": "<p><i>Pride and Prejudice</i> is one of the most beloved novels of all time. Elizabeth Bennett, the book's poverty-bound heroine has charmed readers with her wit and sincerity since the book was first published in 1813.  Its hero, the handsome and wealthy Mr. Darcy, infuriates Elizabeth \u2014 and women readers around the world \u2014 with his rude arrogance, but all fall in love with him anyway.<p>A comedy of manners, romance, and neighborhood drama \u2014 it's all there and more.",
+  "starRating": 4.3,
+  "popularity": 1867,
+  "subjects": [
+      {
+          "value": "Classic Literature"
+      },
+      {
+          "value": "Fiction"
+      }
+  ],
+  "bisacCodes": [
+      {
+          "code": "FIC004000",
+          "description": "Fiction / Classics"
+      }
+  ],
+  "reviews": [
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Juliet Stevenson delivers Austen's lovely prose with the grace and intelligence that it deserves. Most of the novel moves at a stately pace, even the most emotional peaks of the love story, and Stevenson delivers it with the measured cadence it demands. She isn't quite as strong when speaking the male dialogue, but when she's speaking as any of the female characters--especially the silly, breathy ones like Lydia or Mrs. Bennet--she strikes the perfect tone. However, this abridgment leaves much to be desired. Some of Austen's wittiest lines are cut, and so much is lost from some interactions that several characters come off far more flatly than written.  G.T.B. (c) AudioFile 2004, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.publishersweekly.com\" target=\"blank\"><img src=\"https://images.contentreserve.com/pw_logo.png\" alt=\"Publisher's Weekly\" border=\"0\" /></a>",
+          "content": "<p>June 4, 2018<br/>Collagist Fabe adds flair to Jane Austen\u2019s <em>Pride and Prejudice</em> with 39 original illustrations that accompany the unabridged text. Fabe\u2019s collages overlay bright, watercolor-washed scenes with retro cut-paper figures and objects sampled from fashion magazines from the 1930s to the \u201950s. Accompanying each tableau is a quote from the <em>Pride and Prejudice</em> passage that inspired it. Like Austen\u2019s book, Fabe\u2019s work explores arcane customs of beauty and courtship, pageantry and social artifice: in one collage, a housewife holds a tray of drinks while a man sits happily with a sandwich in hand in the distance. While tinged with irony and more than a dash of social commentary, the collages nevertheless have a spirit of glee and evidence deep reverence for the novel. As Fabe describes in a preface, Austen \u201cwas a little bit mean\u2014the way real people are mean\u2014so there are both heroes and nincompoops. Family is both beloved and annoying. That is Austen\u2019s genius, her ability to describe people in all their frailty and humor.\u201d This is a sweet and visually appealing homage. <em></em></p>",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "A young lady ought to be married by the age of 23. The sole quest of a young woman's mother is to see her daughter entered into a proper and timely marriage. How times have changed from Jane Austen's to ours! From initial impressions through each twist and turn of pride or prejudice, the listener becomes intimately involved with the world of Elizabeth Bennet and Mr. Darby. Kate Reading is a fine reader of this classic. She sets a pleasing pace to keep the story moving enough for Austen's words to resonate. Reading has just enough Britishness to her voice to reflect the story's culture, and she maintains adequate variation for each of the many characters of both sexes. Reading's delivery helps the listener appreciate Austen's control of plot and detail, as well as her exquisite diction. This is a recording worthy of repeated listening.  A.R. (c) AudioFile 2002, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "A new version of Austen's classic are part of renewed interest in classics on audio. The BBC Radio production is not dramatized with music and sound effects as many of their productions are. Hodge's voice has a light, clear quality. She does well with the ladies' voices but make little attempt to differentiate among them. Hodge draws fine portraits of the young Bennet girls, their parents and suitors. Her narration involves the listener in the eighteenth-century drawing-room society.  R.F.W. (c)AudioFile, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Jane Austen's classic novel about Elizabeth Bennett, her sisters, and their movement toward marriage in Regency England is richly presented by Irene Sutcliffe. She makes Mrs. Bennett, the girls' flighty mother, strident and grating--just the sort of tone that must have annoyed Mr. Bennett these many years and made his daughter, the intelligent, self-possessed Elizabeth, the greatest source of his pleasure. When the satire gives way to Austen's thoughtful romantic comedy, Sutcliffe's gravity conveys the importance of the eventual humbling and self-awareness attained by Elizabeth and her intended, Fitzwilliam Darcy.  G.H. ",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Jane Lapotaire, known to American audiences from her many PBS appearances, is a perfect choice to read Jane Austen's comedy of manners. Her rich and varied intonations capture just the right blend of artifice and empathy to recreate not only the lively and playfully witty Elizabeth Bennett and the handsome, albeit conceited, Mr. Darcy, but also the entire gamut of Bennett family members, friends and foes. Amazingly, Lapotaire even manages to conjure memories of the screen's Mr. D', Lawrence Olivier. This is an exquisite audio abridgment of the classic English satire.  L.(H.)B. (c)AudioFile, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "A new version of Austen's classic is part of renewed interest in classics on audio.  David's voice has a light, clear quality. She does well with the ladies' voices but make little attempt to differentiate among them. In addition,  David makes no change in tone when a gentleman speaks. Her rapid pace through conversational passages makes them hard to follow. The abridgment increases the speed of events which seem slightly at odds with the protracted courtesies and manners, but is generally successful.  R.F.W. (c)AudioFile, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Jane Austen's classic novel is expertly narrated by Josephine Bailey, whose eloquent presentation captures all the exquisite restraint and elegance of Austen's prose. Undaunted by a large cast that is almost constantly engaged in dialogue, Bailey has impeccable timing as she brings beloved scenes to life. Her insightful narration conveys all the depth and detail of Austen's believable characters, including pert, sometimes saucy Elizabeth; amiable Jane; the initially stiff Mr. Darcy; and the amicable Mr. Bingley. Less central characters (vulgar Mrs. Bennet, ungovernable Lydia, moralizing Mary) are equally well done. The spirited exchange between Elizabeth and Lady Catherine de Bourgh as dramatized by Bailey is beyond compare. This fine production makes a persuasive case that Austen is best enjoyed unabridged.  J.C.G.  Winner of AudioFile Earphones Award (c) AudioFile 2008, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "In this well-produced audio version of Austen's classic, narrator Rosamund Pike elegantly delivers the engaging prose, barbed wit, and social subtleties. She portrays a Bennet family with all their controlled chaos intact. Elizabeth is appropriately snarky, Darcy is prideful and prejudiced, long-suffering Mr. Bennet is stoic, and Mrs. B. is amusingly crass as she attempts to find husbands for their five daughters. Pike's presentation of the sophisticated subtext adds sparkle and color to the conversations, whether coarse or refined. As the satire turns romantic, Pike reveals Elizabeth and Darcy as they grow and change in their spoken and unspoken feelings for each other. Pike's intelligent, nuanced performance of this classic will endear the Bennets to faithful Austen fans and those new to the story.  S.J.H. \u00a9 AudioFile 2016, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Austen's most well-known work has been enjoyed for more than 200 years. British actress Rosamund Pike is the perfect choice to narrate this novel of manners, and listening to her voice each of the iconic characters is great fun.The story follows the Bennet family, five girls of marriageable age, in nineteenth-century England. Mrs. Bennet, a socially awkward but determined force, seeks matches for her brood. When a wealthy, amiable bachelor, Mr. Bingley, moves to the neighborhood, Mrs. Bennet claims him for her eldest daughter, Jane. Bingley's friend, Mr. Darcy, although equally wealthy, seems pompous and distant and is not a favorite of the girls. He and Elizabeth Bennet, the second oldest, get off to a rocky start due to a series of misunderstandings, but when their true natures are revealed, all ends happily. Pike delivers Mrs. Bennet's annoying, inept comments in an abrasive tone. Each sister is individually differentiated. Jane's tone is patient and kind; Elizabeth's is quick and stubborn. Mary, Kitty, and Lydia are, by turns, immature and flighty. Other young women sound catty and pompous. Lowering her voice slightly, Pike takes on the distracted Mr. Bennet; the breathy cousin, Mr. Collins; and the curt Mr. Darcy. Most of the story involves dialogue, with participants making sharp observations of each other and society in general. The surprisingly witty repartee holds up well and paints a vivid picture of the times. Austen's many devotees will savor this first-rate version of her charming novel.  C.P.S. \u00a9 AudioFile 2017, Portland, Maine",
+          "premium": true
+      },
+      {
+          "source": "<a href=\"http://www.audiofilemagazine.com\" target=\"_blank\"><img src=\"https://images.contentreserve.com/audiofile_logo.jpg\" alt=\"AudioFile Magazine\" border=\"0\" /></a>",
+          "content": "Narrator Juliet Stevenson and Jane Austen are well matched in this fine audiobook edition of the famed classic. Stevenson's flawless performance, sparkling with her distinctive voice and lyrical accent, brings Austen's story to life. In this beloved novel, Mr. and Mrs. Bennet, possessed solely of daughters in the early nineteenth century, embark on finding suitable husbands for their girls. Here, descriptions of the posh British setting are brimming with authenticity in Stevenson's care. Dialogue is lively and easy to follow. The subtle humor of Austen's social commentary runs beneath the action in each chapter. Austen's prose is complex and requires attentive listeners, but so considerable is Stevenson's skill that this performance will be popular with both Austen devotees and those just discovering her work.  L.B.F. \u00a9 AudioFile 2021, Portland, Maine",
+          "premium": true
+      }
+  ],
+  "classifications": {},
+  "formats": [
+      {
+          "id": "audiobook-overdrive",
+          "name": "OverDrive Listen",
+          "fileName": "PrideandPrejudice",
+          "fileSize": 355506882,
+          "partCount": 0,
+          "duration": "12:20:38",
+          "onSaleDate": "11/15/2010",
+          "samples": [
+              {
+                  "source": "Part 1",
+                  "formatType": "audiobook-overdrive",
+                  "url": "https://samples.overdrive.com/?crid=13714F86-7A9C-4BA6-80B4-BC8A83DE8615&.epub-sample.overdrive.com"
+              }
+          ],
+          "isReadAlong": false
+      }
+  ]
+}
