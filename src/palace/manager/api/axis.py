@@ -434,8 +434,13 @@ class Axis360API(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
+        # Because we have SET_DELIVERY_MECHANISM_AT set to BORROW_STEP,
+        # delivery mechanism should always be set, but mypy doesn't know
+        # that, so we assert it here for type safety.
+        assert delivery_mechanism is not None
+
         title_id = licensepool.identifier.identifier
         patron_id = patron.authorization_identifier
         response = self._checkout(
