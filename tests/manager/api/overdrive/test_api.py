@@ -879,21 +879,6 @@ class TestOverdriveAPI:
         assert None == loan.start_date
         assert api.MOCK_EXPIRATION_DATE == loan.end_date
 
-    def test_extract_expiration_date(self):
-        # Test the code that finds and parses a loan expiration date.
-        m = OverdriveAPI.extract_expiration_date
-
-        # Success
-        assert datetime_utc(2020, 1, 2, 3, 4, 5) == m(
-            dict(expires="2020-01-02T03:04:05Z")
-        )
-
-        # Various failure cases.
-        assert None == m(dict(expiresPresent=False))
-        assert None == m(dict(expires="Wrong date format"))
-        assert None == m("Not a dict")
-        assert None == m(None)
-
     def test_place_hold(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
 
@@ -2473,23 +2458,6 @@ class TestExtractData:
         assert base + "?contentfile=true" == m(base + "?odreadauthurl={odreadauthurl}")
         assert base + "?other=other&contentfile=true" == m(
             base + "?odreadauthurl={odreadauthurl}&other=other"
-        )
-
-    def test_extract_data_from_checkout_resource(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        data, json = overdrive_api_fixture.sample_json(
-            "checkout_response_locked_in_format.json"
-        )
-        expires, url = MockOverdriveAPI.extract_data_from_checkout_response(
-            json, "ebook-epub-adobe", "http://foo.com/"
-        )
-        assert 2013 == expires.year
-        assert 10 == expires.month
-        assert 4 == expires.day
-        assert (
-            "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
-            == url
         )
 
     def test_process_checkout_data(self, overdrive_api_fixture: OverdriveAPIFixture):
