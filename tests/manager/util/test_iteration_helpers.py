@@ -11,6 +11,7 @@ class TestCountingIterator:
             pytest.param([1], [1], 1, id="single-item-list"),
             pytest.param([1, 2, 3], [1, 2, 3], 3, id="multi-item-list"),
             pytest.param(range(5), [0, 1, 2, 3, 4], 5, id="range"),
+            pytest.param((n for n in range(5)), [0, 1, 2, 3, 4], 5, id="generator"),
             pytest.param(["a", "b", "c"], ["a", "b", "c"], 3, id="string"),
             pytest.param("abc", ["a", "b", "c"], 3, id="string"),
         ],
