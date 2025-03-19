@@ -1,8 +1,18 @@
+import logging
+from collections.abc import MutableMapping
+from typing import Any
+
 import pytest
 from pytest import LogCaptureFixture
 
 from palace.manager.service.logging.configuration import LogLevel
-from palace.manager.util.log import LoggerMixin, log_elapsed_time, pluralize
+from palace.manager.util.log import (
+    ExtraDataLoggerAdapter,
+    LoggerAdapterType,
+    LoggerMixin,
+    log_elapsed_time,
+    pluralize,
+)
 
 
 class MockClass(LoggerMixin):
@@ -60,3 +70,64 @@ def test_pluralize():
 
     assert pluralize(1, "foo", "bar") == "1 foo"
     assert pluralize(2, "foo", "bar") == "2 bar"
+
+
+class MockExtraDataLoggerAdapter(ExtraDataLoggerAdapter):
+    def process(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
+        value = str(self.extra.get("key", "key_missing"))
+        new_msg = f"{msg} [{value}]"
+        return new_msg, kwargs
+
+
+class ClassThatUsesExtraDataAdapter:
+    def __init__(self, name: str):
+        self.name = name
+        self.logger = logging.getLogger(self.name)
+
+    @property
+    def log(self) -> LoggerAdapterType:
+        extra = {"key": "test_value"}
+        return MockExtraDataLoggerAdapter(self.logger, extra)
+
+    def do_something(self, message: str) -> None:
+        self.log.info(message)
+
+
+class TestExtraDataLoggerAdapter:
+    @pytest.fixture
+    def log_capture(self, caplog):
+        caplog.set_level(logging.INFO)
+        return caplog
+
+    @pytest.mark.parametrize(
+        "extra_data, expected_value",
+        (
+            pytest.param(
+                {"key": "I'm special"}, "I'm special", id="extra_data_custom_value"
+            ),
+            pytest.param({}, "key_missing", id="no_extra_data"),
+            pytest.param({"key": None}, "None", id="extra_data_none_value"),
+            pytest.param({"key": True}, "True", id="extra_data_true"),
+            pytest.param({"key": False}, "False", id="extra_data_faux"),
+            pytest.param({"key": 0}, "0", id="extra_data_nada"),
+            pytest.param({"key": 42}, "42", id="extra_data_ltuae"),
+            pytest.param({"key": -1}, "-1", id="extra_data_less_than_zero"),
+        ),
+    )
+    def test_logger_adapter_extra_data(
+        self,
+        extra_data: dict[str, Any] | None,
+        expected_value: str,
+        log_capture: LogCaptureFixture,
+    ):
+        logger = logging.getLogger("test_logger")
+        adapter = MockExtraDataLoggerAdapter(logger, extra_data)
+        adapter.info("Original message")
+        assert f"Original message [{expected_value}]" in log_capture.text
+
+    def test_using_the_adapter(self, log_capture):
+        test_instance = ClassThatUsesExtraDataAdapter("test_instance")
+        test_instance.do_something("Another test message")
+        assert "Another test message [test_value]" in log_capture.text
