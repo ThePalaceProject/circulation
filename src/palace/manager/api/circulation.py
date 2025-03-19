@@ -684,7 +684,7 @@ class BaseCirculationAPI(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo | HoldInfo:
         """Check out a book on behalf of a patron.
 
@@ -1066,7 +1066,7 @@ class CirculationAPI(LoggerMixin):
         # last looked.
         try:
             checkout_result = api.checkout(
-                patron, pin, licensepool, delivery_mechanism=delivery_mechanism  # type: ignore[arg-type]
+                patron, pin, licensepool, delivery_mechanism=delivery_mechanism
             )
 
             if isinstance(checkout_result, HoldInfo):

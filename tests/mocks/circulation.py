@@ -67,7 +67,7 @@ class MockBaseCirculationAPI(BaseCirculationAPI):
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo | HoldInfo:
         # Should be a LoanInfo.
         return self._return_or_raise("checkout")

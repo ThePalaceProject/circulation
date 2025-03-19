@@ -401,7 +401,7 @@ class EnkiAPI(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
         identifier = licensepool.identifier
         enki_id = identifier.identifier
