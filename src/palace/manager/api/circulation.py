@@ -833,9 +833,12 @@ class PatronActivityCirculationAPI(
                     f"\n  * the license pool (id={license_pool.id}) is not deliverable"
                 )
                 remove = True
-            # the associated licensepool has no owned copies
-            if not license_pool.licenses_owned == 0 and not license_pool.open_access:
-                log_message += f"\n  * the license pool (id={license_pool.id}) does not have any owned licenses."
+            # the associated licensepool has no owned copies and is not open access
+            if license_pool.licenses_owned == 0 and not license_pool.open_access:
+                log_message += (
+                    f"\n  * the license pool (id={license_pool.id}) "
+                    f"does not have any owned licenses and is not open access."
+                )
                 remove = True
 
             if remove:
