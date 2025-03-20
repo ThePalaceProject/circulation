@@ -1369,7 +1369,6 @@ class TestOverdriveAPI:
         # We will get the loan, try to lock in the format, and fail.
         overdrive_api_fixture.queue_access_token_response()
         http.queue_response(200, content=loan)
-        overdrive_api_fixture.queue_access_token_response()
         http.queue_response(400, content=lock_in_format_not_available)
 
         # Trying to get a fulfillment link raises an exception.
@@ -1395,7 +1394,6 @@ class TestOverdriveAPI:
         # format, fail, and then update the bibliographic information.
         overdrive_api_fixture.queue_access_token_response()
         http.queue_response(200, content=loan)
-        overdrive_api_fixture.queue_access_token_response()
         http.queue_response(400, content=lock_in_format_not_available)
         http.queue_response(200, content=bibliographic)
 
@@ -2054,45 +2052,6 @@ class TestOverdriveAPI:
                 credential, patron, "a pin"
             )
 
-    def test__refresh_patron_oauth_token_palace_context(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        """Verify that patron information is included in the request
-        when refreshing a patron access token.
-        """
-
-        patron = db.patron()
-        patron.authorization_identifier = "barcode"
-        credential = db.credential(patron=patron)
-
-        # Mocked testing credentials
-        encoded_auth = base64.b64encode("TestingKey:TestingSecret")
-
-        # use a real Overdrive API
-        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
-        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-        # but mock the request methods
-        post_response, _ = overdrive_api_fixture.sample_json("patron_token.json")
-        od_api._do_post = MagicMock(
-            return_value=MockRequestsResponse(200, content=post_response)
-        )
-        od_api._do_get = MagicMock()
-        response_credential = od_api._refresh_patron_oauth_token(
-            credential, patron, "a pin", palace_context=True
-        )
-
-        # Posted once, no gets
-        od_api._do_post.assert_called_once()
-        od_api._do_get.assert_not_called()
-
-        # What did we Post?
-        call_args = od_api._do_post.call_args[0]
-        assert "/patrontoken" in call_args[0]  # url
-        assert (
-            call_args[2]["Authorization"] == f"Basic {encoded_auth}"
-        )  # Basic header should be that of the fulfillment keys
-        assert response_credential == credential
-
     def test_cannot_fulfill_error_audiobook(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
@@ -2589,7 +2548,6 @@ class TestSyncBookshelf:
 
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         patron = db.patron()
@@ -2647,7 +2605,6 @@ class TestSyncBookshelf:
 
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # Create a loan not present in the sample data.
@@ -2688,7 +2645,6 @@ class TestSyncBookshelf:
         # not destroyed, because it came from another source.
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         overdrive_api_fixture.sync_patron_activity(patron)
@@ -2703,7 +2659,6 @@ class TestSyncBookshelf:
 
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
         patron = db.patron()
 
@@ -2738,7 +2693,6 @@ class TestSyncBookshelf:
 
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # The hold not present in the sample data has been removed
@@ -2767,7 +2721,6 @@ class TestSyncBookshelf:
 
         overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.queue_access_token_response()
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # overdrive_api_fixture.api doesn't know about the hold, but it was not

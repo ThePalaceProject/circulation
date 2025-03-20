@@ -53,7 +53,6 @@ class MockOverdriveAPI(OverdriveAPI):
         data: str | None = None,
         exception_on_401: bool = False,
         method: str | None = None,
-        palace_context: bool = False,
     ) -> Response:
         with self.mock_http.patch():
             return super().patron_request(
@@ -64,5 +63,4 @@ class MockOverdriveAPI(OverdriveAPI):
                 data,
                 exception_on_401,
                 method,
-                palace_context,
             )
