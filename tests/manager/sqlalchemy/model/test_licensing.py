@@ -1377,7 +1377,11 @@ class TestLicensePoolDeliveryMechanism:
         )
 
         # Create a LicensePoolDeliveryMechanism.
-        lpdm = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE, available=False)
+        lpdm = lpdm_set(
+            content_type=MediaTypes.EPUB_MEDIA_TYPE,
+            available=False,
+            update_available=False,
+        )
 
         assert lpdm.data_source == datasource
         assert lpdm.identifier == identifier
@@ -1388,24 +1392,41 @@ class TestLicensePoolDeliveryMechanism:
 
         assert db.session.query(LicensePoolDeliveryMechanism).count() == 1
 
-        # Calling set again with the same arguments should return the existing LicensePoolDeliveryMechanism.
-        lpdm2 = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE, available=False)
+        # Calling set again with the same content_type should return the existing LicensePoolDeliveryMechanism.
+        lpdm2 = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE)
         assert lpdm2 is lpdm
         assert db.session.query(LicensePoolDeliveryMechanism).count() == 1
+        assert lpdm2.available is False
 
-        # LicensePoolDeliveryMechanism.available is only changed when creating a new LicensePoolDeliveryMechanism.
+        # LicensePoolDeliveryMechanism.available is updated when calling set()
         lpdm = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE, available=True)
-        assert lpdm.available == False
+        assert lpdm.available is True
 
-        # Create a new LicensePoolDeliveryMechanism with a different content type that is available
-        lpdm = lpdm_set(content_type=MediaTypes.PDF_MEDIA_TYPE, available=True)
-        assert lpdm.available == True
+        # Unless the update_available flag is set to False, then available is only set on creation
+        lpdm = lpdm_set(
+            content_type=MediaTypes.EPUB_MEDIA_TYPE,
+            available=False,
+            update_available=False,
+        )
+        assert lpdm.available is True
+
+        # Create a new LicensePoolDeliveryMechanism with a different content type.
+        lpdm = lpdm_set(content_type=MediaTypes.PDF_MEDIA_TYPE)
+        assert lpdm.available is True
         assert lpdm.delivery_mechanism.content_type == MediaTypes.PDF_MEDIA_TYPE
         assert db.session.query(LicensePoolDeliveryMechanism).count() == 2
 
-        # Its available status also is only set when creating a new LicensePoolDeliveryMechanism.
+        # Its available status is changed when calling set() with an available argument
         lpdm = lpdm_set(content_type=MediaTypes.PDF_MEDIA_TYPE, available=False)
-        assert lpdm.available == True
+        assert lpdm.available == False
+
+        # Unless the update_available flag is set to False, then available is only set on creation
+        lpdm = lpdm_set(
+            content_type=MediaTypes.PDF_MEDIA_TYPE,
+            available=True,
+            update_available=False,
+        )
+        assert lpdm.available == False
 
     def test_lpdm_change_may_change_open_access_status(
         self, db: DatabaseTransactionFixture

@@ -1533,6 +1533,7 @@ class LicensePool(Base):
         rights_uri: str | None,
         resource: Resource | None = None,
         available: bool | None = None,
+        update_available: bool = True,
         db: Session | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Ensure that this LicensePool (and any other LicensePools for the same
@@ -1547,6 +1548,7 @@ class LicensePool(Base):
             rights_uri,
             resource,
             available,
+            update_available,
             db,
         )
 
@@ -1627,6 +1629,7 @@ class LicensePoolDeliveryMechanism(Base):
         rights_uri: str | None,
         resource: Resource | None = None,
         available: bool | None = None,
+        update_available: bool = True,
         db: Session | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Register the fact that a distributor makes a title available in a
@@ -1644,6 +1647,9 @@ class LicensePoolDeliveryMechanism(Base):
         :param available: Is this LicensePoolDeliveryMechanism currently
             available? If None the availability won't be changed, and
             will use the default value if its created.
+        :param update_available: Should the value for available be updated
+            if the LicensePoolDeliveryMechanism already exists. This
+            parameter is ignored if available is None.
         :param db: Use this database connection. If this is not supplied
             the database connection will be taken from the data_source.
         """
@@ -1657,6 +1663,8 @@ class LicensePoolDeliveryMechanism(Base):
             _db, content_type, drm_scheme
         )
         rights_status = RightsStatus.lookup(_db, rights_uri)
+
+        create_method_kwargs = None if available is None else {"available": available}
         lpdm, dirty = get_one_or_create(
             _db,
             LicensePoolDeliveryMechanism,
@@ -1664,10 +1672,11 @@ class LicensePoolDeliveryMechanism(Base):
             data_source=data_source,
             delivery_mechanism=delivery_mechanism,
             resource=resource,
-            create_method_kwargs={
-                "available": available,
-            },
+            create_method_kwargs=create_method_kwargs,
         )
+        if not dirty and update_available and available is not None:
+            lpdm.available = available
+
         if not lpdm.rights_status or rights_status.uri != RightsStatus.UNKNOWN:
             # We have better information available about the
             # rights status of this delivery mechanism.

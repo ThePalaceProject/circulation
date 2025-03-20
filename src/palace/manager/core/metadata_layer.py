@@ -553,6 +553,9 @@ class FormatData:
     link: LinkData | None = None
     rights_uri: str | None = None
     available: bool = True
+    # By default, we don't update a formats availability, we only set it when
+    # creating a new one, this can be overridden by setting this flag to True.
+    update_available: bool = False
 
     def __post_init__(self) -> None:
         if self.link and not isinstance(self.link, LinkData):
@@ -1054,6 +1057,7 @@ class CirculationData(LoggerMixin):
                 format.rights_uri or self.default_rights_uri,
                 resource,
                 available=format.available,
+                update_available=format.update_available,
                 db=_db,
             )
             new_lpdms.append(lpdm)
