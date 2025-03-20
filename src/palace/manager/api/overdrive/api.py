@@ -710,18 +710,16 @@ class OverdriveAPI(
         data: str | None = None,
         exception_on_401: bool = False,
         method: str | None = None,
-        palace_context: bool = False,
     ) -> Response:
         """
         Make an HTTP request on behalf of a patron to Overdrive's API.
 
-        If palace_context == True, the request will be performed using privileged
-        Palace Project credentials, which provide extended API access. Otherwise,
-        it will use the collection's configured credentials.
+        This request will be made using an OAuth bearer token for the
+        patron that was acquired using the privileged Palace credentials
+        so that the patron can take actions that require extra api
+        premissions.
         """
-        patron_credential = self._get_patron_oauth_credential(
-            patron, pin, palace_context=palace_context
-        )
+        patron_credential = self._get_patron_oauth_credential(patron, pin)
         headers = dict(Authorization="Bearer %s" % patron_credential.credential)
         if extra_headers:
             headers.update(extra_headers)
@@ -742,9 +740,7 @@ class OverdriveAPI(
                 )
             else:
                 # Refresh the token and try again.
-                self._refresh_patron_oauth_token(
-                    patron_credential, patron, pin, palace_context=palace_context
-                )
+                self._refresh_patron_oauth_token(patron_credential, patron, pin)
                 return self.patron_request(patron, pin, url, extra_headers, data, True)
         else:
             # This is commented out because it may expose patron
@@ -754,7 +750,7 @@ class OverdriveAPI(
             return response
 
     def _get_patron_oauth_credential(
-        self, patron: Patron, pin: str | None, palace_context: bool = False
+        self, patron: Patron, pin: str | None
     ) -> Credential:
         """Get an Overdrive OAuth token for the given patron.
 
@@ -762,25 +758,18 @@ class OverdriveAPI(
 
         :param patron: The patron for whom to fetch the credential.
         :param pin: The patron's PIN or password.
-        :param palace_context: Determines if the oauth token is fetched
-           using the palace credentials or the collections credentials.
         """
 
         refresh = partial(
             self._refresh_patron_oauth_token,
             patron=patron,
             pin=pin,
-            palace_context=palace_context,
         )
 
         return Credential.lookup(
             self._db,
             DataSource.OVERDRIVE,
-            (
-                "Palace Context Patron OAuth Token"
-                if palace_context
-                else "Collection Context Patron OAuth Token"
-            ),
+            "Palace Context Patron OAuth Token",
             patron,
             refresh,
             collection=self.collection,
@@ -803,7 +792,6 @@ class OverdriveAPI(
         credential: Credential,
         patron: Patron,
         pin: str | None,
-        palace_context: bool = False,
     ) -> Credential:
         """Request an OAuth bearer token that allows us to act on
         behalf of a specific patron.
@@ -829,13 +817,7 @@ class OverdriveAPI(
             response = self._do_post(
                 self.PATRON_TOKEN_ENDPOINT,
                 payload,
-                {
-                    "Authorization": (
-                        self._palace_context_basic_auth_header
-                        if palace_context
-                        else self._collection_context_basic_auth_header
-                    ),
-                },
+                {"Authorization": self._palace_context_basic_auth_header},
                 allowed_response_codes=["2xx"],
             )
         except BadResponseException as e:
@@ -1096,7 +1078,7 @@ class OverdriveAPI(
         :return: Information about the loan.
         """
         url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        data = self.patron_request(patron, pin, url, palace_context=True).json()
+        data = self.patron_request(patron, pin, url).json()
         self.raise_exception_on_error(data)
         return data  # type: ignore[no-any-return]
 
@@ -1218,7 +1200,6 @@ class OverdriveAPI(
                 fulfillment_access_token = self._get_patron_oauth_credential(
                     patron,
                     pin,
-                    palace_context=True,
                 ).credential
                 # The credential should never be None, but mypy doesn't know that, so
                 # we assert to be safe.
@@ -1318,9 +1299,7 @@ class OverdriveAPI(
         :param pin: An optional PIN/password for the patron.
         :return: Information about the patron's loans.
         """
-        data = self.patron_request(
-            patron, pin, self.CHECKOUTS_ENDPOINT, palace_context=True
-        ).json()
+        data = self.patron_request(patron, pin, self.CHECKOUTS_ENDPOINT).json()
         self.raise_exception_on_error(data)
         return data  # type: ignore[no-any-return]
 
