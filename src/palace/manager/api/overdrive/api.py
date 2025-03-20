@@ -443,7 +443,7 @@ class OverdriveAPI(
         This header contains the collection's credentials that were configured
         through the admin interface for this specific collection.
         """
-        credentials = b"%s:%s" % (self.client_key(), self.client_secret())
+        credentials = f"{self.client_key()}:{self.client_secret()}"
         return "Basic " + base64.standard_b64encode(credentials).strip()
 
     @property
@@ -644,14 +644,14 @@ class OverdriveAPI(
         kwargs["timeout"] = 120
         return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
 
-    def website_id(self) -> bytes:
-        return self.settings.overdrive_website_id.encode("utf-8")
+    def website_id(self) -> str:
+        return self.settings.overdrive_website_id
 
-    def client_key(self) -> bytes:
-        return self.settings.overdrive_client_key.encode("utf-8")
+    def client_key(self) -> str:
+        return self.settings.overdrive_client_key
 
-    def client_secret(self) -> bytes:
-        return self.settings.overdrive_client_secret.encode("utf-8")
+    def client_secret(self) -> str:
+        return self.settings.overdrive_client_secret
 
     def library_id(self) -> str:
         return self._library_id
