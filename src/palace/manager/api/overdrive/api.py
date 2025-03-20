@@ -713,11 +713,11 @@ class OverdriveAPI(
         palace_context: bool = False,
     ) -> Response:
         """
-        Make an HTTP request on behalf of a patron.
+        Make an HTTP request on behalf of a patron to Overdrive's API.
 
-        If palace_context==True, then the request will be performed in the context of
-        privileged palace credentials. Otherwise, it will be performed in the context of
-        the collections configured credentials.
+        If palace_context == True, the request will be performed using privileged
+        Palace Project credentials, which provide extended API access. Otherwise,
+        it will use the collection's configured credentials.
         """
         patron_credential = self._get_patron_oauth_credential(
             patron, pin, palace_context=palace_context
@@ -790,8 +790,8 @@ class OverdriveAPI(
         """Create the Overdrive scope string for the given library.
 
         This is used when setting up Patron Authentication, and when
-        generating the X-Overdrive-Scope header used by SimplyE to set up
-        its own Patron Authentication.
+        generating the X-Overdrive-Scope header used by apps to set up
+        their own Patron Authentication.
         """
         return "websiteid:{} authorizationname:{}".format(
             self.settings.overdrive_website_id,
