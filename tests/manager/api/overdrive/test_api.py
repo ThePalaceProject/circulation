@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import random
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
@@ -49,6 +48,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -57,9 +57,6 @@ from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.overdrive import MockOverdriveAPI
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestOverdriveAPI:
@@ -237,8 +234,8 @@ class TestOverdriveAPI:
             fixture.api._collection_context_basic_auth_header
             == "Basic "
             + base64.standard_b64encode(
-                b"%s:%s" % (fixture.api.client_key(), fixture.api.client_secret())
-            ).decode("utf8")
+                f"{fixture.api.client_key()}:{fixture.api.client_secret()}"
+            )
         )
 
     def test_get_success(self, overdrive_api_fixture: OverdriveAPIFixture):
@@ -690,7 +687,7 @@ class TestOverdriveAPI:
         # into the form expected by Overdrive.
         db = overdrive_api_fixture.db
         expect = "websiteid:{} authorizationname:{}".format(
-            overdrive_api_fixture.api.website_id().decode("utf-8"),
+            overdrive_api_fixture.api.website_id(),
             overdrive_api_fixture.api.ils_name(db.default_library()),
         )
         assert expect == overdrive_api_fixture.api.scope_string(db.default_library())
@@ -1983,7 +1980,7 @@ class TestOverdriveAPI:
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
         assert "barcode" == payload["username"]
         expect_scope = "websiteid:{} authorizationname:{}".format(
-            overdrive_api_fixture.api.website_id().decode("utf-8"),
+            overdrive_api_fixture.api.website_id(),
             overdrive_api_fixture.api.ils_name(patron.library),
         )
         assert expect_scope == payload["scope"]
@@ -2043,7 +2040,7 @@ class TestOverdriveAPI:
         credential = db.credential(patron=patron)
 
         # Mocked testing credentials
-        encoded_auth = base64.b64encode(b"TestingKey:TestingSecret")
+        encoded_auth = base64.b64encode("TestingKey:TestingSecret")
 
         # use a real Overdrive API
         od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
@@ -2066,7 +2063,7 @@ class TestOverdriveAPI:
         call_args = od_api._do_post.call_args[0]
         assert "/patrontoken" in call_args[0]  # url
         assert (
-            call_args[2]["Authorization"] == f"Basic {encoded_auth.decode()}"
+            call_args[2]["Authorization"] == f"Basic {encoded_auth}"
         )  # Basic header should be that of the fulfillment keys
         assert response_credential == credential
 

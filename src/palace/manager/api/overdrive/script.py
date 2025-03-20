@@ -41,8 +41,8 @@ class GenerateOverdriveAdvantageAccountList(InputScript):
         query = Collection.by_protocol(self._db, protocol=OverdriveAPI.label())
         for collection in query.filter(Collection.parent_id == None):
             api = self._create_overdrive_api(collection=collection)
-            client_key = api.client_key().decode()
-            client_secret = api.client_secret().decode()
+            client_key = api.client_key()
+            client_secret = api.client_secret()
             library_id = api.library_id()
 
             try:
