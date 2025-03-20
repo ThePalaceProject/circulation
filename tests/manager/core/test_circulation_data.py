@@ -36,8 +36,8 @@ class TestCirculationData:
         """
         identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
         format = FormatData(
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.NO_DRM,
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.NO_DRM,
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circdata = CirculationData(
@@ -75,7 +75,10 @@ class TestCirculationData:
         contributor = ContributorData()
         identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
         link = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
-        format = FormatData(Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+        format = FormatData(
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.NO_DRM,
+        )
         rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
 
         circulation_data = CirculationData(
@@ -715,8 +718,8 @@ class TestCirculationData:
 
         # Then we find out it was a mistake -- the book is in copyright.
         format = FormatData(
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.NO_DRM,
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.NO_DRM,
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circulation_data = CirculationData(

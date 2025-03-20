@@ -496,7 +496,7 @@ class EnkiAPI(
         # ACSM file) but since Enki titles only have a single delivery
         # mechanism, it's easy to make a guess.
         drm_type = DeliveryMechanism.NO_DRM
-        for lpdm in licensepool.delivery_mechanisms:
+        for lpdm in licensepool.available_delivery_mechanisms:
             mechanism = lpdm.delivery_mechanism
             if mechanism:
                 drm_type = mechanism.drm_scheme
@@ -759,7 +759,7 @@ class BibliographicParser(LoggerMixin):
         elif formattype == "EPUB":
             content_type = Representation.EPUB_MEDIA_TYPE
         if content_type != None:
-            formats.append(FormatData(content_type, drm_scheme=drm_type))
+            formats.append(FormatData(content_type=content_type, drm_scheme=drm_type))
         else:
             self.log.error("Unrecognized formattype: %s", formattype)
 

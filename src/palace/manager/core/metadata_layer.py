@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+
 from sqlalchemy import Boolean
 from sqlalchemy.orm import Query
 from sqlalchemy.sql import ColumnElement
@@ -544,22 +546,30 @@ class MeasurementData:
         )
 
 
+@dataclass(frozen=True, kw_only=True)
 class FormatData:
-    def __init__(
-        self,
-        content_type: str | None,
-        drm_scheme: str | None,
-        link: LinkData | None = None,
-        rights_uri: str | None = None,
-    ):
-        self.content_type = content_type
-        self.drm_scheme = drm_scheme
-        if link and not isinstance(link, LinkData):
-            raise TypeError("Expected LinkData object, got %s" % type(link))
-        self.link = link
-        self.rights_uri = rights_uri
-        if (not self.rights_uri) and self.link and self.link.rights_uri:
-            self.rights_uri = self.link.rights_uri
+    content_type: str | None
+    drm_scheme: str | None
+    link: LinkData | None = None
+    rights_uri: str | None = None
+    available: bool = True
+    # By default, we don't update a formats availability, we only set it when
+    # creating a new one, this can be overridden by setting this flag to True.
+    update_available: bool = False
+
+    def __post_init__(self) -> None:
+        if self.link and not isinstance(self.link, LinkData):
+            raise TypeError("Expected LinkData object, got %s" % type(self.link))
+
+        # We can't use direct assignment because of the frozen=True flag, so
+        # we have to use object.__setattr__.
+        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+        if self.link:
+            if not self.rights_uri and self.link.rights_uri:
+                object.__setattr__(self, "rights_uri", self.link.rights_uri)
+
+            if not self.content_type and self.link.media_type:
+                object.__setattr__(self, "content_type", self.link.media_type)
 
 
 class LicenseData(LicenseFunctions):
@@ -840,12 +850,16 @@ class CirculationData(LoggerMixin):
                         # so treat it as a generic open-access book.
                         rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
                     format_found = False
+                    format = None
                     for format in self.formats:
                         if format and format.link and format.link.href == link.href:
-                            if not format.rights_uri:
-                                format.rights_uri = rights_uri
                             format_found = True
                             break
+                    if format_found and format and not format.rights_uri:
+                        self.formats.remove(format)
+                        self.formats.append(
+                            dataclasses.replace(format, rights_uri=rights_uri)
+                        )
                     if not format_found:
                         self.formats.append(
                             FormatData(
@@ -1029,10 +1043,7 @@ class CirculationData(LoggerMixin):
         old_open_access = any(pool.open_access for pool in pools)
 
         for format in self.formats:
-            if format and format.link:
-                link = format.link
-                if not format.content_type:
-                    format.content_type = link.media_type
+            if format.link:
                 link_obj = link_objects[format.link]
                 resource = link_obj.resource
             else:
@@ -1045,6 +1056,8 @@ class CirculationData(LoggerMixin):
                 format.drm_scheme,
                 format.rights_uri or self.default_rights_uri,
                 resource,
+                available=format.available,
+                update_available=format.update_available,
                 db=_db,
             )
             new_lpdms.append(lpdm)

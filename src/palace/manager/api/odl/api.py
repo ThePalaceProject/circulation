@@ -508,7 +508,7 @@ class OPDS2WithODLApi(
         resource = next(
             (
                 lpdm.resource
-                for lpdm in licensepool.delivery_mechanisms
+                for lpdm in licensepool.available_delivery_mechanisms
                 if lpdm.delivery_mechanism == requested_delivery_mechanism
                 and lpdm.resource is not None
             ),

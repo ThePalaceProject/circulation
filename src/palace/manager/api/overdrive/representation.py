@@ -688,7 +688,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 internal_formats = list(cls.internal_formats(format_id))
                 if internal_formats:
                     for content_type, drm_scheme in internal_formats:
-                        formats.append(FormatData(content_type, drm_scheme))
+                        formats.append(
+                            FormatData(content_type=content_type, drm_scheme=drm_scheme)
+                        )
                 elif format_id not in cls.ignorable_overdrive_formats:
                     cls.logger().error(
                         "Could not process Overdrive format %s for %s",

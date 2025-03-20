@@ -2,6 +2,7 @@ import datetime
 import json
 from collections.abc import Callable
 from datetime import timedelta
+from functools import partial
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
@@ -1324,8 +1325,109 @@ class TestLicensePool:
             pool.on_hold_to(patron2)
         assert "Cannot create a new hold on an inactive collection" in str(exc.value)
 
+    def test_delivery_mechanisms(self, db: DatabaseTransactionFixture) -> None:
+        # Test the delivery_mechanisms and available_delivery_mechanisms property.
+        pool = db.licensepool(None)
+
+        # The pool is created with one delivery mechanism.
+        assert pool.delivery_mechanisms == pool.available_delivery_mechanisms
+        assert len(pool.available_delivery_mechanisms) == 1
+        [lpdm1] = pool.available_delivery_mechanisms
+        assert lpdm1.available
+
+        # Set lpdm1 to unavailable and create three new delivery mechanisms, two of which are available.
+        lpdm1.available = False
+        lpmd2 = pool.set_delivery_mechanism(
+            "lpdm2",
+            None,
+            None,
+        )
+        lpmd3 = pool.set_delivery_mechanism(
+            "lpdm3",
+            None,
+            None,
+        )
+        lpmd4 = pool.set_delivery_mechanism(
+            "lpdm4",
+            None,
+            None,
+            available=False,
+        )
+
+        # The properties should reflect the new state.
+        assert set(pool.delivery_mechanisms) == {lpdm1, lpmd2, lpmd3, lpmd4}
+        assert set(pool.available_delivery_mechanisms) == {lpmd2, lpmd3}
+
 
 class TestLicensePoolDeliveryMechanism:
+    def test_set(self, db: DatabaseTransactionFixture) -> None:
+        datasource = DataSource.lookup(
+            db.session, DataSource.GUTENBERG, autocreate=True
+        )
+        identifier = db.identifier()
+
+        assert db.session.query(LicensePoolDeliveryMechanism).count() == 0
+
+        lpdm_set = partial(
+            LicensePoolDeliveryMechanism.set,
+            data_source=datasource,
+            identifier=identifier,
+            drm_scheme=DeliveryMechanism.NO_DRM,
+            rights_uri=RightsStatus.IN_COPYRIGHT,
+        )
+
+        # Create a LicensePoolDeliveryMechanism.
+        lpdm = lpdm_set(
+            content_type=MediaTypes.EPUB_MEDIA_TYPE,
+            available=False,
+            update_available=False,
+        )
+
+        assert lpdm.data_source == datasource
+        assert lpdm.identifier == identifier
+        assert lpdm.available == False
+        assert lpdm.delivery_mechanism.content_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert lpdm.delivery_mechanism.drm_scheme is None
+        assert lpdm.rights_status.uri == RightsStatus.IN_COPYRIGHT
+
+        assert db.session.query(LicensePoolDeliveryMechanism).count() == 1
+
+        # Calling set again with the same content_type should return the existing LicensePoolDeliveryMechanism.
+        lpdm2 = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE)
+        assert lpdm2 is lpdm
+        assert db.session.query(LicensePoolDeliveryMechanism).count() == 1
+        assert lpdm2.available is False
+
+        # LicensePoolDeliveryMechanism.available is updated when calling set()
+        lpdm = lpdm_set(content_type=MediaTypes.EPUB_MEDIA_TYPE, available=True)
+        assert lpdm.available is True
+
+        # Unless the update_available flag is set to False, then available is only set on creation
+        lpdm = lpdm_set(
+            content_type=MediaTypes.EPUB_MEDIA_TYPE,
+            available=False,
+            update_available=False,
+        )
+        assert lpdm.available is True
+
+        # Create a new LicensePoolDeliveryMechanism with a different content type.
+        lpdm = lpdm_set(content_type=MediaTypes.PDF_MEDIA_TYPE)
+        assert lpdm.available is True
+        assert lpdm.delivery_mechanism.content_type == MediaTypes.PDF_MEDIA_TYPE
+        assert db.session.query(LicensePoolDeliveryMechanism).count() == 2
+
+        # Its available status is changed when calling set() with an available argument
+        lpdm = lpdm_set(content_type=MediaTypes.PDF_MEDIA_TYPE, available=False)
+        assert lpdm.available == False
+
+        # Unless the update_available flag is set to False, then available is only set on creation
+        lpdm = lpdm_set(
+            content_type=MediaTypes.PDF_MEDIA_TYPE,
+            available=True,
+            update_available=False,
+        )
+        assert lpdm.available == False
+
     def test_lpdm_change_may_change_open_access_status(
         self, db: DatabaseTransactionFixture
     ):

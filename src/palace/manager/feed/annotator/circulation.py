@@ -523,7 +523,7 @@ class CirculationManagerAnnotator(Annotator):
                 # Since the delivery mechanism has already been locked in,
                 # we choose not to use visible_delivery_mechanisms --
                 # they already chose it and they're stuck with it.
-                for lpdm in active_license_pool.delivery_mechanisms:
+                for lpdm in active_license_pool.available_delivery_mechanisms:
                     if (
                         lpdm is active_loan.fulfillment
                         or lpdm.delivery_mechanism.is_streaming
@@ -579,7 +579,7 @@ class CirculationManagerAnnotator(Annotator):
             and active_license_pool
             and active_license_pool.open_access
         ):
-            for lpdm in active_license_pool.delivery_mechanisms:
+            for lpdm in active_license_pool.available_delivery_mechanisms:
                 if lpdm.resource:
                     open_access_links.append(
                         self.open_access_link(active_license_pool, lpdm)
@@ -1292,7 +1292,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
                 api.SET_DELIVERY_MECHANISM_AT == BaseCirculationAPI.BORROW_STEP
             )
             if active_license_pool and not self.identifies_patrons and not active_loan:
-                for lpdm in active_license_pool.delivery_mechanisms:
+                for lpdm in active_license_pool.available_delivery_mechanisms:
                     if api.can_fulfill_without_loan(None, active_license_pool, lpdm):
                         # This title can be fulfilled without an
                         # active loan, so we're going to add an acquisition
