@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-import re
-import urllib.parse
-from collections.abc import Callable, Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable
 from functools import partial
 from json import JSONDecodeError
 from threading import RLock
@@ -1005,7 +1003,9 @@ class OverdriveAPI(
         :return: Information about the loan.
         """
         url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        return self.patron_request(patron, pin, url, palace_context=True, response_type=Checkout)
+        return self.patron_request(
+            patron, pin, url, palace_context=True, response_type=Checkout
+        )
 
     def fulfill(
         self,
@@ -1163,7 +1163,11 @@ class OverdriveAPI(
         :return: Information about the patron's loans.
         """
         return self.patron_request(
-            patron, pin, self.CHECKOUTS_ENDPOINT, palace_context=True, response_type=Checkouts
+            patron,
+            pin,
+            self.CHECKOUTS_ENDPOINT,
+            palace_context=True,
+            response_type=Checkouts,
         )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> dict[str, Any]:
