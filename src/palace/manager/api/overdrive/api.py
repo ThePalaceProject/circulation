@@ -714,6 +714,10 @@ class OverdriveAPI(
     ) -> Response:
         """
         Make an HTTP request on behalf of a patron.
+
+        If palace_context==True, then the request will be performed in the context of
+        privileged palace credentials. Otherwise, it will be performed in the context of
+        the collections configured credentials.
         """
         patron_credential = self._get_patron_oauth_credential(
             patron, pin, palace_context=palace_context
