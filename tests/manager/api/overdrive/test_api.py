@@ -2555,10 +2555,10 @@ class TestSyncBookshelf:
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         db = overdrive_api_fixture.db
-
         loans_data, json_loans = overdrive_api_fixture.sample_json(
             "shelf_with_some_checked_out_books.json"
         )
+
         holds_data, json_holds = overdrive_api_fixture.sample_json("no_holds.json")
 
         overdrive_api_fixture.api.queue_response(200, content=loans_data)
