@@ -317,8 +317,11 @@ class OverdriveAPI(
     @property
     def _client_oauth_token(self) -> str:
         """
-        Get the oauth bearer token used to authenticate with Overdrive
-        for this collection.
+        The client oauth bearer token used for authentication with
+        Overdrive for this collection.
+
+        This token is refreshed as needed and cached for reuse
+        by this property.
 
         See: https://developer.overdrive.com/docs/api-security
              https://developer.overdrive.com/apis/client-auth
@@ -435,18 +438,22 @@ class OverdriveAPI(
     @property
     def _collection_context_basic_auth_header(self) -> str:
         """
-        The basic auth header used to acquire an oauth bearer token
-        using the collections credentials, configured for each
-        collection through the admin interface.
+        Returns the Basic Auth header used to acquire an OAuth bearer token.
+
+        This header contains the collection's credentials that were configured
+        through the admin interface for this specific collection.
         """
-        s = b"%s:%s" % (self.client_key(), self.client_secret())
-        return "Basic " + base64.standard_b64encode(s).strip()
+        credentials = b"%s:%s" % (self.client_key(), self.client_secret())
+        return "Basic " + base64.standard_b64encode(credentials).strip()
 
     @property
     def _palace_context_basic_auth_header(self) -> str:
         """
-        The basic auth header used to acquire an oauth bearer token
-        using the palace credentials passed into the CM via env vars.
+        Returns the Basic Auth header used to acquire an OAuth bearer token.
+
+        This header contains the Palace Project credentials passed into the
+        Circulation Manager via environment variables. This is used to acquire
+        a privileged token that has extra permissions for the Overdrive API.
         """
         is_test_mode = (
             True
