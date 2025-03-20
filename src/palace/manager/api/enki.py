@@ -759,7 +759,7 @@ class BibliographicParser(LoggerMixin):
         elif formattype == "EPUB":
             content_type = Representation.EPUB_MEDIA_TYPE
         if content_type != None:
-            formats.append(FormatData(content_type, drm_scheme=drm_type))
+            formats.append(FormatData(content_type=content_type, drm_scheme=drm_type))
         else:
             self.log.error("Unrecognized formattype: %s", formattype)
 
