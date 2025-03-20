@@ -777,9 +777,9 @@ class OverdriveAPI(
             self._db,
             DataSource.OVERDRIVE,
             (
-                "Palace Scope OAuth Token"
+                "Palace Context Patron OAuth Token"
                 if palace_context
-                else "Collection Scope OAuth Token"
+                else "Collection Context Patron OAuth Token"
             ),
             patron,
             refresh,
