@@ -41,6 +41,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
+    LicensePool,
     LicensePoolDeliveryMechanism,
     RightsStatus,
 )
@@ -1113,41 +1114,46 @@ def patron_activity_circulation_api(
 class TestPatronActivityCirculationAPI:
 
     @pytest.mark.parametrize(
-        "has_owned_copies, is_open_access, collection_is_active, library_associated_with_collection, license_pool_is_deliverable, is_deleted",
+        "has_owned_copies, is_unlimited_access, is_open_access, collection_is_active, library_associated_with_collection, license_pool_is_deliverable, is_deleted",
         [
             [
+                False,
                 True,
                 True,
                 True,
                 True,
                 True,
                 False,
-            ],  # all criteria met: not deleted
+            ],  # has no owned copies but otherwise all criteria met: not deleted
+            [
+                True,
+                False,
+                False,
+                True,
+                True,
+                True,
+                False,
+            ],  # has owned copies and not open or unlimited but otherwise all criteria met: not deleted
             [
                 False,
                 True,
-                True,
+                False,
                 True,
                 True,
                 False,
-            ],  # no owned copies but open access: not deleted
+                True,
+            ],  # no owned copies, open access, not unlimited, no delivery mechanism : deleted
             [
                 False,
+                False,
                 True,
                 True,
                 True,
                 False,
                 True,
-            ],  # no delivery mechanism: deleted
+            ],  # no owned copies, not open access, unlimited, no delivery mechanism : deleted
             [
-                True,
-                True,
-                True,
                 False,
-                True,
-                True,
-            ],  # library not assoc with collection: deleted
-            [
                 True,
                 True,
                 False,
@@ -1157,12 +1163,13 @@ class TestPatronActivityCirculationAPI:
             ],  # collection not active - deleted
             [
                 False,
+                True,
+                True,
+                True,
                 False,
                 True,
                 True,
-                True,
-                True,
-            ],  # no owned copies and not open access - deleted
+            ],  # library not assoc with collection: deleted
         ],
     )
     def test_sync_patron_activity_when_remote_loan_present_but_loan_should_be_removed(
@@ -1171,6 +1178,7 @@ class TestPatronActivityCirculationAPI:
         patron_activity_circulation_api: PatronActivityCirculationAPIFixture,
         has_owned_copies: bool,
         is_open_access: bool,
+        is_unlimited_access: bool,
         collection_is_active: bool,
         library_associated_with_collection: bool,
         license_pool_is_deliverable: bool,
@@ -1217,6 +1225,9 @@ class TestPatronActivityCirculationAPI:
         lp.licenses_owned = 1 if has_owned_copies else 0
         lp.open_access = is_open_access
 
+        if is_unlimited_access:
+            lp.licenses_owned = LicensePool.UNLIMITED_ACCESS
+
         if not library_associated_with_collection:
             # disassociate library from collection
             db.session.execute(
@@ -1240,9 +1251,15 @@ class TestPatronActivityCirculationAPI:
 
         if not collection_is_active:
             # make the collection inactive
+            day_before_yesterday = (
+                patron_activity_circulation_api.yesterday - timedelta(days=1)
+            ).date()
             lp.collection._set_settings(
-                subscription_expiration_date=patron_activity_circulation_api.yesterday
+                subscription_expiration_date=patron_activity_circulation_api.yesterday.date(),
+                subscription_activation_date=day_before_yesterday,
             )
+            db.session.refresh(lp)
+            db.session.refresh(lp.collection)
             assert not lp.collection.is_active
         # re-sync based on specific test conditions
         patron_activity_circulation_api.sync_patron_activity()
