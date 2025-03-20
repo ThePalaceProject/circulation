@@ -271,7 +271,7 @@ class OPDSForDistributorsAPI(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
         now = utc_now()
         return LoanInfo.from_license_pool(

@@ -341,7 +341,7 @@ class BaseOPDSAPI(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
         return LoanInfo.from_license_pool(licensepool, end_date=None)
 

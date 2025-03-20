@@ -287,7 +287,7 @@ class OPDS2WithODLApi(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
         """Create a new loan."""
         _db = Session.object_session(patron)

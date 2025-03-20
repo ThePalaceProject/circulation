@@ -839,7 +839,7 @@ class OverdriveAPI(
         patron: Patron,
         pin: str | None,
         licensepool: LicensePool,
-        delivery_mechanism: LicensePoolDeliveryMechanism,
+        delivery_mechanism: LicensePoolDeliveryMechanism | None,
     ) -> LoanInfo:
         """Check out a book on behalf of a patron.
 
