@@ -3,11 +3,16 @@ import logging
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from typing_extensions import ParamSpec
 
 from palace.manager.service.logging.configuration import LogLevel
+
+if TYPE_CHECKING:
+    LoggerAdapterType = logging.LoggerAdapter[logging.Logger]
+else:
+    LoggerAdapterType = logging.LoggerAdapter
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -107,7 +112,7 @@ class LoggerMixin:
         return logger_for_cls(cls)
 
     @property
-    def log(self) -> logging.Logger:
+    def log(self) -> logging.Logger | LoggerAdapterType:
         """
         A convenience property that returns the logger for the class,
         so it is easier to access the logger from an instance.
@@ -122,3 +127,25 @@ def pluralize(count: int, singular: str, plural: str | None = None) -> str:
     if plural is None:
         plural = singular + "s"
     return f"{count} {singular if count == 1 else plural}"
+
+
+class ExtraDataLoggerAdapter(LoggerAdapterType):
+    """Make extra data available for logging.
+
+    This is useful for logging extra data that is not available in the
+    standard logging.Logger object.
+
+    The data can be formatted into the log message using the adapter's
+    `process` method. For example:
+
+    ```
+    def process(self, msg: str, kwargs: MutableMapping[str, Any]) -> tuple[str, MutableMapping[str, Any]]:
+        value = self.extra.get('<key>', "unknown")
+        new_msg = f"{msg} [{value}]"
+        return new_msg, kwargs
+    ```
+    """
+
+    def __init__(self, logger: logging.Logger, extra: dict[str, Any] | None = None):
+        self.extra = extra or {}
+        super().__init__(logger, self.extra)
