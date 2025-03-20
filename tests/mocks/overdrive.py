@@ -79,21 +79,6 @@ class MockOverdriveAPI(OverdriveAPI):
         # queue up the response.
         self.queue_response(200, content=self.mock_collection_token("collection token"))
 
-    def token_post(self, url, payload, is_fulfillment=False, headers={}, **kwargs):
-        """Mock the request for an OAuth token.
-
-        We mock the method by looking at the access_token_response
-        property, rather than inserting a mock response in the queue,
-        because only the first MockOverdriveAPI instantiation in a
-        given test actually makes this call. By mocking the response
-        to this method separately we remove the need to figure out
-        whether to queue a response in a given test.
-        """
-        url = self.endpoint(url)
-        self.access_token_requests.append((url, payload, headers, kwargs))
-        response = self.access_token_response
-        return HTTP._process_response(url, response, **kwargs)
-
     def mock_access_token_response(self, credential):
         token = dict(access_token=credential, expires_in=3600)
         return MockRequestsResponse(200, {}, json.dumps(token))
@@ -113,12 +98,20 @@ class MockOverdriveAPI(OverdriveAPI):
     def _do_post(self, url, *args, **kwargs):
         return self._make_request(url, *args, **kwargs)
 
+    @property
+    def _palace_context_basic_auth_header(self) -> str:
+        return "Basic auth header"
+
     def _make_request(self, url, *args, **kwargs):
-        url = self.endpoint(url)
-        response = self.responses.pop()
-        self.requests.append((url, args, kwargs))
+        request = (self.endpoint(url), args, kwargs)
+        if url == self.TOKEN_ENDPOINT or url == self.PATRON_TOKEN_ENDPOINT:
+            response = self.access_token_response
+            self.access_token_requests.append(request)
+        else:
+            response = self.responses.pop()
+            self.requests.append(request)
         return HTTP._process_response(
-            url,
+            self.endpoint(url),
             response,
             kwargs.get("allowed_response_codes"),
             kwargs.get("disallowed_response_codes"),

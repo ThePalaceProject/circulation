@@ -134,24 +134,25 @@ class TestOverdriveAPI:
         # make any HTTP requests.
         collection = MockOverdriveAPI.mock_collection(session, library)
 
-        class NoRequests(OverdriveAPI):
-            MSG = "This is a unit test, you can't make HTTP requests!"
+        exception_message = "This is a unit test, you can't make HTTP requests!"
+        with (
+            patch.object(
+                OverdriveAPI, "_do_get", side_effect=Exception(exception_message)
+            ),
+            patch.object(
+                OverdriveAPI, "_do_post", side_effect=Exception(exception_message)
+            ),
+        ):
+            # Make sure that the constructor doesn't make any requests.
+            api = OverdriveAPI(session, collection)
 
-            def no_requests(self, *args, **kwargs):
-                raise Exception(self.MSG)
+            # Attempting to access ._client_oauth_token or .collection_token _will_
+            # try to make an HTTP request.
+            with pytest.raises(Exception, match=exception_message):
+                api.collection_token
 
-            _do_get = no_requests
-            _do_post = no_requests
-            _make_request = no_requests
-
-        api = NoRequests(session, collection)
-
-        # Attempting to access .token or .collection_token _will_
-        # try to make an HTTP request.
-        for field in "token", "collection_token":
-            with pytest.raises(Exception) as excinfo:
-                getattr(api, field)
-            assert api.MSG in str(excinfo.value)
+            with pytest.raises(Exception, match=exception_message):
+                api._client_oauth_token
 
     def test_ils_name(self, overdrive_api_fixture: OverdriveAPIFixture):
         fixture = overdrive_api_fixture
@@ -224,30 +225,21 @@ class TestOverdriveAPI:
             result + "%3A", extra="something else"
         )
 
-    def test_token_authorization_header(
+    def test__collection_context_basic_auth_header(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         fixture = overdrive_api_fixture
 
         # Verify that the Authorization header needed to get an access
         # token for a given collection is encoded properly.
-        assert fixture.api.token_authorization_header == "Basic YTpi"
+        assert fixture.api._collection_context_basic_auth_header == "Basic YTpi"
         assert (
-            fixture.api.token_authorization_header
+            fixture.api._collection_context_basic_auth_header
             == "Basic "
             + base64.standard_b64encode(
                 b"%s:%s" % (fixture.api.client_key(), fixture.api.client_secret())
             ).decode("utf8")
         )
-
-    def test_token_post_success(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-        transaction = fixture.db
-
-        fixture.api.queue_response(200, content="some content")
-        response = fixture.api.token_post(transaction.fresh_url(), "the payload")
-        assert 200 == response.status_code
-        assert fixture.api.access_token_response.content == response.content
 
     def test_get_success(self, overdrive_api_fixture: OverdriveAPIFixture):
         fixture = overdrive_api_fixture
@@ -302,14 +294,13 @@ class TestOverdriveAPI:
         transaction = fixture.db
 
         # We have a token.
-        assert "bearer token" == fixture.api.token
+        assert "bearer token" == fixture.api._client_oauth_token
 
         # But then we try to GET, and receive a 401.
         fixture.api.queue_response(401)
 
-        # We refresh the bearer token. (This happens in
-        # MockOverdriveAPI.token_post, so we don't mock the response
-        # in the normal way.)
+        # We refresh the bearer token. (This is special cased in MockOverdriveAPI
+        # so we don't mock the response in the normal way.)
         fixture.api.access_token_response = fixture.api.mock_access_token_response(
             "new bearer token"
         )
@@ -323,9 +314,9 @@ class TestOverdriveAPI:
         assert b"at last, the content" == content
 
         # The bearer token has been updated.
-        assert "new bearer token" == fixture.api.token
+        assert "new bearer token" == fixture.api._client_oauth_token
 
-    def test_token(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test__client_oauth_token(self, overdrive_api_fixture: OverdriveAPIFixture):
         """Verify the process of refreshing the Overdrive bearer token."""
         api = overdrive_api_fixture.api
 
@@ -333,31 +324,33 @@ class TestOverdriveAPI:
         assert len(api.access_token_requests) == 0
 
         # Accessing the token triggers a refresh
-        assert api.token == "bearer token"
+        assert api._client_oauth_token == "bearer token"
         assert len(api.access_token_requests) == 1
 
         # Mock the token response
         api.access_token_response = api.mock_access_token_response("new bearer token")
 
         # Accessing the token again won't refresh, because the old token is still valid
-        assert api.token == "bearer token"
+        assert api._client_oauth_token == "bearer token"
         assert len(api.access_token_requests) == 1
 
         # However if the token expires we will get a new one
-        assert api._token is not None
-        api._token = api._token._replace(expires=utc_now() - timedelta(seconds=1))
+        assert api._cached_client_oauth_token is not None
+        api._cached_client_oauth_token = api._cached_client_oauth_token._replace(
+            expires=utc_now() - timedelta(seconds=1)
+        )
 
-        assert api.token == "new bearer token"
+        assert api._client_oauth_token == "new bearer token"
         assert len(api.access_token_requests) == 2
 
-    def test_401_after_token_refresh_raises_error(
+    def test_401_after__refresh_client_oauth_token_raises_error(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         fixture = overdrive_api_fixture
         api = fixture.api
 
         # Our initial token value is "bearer token".
-        assert api.token == "bearer token"
+        assert api._client_oauth_token == "bearer token"
 
         # We try to GET and receive a 401.
         api.queue_response(401)
@@ -376,12 +369,12 @@ class TestOverdriveAPI:
             api.get_library()
 
         # We refreshed the token in the process.
-        assert fixture.api.token == "new bearer token"
+        assert fixture.api._client_oauth_token == "new bearer token"
 
         # We made two requests
         assert len(api.requests) == 2
 
-    def test_401_during__refresh_token_raises_error(
+    def test_401_during__refresh_client_oauth_token_raises_error(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         fixture = overdrive_api_fixture
@@ -394,7 +387,7 @@ class TestOverdriveAPI:
             BadResponseException,
             match="Got status code 401 .* can only continue on: 200.",
         ):
-            fixture.api._refresh_token()
+            fixture.api._refresh_client_oauth_token()
 
     def test_advantage_differences(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
@@ -526,9 +519,9 @@ class TestOverdriveAPI:
         # Mock every method used by OverdriveAPI._run_self_tests.
         api = MockOverdriveAPI(db.session, overdrive_api_fixture.collection)
 
-        # First we will call get_token
-        mock_refresh_token = create_autospec(api._refresh_token)
-        api._refresh_token = mock_refresh_token
+        # First we will call _refresh_collection_oauth_token
+        mock_refresh_token = create_autospec(api._refresh_client_oauth_token)
+        api._refresh_client_oauth_token = mock_refresh_token
 
         # Then we will call get_advantage_accounts().
         mock_get_advantage_accounts = create_autospec(
@@ -545,8 +538,8 @@ class TestOverdriveAPI:
         # Finally, for every library associated with this
         # collection, we'll call get_patron_credential() using
         # the credentials of that library's test patron.
-        mock_get_patron_credential = create_autospec(api.get_patron_credential)
-        api.get_patron_credential = mock_get_patron_credential
+        mock_get_patron_credential = create_autospec(api._get_patron_oauth_credential)
+        api._get_patron_oauth_credential = mock_get_patron_credential
 
         # Now let's make sure two Libraries have access to this
         # Collection -- one library with a default patron and one
@@ -623,8 +616,8 @@ class TestOverdriveAPI:
         """
 
         api = overdrive_api_fixture.api
-        api._refresh_token = create_autospec(
-            api._refresh_token, side_effect=Exception("Failure!")
+        api._refresh_client_oauth_token = create_autospec(
+            api._refresh_client_oauth_token, side_effect=Exception("Failure!")
         )
 
         # Only one test will be run.
@@ -1964,7 +1957,7 @@ class TestOverdriveAPI:
         assert 10 == pool.patrons_in_hold_queue
         assert True == changed
 
-    def test_refresh_patron_access_token(
+    def test__refresh_patron_oauth_token(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         """Verify that patron information is included in the request
@@ -1975,21 +1968,18 @@ class TestOverdriveAPI:
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
 
-        data, raw = overdrive_api_fixture.sample_json("patron_token.json")
-        overdrive_api_fixture.api.queue_response(200, content=raw)
-
         # Try to refresh the patron access token with a PIN, and
         # then without a PIN.
-        overdrive_api_fixture.api.refresh_patron_access_token(
+        overdrive_api_fixture.api._refresh_patron_oauth_token(
             credential, patron, "a pin"
         )
 
-        overdrive_api_fixture.api.refresh_patron_access_token(credential, patron, None)
+        overdrive_api_fixture.api._refresh_patron_oauth_token(credential, patron, None)
 
         # Verify that the requests that were made correspond to what
         # Overdrive is expecting.
         with_pin, without_pin = overdrive_api_fixture.api.access_token_requests
-        url, payload, headers, kwargs = with_pin
+        url, (payload, headers), kwargs = with_pin
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
         assert "barcode" == payload["username"]
         expect_scope = "websiteid:{} authorizationname:{}".format(
@@ -2000,14 +1990,14 @@ class TestOverdriveAPI:
         assert "a pin" == payload["password"]
         assert not "password_required" in payload
 
-        url, payload, headers, kwargs = without_pin
+        url, (payload, headers), kwargs = without_pin
         assert "https://oauth-patron.overdrive.com/patrontoken" == url
         assert "barcode" == payload["username"]
         assert expect_scope == payload["scope"]
         assert "false" == payload["password_required"]
         assert "[ignore]" == payload["password"]
 
-    def test_test_refresh_patron_access_token_failure(
+    def test__refresh_patron_oauth_token_failure(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
         db = overdrive_api_fixture.db
@@ -2023,7 +2013,7 @@ class TestOverdriveAPI:
         with pytest.raises(
             PatronAuthorizationFailedException, match="Invalid Library Card"
         ):
-            overdrive_api_fixture.api.refresh_patron_access_token(
+            overdrive_api_fixture.api._refresh_patron_oauth_token(
                 credential, patron, "a pin"
             )
 
@@ -2037,11 +2027,11 @@ class TestOverdriveAPI:
             PatronAuthorizationFailedException,
             match="Failed to authenticate with Overdrive",
         ):
-            overdrive_api_fixture.api.refresh_patron_access_token(
+            overdrive_api_fixture.api._refresh_patron_oauth_token(
                 credential, patron, "a pin"
             )
 
-    def test_refresh_patron_access_token_is_fulfillment(
+    def test__refresh_patron_oauth_token_palace_context(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         """Verify that patron information is included in the request
@@ -2064,8 +2054,8 @@ class TestOverdriveAPI:
             return_value=MockRequestsResponse(200, content=post_response)
         )
         od_api._do_get = MagicMock()
-        response_credential = od_api.refresh_patron_access_token(
-            credential, patron, "a pin", is_fulfillment=True
+        response_credential = od_api._refresh_patron_oauth_token(
+            credential, patron, "a pin", palace_context=True
         )
 
         # Posted once, no gets
@@ -2104,7 +2094,7 @@ class TestOverdriveAPI:
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
         )
         with pytest.raises(CannotFulfill):
-            od_api.fulfillment_authorization_header
+            od_api._palace_context_basic_auth_header
 
     def test_no_drm_fulfillment(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
@@ -2192,9 +2182,8 @@ class TestOverdriveAPI:
 
 class TestOverdriveAPICredentials:
     def test_patron_correct_credentials_for_multiple_overdrive_collections(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
         # Verify that the correct credential will be used
         # when a library has more than one OverDrive collection.
 
@@ -2205,9 +2194,7 @@ class TestOverdriveAPICredentials:
             return f"{grant_type}|{scope}|{username}|{password}"
 
         class MockAPI(MockOverdriveAPI):
-            def token_post(
-                self, url, payload, is_fulfillment=False, headers={}, **kwargs
-            ):
+            def _do_post(self, url, payload, headers, **kwargs):
                 url = self.endpoint(url)
                 self.access_token_requests.append((url, payload, headers, kwargs))
                 token = _make_token(
@@ -2283,21 +2270,23 @@ class TestOverdriveAPICredentials:
         for name in list(expected_credentials.keys()) + list(
             reversed(list(expected_credentials.keys()))
         ):
-            credential = od_apis[name].get_patron_credential(patron, pin)
+            credential = od_apis[name]._get_patron_oauth_credential(patron, pin)
             assert expected_credentials[name] == credential.credential
 
     def test_fulfillment_credentials_testing_keys(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         test_key = "tk"
         test_secret = "ts"
 
-        os.environ[
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
-        ] = test_key
-        os.environ[
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
-        ] = test_secret
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            test_key,
+        )
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
+            test_secret,
+        )
 
         testing_credentials = Configuration.overdrive_fulfillment_keys(testing=True)
         assert testing_credentials["key"] == test_key
@@ -2306,27 +2295,31 @@ class TestOverdriveAPICredentials:
         prod_key = "pk"
         prod_secret = "ps"
 
-        os.environ[
-            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
-        ] = prod_key
-        os.environ[
-            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
-        ] = prod_secret
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            prod_key,
+        )
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
+            prod_secret,
+        )
 
         prod_credentials = Configuration.overdrive_fulfillment_keys()
         assert prod_credentials["key"] == prod_key
         assert prod_credentials["secret"] == prod_secret
 
     def test_fulfillment_credentials_cannot_load(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        os.environ.pop(
-            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(
+            f"{Configuration.OD_PREFIX_PRODUCTION_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            raising=False,
         )
         pytest.raises(CannotLoadConfiguration, Configuration.overdrive_fulfillment_keys)
 
-        os.environ.pop(
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+        monkeypatch.delenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            raising=False,
         )
         pytest.raises(
             CannotLoadConfiguration,

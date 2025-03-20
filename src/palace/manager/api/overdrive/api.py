@@ -5,6 +5,7 @@ import json
 import re
 import urllib.parse
 from collections.abc import Callable, Generator, Iterable, Mapping
+from functools import partial
 from json import JSONDecodeError
 from threading import RLock
 from typing import Any, NamedTuple, cast
@@ -278,8 +279,8 @@ class OverdriveAPI(
 
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
-        # This is set by access to .token
-        self._token: OverdriveToken | None = None
+        # This is set by access to ._client_oauth_token
+        self._cached_client_oauth_token: OverdriveToken | None = None
 
         # This is set by an access to .collection_token
         self._collection_token: str | None = None
@@ -314,26 +315,40 @@ class OverdriveAPI(
         return url % kwargs
 
     @property
-    def token(self) -> str:
-        if (token := self._token) is not None and utc_now() < token.expires:
+    def _client_oauth_token(self) -> str:
+        """
+        The client oauth bearer token used for authentication with
+        Overdrive for this collection.
+
+        This token is refreshed as needed and cached for reuse
+        by this property.
+
+        See: https://developer.overdrive.com/docs/api-security
+             https://developer.overdrive.com/apis/client-auth
+        """
+        if (
+            token := self._cached_client_oauth_token
+        ) is not None and utc_now() < token.expires:
             return token.token
 
-        return self._refresh_token().token
+        return self._refresh_client_oauth_token().token
 
-    def _refresh_token(self) -> OverdriveToken:
-        """Get an overdrive bearer token."""
+    def _refresh_client_oauth_token(self) -> OverdriveToken:
         with self.lock:
-            response = self.token_post(
+            response = self._do_post(
                 self.TOKEN_ENDPOINT,
                 dict(grant_type="client_credentials"),
+                {"Authorization": self._collection_context_basic_auth_header},
                 allowed_response_codes=[200],
             )
             data = response.json()
             access_token = data["access_token"]
             expires_in = data["expires_in"] * 0.9
             expires = utc_now() + datetime.timedelta(seconds=expires_in)
-            self._token = OverdriveToken(token=access_token, expires=expires)
-            return self._token
+            self._cached_client_oauth_token = OverdriveToken(
+                token=access_token, expires=expires
+            )
+            return self._cached_client_oauth_token
 
     @property
     def collection_token(self) -> str:
@@ -394,7 +409,7 @@ class OverdriveAPI(
         exception_on_401: bool = False,
     ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        request_headers = dict(Authorization="Bearer %s" % self.token)
+        request_headers = dict(Authorization="Bearer %s" % self._client_oauth_token)
         if extra_headers:
             request_headers.update(extra_headers)
 
@@ -415,18 +430,31 @@ class OverdriveAPI(
                 )
             else:
                 # Force a refresh of the token and try again.
-                self._refresh_token()
+                self._refresh_client_oauth_token()
                 return self.get(url, extra_headers, True)
         else:
             return status_code, headers, content
 
     @property
-    def token_authorization_header(self) -> str:
-        s = b"%s:%s" % (self.client_key(), self.client_secret())
-        return "Basic " + base64.standard_b64encode(s).strip()
+    def _collection_context_basic_auth_header(self) -> str:
+        """
+        Returns the Basic Auth header used to acquire an OAuth bearer token.
+
+        This header contains the collection's credentials that were configured
+        through the admin interface for this specific collection.
+        """
+        credentials = b"%s:%s" % (self.client_key(), self.client_secret())
+        return "Basic " + base64.standard_b64encode(credentials).strip()
 
     @property
-    def fulfillment_authorization_header(self) -> str:
+    def _palace_context_basic_auth_header(self) -> str:
+        """
+        Returns the Basic Auth header used to acquire an OAuth bearer token.
+
+        This header contains the Palace Project credentials passed into the
+        Circulation Manager via environment variables. This is used to acquire
+        a privileged token that has extra permissions for the Overdrive API.
+        """
         is_test_mode = (
             True
             if self._server_nickname == OverdriveConstants.TESTING_SERVERS
@@ -444,23 +472,6 @@ class OverdriveAPI(
             client_credentials["secret"].encode(),
         )
         return "Basic " + base64.standard_b64encode(s).strip()
-
-    def token_post(
-        self,
-        url: str,
-        payload: dict[str, str],
-        is_fulfillment: bool = False,
-        headers: dict[str, str] | None = None,
-        **kwargs: Any,
-    ) -> Response:
-        """Make an HTTP POST request for purposes of getting an OAuth token."""
-        headers = dict(headers) if headers is not None else {}
-        headers["Authorization"] = (
-            self.token_authorization_header
-            if not is_fulfillment
-            else self.fulfillment_authorization_header
-        )
-        return self._do_post(url, payload, headers, **kwargs)
 
     @staticmethod
     def _update_credential(
@@ -651,7 +662,7 @@ class OverdriveAPI(
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         result = self.run_test(
             "Checking global Client Authentication privileges",
-            self._refresh_token,
+            self._refresh_client_oauth_token,
         )
         yield result
         if not result.success:
@@ -686,7 +697,9 @@ class OverdriveAPI(
                     "Checking Patron Authentication privileges, using test patron for library %s"
                     % library.name
                 )
-                yield self.run_test(task, self.get_patron_credential, patron, pin)
+                yield self.run_test(
+                    task, self._get_patron_oauth_credential, patron, pin
+                )
 
     def patron_request(
         self,
@@ -697,18 +710,17 @@ class OverdriveAPI(
         data: str | None = None,
         exception_on_401: bool = False,
         method: str | None = None,
-        is_fulfillment: bool = False,
+        palace_context: bool = False,
     ) -> Response:
-        """Make an HTTP request on behalf of a patron.
-
-        If is_fulfillment==True, then the request will be performed in the context of our
-        fulfillment client credentials. Otherwise, it will be performed in the context of
-        the collection client credentials.
-
-        The results are never cached.
         """
-        patron_credential = self.get_patron_credential(
-            patron, pin, is_fulfillment=is_fulfillment
+        Make an HTTP request on behalf of a patron to Overdrive's API.
+
+        If palace_context == True, the request will be performed using privileged
+        Palace Project credentials, which provide extended API access. Otherwise,
+        it will use the collection's configured credentials.
+        """
+        patron_credential = self._get_patron_oauth_credential(
+            patron, pin, palace_context=palace_context
         )
         headers = dict(Authorization="Bearer %s" % patron_credential.credential)
         if extra_headers:
@@ -730,7 +742,9 @@ class OverdriveAPI(
                 )
             else:
                 # Refresh the token and try again.
-                self.refresh_patron_access_token(patron_credential, patron, pin)
+                self._refresh_patron_oauth_token(
+                    patron_credential, patron, pin, palace_context=palace_context
+                )
                 return self.patron_request(patron, pin, url, extra_headers, data, True)
         else:
             # This is commented out because it may expose patron
@@ -739,25 +753,34 @@ class OverdriveAPI(
             # self.log.debug("%s: %s", url, response.status_code)
             return response
 
-    def get_patron_credential(
-        self, patron: Patron, pin: str | None, is_fulfillment: bool = False
+    def _get_patron_oauth_credential(
+        self, patron: Patron, pin: str | None, palace_context: bool = False
     ) -> Credential:
-        """Create an OAuth token for the given patron.
+        """Get an Overdrive OAuth token for the given patron.
+
+        See: https://developer.overdrive.com/apis/patron-auth
 
         :param patron: The patron for whom to fetch the credential.
         :param pin: The patron's PIN or password.
-        :param is_fulfillment: Boolean indicating whether we need a fulfillment credential.
+        :param palace_context: Determines if the oauth token is fetched
+           using the palace credentials or the collections credentials.
         """
 
-        def refresh(credential: Credential) -> Credential:
-            return self.refresh_patron_access_token(
-                credential, patron, pin, is_fulfillment=is_fulfillment
-            )
+        refresh = partial(
+            self._refresh_patron_oauth_token,
+            patron=patron,
+            pin=pin,
+            palace_context=palace_context,
+        )
 
         return Credential.lookup(
             self._db,
             DataSource.OVERDRIVE,
-            "Fulfillment OAuth Token" if is_fulfillment else "OAuth Token",
+            (
+                "Palace Context Patron OAuth Token"
+                if palace_context
+                else "Collection Context Patron OAuth Token"
+            ),
             patron,
             refresh,
             collection=self.collection,
@@ -767,20 +790,20 @@ class OverdriveAPI(
         """Create the Overdrive scope string for the given library.
 
         This is used when setting up Patron Authentication, and when
-        generating the X-Overdrive-Scope header used by SimplyE to set up
-        its own Patron Authentication.
+        generating the X-Overdrive-Scope header used by apps to set up
+        their own Patron Authentication.
         """
         return "websiteid:{} authorizationname:{}".format(
             self.settings.overdrive_website_id,
             self.ils_name(library),
         )
 
-    def refresh_patron_access_token(
+    def _refresh_patron_oauth_token(
         self,
         credential: Credential,
         patron: Patron,
         pin: str | None,
-        is_fulfillment: bool = False,
+        palace_context: bool = False,
     ) -> Credential:
         """Request an OAuth bearer token that allows us to act on
         behalf of a specific patron.
@@ -803,10 +826,16 @@ class OverdriveAPI(
             payload["password_required"] = "false"
             payload["password"] = "[ignore]"
         try:
-            response = self.token_post(
+            response = self._do_post(
                 self.PATRON_TOKEN_ENDPOINT,
                 payload,
-                is_fulfillment=is_fulfillment,
+                {
+                    "Authorization": (
+                        self._palace_context_basic_auth_header
+                        if palace_context
+                        else self._collection_context_basic_auth_header
+                    ),
+                },
                 allowed_response_codes=["2xx"],
             )
         except BadResponseException as e:
@@ -823,7 +852,7 @@ class OverdriveAPI(
                 "error_description", "Failed to authenticate with Overdrive"
             )
             debug_message = (
-                f"refresh_patron_access_token failed. Status code: '{e.response.status_code}'. "
+                f"_refresh_patron_oauth_token failed. Status code: '{e.response.status_code}'. "
                 f"Error: '{error_code}'. Description: '{error_description}'."
             )
             self.log.info(debug_message + f" Response: '{e.response.text}'")
@@ -1067,7 +1096,7 @@ class OverdriveAPI(
         :return: Information about the loan.
         """
         url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        data = self.patron_request(patron, pin, url, is_fulfillment=True).json()
+        data = self.patron_request(patron, pin, url, palace_context=True).json()
         self.raise_exception_on_error(data)
         return data  # type: ignore[no-any-return]
 
@@ -1186,10 +1215,10 @@ class OverdriveAPI(
                 # The client must authenticate using its own
                 # credentials to fulfill this URL; we can't do it.
                 scope_string = self.scope_string(patron.library)
-                fulfillment_access_token = self.get_patron_credential(
+                fulfillment_access_token = self._get_patron_oauth_credential(
                     patron,
                     pin,
-                    is_fulfillment=True,
+                    palace_context=True,
                 ).credential
                 # The credential should never be None, but mypy doesn't know that, so
                 # we assert to be safe.
@@ -1290,7 +1319,7 @@ class OverdriveAPI(
         :return: Information about the patron's loans.
         """
         data = self.patron_request(
-            patron, pin, self.CHECKOUTS_ENDPOINT, is_fulfillment=True
+            patron, pin, self.CHECKOUTS_ENDPOINT, palace_context=True
         ).json()
         self.raise_exception_on_error(data)
         return data  # type: ignore[no-any-return]
