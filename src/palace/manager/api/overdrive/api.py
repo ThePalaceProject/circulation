@@ -279,8 +279,8 @@ class OverdriveAPI(
 
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
 
-        # This is set by access to ._collection_oauth_token
-        self._collection_oauth_token_cache: OverdriveToken | None = None
+        # This is set by access to ._client_oauth_token
+        self._cached_client_oauth_token: OverdriveToken | None = None
 
         # This is set by an access to .collection_token
         self._collection_token: str | None = None
@@ -324,7 +324,7 @@ class OverdriveAPI(
              https://developer.overdrive.com/apis/client-auth
         """
         if (
-            token := self._collection_oauth_token_cache
+            token := self._cached_client_oauth_token
         ) is not None and utc_now() < token.expires:
             return token.token
 
@@ -342,10 +342,10 @@ class OverdriveAPI(
             access_token = data["access_token"]
             expires_in = data["expires_in"] * 0.9
             expires = utc_now() + datetime.timedelta(seconds=expires_in)
-            self._collection_oauth_token_cache = OverdriveToken(
+            self._cached_client_oauth_token = OverdriveToken(
                 token=access_token, expires=expires
             )
-            return self._collection_oauth_token_cache
+            return self._cached_client_oauth_token
 
     @property
     def collection_token(self) -> str:

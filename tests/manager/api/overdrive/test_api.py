@@ -329,8 +329,8 @@ class TestOverdriveAPI:
         assert len(api.access_token_requests) == 1
 
         # However if the token expires we will get a new one
-        assert api._collection_oauth_token_cache is not None
-        api._collection_oauth_token_cache = api._collection_oauth_token_cache._replace(
+        assert api._cached_client_oauth_token is not None
+        api._cached_client_oauth_token = api._cached_client_oauth_token._replace(
             expires=utc_now() - timedelta(seconds=1)
         )
 
