@@ -925,6 +925,7 @@ class OverdriveAPI(
                 self.CHECKOUTS_ENDPOINT,
                 extra_headers=headers,
                 data=payload,
+                palace_context=True,
                 response_type=Checkout,
             )
         except OverdriveResponseException as e:
@@ -1041,7 +1042,7 @@ class OverdriveAPI(
             odreadauthurl=fulfill_url,
         )
         download_response = self.patron_request(
-            patron, pin, download_link, response_type=Format
+            patron, pin, download_link, palace_context=True, response_type=Format
         )
         result = download_response.links["contentlink"]
         url = result.href
@@ -1119,7 +1120,7 @@ class OverdriveAPI(
     def _lock_in_format(
         self, patron: Patron, pin: str | None, format_type: str, loan: Checkout
     ) -> Format:
-        make_request = partial(self.patron_request, patron, pin)
+        make_request = partial(self.patron_request, patron, pin, palace_context=True)
         try:
             format_data = loan.action("format", make_request, formatType=format_type)
         except (PalaceValueError, OverdriveResponseException) as e:
@@ -1171,7 +1172,9 @@ class OverdriveAPI(
         )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> dict[str, Any]:
-        return self.patron_request(patron, pin, self.HOLDS_ENDPOINT)
+        return self.patron_request(
+            patron, pin, self.HOLDS_ENDPOINT, palace_context=True
+        )
 
     @classmethod
     def _pd(cls, d: str | None) -> datetime.datetime | None:
