@@ -135,12 +135,18 @@ class TestOverdriveAPI:
         collection = MockOverdriveAPI.mock_collection(session, library)
 
         exception_message = "This is a unit test, you can't make HTTP requests!"
-        api = OverdriveAPI(session, collection)
         with (
-            patch.object(api, "_do_get", side_effect=Exception(exception_message)),
-            patch.object(api, "_do_post", side_effect=Exception(exception_message)),
+            patch.object(
+                OverdriveAPI, "_do_get", side_effect=Exception(exception_message)
+            ),
+            patch.object(
+                OverdriveAPI, "_do_post", side_effect=Exception(exception_message)
+            ),
         ):
-            # Attempting to access .token or .collection_token _will_
+            # Make sure that the constructor doesn't make any requests.
+            api = OverdriveAPI(session, collection)
+
+            # Attempting to access ._client_oauth_token or .collection_token _will_
             # try to make an HTTP request.
             with pytest.raises(Exception, match=exception_message):
                 api.collection_token
