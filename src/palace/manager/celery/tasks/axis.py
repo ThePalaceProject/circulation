@@ -49,6 +49,10 @@ def import_all_collections(
             )
             list_identifiers_for_import.apply_async(
                 kwargs={"collection_id": collection.id},
+                countdown=count * 5,  # stagger the execution of the collection import
+                # in order to minimize chance of deadlocks caused by
+                # simultaneous updates to the metadata when CM has multiple
+                # axis collections configured with overlapping content
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
@@ -356,11 +360,19 @@ def reap_all_collections(task: Task) -> None:
     A shared task that  kicks off a reap collection task for each Axis 360 collection.
     """
     with task.session() as session:
+        count = 0
         for collection in get_collections_by_protocol(task, session, Axis360API):
             task.log.info(
                 f'Queued collection("{collection.name}" [id={collection.id}] for reaping...'
             )
-            reap_collection.delay(collection_id=collection.id)
+            reap_collection.apply_async(
+                kwargs={"collection_id": collection.id},
+                countdown=count * 5,  # stagger the execution of the collection import
+                # in order to minimize chance of deadlocks caused by
+                # simultaneous updates to the metadata when CM has multiple
+                # axis collections configured with overlapping content
+            )
+            count += 1
 
         task.log.info(f"Finished queuing reap collection tasks.")
 
