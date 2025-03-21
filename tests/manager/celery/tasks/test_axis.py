@@ -101,17 +101,17 @@ def test_import_all_collections(
         import_all_collections.delay().wait()
 
         assert mock_list_identifiers_for_import.apply_async.call_count == 1
+        import_args = {
+            "kwargs": {"collection_id": collection2.id},
+            "countdown": 0,
+            "link": import_identifiers.s(
+                collection_id=collection2.id,
+                batch_size=DEFAULT_BATCH_SIZE,
+            ),
+        }
         assert (
-            mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs[
-                "kwargs"
-            ]["collection_id"]
-            == collection2.id
-        )
-        assert mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs[
-            "link"
-        ] == import_identifiers.s(
-            collection_id=collection2.id,
-            batch_size=DEFAULT_BATCH_SIZE,
+            mock_list_identifiers_for_import.apply_async.call_args_list[0].kwargs
+            == import_args
         )
         assert "Finished queuing 1 collection." in caplog.text
 
@@ -300,10 +300,18 @@ def test_reap_all_collections(
     with patch.object(axis, "reap_collection") as mock_reap_collection:
         reap_all_collections.delay().wait()
 
-        assert mock_reap_collection.delay.call_count == 1
-        assert mock_reap_collection.delay.call_args_list[0].kwargs == {
-            "collection_id": collection2.id,
+        assert mock_reap_collection.apply_async.call_count == 1
+        reap_collection_args = {
+            "kwargs": {
+                "collection_id": collection2.id,
+            },
+            "countdown": 0,
         }
+
+        assert (
+            mock_reap_collection.apply_async.call_args_list[0].kwargs
+            == reap_collection_args
+        )
         assert "Finished queuing reap collection tasks" in caplog.text
 
 
