@@ -104,7 +104,7 @@ class CirculationInfo:
         self.identifier = identifier
 
 
-class DeliveryMechanismInfo(CirculationInfo):
+class DeliveryMechanismInfo:
     """A record of a technique that must be (but is not, currently, being)
     used to fulfill a certain loan.
 
