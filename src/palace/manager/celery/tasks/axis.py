@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from celery import shared_task
 from sqlalchemy import select
@@ -49,6 +49,13 @@ def import_all_collections(
             )
             list_identifiers_for_import.apply_async(
                 kwargs={"collection_id": collection.id},
+                eta=utc_now()
+                + timedelta(
+                    seconds=count * 5
+                ),  # stagger the execution of the collection import
+                # in order to minimize chance of deadlocks caused by
+                # simultaneous updates to the metadata when CM has multiple
+                # axis collections configured with overlapping content
                 link=import_identifiers.s(
                     collection_id=collection.id,
                     batch_size=batch_size,
