@@ -795,6 +795,14 @@ class PatronActivityCirculationAPI(
         self.delete_loans_and_holds_no_longer_available(patron)
 
     def delete_loans_and_holds_no_longer_available(self, patron: Patron) -> None:
+        """
+        Delete the loans an holds associated with the patron that are no longer available to the patron
+        due to one or more of the following conditions:
+        1. The library is no longer associated with the collection which the loan or hold is associated with
+        2. The collection associated with the loan or hold is no longer active
+        3. The license pool is (open access or unlimited use)  AND there is no associated delivery mechanism.
+
+        """
         # get all loans and holds for patron
         loans_and_holds: list[Loan | Hold] = patron.loans + patron.holds
         # for each loan delete if any of the following are true:
@@ -827,13 +835,13 @@ class PatronActivityCirculationAPI(
                 )
                 remove = True
 
-            # the associated licensepool is (open access or unlimited access) and undeliverable
+            # the associated license pool is (unlimited or open access) AND unfulfillable
             if (
                 license_pool.open_access or license_pool.unlimited_access
-            ) and not license_pool.deliverable:
+            ) and not license_pool.has_fulfillable_delivery_mechanism:
                 log_message += (
                     f"\n  * the license pool (id={license_pool.id}) "
-                    f"is open/or unlimited access but is not deliverable."
+                    f"is open/or unlimited access but is not fulfillable."
                 )
                 remove = True
 

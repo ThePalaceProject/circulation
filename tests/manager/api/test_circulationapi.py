@@ -1184,10 +1184,6 @@ class TestPatronActivityCirculationAPI:
         license_pool_is_deliverable: bool,
         is_deleted: int,
     ):
-        # # Local loan that was created yesterday.
-        # loan, _ = patron_activity_circulation_api.pool.loan_to(
-        #     patron_activity_circulation_api.patron
-        # )
         loan_info = LoanInfo.from_license_pool(
             patron_activity_circulation_api.pool,
             start_date=patron_activity_circulation_api.now,
@@ -1247,7 +1243,7 @@ class TestPatronActivityCirculationAPI:
                 )
             )
             db.session.refresh(lp)
-            assert not lp.deliverable
+            assert not lp.has_fulfillable_delivery_mechanism
 
         if not collection_is_active:
             # make the collection inactive
