@@ -1,40 +1,61 @@
 from __future__ import annotations
 
 import json
-import os
+from functools import partial
+from typing import Any
 
 import pytest
 
 from palace.manager.api.circulation import CirculationAPI
 from palace.manager.api.config import Configuration
+from palace.manager.api.overdrive.api import OverdriveAPI
+from palace.manager.api.overdrive.constants import OverdriveConstants
+from palace.manager.api.overdrive.settings import (
+    OverdriveLibrarySettings,
+    OverdriveSettings,
+)
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
+from tests.mocks.mock import MockHTTPClient
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
 class OverdriveAPIFixture:
-    def __init__(self, db: DatabaseTransactionFixture, data: OverdriveFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        data: OverdriveFilesFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         self.db = db
         self.data = data
-        library = db.default_library()
-        self.collection = MockOverdriveAPI.mock_collection(
-            db.session, db.default_library()
+        self.library = db.default_library()
+        self.collection = self.create_collection(self.library)
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            "TestingKey",
         )
-        self.api = MockOverdriveAPI(db.session, self.collection)
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
+            "TestingSecret",
+        )
+        self.mock_http = MockHTTPClient()
+        self.api = MockOverdriveAPI(db.session, self.collection, self.mock_http)
         self.circulation = CirculationAPI(
             db.session,
-            library,
+            self.library,
             {self.collection.id: self.api},
         )
-        os.environ[
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
-        ] = "TestingKey"
-        os.environ[
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}"
-        ] = "TestingSecret"
+        self.create_mock_api = partial(
+            MockOverdriveAPI, db.session, mock_http=self.mock_http
+        )
 
-    def error_message(self, error_code, message=None, token=None):
+    def error_message(
+        self, error_code: str, message: str | None = None, token: str | None = None
+    ) -> str:
         """Create a JSON document that simulates the message served by
         Overdrive given a certain error condition.
         """
@@ -43,7 +64,7 @@ class OverdriveAPIFixture:
         data = dict(errorCode=error_code, message=message, token=token)
         return json.dumps(data)
 
-    def sample_json(self, filename):
+    def sample_json(self, filename: str) -> tuple[bytes, dict[str, Any]]:
         data = self.data.sample_data(filename)
         return data, json.loads(data)
 
@@ -51,10 +72,56 @@ class OverdriveAPIFixture:
         self.api.sync_patron_activity(patron, "dummy pin")
         return self.api.local_loans_and_holds(patron)
 
+    def create_collection(
+        self,
+        library: Library,
+        name: str = "Test Overdrive Collection",
+        client_key: str = "a",
+        client_secret: str = "b",
+        library_id: str = "c",
+        website_id: str = "d",
+        ils_name: str = "e",
+        overdrive_server_nickname: str = OverdriveConstants.TESTING_SERVERS,
+    ) -> Collection:
+        """Create a mock Overdrive collection for use in tests."""
+        collection, _ = Collection.by_name_and_protocol(
+            self.db.session, name=name, protocol=OverdriveAPI.label()
+        )
+        settings = OverdriveSettings(
+            external_account_id=library_id,
+            overdrive_website_id=website_id,
+            overdrive_client_key=client_key,
+            overdrive_client_secret=client_secret,
+            overdrive_server_nickname=overdrive_server_nickname,
+        )
+        OverdriveAPI.settings_update(collection.integration_configuration, settings)
+        if library not in collection.associated_libraries:
+            collection.associated_libraries.append(library)
+        library_settings = OverdriveLibrarySettings(
+            ils_name=ils_name,
+        )
+        library_config = collection.integration_configuration.for_library(library.id)
+        assert library_config is not None
+        OverdriveAPI.library_settings_update(library_config, library_settings)
+        return collection
+
+    def queue_access_token_response(self, credential: str = "token") -> None:
+        token = dict(access_token=credential, expires_in=3600)
+        self.mock_http.queue_response(200, content=json.dumps(token))
+
+    def queue_collection_token(self, token: str = "collection token") -> None:
+        # Many tests immediately try to access the
+        # collection token. This is a helper method to make it easy to
+        # queue up the response.
+        self.mock_http.queue_response(
+            200, content=json.dumps(dict(collectionToken=token))
+        )
+
 
 @pytest.fixture(scope="function")
 def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> OverdriveAPIFixture:
-    return OverdriveAPIFixture(db, overdrive_files_fixture)
+    return OverdriveAPIFixture(db, overdrive_files_fixture, monkeypatch)

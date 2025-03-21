@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import random
 from datetime import timedelta
 from typing import Any
@@ -38,6 +37,7 @@ from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillmen
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -55,7 +55,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
-from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.overdrive import MockOverdriveAPI
 
 
@@ -76,12 +76,11 @@ class TestOverdriveAPI:
 
     def test_errors_not_retried(
         self,
+        db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         mock_web_server: MockAPIServer,
     ):
-        session = overdrive_api_fixture.db.session
-        library = overdrive_api_fixture.db.default_library()
-        collection = MockOverdriveAPI.mock_collection(session, library)
+        collection = overdrive_api_fixture.collection
 
         # Enqueue a response for the request that the server will make for a token.
         _r = MockAPIServerResponse()
@@ -95,7 +94,7 @@ class TestOverdriveAPI:
         )
         mock_web_server.enqueue_response("POST", "/oauth/token", _r)
 
-        api = OverdriveAPI(session, collection)
+        api = OverdriveAPI(db.session, collection)
         api._hosts["oauth_host"] = mock_web_server.url("/oauth")
 
         # Try a get() call for each error code
@@ -123,13 +122,10 @@ class TestOverdriveAPI:
 
     def test_constructor_makes_no_requests(
         self,
+        db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
     ):
-        session = overdrive_api_fixture.db.session
-        library = overdrive_api_fixture.db.default_library()
-        # Invoking the OverdriveAPI constructor does not, by itself,
-        # make any HTTP requests.
-        collection = MockOverdriveAPI.mock_collection(session, library)
+        collection = overdrive_api_fixture.collection
 
         exception_message = "This is a unit test, you can't make HTTP requests!"
         with (
@@ -140,8 +136,9 @@ class TestOverdriveAPI:
                 OverdriveAPI, "_do_post", side_effect=Exception(exception_message)
             ),
         ):
-            # Make sure that the constructor doesn't make any requests.
-            api = OverdriveAPI(session, collection)
+            # Invoking the OverdriveAPI constructor does not, by itself,
+            # make any HTTP requests.
+            api = OverdriveAPI(db.session, collection)
 
             # Attempting to access ._client_oauth_token or .collection_token _will_
             # try to make an HTTP request.
@@ -151,29 +148,30 @@ class TestOverdriveAPI:
             with pytest.raises(Exception, match=exception_message):
                 api._client_oauth_token
 
-    def test_ils_name(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-        transaction = overdrive_api_fixture.db
-
-        """The 'ils_name' setting (defined in
-        MockOverdriveAPI.mock_collection) is available through
-        OverdriveAPI.ils_name().
+    def test_ils_name(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        """The 'ils_name' setting (set in OverdriveAPIFixture.create_collection) is available
+        through OverdriveAPI.ils_name().
         """
-        assert "e" == fixture.api.ils_name(transaction.default_library())
+        api = overdrive_api_fixture.api
+        assert api.ils_name(overdrive_api_fixture.library) == "e"
 
         # The value must be explicitly set for a given library, or
         # else the default will be used.
-        l2 = transaction.library()
-        assert "default" == fixture.api.ils_name(l2)
+        l2 = db.library()
+        assert api.ils_name(l2) == "default"
 
-    def test_hosts(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-        db = fixture.db
+    def test_hosts(self, db: DatabaseTransactionFixture):
         # By default, OverdriveAPI is initialized with the production
         # set of hostnames.
+        collection = db.collection(
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(),
+        )
+        testing = OverdriveAPI(db.session, collection)
         assert (
-            fixture.api.hosts()
-            == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
+            testing.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
         )
 
         collection = db.collection(
@@ -195,141 +193,135 @@ class TestOverdriveAPI:
         assert bad.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
 
     def test_endpoint(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-
         # The .endpoint() method performs string interpolation, including
         # the names of servers.
+        api = overdrive_api_fixture.api
         template = (
             "%(host)s %(patron_host)s %(oauth_host)s %(oauth_patron_host)s %(extra)s"
         )
-        result = fixture.api.endpoint(template, extra="val")
+        result = api.endpoint(template, extra="val")
 
         # The host names and the 'extra' argument have been used to
         # fill in the string interpolations.
-        expect_args = dict(fixture.api.hosts())
+        expect_args = dict(api.hosts())
         expect_args["extra"] = "val"
-        assert result == template % expect_args
+        assert template % expect_args == result
 
         # The string has been completely interpolated.
         assert "%" not in result
 
         # Once interpolation has happened, doing it again has no effect.
-        assert result == fixture.api.endpoint(result, extra="something else")
+        assert api.endpoint(result, extra="something else") == result
 
         # This is important because an interpolated URL may superficially
         # appear to contain extra formatting characters.
-        assert result + "%3A" == fixture.api.endpoint(
-            result + "%3A", extra="something else"
-        )
+        assert api.endpoint(result + "%3A", extra="something else") == result + "%3A"
 
     def test__collection_context_basic_auth_header(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        fixture = overdrive_api_fixture
-
         # Verify that the Authorization header needed to get an access
         # token for a given collection is encoded properly.
-        assert fixture.api._collection_context_basic_auth_header == "Basic YTpi"
+        api = overdrive_api_fixture.api
+        assert api._collection_context_basic_auth_header == "Basic YTpi"
         assert (
-            fixture.api._collection_context_basic_auth_header
+            api._collection_context_basic_auth_header
             == "Basic "
-            + base64.standard_b64encode(
-                f"{fixture.api.client_key()}:{fixture.api.client_secret()}"
-            )
+            + base64.standard_b64encode(f"{api.client_key()}:{api.client_secret()}")
         )
 
-    def test_get_success(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-        transaction = fixture.db
-
-        fixture.api.queue_response(200, content="some content")
-        status_code, headers, content = fixture.api.get(transaction.fresh_url(), {})
+    def test_get_success(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
+        http.queue_response(200, content="some content")
+        status_code, headers, content = api.get(db.fresh_url(), {})
         assert 200 == status_code
         assert b"some content" == content
 
     def test_failure_to_get_library_is_fatal(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        fixture = overdrive_api_fixture
-
-        fixture.api.queue_response(500)
+        http = overdrive_api_fixture.mock_http
+        http.queue_response(500)
         with pytest.raises(BadResponseException) as excinfo:
-            fixture.api.get_library()
+            overdrive_api_fixture.api.get_library()
         assert "Got status code 500" in str(excinfo.value)
 
-    def test_error_getting_library(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-        session = fixture.db.session
+    def test_error_getting_library(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        collection = overdrive_api_fixture.collection
 
-        class MisconfiguredOverdriveAPI(MockOverdriveAPI):
-            """This Overdrive client has valid credentials but the library
-            can't be found -- probably because the library ID is wrong."""
+        # This Overdrive client has valid credentials but the library
+        # can't be found -- probably because the library ID is wrong.
+        with patch.object(
+            OverdriveAPI,
+            "get_library",
+            return_value={
+                "errorCode": "Some error",
+                "message": "Some message.",
+                "token": "abc-def-ghi",
+            },
+        ):
+            # Just instantiating the API doesn't cause this error.
+            api = OverdriveAPI(db.session, collection)
 
-            def get_library(self):
-                return {
-                    "errorCode": "Some error",
-                    "message": "Some message.",
-                    "token": "abc-def-ghi",
-                }
-
-        # Just instantiating the API doesn't cause this error.
-        api = MisconfiguredOverdriveAPI(session, fixture.collection)
-        api._collection_token = None
-
-        # But trying to access the collection token will cause it.
-        with pytest.raises(CannotLoadConfiguration) as excinfo:
-            api.collection_token
-        assert (
-            "Overdrive credentials are valid but could not fetch library: Some message."
-            in str(excinfo.value)
-        )
+            # But trying to access the collection token will cause it.
+            with pytest.raises(
+                CannotLoadConfiguration,
+                match="Overdrive credentials are valid but could not fetch library: Some message.",
+            ):
+                api.collection_token
 
     def test_401_on_get_refreshes_bearer_token(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        fixture = overdrive_api_fixture
-        transaction = fixture.db
+        http = overdrive_api_fixture.mock_http
 
         # We have a token.
-        assert "bearer token" == fixture.api._client_oauth_token
-
-        # But then we try to GET, and receive a 401.
-        fixture.api.queue_response(401)
-
-        # We refresh the bearer token. (This is special cased in MockOverdriveAPI
-        # so we don't mock the response in the normal way.)
-        fixture.api.access_token_response = fixture.api.mock_access_token_response(
-            "new bearer token"
+        assert (
+            overdrive_api_fixture.api._client_oauth_token == "fake client oauth token"
         )
 
+        # But then we try to GET, and receive a 401.
+        http.queue_response(401)
+
+        # We refresh the bearer token.
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+
         # Then we retry the GET and it succeeds this time.
-        fixture.api.queue_response(200, content="at last, the content")
+        http.queue_response(200, content="at last, the content")
 
-        status_code, headers, content = fixture.api.get(transaction.fresh_url(), {})
-
-        assert 200 == status_code
-        assert b"at last, the content" == content
+        assert overdrive_api_fixture.api.get(db.fresh_url(), {}) == (
+            200,
+            {},
+            b"at last, the content",
+        )
 
         # The bearer token has been updated.
-        assert "new bearer token" == fixture.api._client_oauth_token
+        assert overdrive_api_fixture.api._client_oauth_token == "new bearer token"
 
     def test__client_oauth_token(self, overdrive_api_fixture: OverdriveAPIFixture):
         """Verify the process of refreshing the Overdrive bearer token."""
         api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
 
-        # Initially the token is None
-        assert len(api.access_token_requests) == 0
+        # Initially the cached token is None
+        api._cached_client_oauth_token = None
 
         # Accessing the token triggers a refresh
+        overdrive_api_fixture.queue_access_token_response("bearer token")
         assert api._client_oauth_token == "bearer token"
-        assert len(api.access_token_requests) == 1
+        assert len(http.requests) == 1
 
-        # Mock the token response
-        api.access_token_response = api.mock_access_token_response("new bearer token")
+        # Queue up another bearer token response
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
 
         # Accessing the token again won't refresh, because the old token is still valid
         assert api._client_oauth_token == "bearer token"
-        assert len(api.access_token_requests) == 1
+        assert len(http.requests) == 1
 
         # However if the token expires we will get a new one
         assert api._cached_client_oauth_token is not None
@@ -338,25 +330,22 @@ class TestOverdriveAPI:
         )
 
         assert api._client_oauth_token == "new bearer token"
-        assert len(api.access_token_requests) == 2
+        assert len(http.requests) == 2
 
     def test_401_after__refresh_client_oauth_token_raises_error(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        fixture = overdrive_api_fixture
-        api = fixture.api
-
-        # Our initial token value is "bearer token".
-        assert api._client_oauth_token == "bearer token"
+        api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
 
         # We try to GET and receive a 401.
-        api.queue_response(401)
+        http.queue_response(401)
 
         # We refresh the bearer token.
-        api.access_token_response = api.mock_access_token_response("new bearer token")
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
 
         # Then we retry the GET but we get another 401.
-        api.queue_response(401)
+        http.queue_response(401)
 
         # That raises a BadResponseException
         with pytest.raises(
@@ -366,30 +355,31 @@ class TestOverdriveAPI:
             api.get_library()
 
         # We refreshed the token in the process.
-        assert fixture.api._client_oauth_token == "new bearer token"
+        assert overdrive_api_fixture.api._client_oauth_token == "new bearer token"
 
-        # We made two requests
-        assert len(api.requests) == 2
+        # We made three requests, one for the original GET, one for the token refresh,
+        # and one for the retry.
+        assert len(http.requests) == 3
 
     def test_401_during__refresh_client_oauth_token_raises_error(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        fixture = overdrive_api_fixture
-
         """If we fail to refresh the OAuth bearer token, an exception is
         raised.
         """
-        fixture.api.access_token_response = MockRequestsResponse(401, {}, "")
+        api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
+
+        http.queue_response(401)
         with pytest.raises(
             BadResponseException,
             match="Got status code 401 .* can only continue on: 200.",
         ):
-            fixture.api._refresh_client_oauth_token()
+            api._refresh_client_oauth_token()
 
-    def test_advantage_differences(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
-        session = db.session
-
+    def test_advantage_differences(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Test the differences between Advantage collections and
         # regular Overdrive collections.
 
@@ -406,18 +396,18 @@ class TestOverdriveAPI:
         )
 
         # Here's an Overdrive API client for that collection.
-        overdrive_main = MockOverdriveAPI(session, main)
+        overdrive_main = overdrive_api_fixture.create_mock_api(main)
 
         # Note the "library" endpoint.
         assert (
-            "https://api.overdrive.com/v1/libraries/1"
-            == overdrive_main._library_endpoint
+            overdrive_main._library_endpoint
+            == "https://api.overdrive.com/v1/libraries/1"
         )
 
         # The advantage_library_id of a non-Advantage Overdrive account
         # is always -1.
-        assert "1" == overdrive_main.library_id()
-        assert -1 == overdrive_main.advantage_library_id
+        assert overdrive_main.library_id() == "1"
+        assert overdrive_main.advantage_library_id == -1
 
         # Here's an Overdrive Advantage collection associated with the
         # main Overdrive collection.
@@ -426,26 +416,26 @@ class TestOverdriveAPI:
             settings=db.overdrive_settings(external_account_id="2"),
         )
         child.parent = main
-        overdrive_child = MockOverdriveAPI(session, child)
+        overdrive_child = overdrive_api_fixture.create_mock_api(child)
 
         # In URL-space, the "library" endpoint for the Advantage
         # collection is beneath the the parent collection's "library"
         # endpoint.
         assert (
-            "https://api.overdrive.com/v1/libraries/1/advantageAccounts/2"
-            == overdrive_child._library_endpoint
+            overdrive_child._library_endpoint
+            == "https://api.overdrive.com/v1/libraries/1/advantageAccounts/2"
         )
 
         # The advantage_library_id of an Advantage collection is the
         # numeric value of its external_account_id.
-        assert "2" == overdrive_child.library_id()
-        assert 2 == overdrive_child.advantage_library_id
+        assert overdrive_child.library_id() == "2"
+        assert overdrive_child.advantage_library_id == 2
 
     def test__get_book_list_page(self, overdrive_api_fixture: OverdriveAPIFixture):
-        fixture = overdrive_api_fixture
-
         # Test the internal method that retrieves a list of books and
         # preprocesses it.
+
+        http = overdrive_api_fixture.mock_http
 
         class MockExtractor:
             def link(self, content, rel_to_follow):
@@ -463,15 +453,14 @@ class TestOverdriveAPI:
             json.dumps(original_data).encode("utf8"),
         ):
             extractor = MockExtractor()
-            fixture.api.queue_response(200, content=content)
-            result = fixture.api._get_book_list_page(
+            http.queue_response(200, content=content)
+            result = overdrive_api_fixture.api._get_book_list_page(
                 "http://first-page/", "some-rel", extractor  # type: ignore[arg-type]
             )
 
             # A single request was made to the requested page.
-            (url, headers, body) = fixture.api.requests.pop()
-            assert len(fixture.api.requests) == 0
-            assert url == "http://first-page/"
+            assert len(http.requests) == 1
+            assert http.requests.pop() == "http://first-page/"
 
             # The extractor was used to extract a link to the page
             # with rel="some-rel".
@@ -508,13 +497,13 @@ class TestOverdriveAPI:
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
     ):
         # Verify that OverdriveAPI._run_self_tests() calls the right
         # methods.
-        db = overdrive_api_fixture.db
 
         # Mock every method used by OverdriveAPI._run_self_tests.
-        api = MockOverdriveAPI(db.session, overdrive_api_fixture.collection)
+        api = overdrive_api_fixture.api
 
         # First we will call _refresh_collection_oauth_token
         mock_refresh_token = create_autospec(api._refresh_client_oauth_token)
@@ -626,18 +615,19 @@ class TestOverdriveAPI:
     def test_default_notification_email_address(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
         library_fixture: LibraryFixture,
     ):
         """Test the ability of the Overdrive API to detect an email address
         previously given by the patron to Overdrive for the purpose of
         notifications.
         """
-        db = overdrive_api_fixture.db
-
+        http = overdrive_api_fixture.mock_http
+        overdrive_api_fixture.queue_access_token_response("patron_token")
         ignore, patron_with_email = overdrive_api_fixture.sample_json(
             "patron_info.json"
         )
-        overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
+        http.queue_response(200, content=patron_with_email)
         settings = library_fixture.mock_settings()
         library = library_fixture.library(settings=settings)
         patron = db.patron(library=library)
@@ -648,10 +638,8 @@ class TestOverdriveAPI:
         # If the patron has used a particular email address to put
         # books on hold, use that email address, not the site default.
         assert (
-            "foo@bar.com"
-            == overdrive_api_fixture.api.default_notification_email_address(
-                patron, "pin"
-            )
+            overdrive_api_fixture.api.default_notification_email_address(patron, "pin")
+            == "foo@bar.com"
         )
 
         # If the patron's email address according to Overdrive _is_
@@ -659,9 +647,10 @@ class TestOverdriveAPI:
         # this patron placed a hold using an older version of the
         # circulation manager.
         patron_with_email["lastHoldEmail"] = settings.default_notification_email_address
-        overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
-        assert None == overdrive_api_fixture.api.default_notification_email_address(
-            patron, "pin"
+        http.queue_response(200, content=patron_with_email)
+        assert (
+            overdrive_api_fixture.api.default_notification_email_address(patron, "pin")
+            is None
         )
 
         # If the patron has never before put an Overdrive book on
@@ -669,32 +658,38 @@ class TestOverdriveAPI:
         # case we return None -- again, ignoring the site default.
         patron_with_no_email = dict(patron_with_email)
         del patron_with_no_email["lastHoldEmail"]
-        overdrive_api_fixture.api.queue_response(200, content=patron_with_no_email)
-        assert None == overdrive_api_fixture.api.default_notification_email_address(
-            patron, "pin"
+        http.queue_response(200, content=patron_with_no_email)
+        assert (
+            overdrive_api_fixture.api.default_notification_email_address(patron, "pin")
+            is None
         )
 
         # If there's an error getting the information from Overdrive,
         # we return None.
-        overdrive_api_fixture.api.queue_response(404)
-        assert None == overdrive_api_fixture.api.default_notification_email_address(
-            patron, "pin"
+        http.queue_response(404)
+        assert (
+            overdrive_api_fixture.api.default_notification_email_address(patron, "pin")
+            is None
         )
 
-    def test_scope_string(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_scope_string(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # scope_string() puts the website ID of the Overdrive
         # integration and the ILS name associated with the library
         # into the form expected by Overdrive.
-        db = overdrive_api_fixture.db
+        api = overdrive_api_fixture.api
         expect = "websiteid:{} authorizationname:{}".format(
-            overdrive_api_fixture.api.website_id(),
-            overdrive_api_fixture.api.ils_name(db.default_library()),
+            api.website_id(),
+            api.ils_name(db.default_library()),
         )
-        assert expect == overdrive_api_fixture.api.scope_string(db.default_library())
+        assert api.scope_string(db.default_library()) == expect
 
-    def test_checkout(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_checkout(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Verify the process of checking out a book.
-        db = overdrive_api_fixture.db
+        http = overdrive_api_fixture.mock_http
         patron = MagicMock()
         pin = MagicMock()
         delivery_mechanism = MagicMock()
@@ -712,6 +707,11 @@ class TestOverdriveAPI:
                 self.extract_expiration_date_called_with = []
                 self._process_checkout_error_called_with = []
 
+            def _get_patron_oauth_credential(
+                self, patron, pin, palace_context=False
+            ) -> Credential:
+                return create_autospec(Credential)
+
             def extract_expiration_date(self, loan):
                 self.extract_expiration_date_called_with.append(loan)
                 return self.MOCK_EXPIRATION_DATE
@@ -726,46 +726,46 @@ class TestOverdriveAPI:
                 return result
 
         # First, test the successful path.
-        api = Mock(db.session, overdrive_api_fixture.collection)
+        api = Mock(db.session, overdrive_api_fixture.collection, http)
         api_response = json.dumps("some data")
-        api.queue_response(201, content=api_response)
+        http.queue_response(201, content=api_response)
         loan = api.checkout(patron, pin, pool, delivery_mechanism)
 
         # Verify that a good-looking patron request went out.
-        endpoint, ignore, kwargs = api.requests.pop()
+        endpoint = http.requests.pop()
         assert endpoint.endswith("/me/checkouts")
-        assert patron == kwargs.pop("_patron")
-        extra_headers = kwargs.pop("extra_headers")
-        assert {"Content-Type": "application/json"} == extra_headers
-        data = json.loads(kwargs.pop("data"))
-        assert {
+        args = http.requests_args.pop()
+        headers = args.kwargs.pop("headers")
+        assert headers.get("Content-Type") == "application/json"
+        assert json.loads(args.kwargs.pop("data")) == {
             "fields": [{"name": "reserveId", "value": pool.identifier.identifier}]
-        } == data
+        }
 
         # The API response was passed into extract_expiration_date.
         #
         # The most important thing here is not the content of the response but the
         # fact that the response code was not 400.
-        assert "some data" == api.extract_expiration_date_called_with.pop()
+        assert api.extract_expiration_date_called_with.pop() == "some data"
 
         # The return value is a LoanInfo object with all relevant info.
         assert isinstance(loan, LoanInfo)
-        assert pool.collection.id == loan.collection_id
-        assert identifier.type == loan.identifier_type
-        assert identifier.identifier == loan.identifier
-        assert None == loan.start_date
-        assert api.MOCK_EXPIRATION_DATE == loan.end_date
+        assert loan.collection_id == pool.collection.id
+        assert loan.identifier_type == identifier.type
+        assert loan.identifier == identifier.identifier
+        assert loan.start_date is None
+        assert loan.end_date == api.MOCK_EXPIRATION_DATE
 
         # _process_checkout_error was not called
-        assert [] == api._process_checkout_error_called_with
+        assert api._process_checkout_error_called_with == []
 
         # Now let's test error conditions.
 
         # Most of the time, an error simply results in an exception.
-        api.queue_response(400, content=api_response)
-        with pytest.raises(Exception) as excinfo:
+        http.queue_response(400, content=api_response)
+        with pytest.raises(
+            Exception, match="exception in _process_checkout_error"
+        ) as excinfo:
             api.checkout(patron, pin, pool, delivery_mechanism)
-        assert "exception in _process_checkout_error" in str(excinfo.value)
         assert (
             patron,
             pin,
@@ -777,21 +777,24 @@ class TestOverdriveAPI:
         # the error and ends up returning something, the return value
         # is propagated from checkout().
         api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"  # type: ignore[assignment]
-        api.queue_response(400, content=api_response)
-        assert "Actually, I was able to recover" == api.checkout(
-            patron, pin, pool, delivery_mechanism
-        )
+        http.queue_response(400, content=api_response)
         assert (
+            api.checkout(patron, pin, pool, delivery_mechanism)
+            == "Actually, I was able to recover"
+        )
+        assert api._process_checkout_error_called_with.pop() == (
             patron,
             pin,
             pool,
             "some data",
-        ) == api._process_checkout_error_called_with.pop()
+        )
 
-    def test__process_checkout_error(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test__process_checkout_error(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Verify that _process_checkout_error handles common API-side errors,
         # making follow-up API calls if necessary.
-        db = overdrive_api_fixture.db
+        http = overdrive_api_fixture.mock_http
 
         class Mock(MockOverdriveAPI):
             MOCK_LOAN = object()
@@ -814,7 +817,7 @@ class TestOverdriveAPI:
         pin = MagicMock()
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
         identifier = pool.identifier
-        api = Mock(db.session, overdrive_api_fixture.collection)
+        api = Mock(db.session, overdrive_api_fixture.collection, http)
         m = api._process_checkout_error
 
         # Most of the error handling is pretty straightforward.
@@ -826,29 +829,24 @@ class TestOverdriveAPI:
             return m(patron, pin, pool, error)
 
         # Errors not specifically known become generic CannotLoan exceptions.
-        with pytest.raises(CannotLoan) as excinfo:
+        with pytest.raises(CannotLoan, match="WeirdError"):
             with_error_code("WeirdError")
-        assert "WeirdError" in str(excinfo.value)
 
         # If the data passed in to _process_checkout_error is not what
         # the real Overdrive API would send, the error is even more
         # generic.
-        with pytest.raises(CannotLoan) as excinfo:
+        with pytest.raises(CannotLoan, match="Unknown Error"):
             m(patron, pin, pool, "Not a dict")
-        assert "Unknown Error" in str(excinfo.value)
-        with pytest.raises(CannotLoan) as excinfo:
+
+        with pytest.raises(CannotLoan, match="Unknown Error"):
             m(patron, pin, pool, dict(errorCodePresent=False))
-        assert "Unknown Error" in str(excinfo.value)
 
         # Some known errors become specific subclasses of CannotLoan.
-        pytest.raises(
-            PatronLoanLimitReached, with_error_code, "PatronHasExceededCheckoutLimit"
-        )
-        pytest.raises(
-            PatronLoanLimitReached,
-            with_error_code,
-            "PatronHasExceededCheckoutLimit_ForCPC",
-        )
+        with pytest.raises(PatronLoanLimitReached):
+            with_error_code("PatronHasExceededCheckoutLimit")
+
+        with pytest.raises(PatronLoanLimitReached):
+            with_error_code("PatronHasExceededCheckoutLimit_ForCPC")
 
         # There are two cases where we need to make follow-up API
         # requests as the result of a failure during the loan process.
@@ -856,7 +854,8 @@ class TestOverdriveAPI:
         # First, if the error is "NoCopiesAvailable", we know we have
         # out-of-date availability information. We raise NoAvailableCopies
         # and let the circulation API take care of handling that.
-        pytest.raises(NoAvailableCopies, with_error_code, "NoCopiesAvailable")
+        with pytest.raises(NoAvailableCopies):
+            with_error_code("NoCopiesAvailable")
 
         # If the error is "TitleAlreadyCheckedOut", then the problem
         # is that the patron tried to take out a new loan instead of
@@ -866,42 +865,44 @@ class TestOverdriveAPI:
         loan = with_error_code("TitleAlreadyCheckedOut")
 
         # get_loan was called with the patron's details.
-        assert (patron, pin, identifier.identifier) == api.get_loan_called_with.pop()
+        assert api.get_loan_called_with.pop() == (patron, pin, identifier.identifier)
 
         # extract_expiration_date was called on the return value of get_loan.
-        assert api.MOCK_LOAN == api.extract_expiration_date_called_with.pop()
+        assert api.extract_expiration_date_called_with.pop() == api.MOCK_LOAN
 
         # And a LoanInfo was created with all relevant information.
         assert isinstance(loan, LoanInfo)
-        assert pool.collection.id == loan.collection_id
-        assert identifier.type == loan.identifier_type
-        assert identifier.identifier == loan.identifier
-        assert None == loan.start_date
-        assert api.MOCK_EXPIRATION_DATE == loan.end_date
+        assert loan.collection_id == pool.collection.id
+        assert loan.identifier_type == identifier.type
+        assert loan.identifier == identifier.identifier
+        assert loan.start_date is None
+        assert loan.end_date == api.MOCK_EXPIRATION_DATE
 
-    def test_extract_expiration_date(self):
+    def test_extract_expiration_date(self) -> None:
         # Test the code that finds and parses a loan expiration date.
-        m = OverdriveAPI.extract_expiration_date
+        extract_expiration_date = OverdriveAPI.extract_expiration_date
 
         # Success
-        assert datetime_utc(2020, 1, 2, 3, 4, 5) == m(
+        assert extract_expiration_date(
             dict(expires="2020-01-02T03:04:05Z")
-        )
+        ) == datetime_utc(2020, 1, 2, 3, 4, 5)
 
         # Various failure cases.
-        assert None == m(dict(expiresPresent=False))
-        assert None == m(dict(expires="Wrong date format"))
-        assert None == m("Not a dict")
-        assert None == m(None)
+        assert extract_expiration_date(dict(expiresPresent=False)) is None
+        assert extract_expiration_date(dict(expires="Wrong date format")) is None
+        assert extract_expiration_date("Not a dict") is None  # type: ignore[arg-type]
+        assert extract_expiration_date(None) is None  # type: ignore[arg-type]
 
-    def test_place_hold(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
-
+    def test_place_hold(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Verify that an appropriate request is made to HOLDS_ENDPOINT
         # to create a hold.
         #
         # The request will include different form fields depending on
         # whether default_notification_email_address returns something.
+        http = overdrive_api_fixture.mock_http
+
         class Mock(MockOverdriveAPI):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -935,37 +936,37 @@ class TestOverdriveAPI:
         patron = MagicMock()
         pin = MagicMock()
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
-        api = Mock(db.session, overdrive_api_fixture.collection)
+        api = Mock(db.session, overdrive_api_fixture.collection, http)
         response = api.place_hold(patron, pin, pool, None)
 
         # Now we can trace the path of the input through the method calls.
 
         # The patron and PIN were passed into
         # default_notification_email_address.
-        assert (patron, pin) == api.default_notification_email_address_called_with
+        assert api.default_notification_email_address_called_with == (patron, pin)
 
         # The return value was None, and so 'ignoreHoldEmail' was
         # added to the form to be filled out, rather than
         # 'emailAddress' being added.
         fields = api.fill_out_form_called_with
         identifier = str(pool.identifier.identifier)
-        assert dict(ignoreHoldEmail=True, reserveId=identifier) == fields
+        assert fields == dict(ignoreHoldEmail=True, reserveId=identifier)
 
         # patron_request was called with the filled-out form and other
         # information necessary to authenticate the request.
         args, kwargs = api.patron_request_called_with
-        assert (patron, pin, api.HOLDS_ENDPOINT, "headers", "filled-out form") == args
+        assert args == (patron, pin, api.HOLDS_ENDPOINT, "headers", "filled-out form")
         assert {} == kwargs
 
         # Finally, process_place_hold_response was called on
         # the return value of patron_request
-        assert (
+        assert api.process_place_hold_response_called_with == (
             "A mock response",
             patron,
             pin,
             pool,
-        ) == api.process_place_hold_response_called_with
-        assert "OK, I processed it." == response
+        )
+        assert response == "OK, I processed it."
 
         # Now we need to test two more cases.
         #
@@ -976,25 +977,23 @@ class TestOverdriveAPI:
         response = api.place_hold(patron, pin, pool, None)
 
         # Same result.
-        assert "OK, I processed it." == response
+        assert response == "OK, I processed it."
 
         # Different variables were passed in to fill_out_form.
         fields = api.fill_out_form_called_with
-        assert dict(emailAddress=email, reserveId=identifier) == fields
+        assert fields == dict(emailAddress=email, reserveId=identifier)
 
         # Finally, test that when a specific address is passed in, it
         # takes precedence over the patron's holds notification address.
 
         response = api.place_hold(patron, pin, pool, "another@addre.ss")
-        assert "OK, I processed it." == response
+        assert response == "OK, I processed it."
         fields = api.fill_out_form_called_with
-        assert dict(emailAddress="another@addre.ss", reserveId=identifier) == fields
+        assert fields == dict(emailAddress="another@addre.ss", reserveId=identifier)
 
     def test_process_place_hold_response(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         # Verify that we can handle various error and non-error responses
         # to a HOLDS_ENDPOINT request.
 
@@ -1002,7 +1001,7 @@ class TestOverdriveAPI:
             "successful_hold.json"
         )
 
-        api = MockOverdriveAPI(db.session, overdrive_api_fixture.collection)
+        api = overdrive_api_fixture.api
 
         def process_error_response(message):
             # Attempt to process a response that resulted in an error.
@@ -1014,27 +1013,31 @@ class TestOverdriveAPI:
             return api.process_place_hold_response(response, None, None, None)
 
         # Some error messages result in specific CirculationExceptions.
-        pytest.raises(CannotRenew, process_error_response, "NotWithinRenewalWindow")
-        pytest.raises(
-            PatronHoldLimitReached, process_error_response, "PatronExceededHoldLimit"
-        )
-        pytest.raises(AlreadyOnHold, process_error_response, "AlreadyOnWaitList")
+        with pytest.raises(CannotRenew):
+            process_error_response("NotWithinRenewalWindow")
+        with pytest.raises(PatronHoldLimitReached):
+            process_error_response("PatronExceededHoldLimit")
+        with pytest.raises(AlreadyOnHold):
+            process_error_response("AlreadyOnWaitList")
 
         # An unrecognized error message results in a generic
         # CannotHold.
-        pytest.raises(CannotHold, process_error_response, "SomeOtherError")
+        with pytest.raises(CannotHold):
+            process_error_response("SomeOtherError")
 
         # Same if the error message is missing or the response can't be
         # processed.
-        pytest.raises(CannotHold, process_error_response, dict())
-        pytest.raises(CannotHold, process_error_response, json.dumps(None))
+        with pytest.raises(CannotHold):
+            process_error_response(dict())
+        with pytest.raises(CannotHold):
+            process_error_response(json.dumps(None))
 
         # Same if the error code isn't in the 4xx or 2xx range
         # (which shouldn't happen in real life).
-        response = MockRequestsResponse(999)
-        pytest.raises(
-            CannotHold, api.process_place_hold_response, response, None, None, None
-        )
+        with pytest.raises(CannotHold):
+            api.process_place_hold_response(
+                MockRequestsResponse(999), MagicMock(), None, MagicMock()
+            )
 
         # At this point patron and book details become important --
         # we're going to return a HoldInfo object and potentially make
@@ -1048,15 +1051,17 @@ class TestOverdriveAPI:
         response = MockRequestsResponse(200, content=successful_hold)
         result = api.process_place_hold_response(response, patron, pin, licensepool)
         assert isinstance(result, HoldInfo)
-        assert licensepool.collection == result.collection(db.session)
-        assert licensepool.identifier.identifier == result.identifier
-        assert licensepool.identifier.type == result.identifier_type
-        assert datetime_utc(2015, 3, 26, 11, 30, 29) == result.start_date
-        assert None == result.end_date
-        assert 1 == result.hold_position
+        assert result.collection(db.session) == licensepool.collection
+        assert result.identifier == licensepool.identifier.identifier
+        assert result.identifier_type == licensepool.identifier.type
+        assert result.start_date == datetime_utc(2015, 3, 26, 11, 30, 29)
+        assert result.end_date is None
+        assert result.hold_position == 1
 
-    def test_checkin(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_checkin(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        http = overdrive_api_fixture.mock_http
 
         class Mock(MockOverdriveAPI):
             EARLY_RETURN_SUCCESS = False
@@ -1068,33 +1073,33 @@ class TestOverdriveAPI:
             def patron_request(self, *args, **kwargs):
                 self.patron_request_call = (args, kwargs)
 
-        overdrive = Mock(db.session, overdrive_api_fixture.collection)
-        overdrive.perform_early_return_call = None
+        api = Mock(db.session, overdrive_api_fixture.collection, http)
+        api.perform_early_return_call = None
 
         # In most circumstances we do not bother calling
         # perform_early_return; we just call patron_request.
         pool = db.licensepool(None)
         patron = db.patron()
         pin = MagicMock()
-        expect_url = overdrive.endpoint(
-            overdrive.CHECKOUT_ENDPOINT, overdrive_id=pool.identifier.identifier
+        expect_url = api.endpoint(
+            api.CHECKOUT_ENDPOINT, overdrive_id=pool.identifier.identifier
         )
 
         def assert_no_early_return():
             """Call this to verify that patron_request is
             called within checkin() instead of perform_early_return.
             """
-            overdrive.checkin(patron, pin, pool)
+            api.checkin(patron, pin, pool)
 
             # perform_early_return was not called.
-            assert None == overdrive.perform_early_return_call
+            assert api.perform_early_return_call is None
 
             # patron_request was called in an attempt to
             # DELETE an active loan.
-            args, kwargs = overdrive.patron_request_call
-            assert (patron, pin, expect_url) == args
-            assert dict(method="DELETE") == kwargs
-            overdrive.patron_request_call = None
+            args, kwargs = api.patron_request_call
+            assert args == (patron, pin, expect_url)
+            assert kwargs == dict(method="DELETE")
+            api.patron_request_call = None
 
         # If there is no loan, there is no perform_early_return.
         assert_no_early_return()
@@ -1117,26 +1122,28 @@ class TestOverdriveAPI:
         # If the loan is fulfilled with a DRM-free delivery mechanism,
         # perform_early_return _is_ called.
         dm.drm_scheme = DeliveryMechanism.NO_DRM
-        overdrive.checkin(patron, pin, pool)
+        api.checkin(patron, pin, pool)
 
-        assert (patron, pin, loan) == overdrive.perform_early_return_call
+        assert api.perform_early_return_call == (patron, pin, loan)
 
         # But if it fails, patron_request is _also_ called.
-        args, kwargs = overdrive.patron_request_call
-        assert (patron, pin, expect_url) == args
-        assert dict(method="DELETE") == kwargs
+        args, kwargs = api.patron_request_call
+        assert args == (patron, pin, expect_url)
+        assert kwargs == dict(method="DELETE")
 
         # Finally, if the loan is fulfilled with a DRM-free delivery mechanism
         # and perform_early_return succeeds, patron_request_call is not
         # called -- the title was already returned.
-        overdrive.patron_request_call = None
-        overdrive.EARLY_RETURN_SUCCESS = True
-        overdrive.checkin(patron, pin, pool)
-        assert (patron, pin, loan) == overdrive.perform_early_return_call
-        assert None == overdrive.patron_request_call
+        api.patron_request_call = None
+        api.EARLY_RETURN_SUCCESS = True
+        api.checkin(patron, pin, pool)
+        assert api.perform_early_return_call == (patron, pin, loan)
+        assert api.patron_request_call is None
 
-    def test_perform_early_return(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_perform_early_return(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        http = overdrive_api_fixture.mock_http
 
         class Mock(MockOverdriveAPI):
             EARLY_RETURN_URL = "http://early-return/"
@@ -1149,7 +1156,7 @@ class TestOverdriveAPI:
                 self._extract_early_return_url_call = args
                 return self.EARLY_RETURN_URL
 
-        overdrive = Mock(db.session, overdrive_api_fixture.collection)
+        api = Mock(db.session, overdrive_api_fixture.collection, http)
 
         # This patron has a loan.
         pool = db.licensepool(None)
@@ -1165,7 +1172,6 @@ class TestOverdriveAPI:
         # The first will be to the fulfill link returned by our mock
         # get_fulfillment_link. The response to this request is a
         # redirect that includes an early return link.
-        http = MockHTTPClient()
         http.queue_response(
             302,
             other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
@@ -1178,63 +1184,57 @@ class TestOverdriveAPI:
         http.queue_response(200, content="Success")
 
         # Do the thing.
-        success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
-
         # The title was 'returned'.
-        assert True == success
+        assert api.perform_early_return(patron, pin, loan, http.do_get) is True
 
         # It worked like this:
         #
         # get_fulfillment_link was called with appropriate arguments.
-        assert (
+        assert api.get_fulfillment_link_call == (
             patron,
             pin,
             pool.identifier.identifier,
             "ebook-epub-adobe",
-        ) == overdrive.get_fulfillment_link_call
+        )
 
         # The URL returned by that method was 'requested'.
-        assert "http://fulfillment/" == http.requests.pop(0)
+        assert http.requests.pop(0) == "http://fulfillment/"
 
         # The resulting URL was passed into _extract_early_return_url.
-        assert (
+        assert api._extract_early_return_url_call == (
             "http://fulfill-this-book/?or=return-early",
-        ) == overdrive._extract_early_return_url_call
+        )
 
         # Then the URL returned by _that_ method was 'requested'.
-        assert "http://early-return/" == http.requests.pop(0)
+        assert http.requests.pop(0) == "http://early-return/"
 
         # If no early return URL can be extracted from the fulfillment URL,
         # perform_early_return has no effect.
         #
-        overdrive._extract_early_return_url_call = None
-        overdrive.EARLY_RETURN_URL = None  # type: ignore
+        api._extract_early_return_url_call = None
+        api.EARLY_RETURN_URL = None  # type: ignore
         http.queue_response(
             302, other_headers=dict(location="http://fulfill-this-book/")
         )
 
-        success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
-        assert False == success
+        assert api.perform_early_return(patron, pin, loan, http.do_get) is False
 
         # extract_early_return_url_call was called, but since it returned
         # None, no second HTTP request was made.
-        assert "http://fulfillment/" == http.requests.pop(0)
-        assert (
-            "http://fulfill-this-book/",
-        ) == overdrive._extract_early_return_url_call
-        assert [] == http.requests
+        assert http.requests.pop(0) == "http://fulfillment/"
+        assert api._extract_early_return_url_call == ("http://fulfill-this-book/",)
+        assert http.requests == []
 
         # If we can't map the delivery mechanism to one of Overdrive's
         # internal formats, perform_early_return has no effect.
         #
         loan.fulfillment.delivery_mechanism.content_type = "not-in/overdrive"
-        success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
-        assert False == success
+        assert api.perform_early_return(patron, pin, loan, http.do_get) is False
 
         # In this case, no HTTP requests were made at all, since we
         # couldn't figure out which arguments to pass into
         # get_fulfillment_link.
-        assert [] == http.requests
+        assert http.requests == []
 
         # If the final attempt to hit the return URL doesn't result
         # in a 200 status code, perform_early_return has no effect.
@@ -1243,27 +1243,24 @@ class TestOverdriveAPI:
             other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
         )
         http.queue_response(401, content="Unauthorized!")
-        success = overdrive.perform_early_return(patron, pin, loan, http.do_get)
-        assert False == success
+        assert api.perform_early_return(patron, pin, loan, http.do_get) is False
 
-    def test_extract_early_return_url(self):
-        m = OverdriveAPI._extract_early_return_url
-        assert None == m("http://no-early-return/")
-        assert None == m("")
-        assert None == m(None)
+    def test_extract_early_return_url(self) -> None:
+        _extract_early_return_url = OverdriveAPI._extract_early_return_url
+        assert _extract_early_return_url("http://no-early-return/") is None
+        assert _extract_early_return_url("") is None
+        assert _extract_early_return_url(None) is None
 
         # This is based on a real Overdrive early return URL.
         has_early_return = "https://openepub-gk.cdn.overdrive.com/OpenEPUBStore1/1577-1/%7B5880F6D0-48AC-44DE-8BF1-FD1CE62E97A8%7DFzr418.epub?e=1518753718&loanExpirationDate=2018-03-01T17%3a12%3a33Z&loanEarlyReturnUrl=https%3a%2f%2fnotifications-ofs.contentreserve.com%2fEarlyReturn%2fnypl%2f037-1374147-00279%2f5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312%3fh%3dVgvxBQHdQxtsbgb43AH6%252bEmpni9LoffkPczNiUz7%252b10%253d&sourceId=nypl&h=j7nGk7qxE71X2ZcdLw%2bqa04jqEw%3d"
-        assert (
-            "https://notifications-ofs.contentreserve.com/EarlyReturn/nypl/037-1374147-00279/5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312?h=VgvxBQHdQxtsbgb43AH6%2bEmpni9LoffkPczNiUz7%2b10%3d"
-            == m(has_early_return)
-        )
+        expected = "https://notifications-ofs.contentreserve.com/EarlyReturn/nypl/037-1374147-00279/5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312?h=VgvxBQHdQxtsbgb43AH6%2bEmpni9LoffkPczNiUz7%2b10%3d"
+        assert _extract_early_return_url(has_early_return) == expected
 
     def test_place_hold_raises_exception_if_patron_over_hold_limit(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
+        api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
         over_hold_limit = overdrive_api_fixture.error_message(
             "PatronExceededHoldLimit",
             "Patron cannot place any more holds, already has maximum holds placed.",
@@ -1274,21 +1271,17 @@ class TestOverdriveAPI:
             data_source_name=DataSource.OVERDRIVE,
             with_license_pool=True,
         )
-        overdrive_api_fixture.api.queue_response(400, content=over_hold_limit)
-        pytest.raises(
-            PatronHoldLimitReached,
-            overdrive_api_fixture.api.place_hold,
-            db.patron(),
-            "pin",
-            pool,
-            notification_email_address="foo@bar.com",
-        )
+        overdrive_api_fixture.queue_access_token_response("patron_token")
+        http.queue_response(400, content=over_hold_limit)
+        with pytest.raises(PatronHoldLimitReached):
+            api.place_hold(
+                db.patron(), "pin", pool, notification_email_address="foo@bar.com"
+            )
 
     def test_place_hold_looks_up_notification_address(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
+        http = overdrive_api_fixture.mock_http
         edition, pool = db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
@@ -1309,47 +1302,45 @@ class TestOverdriveAPI:
             "successful_hold.json"
         )
 
-        overdrive_api_fixture.api.queue_response(200, content=patron_with_email)
-        overdrive_api_fixture.api.queue_response(200, content=successful_hold)
+        overdrive_api_fixture.queue_access_token_response("patron_token")
+        http.queue_response(200, content=patron_with_email)
+        http.queue_response(200, content=successful_hold)
         hold = overdrive_api_fixture.api.place_hold(
             db.patron(), "pin", pool, notification_email_address=None
         )
 
         # The book was placed on hold.
-        assert 1 == hold.hold_position
-        assert pool.identifier.identifier == hold.identifier
+        assert hold.hold_position == 1
+        assert hold.identifier == pool.identifier.identifier
 
         # And when we placed it on hold, we passed in foo@bar.com
         # as the email address -- not notifications@example.com.
-        url, positional_args, kwargs = overdrive_api_fixture.api.requests[-1]
-        headers, body = positional_args
-        assert '{"name": "emailAddress", "value": "foo@bar.com"}' in body
+        args = http.requests_args.pop()
+        data = json.loads(args.kwargs["data"])
+        assert {"name": "emailAddress", "value": "foo@bar.com"} in data.get("fields")
 
     def test_fulfill_returns_fulfillmentinfo_if_returned_by_get_fulfillment_link(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         # If get_fulfillment_link returns a Fulfillment, it is returned
         # immediately and the rest of fulfill() does not run.
         fulfillment = create_autospec(Fulfillment)
 
         edition, pool = db.edition(with_license_pool=True)
-        api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+        api = overdrive_api_fixture.api
         api.get_fulfillment_link = create_autospec(
             api.get_fulfillment_link, return_value=fulfillment
         )
         api.internal_format = create_autospec(
             api.internal_format, return_value="format"
         )
-        result = api.fulfill(MagicMock(), MagicMock(), pool, MagicMock())
-        assert result is fulfillment
+        assert api.fulfill(MagicMock(), MagicMock(), pool, MagicMock()) is fulfillment
 
     def test_fulfill_raises_exception_and_updates_formats_for_outdated_format(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
+        http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
         edition, pool = db.edition(
             identifier_type=Identifier.OVERDRIVE_ID,
             data_source_name=DataSource.OVERDRIVE,
@@ -1371,20 +1362,19 @@ class TestOverdriveAPI:
         )
 
         # We will get the loan, try to lock in the format, and fail.
-        overdrive_api_fixture.api.queue_response(200, content=loan)
-        overdrive_api_fixture.api.queue_response(
-            400, content=lock_in_format_not_available
-        )
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content=loan)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(400, content=lock_in_format_not_available)
 
         # Trying to get a fulfillment link raises an exception.
-        pytest.raises(
-            FormatNotAvailable,
-            overdrive_api_fixture.api.get_fulfillment_link,
-            db.patron(),
-            "pin",
-            pool.identifier.identifier,
-            "ebook-epub-adobe",
-        )
+        with pytest.raises(FormatNotAvailable):
+            api.get_fulfillment_link(
+                db.patron(),
+                "pin",
+                pool.identifier.identifier,
+                "ebook-epub-adobe",
+            )
 
         # Fulfill will also update the formats.
         ignore, bibliographic = overdrive_api_fixture.sample_json(
@@ -1398,67 +1388,70 @@ class TestOverdriveAPI:
         # If we have the LicensePool available (as opposed to just the
         # identifier), we will get the loan, try to lock in the
         # format, fail, and then update the bibliographic information.
-        overdrive_api_fixture.api.queue_response(200, content=loan)
-        overdrive_api_fixture.api.queue_response(
-            400, content=lock_in_format_not_available
-        )
-        overdrive_api_fixture.api.queue_response(200, content=bibliographic)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content=loan)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(400, content=lock_in_format_not_available)
+        http.queue_response(200, content=bibliographic)
 
-        pytest.raises(
-            FormatNotAvailable,
-            overdrive_api_fixture.api.fulfill,
-            db.patron(),
-            "pin",
-            pool,
-            pool.delivery_mechanisms[0],
-        )
+        with pytest.raises(FormatNotAvailable):
+            api.fulfill(db.patron(), "pin", pool, pool.delivery_mechanisms[0])
 
         # The delivery mechanisms have been updated.
-        assert 4 == len(pool.delivery_mechanisms)
+        assert len(pool.delivery_mechanisms) == 4
         assert {
-            MediaTypes.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.KINDLE_CONTENT_TYPE,
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-            MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-        } == {lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms}
-        assert {
-            DeliveryMechanism.ADOBE_DRM,
-            DeliveryMechanism.KINDLE_DRM,
-            DeliveryMechanism.LIBBY_DRM,
-            DeliveryMechanism.STREAMING_DRM,
-        } == {lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms}
+            (lpdm.delivery_mechanism.content_type, lpdm.delivery_mechanism.drm_scheme)
+            for lpdm in pool.delivery_mechanisms
+        } == {
+            (
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+            ),
+            (
+                DeliveryMechanism.KINDLE_CONTENT_TYPE,
+                DeliveryMechanism.KINDLE_DRM,
+            ),
+            (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+            ),
+            (
+                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.LIBBY_DRM,
+            ),
+        }
 
     def test_get_fulfillment_link_from_download_link(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
+        http = overdrive_api_fixture.mock_http
         patron = db.patron()
 
         ignore, streaming_fulfill_link = overdrive_api_fixture.sample_json(
             "streaming_fulfill_link_response.json"
         )
 
-        overdrive_api_fixture.api.queue_response(200, content=streaming_fulfill_link)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content=streaming_fulfill_link)
 
         href, type = overdrive_api_fixture.api.get_fulfillment_link_from_download_link(
             patron, "1234", "http://download-link", fulfill_url="http://fulfill"
         )
         assert (
-            "https://fulfill.contentreserve.com/PerfectLife9780345530967.epub-sample.overdrive.com?RetailerID=nypl&Expires=1469825647&Token=dd0e19b4-eb70-439d-8c50-a65201060f4c&Signature=asl67/G154KeeUsL1mHPwEbZfgc="
-            == href
+            href
+            == "https://fulfill.contentreserve.com/PerfectLife9780345530967.epub-sample.overdrive.com?RetailerID=nypl&Expires=1469825647&Token=dd0e19b4-eb70-439d-8c50-a65201060f4c&Signature=asl67/G154KeeUsL1mHPwEbZfgc="
         )
-        assert "text/html" == type
+        assert type == "text/html"
 
     def test_get_fulfillment_link_returns_fulfillmentinfo_for_manifest_format(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         # When the format requested would result in a link to a
         # manifest file, the manifest link is returned as-is (wrapped
         # in an OverdriveManifestFulfillment) rather than being retrieved
         # and processed.
+
+        http = overdrive_api_fixture.mock_http
 
         # To keep things simple, our mock API will always return the same
         # fulfillment link.
@@ -1477,8 +1470,9 @@ class TestOverdriveAPI:
                 # We want to verify that this method is never called.
                 raise Exception("explode!")
 
-        api = MockAPI(db.session, overdrive_api_fixture.collection)
-        api.queue_response(200, content=json.dumps({"some": "data"}))
+        api = MockAPI(db.session, overdrive_api_fixture.collection, http)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content=json.dumps({"some": "data"}))
 
         # Randomly choose one of the formats that must be fulfilled as
         # a link to a manifest.
@@ -1498,11 +1492,11 @@ class TestOverdriveAPI:
         # let's see how we got there.
 
         # First, our mocked get_loan() was called.
-        assert (
+        assert api.get_loan_called_with == (
             patron,
             "1234",
             "http://download-link",
-        ) == api.get_loan_called_with
+        )
 
         # It returned a dictionary that contained no information
         # except isFormatLockedIn: false.
@@ -1511,23 +1505,24 @@ class TestOverdriveAPI:
         # skipped most of the code in get_fulfillment_link, and the
         # loan info was passed into our mocked get_download_link.
 
-        assert (
+        assert api.get_download_link_called_with == (
             loan_info,
             overdrive_format,
             api.DEFAULT_ERROR_URL,
-        ) == api.get_download_link_called_with
+        )
 
         # Since the manifest formats cannot be retrieved by the
         # circulation manager, the result of get_download_link was
         # wrapped in an OverdriveManifestFulfillment and returned.
         # get_fulfillment_link_from_download_link was never called.
-        assert "http://fulfillment-link/" == fulfillmentinfo.content_link
+        assert fulfillmentinfo.content_link == "http://fulfillment-link/"
 
-    def test_update_formats(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
-
+    def test_update_formats(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Create a LicensePool with an inaccurate delivery mechanism
         # and the wrong medium.
+        http = overdrive_api_fixture.mock_http
         edition, pool = db.edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
@@ -1552,33 +1547,43 @@ class TestOverdriveAPI:
         # for the new pool's Identifier.
         bibliographic["id"] = pool.identifier.identifier
 
-        overdrive_api_fixture.api.queue_response(200, content=bibliographic)
+        http.queue_response(200, content=bibliographic)
 
         overdrive_api_fixture.api.update_formats(pool)
 
         # The delivery mechanisms have been updated.
-        assert 4 == len(pool.delivery_mechanisms)
+        assert len(pool.delivery_mechanisms) == 4
         assert {
-            MediaTypes.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.KINDLE_CONTENT_TYPE,
-            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-            MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-        } == {lpdm.delivery_mechanism.content_type for lpdm in pool.delivery_mechanisms}
-        assert {
-            DeliveryMechanism.ADOBE_DRM,
-            DeliveryMechanism.KINDLE_DRM,
-            DeliveryMechanism.LIBBY_DRM,
-            DeliveryMechanism.STREAMING_DRM,
-        } == {lpdm.delivery_mechanism.drm_scheme for lpdm in pool.delivery_mechanisms}
+            (lpdm.delivery_mechanism.content_type, lpdm.delivery_mechanism.drm_scheme)
+            for lpdm in pool.delivery_mechanisms
+        } == {
+            (
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+            ),
+            (
+                DeliveryMechanism.KINDLE_CONTENT_TYPE,
+                DeliveryMechanism.KINDLE_DRM,
+            ),
+            (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+            ),
+            (
+                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
+                DeliveryMechanism.LIBBY_DRM,
+            ),
+        }
 
         # The Edition's medium has been corrected.
-        assert Edition.BOOK_MEDIUM == edition.medium
+        assert edition.medium == Edition.BOOK_MEDIUM
 
-    def test_update_availability(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
-
+    def test_update_availability(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Test the Overdrive implementation of the update_availability
         # method defined by the CirculationAPI interface.
+        http = overdrive_api_fixture.mock_http
 
         # Create a LicensePool that needs updating.
         edition, pool = db.edition(
@@ -1611,16 +1616,16 @@ class TestOverdriveAPI:
         availability["id"] = pool.identifier.identifier
         bibliographic["id"] = pool.identifier.identifier
 
-        overdrive_api_fixture.api.queue_response(200, content=availability)
-        overdrive_api_fixture.api.queue_response(200, content=bibliographic)
+        http.queue_response(200, content=availability)
+        http.queue_response(200, content=bibliographic)
 
         overdrive_api_fixture.api.update_availability(pool)
 
         # The availability information has been updated, as has the
         # date the availability information was last checked.
-        assert 5 == pool.licenses_owned
-        assert 1 == pool.licenses_available
-        assert 0 == pool.patrons_in_hold_queue
+        assert pool.licenses_owned == 5
+        assert pool.licenses_available == 1
+        assert pool.patrons_in_hold_queue == 0
         assert pool.last_checked is not None
 
     def test_collection_token(self, db: DatabaseTransactionFixture) -> None:
@@ -1642,29 +1647,35 @@ class TestOverdriveAPI:
         assert api.collection_token == "abc"
         mock_get_library.assert_called_once()
 
-    def test_circulation_lookup(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_circulation_lookup(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         """Test the method that actually looks up Overdrive circulation
         information.
         """
-        db = overdrive_api_fixture.db
-        overdrive_api_fixture.api.queue_response(200, content="foo")
+
+        http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
+
+        http.queue_response(200, content="foo")
 
         # If passed an identifier, we'll use the endpoint() method to
         # construct a v2 availability URL and make a request to
         # it.
+
         book, (
             status_code,
             headers,
             content,
-        ) = overdrive_api_fixture.api.circulation_lookup("an-identifier")
-        assert dict(id="an-identifier") == book
-        assert 200 == status_code
-        assert b"foo" == content
+        ) = api.circulation_lookup("an-identifier")
+        assert book == dict(id="an-identifier")
+        assert status_code == 200
+        assert content == b"foo"
 
-        request_url, ignore1, ignore2 = overdrive_api_fixture.api.requests.pop()
-        expect_url = overdrive_api_fixture.api.endpoint(
-            overdrive_api_fixture.api.AVAILABILITY_ENDPOINT,
-            collection_token=overdrive_api_fixture.api.collection_token,
+        request_url = http.requests.pop()
+        expect_url = api.endpoint(
+            api.AVAILABILITY_ENDPOINT,
+            collection_token=api.collection_token,
             product_id="an-identifier",
         )
         assert request_url == expect_url
@@ -1673,7 +1684,7 @@ class TestOverdriveAPI:
         # If passed the result of an API call that includes an
         # availability link, we'll clean up the URL in the link and
         # use it to get our availability data.
-        overdrive_api_fixture.api.queue_response(200, content="foo")
+        http.queue_response(200, content="foo")
         v1 = "https://qa.api.overdrive.com/v1/collections/abcde/products/12345/availability"
         v2 = "https://qa.api.overdrive.com/v2/collections/abcde/products/12345/availability"
         previous_result = dict(availability_link=v1)
@@ -1681,36 +1692,37 @@ class TestOverdriveAPI:
             status_code,
             headers,
             content,
-        ) = overdrive_api_fixture.api.circulation_lookup(previous_result)
-        assert previous_result == book
-        assert 200 == status_code
-        assert b"foo" == content
-        request_url, ignore1, ignore2 = overdrive_api_fixture.api.requests.pop()
+        ) = api.circulation_lookup(previous_result)
+        assert book == previous_result
+        assert status_code == 200
+        assert content == b"foo"
+        request_url = http.requests.pop()
 
         # The v1 URL was converted to a v2 url.
-        assert v2 == request_url
+        assert request_url == v2
 
-    def test_update_licensepool_error(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_update_licensepool_error(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
 
         # Create an identifier.
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         ignore, availability = overdrive_api_fixture.sample_json(
             "overdrive_availability_information.json"
         )
-        overdrive_api_fixture.api.queue_response(500, content="An error occured.")
+        http = overdrive_api_fixture.mock_http
+        http.queue_response(500, content="An error occured.")
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
-        assert None == pool
+        assert pool is None
 
     def test_update_licensepool_not_found(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         # If the Overdrive API says a book is not found in the
         # collection, that's treated as useful information, not an error.
         # Create an identifier.
+        http = overdrive_api_fixture.mock_http
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         ignore, not_found = overdrive_api_fixture.sample_json(
             "overdrive_availability_not_found.json"
@@ -1718,19 +1730,19 @@ class TestOverdriveAPI:
 
         # Queue the 'not found' response twice -- once for the circulation
         # lookup and once for the metadata lookup.
-        overdrive_api_fixture.api.queue_response(404, content=not_found)
-        overdrive_api_fixture.api.queue_response(404, content=not_found)
+        http.queue_response(404, content=not_found)
+        http.queue_response(404, content=not_found)
 
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
-        assert 0 == pool.licenses_owned
-        assert 0 == pool.licenses_available
-        assert 0 == pool.patrons_in_hold_queue
+        assert pool.licenses_owned == 0
+        assert pool.licenses_available == 0
+        assert pool.patrons_in_hold_queue == 0
 
     def test_update_licensepool_provides_bibliographic_coverage(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
+        http = overdrive_api_fixture.mock_http
 
         # Create an identifier.
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
@@ -1749,8 +1761,8 @@ class TestOverdriveAPI:
         availability["id"] = identifier.identifier
         bibliographic["id"] = identifier.identifier
 
-        overdrive_api_fixture.api.queue_response(200, content=availability)
-        overdrive_api_fixture.api.queue_response(200, content=bibliographic)
+        http.queue_response(200, content=availability)
+        http.queue_response(200, content=bibliographic)
 
         # Now we're ready. When we call update_licensepool, the
         # OverdriveAPI will retrieve the availability information,
@@ -1760,13 +1772,13 @@ class TestOverdriveAPI:
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
             identifier.identifier
         )
-        assert True == was_new
-        assert availability["copiesOwned"] == pool.licenses_owned
+        assert was_new is True
+        assert pool.licenses_owned == availability["copiesOwned"]
 
         edition = pool.presentation_edition
-        assert "Ancillary Justice" == edition.title
+        assert edition.title == "Ancillary Justice"
 
-        assert True == pool.work.presentation_ready
+        assert pool.work.presentation_ready is True
         assert pool.work.cover_thumbnail_url.startswith(
             "http://images.contentreserve.com/"
         )
@@ -1778,7 +1790,7 @@ class TestOverdriveAPI:
             for x in identifier.coverage_records
             if x.operation is None and x.data_source.name == DataSource.OVERDRIVE
         ]
-        assert 1 == len(coverage)
+        assert len(coverage) == 1
 
         # Call update_licensepool on an identifier that is missing a work and make
         # sure that it provides bibliographic coverage in that case.
@@ -1792,16 +1804,18 @@ class TestOverdriveAPI:
             collection=overdrive_api_fixture.collection,
         )
         assert not pool.work
-        overdrive_api_fixture.api.queue_response(200, content=availability)
-        overdrive_api_fixture.api.queue_response(200, content=bibliographic)
+        http.queue_response(200, content=availability)
+        http.queue_response(200, content=bibliographic)
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
             identifier.identifier
         )
-        assert False == was_new
-        assert True == pool.work.presentation_ready
+        assert was_new is False
+        assert pool.work.presentation_ready is True
 
-    def test_update_new_licensepool(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_update_new_licensepool(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_availability_information.json"
         )
@@ -1828,20 +1842,20 @@ class TestOverdriveAPI:
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
             raw, pool, was_new
         )
-        assert True == was_new
-        assert True == changed
+        assert was_new is True
+        assert changed is True
 
         db.session.commit()
         assert pool is not None
-        assert raw["copiesOwned"] == pool.licenses_owned
-        assert raw["copiesAvailable"] == pool.licenses_available
-        assert 0 == pool.licenses_reserved
-        assert raw["numberOfHolds"] == pool.patrons_in_hold_queue
+        assert pool.licenses_owned == raw["copiesOwned"]
+        assert pool.licenses_available == raw["copiesAvailable"]
+        assert pool.licenses_reserved == 0
+        assert pool.patrons_in_hold_queue == raw["numberOfHolds"]
 
     def test_update_existing_licensepool(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
+
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_availability_information.json"
         )
@@ -1858,10 +1872,10 @@ class TestOverdriveAPI:
         raw["id"] = pool.identifier.identifier
 
         wr.title = "The real title."
-        assert 1 == pool.licenses_owned
-        assert 1 == pool.licenses_available
-        assert 0 == pool.licenses_reserved
-        assert 0 == pool.patrons_in_hold_queue
+        assert pool.licenses_owned == 1
+        assert pool.licenses_available == 1
+        assert pool.licenses_reserved == 0
+        assert pool.patrons_in_hold_queue == 0
 
         (
             p2,
@@ -1870,21 +1884,21 @@ class TestOverdriveAPI:
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
             raw, pool, False
         )
-        assert False == was_new
-        assert True == changed
-        assert p2 == pool
+        assert was_new is False
+        assert changed is True
+        assert pool == p2
         # The title didn't change to that title given in the availability
         # information, because we already set a title for that work.
-        assert "The real title." == wr.title
-        assert raw["copiesOwned"] == pool.licenses_owned
-        assert raw["copiesAvailable"] == pool.licenses_available
-        assert 0 == pool.licenses_reserved
-        assert raw["numberOfHolds"] == pool.patrons_in_hold_queue
+        assert wr.title == "The real title."
+        assert pool.licenses_owned == raw["copiesOwned"]
+        assert pool.licenses_available == raw["copiesAvailable"]
+        assert pool.licenses_reserved == 0
+        assert pool.patrons_in_hold_queue == raw["numberOfHolds"]
 
     def test_update_new_licensepool_when_same_book_has_pool_in_different_collection(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
+
         old_edition, old_pool = db.edition(
             data_source_name=DataSource.OVERDRIVE,
             identifier_type=Identifier.OVERDRIVE_ID,
@@ -1912,7 +1926,7 @@ class TestOverdriveAPI:
         # The new pool doesn't have a presentation edition yet,
         # but it will be updated to share the old pool's edition.
         assert new_pool is not None
-        assert None == new_pool.presentation_edition
+        assert new_pool.presentation_edition is None
 
         (
             new_pool,
@@ -1922,15 +1936,14 @@ class TestOverdriveAPI:
             raw, new_pool, was_new
         )
         assert new_pool is not None
-        assert True == was_new
-        assert True == changed
-        assert old_edition == new_pool.presentation_edition
-        assert old_pool.work == new_pool.work
+        assert was_new is True
+        assert changed is True
+        assert new_pool.presentation_edition == old_edition
+        assert new_pool.work == old_pool.work
 
     def test_update_licensepool_with_holds(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_availability_information_holds.json"
         )
@@ -1951,19 +1964,22 @@ class TestOverdriveAPI:
         ) = overdrive_api_fixture.api.update_licensepool_with_book_info(
             raw, license_pool, is_new
         )
-        assert 10 == pool.patrons_in_hold_queue
-        assert True == changed
+        assert pool.patrons_in_hold_queue == 10
+        assert changed is True
 
     def test__refresh_patron_oauth_token(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         """Verify that patron information is included in the request
         when refreshing a patron access token.
         """
-        db = overdrive_api_fixture.db
+        http = overdrive_api_fixture.mock_http
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
+
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.queue_access_token_response()
 
         # Try to refresh the patron access token with a PIN, and
         # then without a PIN.
@@ -1975,38 +1991,43 @@ class TestOverdriveAPI:
 
         # Verify that the requests that were made correspond to what
         # Overdrive is expecting.
-        with_pin, without_pin = overdrive_api_fixture.api.access_token_requests
-        url, (payload, headers), kwargs = with_pin
-        assert "https://oauth-patron.overdrive.com/patrontoken" == url
-        assert "barcode" == payload["username"]
+
         expect_scope = "websiteid:{} authorizationname:{}".format(
             overdrive_api_fixture.api.website_id(),
             overdrive_api_fixture.api.ils_name(patron.library),
         )
-        assert expect_scope == payload["scope"]
-        assert "a pin" == payload["password"]
-        assert not "password_required" in payload
 
-        url, (payload, headers), kwargs = without_pin
-        assert "https://oauth-patron.overdrive.com/patrontoken" == url
-        assert "barcode" == payload["username"]
-        assert expect_scope == payload["scope"]
-        assert "false" == payload["password_required"]
-        assert "[ignore]" == payload["password"]
+        # Both requests went to the same patrontoken url
+        assert http.requests == [
+            "https://oauth-patron.overdrive.com/patrontoken",
+            "https://oauth-patron.overdrive.com/patrontoken",
+        ]
+
+        with_pin, without_pin = http.requests_args
+
+        payload = with_pin.kwargs["payload"]
+        assert payload["username"] == "barcode"
+        assert payload["scope"] == expect_scope
+        assert payload["password"] == "a pin"
+        assert "password_required" not in payload
+
+        payload = without_pin.kwargs["payload"]
+        assert payload["username"] == "barcode"
+        assert payload["scope"] == expect_scope
+        assert payload["password_required"] == "false"
+        assert payload["password"] == "[ignore]"
 
     def test__refresh_patron_oauth_token_failure(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ) -> None:
-        db = overdrive_api_fixture.db
+        http = overdrive_api_fixture.mock_http
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
 
         # Test with a real 400 response we've seen from overdrive
         data, raw = overdrive_api_fixture.sample_json("patron_token_failed.json")
-        overdrive_api_fixture.api.access_token_response = MockRequestsResponse(
-            400, content=raw
-        )
+        http.queue_response(400, content=raw)
         with pytest.raises(
             PatronAuthorizationFailedException, match="Invalid Library Card"
         ):
@@ -2017,9 +2038,7 @@ class TestOverdriveAPI:
         # Test with a fictional 403 response that doesn't contain valid json - we've never
         # seen this come back from overdrive, this test is just to make sure we can handle
         # unexpected responses back from OD API.
-        overdrive_api_fixture.api.access_token_response = MockRequestsResponse(
-            403, content="garbage { json"
-        )
+        http.queue_response(403, content="garbage { json")
         with pytest.raises(
             PatronAuthorizationFailedException,
             match="Failed to authenticate with Overdrive",
@@ -2029,12 +2048,12 @@ class TestOverdriveAPI:
             )
 
     def test__refresh_patron_oauth_token_palace_context(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         """Verify that patron information is included in the request
         when refreshing a patron access token.
         """
-        db = overdrive_api_fixture.db
+
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
@@ -2068,9 +2087,11 @@ class TestOverdriveAPI:
         assert response_credential == credential
 
     def test_cannot_fulfill_error_audiobook(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ):
-        db = overdrive_api_fixture.db
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         # use a real Overdrive API
@@ -2079,22 +2100,22 @@ class TestOverdriveAPI:
         od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
         od_api.get_download_link = MagicMock(return_value=None)
 
-        exc = pytest.raises(
-            CannotFulfill,
-            od_api.get_fulfillment_link,
-            *(patron, "pin", "odid", "audiobook-overdrive-manifest"),
-        )
-        assert exc.match("No download link for")
+        with pytest.raises(CannotFulfill, match="No download link for"):
+            od_api.get_fulfillment_link(
+                patron, "pin", "odid", "audiobook-overdrive-manifest"
+            )
 
         # Cannot fulfill error within the get auth function
-        os.environ.pop(
+        monkeypatch.delenv(
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
         )
         with pytest.raises(CannotFulfill):
             od_api._palace_context_basic_auth_header
 
-    def test_no_drm_fulfillment(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_no_drm_fulfillment(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+
         patron = db.patron()
         work = db.work(with_license_pool=True)
         patron.authorization_identifier = "barcode"
@@ -2137,8 +2158,10 @@ class TestOverdriveAPI:
         assert fulfill.content_type == Representation.EPUB_MEDIA_TYPE
         assert fulfill.content_link == "https://example.org/epub-redirect"
 
-    def test_drm_fulfillment(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_drm_fulfillment(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+
         patron = db.patron()
         work = db.work(with_license_pool=True)
         patron.authorization_identifier = "barcode"
@@ -2179,34 +2202,29 @@ class TestOverdriveAPI:
 
 class TestOverdriveAPICredentials:
     def test_patron_correct_credentials_for_multiple_overdrive_collections(
-        self, db: DatabaseTransactionFixture
+        self, db: DatabaseTransactionFixture, overdrive_api_fixture: OverdriveAPIFixture
     ):
         # Verify that the correct credential will be used
         # when a library has more than one OverDrive collection.
 
-        def _optional_value(self, obj, key):
+        def _optional_value(obj, key):
             return obj.get(key, "none")
 
         def _make_token(scope, username, password, grant_type="password"):
             return f"{grant_type}|{scope}|{username}|{password}"
 
-        class MockAPI(MockOverdriveAPI):
-            def _do_post(self, url, payload, headers, **kwargs):
-                url = self.endpoint(url)
-                self.access_token_requests.append((url, payload, headers, kwargs))
-                token = _make_token(
-                    _optional_value(self, payload, "scope"),
-                    _optional_value(self, payload, "username"),
-                    _optional_value(self, payload, "password"),
-                    grant_type=_optional_value(self, payload, "grant_type"),
-                )
-                response = self.mock_access_token_response(token)
+        def _do_post(self, url, payload, headers, **kwargs):
+            token = _make_token(
+                _optional_value(payload, "scope"),
+                _optional_value(payload, "username"),
+                _optional_value(payload, "password"),
+                grant_type=_optional_value(payload, "grant_type"),
+            )
+            return MockRequestsResponse(
+                200, content=json.dumps({"access_token": token, "expires_in": 3600})
+            )
 
-                from palace.manager.util.http import HTTP
-
-                return HTTP._process_response(url, response, **kwargs)
-
-        library = db.default_library()
+        library = overdrive_api_fixture.library
         patron = db.patron(library=library)
         patron.authorization_identifier = "patron_barcode"
         pin = "patron_pin"
@@ -2251,24 +2269,25 @@ class TestOverdriveAPICredentials:
 
         # Add the collections.
         collections = [
-            MockAPI.mock_collection(db.session, **props)  # type: ignore[arg-type]
+            overdrive_api_fixture.create_collection(**props)  # type: ignore[arg-type]
             for props in library_collection_properties
         ]
 
-        od_apis = {
-            collection.name: MockAPI(db.session, collection)
-            for collection in collections
-        }
+        with patch.object(OverdriveAPI, "_do_post", _do_post):
+            od_apis = {
+                collection.name: OverdriveAPI(db.session, collection)
+                for collection in collections
+            }
 
-        # Ensure that we have the correct number of OverDrive collections.
-        assert len(library_collection_properties) == len(od_apis)
+            # Ensure that we have the correct number of OverDrive collections.
+            assert len(library_collection_properties) == len(od_apis)
 
-        # Verify that the expected credentials match what we got.
-        for name in list(expected_credentials.keys()) + list(
-            reversed(list(expected_credentials.keys()))
-        ):
-            credential = od_apis[name]._get_patron_oauth_credential(patron, pin)
-            assert expected_credentials[name] == credential.credential
+            # Verify that the expected credentials match what we got.
+            for name in list(expected_credentials.keys()) + list(
+                reversed(list(expected_credentials.keys()))
+            ):
+                credential = od_apis[name]._get_patron_oauth_credential(patron, pin)
+                assert expected_credentials[name] == credential.credential
 
     def test_fulfillment_credentials_testing_keys(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2334,17 +2353,14 @@ class TestExtractData:
             json, "ebook-epub-adobe", "http://foo.com/"
         )
         assert (
-            "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
-            == url
+            url
+            == "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
         )
 
-        pytest.raises(
-            NoAcceptableFormat,
-            MockOverdriveAPI.get_download_link,
-            json,
-            "no-such-format",
-            "http://foo.com/",
-        )
+        with pytest.raises(NoAcceptableFormat):
+            MockOverdriveAPI.get_download_link(
+                json, "no-such-format", "http://foo.com/"
+            )
 
     def test_get_download_link_raises_exception_if_loan_fulfilled_on_incompatible_platform(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -2352,13 +2368,10 @@ class TestExtractData:
         data, json = overdrive_api_fixture.sample_json(
             "checkout_response_book_fulfilled_on_kindle.json"
         )
-        pytest.raises(
-            FulfilledOnIncompatiblePlatform,
-            MockOverdriveAPI.get_download_link,
-            json,
-            "ebook-epub-adobe",
-            "http://foo.com/",
-        )
+        with pytest.raises(FulfilledOnIncompatiblePlatform):
+            MockOverdriveAPI.get_download_link(
+                json, "ebook-epub-adobe", "http://foo.com/"
+            )
 
     def test_get_download_link_for_manifest_format(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -2381,8 +2394,8 @@ class TestExtractData:
         # The base URL is returned, with {errorpageurl} filled in and
         # {odreadauthurl} left for other code to fill in.
         assert (
-            base_url + "?errorpageurl=http://foo.com/&odreadauthurl={odreadauthurl}"
-            == link
+            link
+            == base_url + "?errorpageurl=http://foo.com/&odreadauthurl={odreadauthurl}"
         )
 
         # Now let's ask for the manifest format.
@@ -2392,7 +2405,7 @@ class TestExtractData:
 
         # The {errorpageurl} and {odreadauthurl} parameters
         # have been removed, and contentfile=true has been appended.
-        assert base_url + "?contentfile=true" == link
+        assert link == base_url + "?contentfile=true"
 
     def test_extract_download_link(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Verify that extract_download_link can or cannot find a
@@ -2406,40 +2419,35 @@ class TestExtractData:
                 cls.called_with = download_link
                 return "http://manifest/"
 
-        m = Mock.extract_download_link
+        extract_download_link = Mock.extract_download_link
         error_url = "http://error/"
 
         # Here we don't even know the name of the format.
         empty: dict[str, Any] = dict()
-        with pytest.raises(IOError) as excinfo:
-            m(empty, error_url)
-        assert "No linkTemplates for format (unknown)" in str(excinfo.value)
+        with pytest.raises(IOError, match=r"No linkTemplates for format \(unknown\)"):
+            extract_download_link(empty, error_url)
 
         # Here we know the name, but there are no link templates.
         no_templates = dict(formatType="someformat")
-        with pytest.raises(IOError) as excinfo:
-            m(no_templates, error_url)
-        assert "No linkTemplates for format someformat" in str(excinfo.value)
+        with pytest.raises(IOError, match="No linkTemplates for format someformat"):
+            extract_download_link(no_templates, error_url)
 
         # Here there's a link template structure, but no downloadLink
         # inside.
         no_download_link = dict(formatType="someformat", linkTemplates=dict())
-        with pytest.raises(IOError) as excinfo:
-            m(no_download_link, error_url)
-        assert "No downloadLink for format someformat" in str(excinfo.value)
+        with pytest.raises(IOError, match="No downloadLink for format someformat"):
+            extract_download_link(no_download_link, error_url)
 
         # Here there's a downloadLink structure, but no href inside.
         href_is_missing = dict(
             formatType="someformat", linkTemplates=dict(downloadLink=dict())
         )
-        with pytest.raises(IOError) as excinfo:
-            m(href_is_missing, error_url)
-        assert "No downloadLink href for format someformat" in str(excinfo.value)
+        with pytest.raises(IOError, match="No downloadLink href for format someformat"):
+            extract_download_link(href_is_missing, error_url)
 
         # Now we finally get to the cases where there is an actual
         # download link.  The behavior is different based on whether
         # or not we want to return a link to the manifest file.
-
         working = dict(
             formatType="someformat",
             linkTemplates=dict(
@@ -2449,17 +2457,21 @@ class TestExtractData:
 
         # If we don't want a manifest, make_direct_download_link is
         # not called.
-        do_not_fetch_manifest = m(working, error_url, fetch_manifest=False)
-        assert None == Mock.called_with
+        do_not_fetch_manifest = extract_download_link(
+            working, error_url, fetch_manifest=False
+        )
+        assert Mock.called_with is None
 
         # The errorpageurl template is filled in.
-        assert "http://download/?errorpageurl=http://error/" == do_not_fetch_manifest
+        assert do_not_fetch_manifest == "http://download/?errorpageurl=http://error/"
 
         # If we do want a manifest, make_direct_download_link is called
         # without errorpageurl being affected.
-        do_fetch_manifest = m(working, error_url, fetch_manifest=True)
-        assert "http://download/?errorpageurl={errorpageurl}" == Mock.called_with
-        assert "http://manifest/" == do_fetch_manifest
+        do_fetch_manifest = extract_download_link(
+            working, error_url, fetch_manifest=True
+        )
+        assert Mock.called_with == "http://download/?errorpageurl={errorpageurl}"
+        assert do_fetch_manifest == "http://manifest/"
 
     def test_make_direct_download_link(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -2468,11 +2480,17 @@ class TestExtractData:
         # or less weird URLs that the Overdrive might or might not
         # serve.
         base = "http://overdrive/downloadlink"
-        m = OverdriveAPI.make_direct_download_link
-        assert base + "?contentfile=true" == m(base)
-        assert base + "?contentfile=true" == m(base + "?odreadauthurl={odreadauthurl}")
-        assert base + "?other=other&contentfile=true" == m(
-            base + "?odreadauthurl={odreadauthurl}&other=other"
+        make_direct_download_link = OverdriveAPI.make_direct_download_link
+        assert make_direct_download_link(base) == base + "?contentfile=true"
+        assert (
+            make_direct_download_link(base + "?odreadauthurl={odreadauthurl}")
+            == base + "?contentfile=true"
+        )
+        assert (
+            make_direct_download_link(
+                base + "?odreadauthurl={odreadauthurl}&other=other"
+            )
+            == base + "?other=other&contentfile=true"
         )
 
     def test_extract_data_from_checkout_resource(
@@ -2484,12 +2502,12 @@ class TestExtractData:
         expires, url = MockOverdriveAPI.extract_data_from_checkout_response(
             json, "ebook-epub-adobe", "http://foo.com/"
         )
-        assert 2013 == expires.year
-        assert 10 == expires.month
-        assert 4 == expires.day
+        assert expires.year == 2013
+        assert expires.month == 10
+        assert expires.day == 4
         assert (
-            "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
-            == url
+            url
+            == "http://patron.api.overdrive.com/v1/patrons/me/checkouts/76C1B7D0-17F4-4C05-8397-C66C17411584/formats/ebook-epub-adobe/downloadlink?errorpageurl=http://foo.com/"
         )
 
     def test_process_checkout_data(self, overdrive_api_fixture: OverdriveAPIFixture):
@@ -2500,20 +2518,23 @@ class TestExtractData:
 
         # The book already fulfilled on Kindle doesn't get turned into
         # LoanInfo at all.
-        assert None == MockOverdriveAPI.process_checkout_data(
-            on_kindle, overdrive_api_fixture.collection
+        assert (
+            MockOverdriveAPI.process_checkout_data(
+                on_kindle, overdrive_api_fixture.collection.id
+            )
+            is None
         )
 
         # The book not yet fulfilled does show up as a LoanInfo.
         loan_info = MockOverdriveAPI.process_checkout_data(
-            not_on_kindle, overdrive_api_fixture.collection
+            not_on_kindle, overdrive_api_fixture.collection.id
         )
         assert loan_info is not None
-        assert "2fadd2ac-a8ec-4938-a369-4c3260e8922b" == loan_info.identifier
+        assert loan_info.identifier == "2fadd2ac-a8ec-4938-a369-4c3260e8922b"
 
         # Since there are two usable formats (Adobe EPUB and Adobe
         # PDF), the LoanInfo is not locked to any particular format.
-        assert None == loan_info.locked_to
+        assert loan_info.locked_to is None
 
         # A book that's on loan and locked to a specific format has a
         # DeliveryMechanismInfo associated with that format.
@@ -2521,13 +2542,13 @@ class TestExtractData:
             "checkout_response_locked_in_format.json"
         )
         loan_info = MockOverdriveAPI.process_checkout_data(
-            format_locked_in, overdrive_api_fixture.collection
+            format_locked_in, overdrive_api_fixture.collection.id
         )
         assert loan_info is not None
         delivery = loan_info.locked_to
         assert delivery is not None
-        assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
-        assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
+        assert delivery.content_type == Representation.EPUB_MEDIA_TYPE
+        assert delivery.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
         # This book is on loan and the choice between Kindle and Adobe
         # EPUB has not yet been made, but as far as we're concerned,
@@ -2537,13 +2558,13 @@ class TestExtractData:
             "checkout_response_no_format_locked_in.json"
         )
         loan_info = MockOverdriveAPI.process_checkout_data(
-            no_format_locked_in, overdrive_api_fixture.collection
+            no_format_locked_in, overdrive_api_fixture.collection.id
         )
         assert loan_info is not None
         delivery = loan_info.locked_to
         assert delivery is not None
-        assert Representation.EPUB_MEDIA_TYPE == delivery.content_type
-        assert DeliveryMechanism.ADOBE_DRM == delivery.drm_scheme
+        assert delivery.content_type == Representation.EPUB_MEDIA_TYPE
+        assert delivery.drm_scheme == DeliveryMechanism.ADOBE_DRM
 
         # TODO: In the future both of these tests should return a
         # LoanInfo with appropriate Fulfillment. The calling code
@@ -2552,38 +2573,35 @@ class TestExtractData:
 
 class TestSyncBookshelf:
     def test_sync_patron_activity_creates_local_loans(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         loans_data, json_loans = overdrive_api_fixture.sample_json(
             "shelf_with_some_checked_out_books.json"
         )
         holds_data, json_holds = overdrive_api_fixture.sample_json("no_holds.json")
 
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         patron = db.patron()
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
 
         # All four loans in the sample data were created.
-        assert 4 == len(loans)
+        assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
 
         # We have created previously unknown LicensePools and
         # Identifiers.
-        identifiers = [
+        assert {
             str(loan.license_pool.identifier.identifier) for loan in loans.values()
-        ]
-        assert sorted(
-            [
-                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
-                "99409f99-45a5-4238-9e10-98d1435cde04",
-                "993e4b33-823c-40af-8f61-cac54e1cba5d",
-                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
-            ]
-        ) == sorted(identifiers)
+        } == {
+            "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+            "99409f99-45a5-4238-9e10-98d1435cde04",
+            "993e4b33-823c-40af-8f61-cac54e1cba5d",
+            "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+        }
 
         # We have recorded a new DeliveryMechanism associated with
         # each loan.
@@ -2595,34 +2613,35 @@ class TestSyncBookshelf:
             for loan in loans.values()
             if loan.fulfillment
         }
-        assert {
+        assert mechanisms == {
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
             (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
             (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-        } == mechanisms
+        }
 
         # There are no holds.
-        assert {} == holds
+        assert holds == {}
 
         # Running the sync again leaves all four loans in place.
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
-        assert 4 == len(loans)
+        assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
 
     def test_sync_patron_activity_removes_loans_not_present_on_remote(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
         loans_data, json_loans = overdrive_api_fixture.sample_json(
             "shelf_with_some_checked_out_books.json"
         )
         holds_data, json_holds = overdrive_api_fixture.sample_json("no_holds.json")
 
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # Create a loan not present in the sample data.
         patron = db.patron()
@@ -2640,15 +2659,13 @@ class TestSyncBookshelf:
         # data is removed.
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
 
-        assert 4 == len(loans)
+        assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
         assert overdrive_loan not in patron.loans
 
     def test_sync_patron_activity_ignores_loans_from_other_sources(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         patron = db.patron()
         gutenberg, new = db.edition(
             data_source_name=DataSource.GUTENBERG, with_license_pool=True
@@ -2662,42 +2679,42 @@ class TestSyncBookshelf:
 
         # Overdrive doesn't know about the Gutenberg loan, but it was
         # not destroyed, because it came from another source.
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         overdrive_api_fixture.sync_patron_activity(patron)
-        assert 5 == len(patron.loans)
+        assert len(patron.loans) == 5
         assert gutenberg_loan in patron.loans
 
     def test_sync_patron_activity_creates_local_holds(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         loans_data, json_loans = overdrive_api_fixture.sample_json("no_loans.json")
         holds_data, json_holds = overdrive_api_fixture.sample_json("holds.json")
 
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
         patron = db.patron()
 
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
         # All four loans in the sample data were created.
-        assert 4 == len(holds)
+        assert len(holds) == 4
         assert sorted(holds.values()) == sorted(patron.holds)
 
         # Running the sync again leaves all four holds in place.
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
-        assert 4 == len(holds)
+        assert len(holds) == 4
         assert sorted(holds.values()) == sorted(patron.holds)
 
     def test_sync_patron_activity_removes_holds_not_present_on_remote(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         loans_data, json_loans = overdrive_api_fixture.sample_json("no_loans.json")
         holds_data, json_holds = overdrive_api_fixture.sample_json("holds.json")
 
@@ -2712,20 +2729,20 @@ class TestSyncBookshelf:
         yesterday = utc_now() - timedelta(days=1)
         overdrive_hold.start = yesterday
 
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # The hold not present in the sample data has been removed
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
-        assert 4 == len(holds)
+        assert len(holds) == 4
         assert set(holds.values()) == set(patron.holds)
         assert overdrive_hold not in patron.holds
 
     def test_sync_patron_activity_ignores_holds_from_other_collections(
-        self, overdrive_api_fixture: OverdriveAPIFixture
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        db = overdrive_api_fixture.db
-
         loans_data, json_loans = overdrive_api_fixture.sample_json("no_loans.json")
         holds_data, json_holds = overdrive_api_fixture.sample_json("holds.json")
         patron = db.patron()
@@ -2741,11 +2758,13 @@ class TestSyncBookshelf:
         [pool] = overdrive.license_pools
         overdrive_hold, new = pool.on_hold_to(patron)
 
-        overdrive_api_fixture.api.queue_response(200, content=loans_data)
-        overdrive_api_fixture.api.queue_response(200, content=holds_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
         # overdrive_api_fixture.api doesn't know about the hold, but it was not
         # destroyed, because it came from a different collection.
         overdrive_api_fixture.sync_patron_activity(patron)
-        assert 5 == len(patron.holds)
+        assert len(patron.holds) == 5
         assert overdrive_hold in patron.holds

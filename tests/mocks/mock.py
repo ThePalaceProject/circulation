@@ -237,7 +237,7 @@ class MockHTTPClient:
         response_code: int,
         media_type: str | None = None,
         other_headers: dict[str, str] | None = None,
-        content: str | bytes = "",
+        content: str | bytes | dict[str, Any] = "",
     ):
         """Queue a response of the type produced by HTTP.get_with_timeout."""
         headers = dict(other_headers or {})
