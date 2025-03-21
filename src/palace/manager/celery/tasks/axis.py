@@ -274,8 +274,7 @@ def import_identifiers(
 
     task.log.info(
         f'Imported {total_imported_in_current_task} books into collection(name="{collection_name}", '
-        f"id={collection_id} in {elapsed_seconds:.2f} secs or "
-        f"{(elapsed_seconds/total_imported_in_current_task):.2f} secs / book"
+        f"id={collection_id} in {elapsed_seconds:.2f} secs"
     )
 
     processed_count += total_imported_in_current_task
