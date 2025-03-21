@@ -13,6 +13,7 @@ from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     GenerateInventoryAndHoldsReportsJob,
     generate_inventory_and_hold_reports,
+    library_report_integrations,
 )
 from palace.manager.core.opds_import import OPDSImporterSettings
 from palace.manager.service.logging.configuration import LogLevel
@@ -26,6 +27,34 @@ from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+
+
+def test_only_active_collections_are_included(
+    db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+):
+    library = db.default_library()
+    collection1 = db.default_collection()
+    collection2 = db.default_inactive_collection()
+
+    # The library has two collections, one of which is inactive.
+    assert set(library.associated_collections) == {collection1, collection2}
+    assert library.active_collections == [collection1]
+    assert collection1.is_active is True
+    assert collection2.is_active is False
+
+    # Only OPDS integrations are eligible for inventory and holds reports,
+    # so we verify that our collections meet that criteria.
+    assert collection1.protocol.lower().startswith(("opds", "odl"))
+    assert collection2.protocol.lower().startswith(("opds", "odl"))
+
+    eligible_integrations = library_report_integrations(
+        library,
+        db.session,
+        services_fixture.services.integration_registry.license_providers(),
+    )
+
+    assert len(eligible_integrations) == 1
+    assert eligible_integrations == [collection1.integration_configuration]
 
 
 def test_job_run(
