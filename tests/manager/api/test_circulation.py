@@ -84,7 +84,7 @@ class TestFetchFulfillment:
         assert response.get_data(as_text=True) == "Other content."
         assert response.content_type == "application/xyz"
         assert http.requests == ["http://some.other.location"]
-        [(args, kwargs)] = http.requests_args
+        [kwargs] = http.requests_args
         assert kwargs["allow_redirects"] is True
 
         # If the content type is not set on the fulfillment, and the response does not have a content type,
@@ -115,7 +115,8 @@ class TestFetchFulfillment:
         assert response.content_type == "foo/bar"
         assert "X-Test" not in response.headers
         assert http.requests == ["http://some.location"]
-        [(args, kwargs)] = http.requests_args
+        [kwargs] = http.requests_args
+        assert kwargs["headers"] is not None
         assert kwargs["headers"]["X-Test"] == "test"
 
     def test_fetch_fulfillment_allowed_response_codes(

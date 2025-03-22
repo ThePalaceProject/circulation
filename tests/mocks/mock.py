@@ -2,10 +2,11 @@ import json
 import logging
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, NamedTuple
+from typing import Any
 from unittest.mock import patch
 
 from requests import Request, Response
+from typing_extensions import Unpack
 
 from palace.manager.core.coverage import (
     BibliographicCoverageProvider,
@@ -16,7 +17,7 @@ from palace.manager.core.coverage import (
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
-from palace.manager.util.http import HTTP
+from palace.manager.util.http import HTTP, GetRequestKwargs, RequestKwargs
 
 
 def _normalize_level(level):
@@ -224,18 +225,11 @@ class TaskIgnoringCoverageProvider(InstrumentedCoverageProvider):
         return []
 
 
-class Args(NamedTuple):
-    """A simple container for positional and keyword arguments."""
-
-    args: tuple[Any, ...]
-    kwargs: dict[str, Any]
-
-
 class MockHTTPClient:
     def __init__(self) -> None:
         self.responses: list[Response] = []
         self.requests: list[str] = []
-        self.requests_args: list[Args] = []
+        self.requests_args: list[RequestKwargs] = []
         self.requests_methods: list[str] = []
 
     def queue_response(
@@ -255,14 +249,16 @@ class MockHTTPClient:
     def _request(self, *args: Any, **kwargs: Any) -> Response:
         return self.responses.pop(0)
 
-    def do_request(self, method: str, url: str, *args: Any, **kwargs: Any) -> Response:
+    def do_request(
+        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
+    ) -> Response:
         self.requests.append(url)
-        self.requests_methods.append(method)
-        self.requests_args.append(Args(args, kwargs))
-        return HTTP._request_with_timeout(url, self._request, *args, **kwargs)
+        self.requests_methods.append(http_method)
+        self.requests_args.append(kwargs)
+        return HTTP._request_with_timeout(http_method, url, self._request, **kwargs)
 
-    def do_get(self, url: str, *args: Any, **kwargs: Any) -> Response:
-        return self.do_request("GET", url, *args, **kwargs)
+    def do_get(self, url: str, **kwargs: Unpack[GetRequestKwargs]) -> Response:
+        return self.do_request("GET", url, **kwargs)
 
     @contextmanager
     def patch(self) -> Generator[None, None, None]:

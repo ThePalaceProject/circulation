@@ -12,6 +12,7 @@ from html_sanitizer import Sanitizer
 from requests import Response
 from sqlalchemy import select
 from sqlalchemy.orm.session import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.config import Configuration
 from palace.manager.api.problem_details import (
@@ -34,7 +35,7 @@ from palace.manager.sqlalchemy.model.discovery_service_registration import (
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.http import HTTP
+from palace.manager.util.http import HTTP, RequestKwargs
 from palace.manager.util.problem_detail import ProblemDetailException
 from palace.manager.util.pydantic import HttpUrl
 
@@ -136,9 +137,10 @@ class OpdsRegistrationService(
 
     @staticmethod
     def post_request(
-        url: str, payload: str | dict[str, Any], **kwargs: Any
+        url: str,
+        **kwargs: Unpack[RequestKwargs],
     ) -> Response:
-        return HTTP.debuggable_post(url, payload, **kwargs)
+        return HTTP.debuggable_post(url, **kwargs)
 
     @classmethod
     def for_protocol_goal_and_url(
@@ -434,7 +436,7 @@ class OpdsRegistrationService(
         response = cls.post_request(
             register_url,
             headers=headers,
-            payload=payload,
+            data=payload,
             timeout=60,
             allowed_response_codes=["2xx", "3xx"],
         )

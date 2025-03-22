@@ -1050,10 +1050,7 @@ class Representation(Base, MediaTypes):
     @classmethod
     def simple_http_post(cls, url, headers, **kwargs):
         """The most simple HTTP-based POST."""
-        data = kwargs.get("data")
-        if "data" in kwargs:
-            del kwargs["data"]
-        response = HTTP.post_with_timeout(url, data, headers=headers, **kwargs)
+        response = HTTP.post_with_timeout(url, headers=headers, **kwargs)
         return response.status_code, response.headers, response.content
 
     @classmethod

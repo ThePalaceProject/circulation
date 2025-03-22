@@ -642,7 +642,7 @@ class OverdriveAPI(
         url = self.endpoint(url)
         kwargs["max_retry_count"] = self.settings.max_retry_count
         kwargs["timeout"] = 120
-        return HTTP.post_with_timeout(url, payload, headers=headers, **kwargs)
+        return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
 
     def website_id(self) -> str:
         return self.settings.overdrive_website_id

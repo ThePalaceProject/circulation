@@ -30,7 +30,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
-from palace.manager.util.http import HTTP
+from palace.manager.util.http import HTTP, GetRequestCallable
 
 
 class OPDS2WithODLImporter(OPDS2Importer):
@@ -59,7 +59,7 @@ class OPDS2WithODLImporter(OPDS2Importer):
         db: Session,
         collection: Collection,
         data_source_name: str | None = None,
-        http_get: Callable[..., Response] | None = None,
+        http_get: GetRequestCallable | None = None,
     ):
         """Initialize a new instance of OPDS2WithODLImporter class.
 
