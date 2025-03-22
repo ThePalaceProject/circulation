@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import cast
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.overdrive.monitor import (
@@ -16,6 +18,7 @@ from palace.manager.api.overdrive.monitor import (
 from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.time import Time
 from tests.mocks.overdrive import MockOverdriveAPI
@@ -377,76 +380,91 @@ class TestNewTitlesOverdriveCollectionMonitor:
         monitor = NewTitlesOverdriveCollectionMonitor(
             db.session, overdrive_api_fixture.collection, api_class=MockAPI
         )
-        assert "all of the ids" == monitor.recently_changed_ids(
-            MagicMock(), MagicMock()
+        assert (
+            monitor.recently_changed_ids(MagicMock(), MagicMock()) == "all of the ids"
         )
 
-    def test_should_stop(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_should_stop(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         db = overdrive_api_fixture.db
+        mock_api_partial = partial(
+            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
+        )
         monitor = NewTitlesOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
         )
 
         # for this test, we will not count consecutive out of scope dates: if one
         # title is out of scope, we should stop.
         NewTitlesOverdriveCollectionMonitor.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 0
 
-        m = monitor.should_stop
-
         # If the monitor has never run before, we need to keep going
         # until we run out of books.
-        assert False == m(None, MagicMock(), MagicMock())
-        assert False == m(monitor.NEVER, MagicMock(), MagicMock())  # type: ignore[arg-type]
+        assert monitor.should_stop(None, MagicMock(), MagicMock()) == False
+        assert monitor.should_stop(monitor.NEVER, MagicMock(), MagicMock()) == False  # type: ignore[arg-type]
 
         # If information is missing or invalid, we assume that we
         # should keep going.
         start = datetime_utc(2018, 1, 1)
-        assert False == m(start, {}, MagicMock())
-        assert False == m(start, {"date_added": None}, MagicMock())
-        assert False == m(start, {"date_added": "Not a date"}, MagicMock())
+        assert monitor.should_stop(start, {}, MagicMock()) == False
+        assert monitor.should_stop(start, {"date_added": None}, MagicMock()) == False
+        assert (
+            monitor.should_stop(start, {"date_added": "Not a date"}, MagicMock())
+            == False
+        )
 
         # Here, we're actually comparing real dates, using the date
         # format found in the Overdrive API. A date that's after the
         # `start` date means we should keep going backwards. A date before
         # the `start` date means we should stop.
-        assert False == m(
-            start, {"date_added": "2019-07-12T11:06:38.157+01:00"}, MagicMock()
+        assert (
+            monitor.should_stop(
+                start, {"date_added": "2019-07-12T11:06:38.157+01:00"}, MagicMock()
+            )
+            == False
         )
-        assert True == m(
-            start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, MagicMock()
+        assert (
+            monitor.should_stop(
+                start, {"date_added": "2017-07-12T11:06:38.157-04:00"}, MagicMock()
+            )
+            == True
         )
 
     def test_should_stop_with_consecutive_data_threshold_gt_zero(
-        self, overdrive_api_fixture: OverdriveAPIFixture, caplog
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
         caplog.set_level(logging.INFO)
 
-        db = overdrive_api_fixture.db
+        mock_api_partial = partial(
+            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
+        )
         monitor = NewTitlesOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
         )
 
         # for this test, we will count consecutive out of scope date
         NewTitlesOverdriveCollectionMonitor.MAX_CONSECUTIVE_OUT_OF_SCOPE_DATES = 1
 
-        m = monitor.should_stop
-
         start = datetime_utc(2018, 1, 1)
 
         # in scope - should continue
         in_scope_properties = {"date_added": "2019-07-12T11:06:38.157+01:00"}
-        assert False == m(start, in_scope_properties, MagicMock())
+        assert monitor.should_stop(start, in_scope_properties, MagicMock()) == False
 
         assert "Date added: 2019-07-12 11:06:38.157000+01:00" in caplog.messages[-1]
 
         # out of scope but counter threshold not yet exceeded: should continue
         out_of_scope_properties = {"date_added": "2017-07-12T11:06:38.157-04:00"}
-        assert not m(start, out_of_scope_properties, MagicMock())
+        assert not monitor.should_stop(start, out_of_scope_properties, MagicMock())
 
         assert "Date added: 2017-07-12 11:06:38.157000-04:00" in caplog.messages[-1]
 
         # in scope - should continue, expect reset
-        assert not m(start, in_scope_properties, MagicMock())
+        assert not monitor.should_stop(start, in_scope_properties, MagicMock())
 
         assert (
             "We encountered a title that was added within our scope that "
@@ -454,72 +472,78 @@ class TestNewTitlesOverdriveCollectionMonitor:
         ) in caplog.messages[-1]
 
         # out of scope but counter threshold not yet exceeded: should continue
-        assert not m(start, out_of_scope_properties, MagicMock())
+        assert not monitor.should_stop(start, out_of_scope_properties, MagicMock())
 
         # second out of scope:  threshold exceeded:  should stop
-        assert m(start, out_of_scope_properties, MagicMock())
+        assert monitor.should_stop(start, out_of_scope_properties, MagicMock())
 
         assert (
             "Max consecutive out of scope date threshold of 1 breached!"
             in caplog.messages[-1]
         )
 
-
-class TestNewTitlesOverdriveCollectionMonitor2:
-    def test_should_stop(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
-        monitor = RecentOverdriveCollectionMonitor(
-            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+    def test_should_stop_again(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        mock_api_partial = partial(
+            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
         )
-        assert 0 == monitor.consecutive_unchanged_books
-        m = monitor.should_stop
-
+        monitor = RecentOverdriveCollectionMonitor(
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial
+        )
+        assert monitor.consecutive_unchanged_books == 0
         # This book hasn't been changed, but we're under the limit, so we should
         # keep going.
-        assert False == m(MagicMock(), MagicMock(), False)
-        assert 1 == monitor.consecutive_unchanged_books
+        assert monitor.should_stop(MagicMock(), MagicMock(), False) == False
+        assert monitor.consecutive_unchanged_books == 1
 
-        assert False == m(MagicMock(), MagicMock(), False)
-        assert 2 == monitor.consecutive_unchanged_books
+        assert monitor.should_stop(MagicMock(), MagicMock(), False) == False
+        assert monitor.consecutive_unchanged_books == 2
 
         # This book has changed, so our counter gets reset.
-        assert False == m(MagicMock(), MagicMock(), True)
-        assert 0 == monitor.consecutive_unchanged_books
+        assert monitor.should_stop(MagicMock(), MagicMock(), True) == False
+        assert monitor.consecutive_unchanged_books == 0
 
         # When we're at the limit, and another book comes along that hasn't
         # been changed, _then_ we decide to stop.
         monitor.consecutive_unchanged_books = (
             monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS
         )
-        assert True == m(MagicMock(), MagicMock(), False)
+        assert monitor.should_stop(MagicMock(), MagicMock(), False) == True
         assert (
-            monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS + 1
-            == monitor.consecutive_unchanged_books
+            monitor.consecutive_unchanged_books
+            == monitor.MAXIMUM_CONSECUTIVE_UNCHANGED_BOOKS + 1
         )
 
 
 class TestReaper:
-    def test_instantiate(self, overdrive_api_fixture: OverdriveAPIFixture):
-        db = overdrive_api_fixture.db
+    def test_instantiate(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
         # Validate the standard CollectionMonitor interface.
+        mock_api_partial = partial(
+            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
+        )
         monitor = OverdriveCollectionReaper(
-            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
         )
 
 
 class TestOverdriveFormatSweep:
     def test_process_item(self, overdrive_api_fixture: OverdriveAPIFixture):
         db = overdrive_api_fixture.db
+        mock_api_partial = partial(
+            MockOverdriveAPI, mock_http=overdrive_api_fixture.mock_http
+        )
         # Validate the standard CollectionMonitor interface.
         monitor = OverdriveFormatSweep(
-            db.session, overdrive_api_fixture.collection, api_class=MockOverdriveAPI
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
         )
-        mock_api = cast(MockOverdriveAPI, monitor.api)
-        mock_api.queue_collection_token()
+        overdrive_api_fixture.queue_collection_token()
         # We're not testing that the work actually gets done (that's
         # tested in test_update_formats), only that the monitor
         # implements the expected process_item API without crashing.
-        mock_api.queue_response(404)
+        overdrive_api_fixture.mock_http.queue_response(404)
         edition, pool = db.edition(with_license_pool=True)
         monitor.process_item(pool.identifier)
 
@@ -536,12 +560,13 @@ class TestOverdriveFormatSweep:
             def update_formats(self, licensepool):
                 self.update_format_calls += 1
 
+        mock_api_partial = partial(MockApi, mock_http=overdrive_api_fixture.mock_http)
         monitor = OverdriveFormatSweep(
-            db.session, overdrive_api_fixture.collection, api_class=MockApi
+            db.session, overdrive_api_fixture.collection, api_class=mock_api_partial  # type: ignore[arg-type]
         )
+        overdrive_api_fixture.queue_collection_token()
+        overdrive_api_fixture.mock_http.queue_response(404)
         mock_api = cast(MockApi, monitor.api)
-        mock_api.queue_collection_token()
-        mock_api.queue_response(404)
 
         edition = db.edition()
         collection1 = db.collection(name="Collection 1")
@@ -551,4 +576,4 @@ class TestOverdriveFormatSweep:
         pool2 = db.licensepool(edition, collection=collection2)
 
         monitor.process_item(pool1.identifier)
-        assert 1 == mock_api.update_format_calls
+        assert mock_api.update_format_calls == 1
