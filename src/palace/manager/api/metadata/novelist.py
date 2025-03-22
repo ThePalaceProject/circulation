@@ -752,9 +752,8 @@ class NoveListAPI(
         }
 
     def put(self, url: str, headers: Mapping[str, str], **kwargs: Any) -> Response:
-        data = kwargs.pop("data", None)
         # This might take a very long time -- disable the normal
         # timeout.
         kwargs["timeout"] = None
-        response = HTTP.put_with_timeout(url, data, headers=headers, **kwargs)
+        response = HTTP.put_with_timeout(url, headers=headers, **kwargs)
         return response

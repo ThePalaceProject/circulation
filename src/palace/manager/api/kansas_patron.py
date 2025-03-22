@@ -135,7 +135,7 @@ class KansasAuthenticationAPI(
         """
         return HTTP.post_with_timeout(
             self.base_url,
-            data,
+            data=data,
             headers={"Content-Type": "application/xml"},
             max_retry_count=0,
             allowed_response_codes=["2xx"],

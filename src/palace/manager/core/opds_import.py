@@ -1703,14 +1703,15 @@ class OPDSImportMonitor(CollectionMonitor):
         """
 
         headers = self._update_headers(headers)
-        kwargs = dict(
+        if not url.startswith("http"):
+            url = urljoin(self._feed_base_url, url)
+        return HTTP.get_with_timeout(
+            url,
+            headers=headers,
             timeout=120,
             max_retry_count=self._max_retry_count,
             allowed_response_codes=["2xx", "3xx"],
         )
-        if not url.startswith("http"):
-            url = urljoin(self._feed_base_url, url)
-        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _get_accept_header(self) -> str:
         return ",".join(
@@ -1862,7 +1863,7 @@ class OPDSImportMonitor(CollectionMonitor):
         """
         self.log.info("Following next link: %s", url)
         get = do_get or self._get
-        resp = get(url, {})
+        resp = get(url, headers={})
         feed = resp.content
 
         self._verify_media_type(url, resp)

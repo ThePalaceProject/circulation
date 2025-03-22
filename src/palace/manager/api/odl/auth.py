@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, NamedTuple
 
@@ -11,7 +11,12 @@ from palace.manager.api.odl.settings import OPDS2AuthType
 from palace.manager.core.exceptions import IntegrationException, PalaceValueError
 from palace.manager.opds.authentication import AuthenticationDocument
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP, BadResponseException, BearerAuth
+from palace.manager.util.http import (
+    HTTP,
+    BadResponseException,
+    BearerAuth,
+    ResponseCodesT,
+)
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -140,8 +145,8 @@ class OdlAuthenticatedRequest(LoggerMixin, ABC):
     ) -> Response:
         # If the request restricts allowed response codes, we need to add 401 to the allowed response codes
         # so that we can handle the 401 response and refresh the token, if necessary.
-        original_allowed_response_codes: Sequence[int | str] = kwargs.get(
-            "allowed_response_codes", []
+        original_allowed_response_codes: ResponseCodesT = (
+            kwargs.get("allowed_response_codes") or []
         )
         if (
             original_allowed_response_codes
