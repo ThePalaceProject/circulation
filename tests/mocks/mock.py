@@ -232,6 +232,12 @@ class MockHTTPClient:
         self.requests_args: list[RequestKwargs] = []
         self.requests_methods: list[str] = []
 
+    def reset_mock(self) -> None:
+        self.responses = []
+        self.requests = []
+        self.requests_args = []
+        self.requests_methods = []
+
     def queue_response(
         self,
         response_code: int,

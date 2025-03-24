@@ -970,9 +970,17 @@ class OverdriveAPI(
             make_request = partial(self.patron_request, patron, pin)
             loan.action("earlyReturn", make_request)
         except NoActiveLoan:
+            # The loan is already gone, no need to return it. This exception gets
+            # handled higher up the stack.
             raise NotCheckedOut()
+        except PalaceValueError:
+            # Something went wrong following the link in the response from Overdrive,
+            # or we could not find the link.
+            # We log the error, and treat this loan like it was returned. If it wasn't
+            # it may come back via patron sync.
+            self.log.exception("Something went wrong calling the earlyReturn action.")
         except OverdriveResponseException as e:
-            raise CannotReturn() from e
+            raise CannotReturn(e.error_message) from e
 
     def fill_out_form(self, **values: str) -> tuple[dict[str, str], str]:
         fields = []
