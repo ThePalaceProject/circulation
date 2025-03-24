@@ -2,12 +2,19 @@ import json
 import re
 import typing
 from functools import cached_property
-from typing import Protocol, TypeVar
+from typing import Protocol, overload
 from urllib.parse import quote_plus
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 from palace.manager.api.overdrive.constants import OVERDRIVE_PALACE_MANIFEST_FORMATS
+from palace.manager.api.overdrive.exception import (
+    FieldNotFoundError,
+    InvalidFieldOptionError,
+    MissingRequiredFieldError,
+    MissingSubstitutionsError,
+)
 from palace.manager.core.exceptions import PalaceValueError
 
 
@@ -34,19 +41,38 @@ class LinkTemplate(Link):
 
     @cached_property
     def substitutions(self) -> set[str]:
+        """Return the set of substitutions available in the link."""
         return set(self._substitution_regex.findall(self.href))
 
     def template(self, **kwargs: str) -> str:
+        """
+        Template the link with the given substitutions.
+
+        Parameters are provided as keyword arguments, where:
+         - Keys correspond to substitution placeholders (without curly braces)
+         - Values are the strings to insert (they will be URL-encoded)
+
+        Substitution names can be provided in either:
+         - camelCase (Overdrive's format)
+         - snake_case (Python's convention)
+
+        All values are automatically converted to camelCase before substitution.
+
+        :raises MissingSubstitutionsError: If any required substitutions are not provided
+
+        :param kwargs: The substitutions to insert into the link
+        :return: The templated link
+        """
         href = self.href
         substitutions = self.substitutions
 
-        if missing := (substitutions - kwargs.keys()):
-            raise PalaceValueError(
-                f"Missing substitutions: {', '.join(sorted(missing))}"
-            )
+        camel_kwargs = {to_camel(k): v for k, v in kwargs.items()}
+
+        if missing := (substitutions - camel_kwargs.keys()):
+            raise MissingSubstitutionsError(missing)
 
         for substitution in substitutions:
-            value = quote_plus(kwargs.pop(substitution))
+            value = quote_plus(camel_kwargs.pop(substitution))
             href = href.replace(f"{{{substitution}}}", value)
 
         return href
@@ -55,11 +81,8 @@ class LinkTemplate(Link):
 class ActionField(BaseOverdriveModel):
     name: str
     value: str | None = None
-    options: list[str] = Field(default_factory=list)
+    options: set[str] = Field(default_factory=set)
     optional: bool = False
-
-
-TOverdriveModel = TypeVar("TOverdriveModel", bound=BaseOverdriveModel)
 
 
 class MakePatronRequestCallable(Protocol):
@@ -80,34 +103,65 @@ class Action(BaseOverdriveModel):
     type: str | None = None
     fields: list[ActionField] = Field(default_factory=list)
 
-    def get_field(self, name: str) -> ActionField | None:
+    @overload
+    def get_field(self, name: str, raising: typing.Literal[True]) -> ActionField: ...
+
+    @overload
+    def get_field(self, name: str, raising: bool = False) -> ActionField | None: ...
+
+    def get_field(self, name: str, raising: bool = False) -> ActionField | None:
+        """
+        Get the field with the given name.
+
+        :param name: The name of the field to get. The name can be in camelCase or snake_case.
+        :param raising: If raising is True, raise a PalaceValueError exception if the
+                        field is not found, otherwise return None.
+
+        :return: The ActionField with the given name, or None if no field is found.
+        """
+        camel_name = to_camel(name)
         for field in self.fields:
-            if field.name == name:
+            if field.name == camel_name:
                 return field
+        if raising:
+            raise FieldNotFoundError(name, camel_name)
         return None
 
-    def call(
+    def request(
         self, make_request: MakePatronRequestCallable, **kwargs: str
     ) -> dict[str, typing.Any]:
+        """
+        Make an HTTP request with the parameters and method specified in the action.
+
+        The request data is constructed from the fields in the action, in the format
+        that Overdrive expects.
+
+        :param make_request: The callable used to make the HTTP request.
+        :param kwargs: The values to provide in the request for fields in the action.
+                       These can be either in camelCase or snake_case. snake_case is
+                       converted to camelCase before being used.
+
+        :raises MissingRequiredFieldError: If a required field is missing.
+        :raises InvalidFieldOptionError: If a field has a value that is not in its options.
+
+        :return: The response from the HTTP request.
+        """
+
+        camel_kwargs = {to_camel(k): v for k, v in kwargs.items()}
         field_data = {}
         for field in self.fields:
-            if field.name in kwargs:
-                value = kwargs.pop(field.name)
+            if field.name in camel_kwargs:
+                value = camel_kwargs.pop(field.name)
             elif field.value:
                 value = field.value
             elif field.optional:
                 continue
             else:
-                raise PalaceValueError(f"Missing required field: {field.name}")
+                raise MissingRequiredFieldError(field.name)
 
             if field.options and value not in field.options:
-                raise PalaceValueError(
-                    f"Invalid value for field {field.name}: {value}. Valid options: {', '.join(field.options)}"
-                )
+                raise InvalidFieldOptionError(field.name, value, field.options)
             field_data[field.name] = value
-
-        if kwargs:
-            raise PalaceValueError(f"Unexpected fields: {', '.join(kwargs.keys())}")
 
         if field_data:
             data = json.dumps(
@@ -121,11 +175,9 @@ class Action(BaseOverdriveModel):
         else:
             data = None
 
-        headers = (
-            {"Content-Type": self.type} if self.type and data is not None else None
-        )
+        headers = {"Content-Type": "application/json"}
         return make_request(
-            method=self.method, url=self.href, data=data, extra_headers=headers
+            method=self.method.upper(), url=self.href, data=data, extra_headers=headers
         )
 
 

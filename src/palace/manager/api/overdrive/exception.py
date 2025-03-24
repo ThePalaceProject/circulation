@@ -13,6 +13,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
+from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -94,3 +95,45 @@ class OverdriveResponseException(BadResponseException):
             error_message = cast(str, bad_response.message)
 
         return cls(error_code, error_message, response)
+
+
+class MissingSubstitutionsError(PalaceValueError):
+    """
+    Raised when templating a LinkTemplate, and some of the required
+    substitutions are missing.
+    """
+
+    def __init__(self, missing: set[str]) -> None:
+        super().__init__(f"Missing substitutions: {', '.join(sorted(missing))}")
+
+
+class FieldNotFoundError(PalaceValueError):
+    """
+    Raised when a field is not found in an Action.
+    """
+
+    def __init__(self, name: str, camel_name: str | None) -> None:
+        message = f"No field found with name: {name}"
+        if camel_name and name != camel_name:
+            message += f" ({camel_name})"
+        super().__init__(message)
+
+
+class MissingRequiredFieldError(PalaceValueError):
+    """
+    Raised when a required field is missing in an Action.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Missing required field: {name}")
+
+
+class InvalidFieldOptionError(PalaceValueError):
+    """
+    Raised when a field in an Action has an invalid value.
+    """
+
+    def __init__(self, field: str, value: str, options: set[str]) -> None:
+        super().__init__(
+            f"Invalid value for field {field}: {value}. Valid options: {', '.join(sorted(options))}"
+        )
