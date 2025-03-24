@@ -13,6 +13,7 @@ import flask
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
+from typing_extensions import Unpack
 
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
@@ -93,7 +94,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
-from palace.manager.util.http import HTTP, BadResponseException
+from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
 
 
 class OverdriveToken(NamedTuple):
@@ -773,7 +774,9 @@ class OverdriveAPI(
         else:
             return response_type.model_validate_json(response.content)
 
-    def _do_patron_request(self, http_method: str, url: str, **kwargs: Any) -> Response:
+    def _do_patron_request(
+        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
+    ) -> Response:
         """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
         return HTTP.request_with_timeout(
@@ -916,7 +919,7 @@ class OverdriveAPI(
                 response_type=Checkout,
             )
         except OverdriveResponseException as e:
-            code = e.error_code or "Unknown Error"
+            code = e.error_message
             raise CannotLoan(code) from e
         except AlreadyCheckedOut:
             # Client should have used a fulfill link instead, but
@@ -924,12 +927,8 @@ class OverdriveAPI(
             #
             # NOTE: It's very unlikely this will happen, but it could
             # happen if the patron borrows a book through Libby and
-            # then immediately borrows the same book through SimplyE.
-            loan = self.get_loan(patron, pin, identifier.identifier)
-            return LoanInfo.from_license_pool(
-                licensepool,
-                end_date=loan.expires,
-            )
+            # then immediately borrows the same book through Palace.
+            checkout = self.get_loan(patron, pin, identifier.identifier)
 
         # At this point we know what formats this book is available in. If this
         # item has never been fulfilled, then this might be the first time we

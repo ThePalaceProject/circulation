@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -37,7 +37,6 @@ from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillmen
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import MediaTypes
-from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -673,47 +672,39 @@ class TestOverdriveAPI:
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         # Verify the process of checking out a book.
+        patron = db.patron()
+        pin = "1234"
+        api = overdrive_api_fixture.api
         http = overdrive_api_fixture.mock_http
-        patron = MagicMock()
-        pin = MagicMock()
-        delivery_mechanism = MagicMock()
+
+        # The licensepool for this checkout has several delivery mechanisms and we incorrectly are identifying that
+        # it is available as an epub with no DRM.
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            available=False,
+            update_available=True,
+            rights_uri=None,
+        )
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            available=True,
+            update_available=True,
+            rights_uri=None,
+        )
         identifier = pool.identifier
 
-        class Mock(MockOverdriveAPI):
-            MOCK_EXPIRATION_DATE = object()
-            PROCESS_CHECKOUT_ERROR_RESULT = Exception(
-                "exception in _process_checkout_error"
-            )
-
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.extract_expiration_date_called_with = []
-                self._process_checkout_error_called_with = []
-
-            def _get_patron_oauth_credential(
-                self, patron, pin, palace_context=False
-            ) -> Credential:
-                return create_autospec(Credential)
-
-            def extract_expiration_date(self, loan):
-                self.extract_expiration_date_called_with.append(loan)
-                return self.MOCK_EXPIRATION_DATE
-
-            def _process_checkout_error(self, patron, pin, licensepool, data):
-                self._process_checkout_error_called_with.append(
-                    (patron, pin, licensepool, data)
-                )
-                result = self.PROCESS_CHECKOUT_ERROR_RESULT
-                if isinstance(result, Exception):
-                    raise result
-                return result
-
         # First, test the successful path.
-        api = Mock(db.session, overdrive_api_fixture.collection, http)
-        api_response = json.dumps("some data")
-        http.queue_response(201, content=api_response)
-        loan = api.checkout(patron, pin, pool, delivery_mechanism)
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            ),
+        )
+        loan = api.checkout(patron, pin, pool, None)
 
         # Verify that a good-looking patron request went out.
         endpoint = http.requests.pop()
@@ -721,18 +712,24 @@ class TestOverdriveAPI:
         args = http.requests_args.pop()
         headers = args["headers"]
         assert headers.get("Content-Type") == "application/json"
-
         data = args["data"]
         assert isinstance(data, str)
         assert json.loads(data) == {
             "fields": [{"name": "reserveId", "value": pool.identifier.identifier}]
         }
 
-        # The API response was passed into extract_expiration_date.
-        #
-        # The most important thing here is not the content of the response but the
-        # fact that the response code was not 400.
-        assert api.extract_expiration_date_called_with.pop() == "some data"
+        # During the checkout process, we get information about the books formats and update them correctly
+        assert {
+            (
+                dm.delivery_mechanism.content_type,
+                dm.delivery_mechanism.drm_scheme,
+                dm.available,
+            )
+            for dm in pool.delivery_mechanisms
+        } == {
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, True),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+        }
 
         # The return value is a LoanInfo object with all relevant info.
         assert isinstance(loan, LoanInfo)
@@ -740,41 +737,58 @@ class TestOverdriveAPI:
         assert loan.identifier_type == identifier.type
         assert loan.identifier == identifier.identifier
         assert loan.start_date is None
-        assert loan.end_date == api.MOCK_EXPIRATION_DATE
-
-        # _process_checkout_error was not called
-        assert api._process_checkout_error_called_with == []
+        assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
 
         # Now let's test error conditions.
 
         # Most of the time, an error simply results in an exception.
-        http.queue_response(400, content=api_response)
+        http.queue_response(400, content="error")
         with pytest.raises(
-            Exception, match="exception in _process_checkout_error"
-        ) as excinfo:
-            api.checkout(patron, pin, pool, delivery_mechanism)
-        assert (
-            patron,
-            pin,
-            pool,
-            "some data",
-        ) == api._process_checkout_error_called_with.pop()
+            CannotLoan, match="Got status code 400 from external server"
+        ):
+            api.checkout(patron, pin, pool, None)
 
-        # However, if _process_checkout_error is able to recover from
-        # the error and ends up returning something, the return value
-        # is propagated from checkout().
-        api.PROCESS_CHECKOUT_ERROR_RESULT = "Actually, I was able to recover"  # type: ignore[assignment]
-        http.queue_response(400, content=api_response)
-        assert (
-            api.checkout(patron, pin, pool, delivery_mechanism)
-            == "Actually, I was able to recover"
+        # If Overdrive gives us a message, we pass it on in the problem detail
+        http.queue_response(
+            400,
+            content=overdrive_api_fixture.error_message("Error", "Some error details"),
         )
-        assert api._process_checkout_error_called_with.pop() == (
-            patron,
-            pin,
-            pool,
-            "some data",
+        with pytest.raises(CannotLoan, match="Some error details"):
+            api.checkout(patron, pin, pool, None)
+
+        # If the error is "TitleAlreadyCheckedOut", we know that somehow we already have this title
+        # checked out. In that case we make a second request to get the loan information, and return a LoanInfo object.
+        http.queue_response(
+            400, content=overdrive_api_fixture.error_message("TitleAlreadyCheckedOut")
         )
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            ),
+        )
+        loan = api.checkout(patron, pin, pool, None)
+
+        # During the checkout process, we get information about the books formats and update them correctly
+        assert {
+            (
+                dm.delivery_mechanism.content_type,
+                dm.delivery_mechanism.drm_scheme,
+                dm.available,
+            )
+            for dm in pool.delivery_mechanisms
+        } == {
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, True),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+        }
+
+        # The return value is a LoanInfo object with all relevant info.
+        assert isinstance(loan, LoanInfo)
+        assert loan.collection_id == pool.collection.id
+        assert loan.identifier_type == identifier.type
+        assert loan.identifier == identifier.identifier
+        assert loan.start_date is None
+        assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
 
     def test__process_checkout_error(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

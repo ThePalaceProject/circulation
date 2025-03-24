@@ -1,15 +1,14 @@
-import json
 from datetime import timedelta
 from typing import Any
 
 from requests import Response
 from sqlalchemy.orm import Session
-from typing_extensions import override
+from typing_extensions import Unpack, override
 
 from palace.manager.api.overdrive.api import OverdriveAPI, OverdriveToken
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import RequestKwargs
 from tests.mocks.mock import MockHTTPClient
 
 
@@ -45,6 +44,8 @@ class MockOverdriveAPI(OverdriveAPI):
         )
 
     @override
-    def _do_patron_request(self, http_method: str, url: str, **kwargs: Any) -> Response:
+    def _do_patron_request(
+        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
+    ) -> Response:
         url = self.endpoint(url)
         return self.mock_http.do_request(http_method, url, **kwargs)
