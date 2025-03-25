@@ -1,0 +1,21 @@
+{
+  "reserveId" : "a4466636-34f5-495a-92ee-3a9c701f46cf",
+  "crossRefId" : 432890,
+  "formatType" : "ebook-epub-open",
+  "links" : {
+    "self" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    }
+  },
+  "linkTemplates" : {
+    "downloadLink" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorpageurl={errorpageurl}",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    },
+    "downloadLinkV2" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorurl={errorurl}&successurl={successurl}",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    }
+  }
+}

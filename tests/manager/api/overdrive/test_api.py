@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
-import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from palace.manager.api.circulation import FetchFulfillment, LoanInfo
+from palace.manager.api.circulation import (
+    FetchFulfillment,
+    LoanInfo,
+    RedirectFulfillment,
+)
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
     CannotLoan,
@@ -1006,7 +1009,7 @@ class TestOverdriveAPI:
         data = json.loads(data_json)
         assert {"name": "emailAddress", "value": "foo@bar.com"} in data.get("fields")
 
-    def test_fulfill_raises_exception_and_updates_formats_for_outdated_format(
+    def test_fulfill_raises_exception_for_outdated_format(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         http = overdrive_api_fixture.mock_http
@@ -1018,172 +1021,126 @@ class TestOverdriveAPI:
         )
 
         # This pool has a format that's no longer available from overdrive.
-        pool.set_delivery_mechanism(
-            Representation.PDF_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM,
+        delivery_mechanism = pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
             RightsStatus.IN_COPYRIGHT,
             None,
         )
 
-        ignore, loan = overdrive_api_fixture.sample_json("single_loan.json")
+        loan = overdrive_api_fixture.data.sample_data("single_loan.json")
 
-        ignore, lock_in_format_not_available = overdrive_api_fixture.sample_json(
+        no_drm_loan = overdrive_api_fixture.data.sample_data(
+            "checkout_response_no_format_locked_in_no_drm.json"
+        )
+
+        lock_in_format_not_available = overdrive_api_fixture.data.sample_data(
             "lock_in_format_not_available.json"
         )
 
-        # We will get the loan, try to lock in the format, and fail.
+        # We will get the loan, try to lock in the format, and fail because
+        # the format is not in the list of available formats.
         overdrive_api_fixture.queue_access_token_response()
         http.queue_response(200, content=loan)
+
+        # Trying to get a fulfillment link raises an exception.
+        with pytest.raises(FormatNotAvailable):
+            api.fulfill(
+                db.patron(),
+                "pin",
+                pool,
+                delivery_mechanism,
+            )
+
+        # Try the case where Overdrive says the format is available, but when we request it
+        # it no longer is.
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content=no_drm_loan)
         http.queue_response(400, content=lock_in_format_not_available)
 
         # Trying to get a fulfillment link raises an exception.
         with pytest.raises(FormatNotAvailable):
-            api.get_fulfillment_link(
+            api.fulfill(
                 db.patron(),
                 "pin",
-                pool.identifier.identifier,
-                "ebook-epub-adobe",
+                pool,
+                delivery_mechanism,
             )
 
-        # Fulfill will also update the formats.
-        ignore, bibliographic = overdrive_api_fixture.sample_json(
-            "bibliographic_information.json"
-        )
-
-        # To avoid a mismatch, make it look like the information is
-        # for the correct Identifier.
-        bibliographic["id"] = pool.identifier.identifier
-
-        # If we have the LicensePool available (as opposed to just the
-        # identifier), we will get the loan, try to lock in the
-        # format, fail, and then update the bibliographic information.
-        overdrive_api_fixture.queue_access_token_response()
-        http.queue_response(200, content=loan)
-        http.queue_response(400, content=lock_in_format_not_available)
-        http.queue_response(200, content=bibliographic)
-
-        with pytest.raises(FormatNotAvailable):
-            api.fulfill(db.patron(), "pin", pool, pool.delivery_mechanisms[0])
-
-        # The delivery mechanisms have been updated.
-        assert len(pool.delivery_mechanisms) == 4
-        assert {
-            (lpdm.delivery_mechanism.content_type, lpdm.delivery_mechanism.drm_scheme)
-            for lpdm in pool.delivery_mechanisms
-        } == {
-            (
-                MediaTypes.EPUB_MEDIA_TYPE,
-                DeliveryMechanism.ADOBE_DRM,
-            ),
-            (
-                DeliveryMechanism.KINDLE_CONTENT_TYPE,
-                DeliveryMechanism.KINDLE_DRM,
-            ),
-            (
-                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
-            ),
-            (
-                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
-            ),
-        }
-
-    def test_get_fulfillment_link_from_download_link(
+    def test_streaming_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
         http = overdrive_api_fixture.mock_http
         patron = db.patron()
-
-        ignore, streaming_fulfill_link = overdrive_api_fixture.sample_json(
-            "streaming_fulfill_link_response.json"
+        work = db.work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+        api = overdrive_api_fixture.api
+        pool = work.active_license_pool()
+        delivery_mechanism = pool.set_delivery_mechanism(
+            DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+            DeliveryMechanism.STREAMING_DRM,
+            None,
         )
 
+        # Queue up the responses
         overdrive_api_fixture.queue_access_token_response()
-        http.queue_response(200, content=streaming_fulfill_link)
-
-        href, type = overdrive_api_fixture.api.get_fulfillment_link_from_download_link(
-            patron, "1234", "http://download-link", fulfill_url="http://fulfill"
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in_no_drm.json"
+            ),
         )
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "streaming_fulfill_link_response.json"
+            ),
+        )
+
+        fulfill = api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+        assert isinstance(fulfill, FetchFulfillment)
+        assert fulfill.content_type == "text/html" + DeliveryMechanism.STREAMING_PROFILE
         assert (
-            href
+            fulfill.content_link
             == "https://fulfill.contentreserve.com/PerfectLife9780345530967.epub-sample.overdrive.com?RetailerID=nypl&Expires=1469825647&Token=dd0e19b4-eb70-439d-8c50-a65201060f4c&Signature=asl67/G154KeeUsL1mHPwEbZfgc="
         )
-        assert type == "text/html"
 
-    def test_get_fulfillment_link_returns_fulfillmentinfo_for_manifest_format(
+    def test_manifest_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        # When the format requested would result in a link to a
-        # manifest file, the manifest link is returned as-is (wrapped
-        # in an OverdriveManifestFulfillment) rather than being retrieved
-        # and processed.
-
         http = overdrive_api_fixture.mock_http
-
-        # To keep things simple, our mock API will always return the same
-        # fulfillment link.
-        loan_info = {"isFormatLockedIn": False}
-
-        class MockAPI(MockOverdriveAPI):
-            def get_loan(self, patron, pin, overdrive_id):
-                self.get_loan_called_with = (patron, pin, overdrive_id)
-                return loan_info
-
-            def get_download_link(self, loan, format_type, error_url):
-                self.get_download_link_called_with = (loan, format_type, error_url)
-                return "http://fulfillment-link/"
-
-            def get_fulfillment_link_from_download_link(self, *args, **kwargs):
-                # We want to verify that this method is never called.
-                raise Exception("explode!")
-
-        api = MockAPI(db.session, overdrive_api_fixture.collection, http)
-        overdrive_api_fixture.queue_access_token_response()
-        http.queue_response(200, content=json.dumps({"some": "data"}))
-
-        # Randomly choose one of the formats that must be fulfilled as
-        # a link to a manifest.
-        overdrive_format = random.choice(list(OverdriveAPI.MANIFEST_INTERNAL_FORMATS))
-
-        # Get the fulfillment link.
         patron = db.patron()
-        fulfillmentinfo = api.get_fulfillment_link(
-            patron,
-            "1234",
-            "http://download-link",
-            overdrive_format,
-        )
-        assert isinstance(fulfillmentinfo, OverdriveManifestFulfillment)
-
-        # Before looking at the OverdriveManifestFulfillment,
-        # let's see how we got there.
-
-        # First, our mocked get_loan() was called.
-        assert api.get_loan_called_with == (
-            patron,
-            "1234",
-            "http://download-link",
+        work = db.work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+        api = overdrive_api_fixture.api
+        pool = work.active_license_pool()
+        delivery_mechanism = pool.set_delivery_mechanism(
+            MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+            DeliveryMechanism.LIBBY_DRM,
+            None,
         )
 
-        # It returned a dictionary that contained no information
-        # except isFormatLockedIn: false.
-
-        # Since the manifest formats do not lock the loan, this
-        # skipped most of the code in get_fulfillment_link, and the
-        # loan info was passed into our mocked get_download_link.
-
-        assert api.get_download_link_called_with == (
-            loan_info,
-            overdrive_format,
-            api.DEFAULT_ERROR_URL,
+        # Queue up the responses
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_audiobook.json"
+            ),
         )
 
-        # Since the manifest formats cannot be retrieved by the
-        # circulation manager, the result of get_download_link was
-        # wrapped in an OverdriveManifestFulfillment and returned.
-        # get_fulfillment_link_from_download_link was never called.
-        assert fulfillmentinfo.content_link == "http://fulfillment-link/"
+        fulfill = api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+        assert isinstance(fulfill, OverdriveManifestFulfillment)
+        assert (
+            fulfill.content_link
+            == "https://patron.api.overdrive.com/v1/patrons/me/checkouts/e14166ba-5022-4e63-969a-6f0b6f86380b/formats/audiobook-overdrive/downloadlink?contentfile=true"
+        )
+        assert fulfill.access_token == "token"
+        assert fulfill.scope_string == "websiteid:d authorizationname:e"
 
     def test_update_formats(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1256,6 +1213,56 @@ class TestOverdriveAPI:
 
         # We don't know these formats for sure though. It turns out later on that different formats are
         # what is available for this book.
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            None,
+            available=False,
+            update_available=True,
+        )
+
+        pool.set_delivery_mechanism(
+            MediaTypes.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            None,
+            available=True,
+            update_available=True,
+        )
+
+        # Updating the formats again, does not overwrite the changes we made to the pool
+        http.queue_response(200, content=bibliographic)
+        overdrive_api_fixture.api.update_formats(pool)
+
+        assert len(pool.delivery_mechanisms) == 4
+        assert {
+            (
+                lpdm.delivery_mechanism.content_type,
+                lpdm.delivery_mechanism.drm_scheme,
+                lpdm.available,
+            )
+            for lpdm in pool.delivery_mechanisms
+        } == {
+            (
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+                False,
+            ),
+            (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                True,
+            ),
+            (
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                True,
+            ),
+            (
+                MediaTypes.PDF_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                False,
+            ),
+        }
 
     def test_update_availability(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1728,62 +1735,49 @@ class TestOverdriveAPI:
                 credential, patron, "a pin"
             )
 
-    # def test_cannot_fulfill_error_audiobook(
-    #     self,
-    #     overdrive_api_fixture: OverdriveAPIFixture,
-    #     db: DatabaseTransactionFixture,
-    #     monkeypatch: pytest.MonkeyPatch,
-    # ):
-    #     patron = db.patron()
-    #     patron.authorization_identifier = "barcode"
-    #     # use a real Overdrive API
-    #     od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
-    #     od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-    #     od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
-    #     od_api.get_download_link = MagicMock(return_value=None)
-    #
-    #     with pytest.raises(CannotFulfill, match="No download link for"):
-    #         od_api.get_fulfillment_link(
-    #             patron, "pin", "odid", "audiobook-overdrive-manifest"
-    #         )
-    #
-    #     # Cannot fulfill error within the get auth function
-    #     monkeypatch.delenv(
-    #         f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
-    #     )
-    #     with pytest.raises(CannotFulfill):
-    #         od_api._palace_context_basic_auth_header
+    def test_no_drm_fulfillment(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        http = overdrive_api_fixture.mock_http
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        patron.authorization_identifier = "barcode"
+        api = overdrive_api_fixture.api
+        pool = work.active_license_pool()
+        delivery_mechanism = pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            None,
+        )
 
-    # def test_no_drm_fulfillment(
-    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    # ):
-    #     http = overdrive_api_fixture.mock_http
-    #     patron = db.patron()
-    #     work = db.work(with_license_pool=True)
-    #     patron.authorization_identifier = "barcode"
-    #     api = overdrive_api_fixture.api
-    #     pool = work.active_license_pool()
-    #     delivery_mechanism = pool.set_delivery_mechanism(
-    #         Representation.EPUB_MEDIA_TYPE,
-    #         DeliveryMechanism.NO_DRM,
-    #         None,
-    #     )
-    #
-    #     # Queue up the responses
-    #     overdrive_api_fixture.queue_access_token_response()
-    #     http.queue_response(200, content=overdrive_api_fixture.data.sample_data("checkout_response_no_format_locked_in.json"))
-    #     format_locked_in = Checkout.model_validate_json(overdrive_api_fixture.data.sample_data(
-    #         "checkout_response_locked_in_format.json"))
-    #     http.queue_response(200, content=format_locked_in.get_format("ebook-epub-adobe", raising=True).model_dump_json())
-    #     lock_in_response = Format(format_type="ebook-epub-adobe", links={"contentlink": Link(href="http://example.com/acsm", type="application/vnd.adobe.adept+xml")})
-    #     http.queue_response(200, content=lock_in_response.model_dump_json())
-    #
-    #     fulfill = api.fulfill(
-    #         patron, "pin", work.active_license_pool(), delivery_mechanism
-    #     )
-    #     assert isinstance(fulfill, FetchFulfillment)
-    #     assert fulfill.content_type == "application/vnd.adobe.adept+xml"
-    #     assert fulfill.content_link == "http://example.com/acsm"
+        # Queue up the responses
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in_no_drm.json"
+            ),
+        )
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "format_response_no_drm.json"
+            ),
+        )
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data("download_link_no_drm.json"),
+        )
+
+        fulfill = api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+        assert isinstance(fulfill, RedirectFulfillment)
+        assert fulfill.content_type == "application/epub+zip"
+        assert (
+            fulfill.content_link
+            == "https://fulfill.contentreserve.com/LittleWomen_432890.epub?RetailerID=odapilib&Expires=1742921390&Token=6ae382f6-01b0-4ee6-b5ee-b2ab00c2f713&Signature=C2PB%2bLPnNPjrQ%2bQQ2kquMdjYZzY%3d"
+        )
 
     def test_drm_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

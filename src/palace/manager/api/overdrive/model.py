@@ -14,6 +14,7 @@ from palace.manager.api.circulation_exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotRenew,
+    FormatNotAvailable,
     NoActiveLoan,
     NoAvailableCopies,
     PatronHoldLimitReached,
@@ -110,6 +111,8 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
             raise CannotRenew()
         elif error_code == "PatronExceededHoldLimit":
             raise PatronHoldLimitReached()
+        elif error_code == "PatronTitleProcessingFailed":
+            raise FormatNotAvailable()
 
         if error_message is None:
             error_message = default_message

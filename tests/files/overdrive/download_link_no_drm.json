@@ -1,0 +1,15 @@
+{
+  "reserveId" : "a4466636-34f5-495a-92ee-3a9c701f46cf",
+  "crossRefId" : 432890,
+  "formatType" : "ebook-epub-open",
+  "links" : {
+    "self" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/a4466636-34f5-495a-92ee-3a9c701f46cf/formats/ebook-epub-open/downloadlink?errorpageurl=http%3A%2F%2Fthepalaceproject.org%2F",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    },
+    "contentlink" : {
+      "href" : "https://fulfill.contentreserve.com/LittleWomen_432890.epub?RetailerID=odapilib&Expires=1742921390&Token=6ae382f6-01b0-4ee6-b5ee-b2ab00c2f713&Signature=C2PB%2bLPnNPjrQ%2bQQ2kquMdjYZzY%3d",
+      "type" : "application/epub+zip"
+    }
+  }
+}
