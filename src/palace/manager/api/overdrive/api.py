@@ -727,7 +727,7 @@ class OverdriveAPI(
         This request will be made using an OAuth bearer token for the
         patron that was acquired using the privileged Palace credentials
         so that the patron can take actions that require extra api
-        premissions.
+        permissions.
         """
         patron_credential = self._get_patron_oauth_credential(patron, pin)
         headers = dict(Authorization="Bearer %s" % patron_credential.credential)

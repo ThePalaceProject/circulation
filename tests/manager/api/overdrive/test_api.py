@@ -28,7 +28,7 @@ from palace.manager.api.overdrive.constants import OverdriveConstants
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import Checkout, Format, Link
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -366,6 +366,35 @@ class TestOverdriveAPI:
             match="Got status code 401 .* can only continue on: 200.",
         ):
             api._refresh_client_oauth_token()
+
+    def test_patron_request_401_refreshes_bearer_token(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
+        patron = db.patron()
+
+        # If we get a 401, we refresh the bearer token and try again.
+        overdrive_api_fixture.queue_access_token_response("bearer token")
+        http.queue_response(401)
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        http.queue_response(200, content=json.dumps("at last, the content"))
+        assert (
+            api.patron_request(patron, "pin", db.fresh_url()) == "at last, the content"
+        )
+
+        # The bearer token has been updated.
+        assert (
+            api._get_patron_oauth_credential(patron, "pin").credential
+            == "new bearer token"
+        )
+
+        # If we get two 401 in a row, we raise an error
+        http.queue_response(401)
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        http.queue_response(401)
+        with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
+            api.patron_request(patron, "pin", db.fresh_url())
 
     def test_advantage_differences(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
