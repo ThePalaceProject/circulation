@@ -8,11 +8,13 @@ from palace.manager.api.overdrive.advantage import OverdriveAdvantageAccount
 from palace.manager.api.overdrive.script import GenerateOverdriveAdvantageAccountList
 from palace.manager.sqlalchemy.model.collection import Collection
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.mocks.overdrive import MockOverdriveAPI
+from tests.fixtures.overdrive import OverdriveAPIFixture
 
 
 class TestGenerateOverdriveAdvantageAccountList:
-    def test_generate_od_advantage_account_list(self, db: DatabaseTransactionFixture):
+    def test_generate_od_advantage_account_list(
+        self, db: DatabaseTransactionFixture, overdrive_api_fixture: OverdriveAPIFixture
+    ):
         output_file_path = "test-output.csv"
         circ_manager_name = "circ_man_name"
         parent_library_name = "Parent"
@@ -27,23 +29,22 @@ class TestGenerateOverdriveAdvantageAccountList:
         client_secret = "cs"
         library_token = "lt"
 
+        db.session.delete(overdrive_api_fixture.collection)
         library = db.library()
-        parent: Collection = MockOverdriveAPI.mock_collection(
-            db.session,
+        parent: Collection = overdrive_api_fixture.create_collection(
             library,
             name=parent_library_name,
             library_id=parent_od_library_id,
             client_key=client_key,
             client_secret=client_secret,
         )
-        child1: Collection = MockOverdriveAPI.mock_collection(
-            db.session,
+        child1: Collection = overdrive_api_fixture.create_collection(
             library,
             name=child1_library_name,
             library_id=child1_advantage_library_id,
         )
         child1.parent = parent
-        overdrive_api = MockOverdriveAPI(db.session, parent)
+        overdrive_api = overdrive_api_fixture.create_mock_api(parent)
         mock_get_advantage_accounts = MagicMock()
         mock_get_advantage_accounts.return_value = [
             OverdriveAdvantageAccount(
