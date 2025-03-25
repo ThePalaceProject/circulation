@@ -2094,17 +2094,33 @@ class TestSyncBookshelf:
         # each loan.
         mechanisms = {
             (
+                loan.license_pool.identifier.identifier,
                 loan.fulfillment.delivery_mechanism.content_type,
                 loan.fulfillment.delivery_mechanism.drm_scheme,
+                loan.fulfillment.available,
             )
             for loan in loans.values()
             if loan.fulfillment
         }
         assert mechanisms == {
-            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
-            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-            (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (
+                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+                Representation.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                True,
+            ),
+            (
+                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                Representation.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+                True,
+            ),
+            (
+                "99409f99-45a5-4238-9e10-98d1435cde04",
+                Representation.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.ADOBE_DRM,
+                True,
+            ),
         }
 
         # There are no holds.

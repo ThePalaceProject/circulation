@@ -234,6 +234,16 @@ class TestOverdriveRepresentationExtractor:
                 content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 drm_scheme=DeliveryMechanism.STREAMING_DRM,
             ),
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
+            FormatData(
+                content_type=MediaTypes.PDF_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
         }
         assert set(metadata.circulation.formats) == expected_formats
 
@@ -462,9 +472,7 @@ class TestOverdriveRepresentationExtractor:
         # delivery mechanisms.
         internal_formats = OverdriveRepresentationExtractor.internal_formats
 
-        # ebook-overdrive and audiobook-overdrive each correspond to
-        # two delivery mechanisms.
-        assert internal_formats("ebook-overdrive") == [
+        assert set(internal_formats("ebook-overdrive")) == {
             FormatData(
                 content_type=MediaTypes.EPUB_MEDIA_TYPE,
                 drm_scheme=DeliveryMechanism.ADOBE_DRM,
@@ -473,7 +481,17 @@ class TestOverdriveRepresentationExtractor:
                 content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 drm_scheme=DeliveryMechanism.STREAMING_DRM,
             ),
-        ]
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
+            FormatData(
+                content_type=MediaTypes.PDF_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
+        }
         assert internal_formats("audiobook-overdrive") == [
             FormatData(
                 content_type=MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
