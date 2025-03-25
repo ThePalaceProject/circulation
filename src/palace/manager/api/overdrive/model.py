@@ -5,9 +5,20 @@ from functools import cached_property
 from typing import Protocol, overload
 from urllib.parse import quote_plus
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
+from requests import Response
+from typing_extensions import Self
 
+from palace.manager.api.circulation_exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotRenew,
+    NoActiveLoan,
+    NoAvailableCopies,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+)
 from palace.manager.api.overdrive.constants import OVERDRIVE_PALACE_MANIFEST_FORMATS
 from palace.manager.api.overdrive.exception import (
     ExtraFieldsError,
@@ -15,7 +26,9 @@ from palace.manager.api.overdrive.exception import (
     MissingRequiredFieldError,
     MissingSubstitutionsError,
     NotFoundError,
+    OverdriveResponseException,
 )
+from palace.manager.util.log import LoggerMixin
 
 
 class BaseOverdriveModel(BaseModel):
@@ -25,6 +38,85 @@ class BaseOverdriveModel(BaseModel):
         populate_by_name=True,
         frozen=True,
     )
+
+
+class ErrorResponse(BaseOverdriveModel, LoggerMixin):
+    """
+    Typical error response we see from Overdrive.
+
+    This can take several forms, which is a little annoying, but we
+    try to handle them all here.
+    """
+
+    error_code: str = Field(
+        ..., alias="errorCode", validation_alias=AliasChoices("errorCode", "error")
+    )
+    message: str | None = Field(
+        ..., validation_alias=AliasChoices("message", "error_description")
+    )
+    token: str | None = None
+
+    @classmethod
+    def from_response(cls, response: Response) -> Self | None:
+        """
+        Parse the error response from the given response object.
+
+        :param response: The response object to parse.
+        :return: The ErrorResponse object.
+        """
+        try:
+            error = cls.model_validate_json(response.text)
+        except Exception as e:
+            cls.logger().exception(
+                f"Error parsing Overdrive response. "
+                f"Status code: {response.status_code}. Response: {response.text}. Error: {e}"
+            )
+            error = None
+        return error
+
+    @classmethod
+    def raise_from_response(
+        cls, response: Response, default_message: str | None = None
+    ) -> None:
+        """
+        Raise an appropriate exception based on the Overdrive error code
+        and message in the given response.
+        """
+        if default_message is None:
+            default_message = "Unknown Overdrive error"
+
+        error = cls.from_response(response)
+        error_code = error.error_code if error else None
+        error_message = error.message if error else None
+        error_token = error.token if error else None
+
+        if error_code == "TitleNotCheckedOut":
+            raise NoActiveLoan(error_message)
+        elif error_code == "NoCopiesAvailable":
+            raise NoAvailableCopies(error_message)
+        elif (
+            error_code == "PatronHasExceededCheckoutLimit"
+            or error_code == "PatronHasExceededCheckoutLimit_ForCPC"
+        ):
+            raise PatronLoanLimitReached(error_message)
+        elif error_code == "TitleAlreadyCheckedOut":
+            raise AlreadyCheckedOut(error_message)
+        elif error_code == "AlreadyOnWaitList":
+            # The book is already on hold.
+            raise AlreadyOnHold()
+        elif error_code == "NotWithinRenewalWindow":
+            # The patron has this book checked out and cannot yet
+            # renew their loan.
+            raise CannotRenew()
+        elif error_code == "PatronExceededHoldLimit":
+            raise PatronHoldLimitReached()
+
+        if error_message is None:
+            error_message = default_message
+
+        raise OverdriveResponseException(
+            error_message, error_code, error_token, response
+        )
 
 
 class Link(BaseOverdriveModel):

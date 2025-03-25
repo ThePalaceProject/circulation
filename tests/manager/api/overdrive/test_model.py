@@ -1,26 +1,174 @@
 import json
 from functools import partial
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 
+from palace.manager.api.circulation_exceptions import (
+    AlreadyCheckedOut,
+    AlreadyOnHold,
+    CannotRenew,
+    NoAvailableCopies,
+    PatronHoldLimitReached,
+    PatronLoanLimitReached,
+)
 from palace.manager.api.overdrive.exception import (
     ExtraFieldsError,
     InvalidFieldOptionError,
     MissingRequiredFieldError,
     MissingSubstitutionsError,
     NotFoundError,
+    OverdriveResponseException,
 )
 from palace.manager.api.overdrive.model import (
     Action,
     ActionField,
     Checkout,
     Checkouts,
+    ErrorResponse,
     Format,
     LinkTemplate,
 )
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OverdriveFilesFixture
+from tests.mocks.mock import MockRequestsResponse
+
+
+class ErrorResponseFixture:
+    def __init__(self) -> None: ...
+
+    def mock_response(
+        self, *, status_code: int = 500, content: str
+    ) -> MockRequestsResponse:
+        return MockRequestsResponse(status_code, content=content)
+
+    def mock_error(
+        self,
+        error_code: str,
+        error_message: str | None = None,
+        token: str | None = None,
+    ) -> MockRequestsResponse:
+        error_response = ErrorResponse(
+            error_code=error_code,
+            message=error_message or "An error has occurred",
+            token=token or str(uuid4()),
+        )
+        return self.mock_response(content=error_response.model_dump_json())
+
+
+@pytest.fixture
+def error_response_fixture() -> ErrorResponseFixture:
+    return ErrorResponseFixture()
+
+
+class TestErrorResponse:
+    def test_bad_data(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        error_response_fixture: ErrorResponseFixture,
+    ) -> None:
+        # With non-json data, we should just get a generic OverdriveResponseException.
+        response = error_response_fixture.mock_response(content="not json data! 💣")
+        with pytest.raises(
+            OverdriveResponseException, match="default message"
+        ) as exc_info:
+            ErrorResponse.raise_from_response(response, "default message")
+        assert exc_info.value.error_code is None
+        assert exc_info.value.error_message == "default message"
+        assert exc_info.value.response is response
+
+        # The error is logged.
+        assert "Error parsing Overdrive response" in caplog.text
+
+        # If no default message is supplied, we should get a generic message.
+        with pytest.raises(OverdriveResponseException, match="Unknown Overdrive error"):
+            ErrorResponse.raise_from_response(response)
+
+        # Malformed error document should also raise a generic OverdriveResponseException.
+        response = error_response_fixture.mock_response(
+            content=json.dumps({"errorCode": ["Complete nonsense", 12, 52]})
+        )
+        with pytest.raises(OverdriveResponseException, match="Unknown Overdrive error"):
+            ErrorResponse.raise_from_response(response)
+
+    def test_checkout_errors(
+        self, error_response_fixture: ErrorResponseFixture
+    ) -> None:
+        # Errors not specifically known become generic OverdriveResponseException exceptions.
+        with pytest.raises(OverdriveResponseException, match="Weird error") as exc_info:
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("WeirdError", "Weird error", "token")
+            )
+        assert exc_info.value.error_code == "WeirdError"
+        assert exc_info.value.error_message == "Weird error"
+        assert exc_info.value.token == "token"
+
+        # Some known errors become specific subclasses of CannotLoan.
+        with pytest.raises(PatronLoanLimitReached):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("PatronHasExceededCheckoutLimit")
+            )
+
+        with pytest.raises(PatronLoanLimitReached):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error(
+                    "PatronHasExceededCheckoutLimit_ForCPC"
+                )
+            )
+
+        with pytest.raises(NoAvailableCopies):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("NoCopiesAvailable")
+            )
+
+        with pytest.raises(AlreadyCheckedOut):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("TitleAlreadyCheckedOut")
+            )
+
+    def test_process_place_hold_response(
+        self, error_response_fixture: ErrorResponseFixture
+    ):
+        # Some error messages result in specific CirculationExceptions.
+        with pytest.raises(CannotRenew):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("NotWithinRenewalWindow")
+            )
+        with pytest.raises(PatronHoldLimitReached):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("PatronExceededHoldLimit")
+            )
+        with pytest.raises(AlreadyOnHold):
+            ErrorResponse.raise_from_response(
+                error_response_fixture.mock_error("AlreadyOnWaitList")
+            )
+
+    def test_real_errors(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        # Test an auth error, which has a slightly different format in some cases.
+        response = ErrorResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("patron_token_failed.json")
+        )
+        assert response.error_code == "unauthorized_client"
+        assert response.message == "Invalid Library Card: 123456.  Not a valid card."
+        assert response.token is None
+
+        response = ErrorResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_availability_not_found.json")
+        )
+        assert response.error_code == "NotFound"
+        assert response.message == "The requested resource could not be found."
+        assert response.token == "60a18218-0d25-42b8-80c3-0bf9df782f1b"
+
+        response = ErrorResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("lock_in_format_not_available.json")
+        )
+        assert response.error_code == "PatronTitleProcessingFailed"
+        assert (
+            response.message
+            == "The selected format may not be available for this title."
+        )
+        assert response.token == "bf3b1876-20fa-4755-a923-acc809740002"
 
 
 class TestLinkTemplate:

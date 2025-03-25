@@ -7,13 +7,8 @@ from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from requests import Response
 
-from palace.manager.api.circulation import (
-    FetchFulfillment,
-    LoanInfo,
-    RedirectFulfillment,
-)
+from palace.manager.api.circulation import FetchFulfillment, LoanInfo
 from palace.manager.api.circulation_exceptions import (
     CannotFulfill,
     CannotLoan,
@@ -29,6 +24,7 @@ from palace.manager.api.config import Configuration
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.constants import OverdriveConstants
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
+from palace.manager.api.overdrive.model import Checkout, Format, Link
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -38,7 +34,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
-    LicensePoolDeliveryMechanism,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Representation
@@ -785,110 +780,6 @@ class TestOverdriveAPI:
         assert loan.start_date is None
         assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
 
-    # def test__process_checkout_error(
-    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    # ):
-    #     # Verify that _process_checkout_error handles common API-side errors,
-    #     # making follow-up API calls if necessary.
-    #     http = overdrive_api_fixture.mock_http
-    #
-    #     class Mock(MockOverdriveAPI):
-    #         MOCK_LOAN = object()
-    #         MOCK_EXPIRATION_DATE = object()
-    #
-    #         def __init__(self, *args, **kwargs):
-    #             super().__init__(*args, **kwargs)
-    #             self.get_loan_called_with = []
-    #             self.extract_expiration_date_called_with = []
-    #
-    #         def get_loan(self, patron, pin, identifier):
-    #             self.get_loan_called_with.append((patron, pin, identifier))
-    #             return self.MOCK_LOAN
-    #
-    #         def extract_expiration_date(self, loan):
-    #             self.extract_expiration_date_called_with.append(loan)
-    #             return self.MOCK_EXPIRATION_DATE
-    #
-    #     patron = MagicMock()
-    #     pin = MagicMock()
-    #     pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
-    #     identifier = pool.identifier
-    #     api = Mock(db.session, overdrive_api_fixture.collection, http)
-    #     m = api._process_checkout_error
-    #
-    #     # Most of the error handling is pretty straightforward.
-    #     def with_error_code(code):
-    #         # Simulate the response of the Overdrive API with a given error code.
-    #         error = dict(errorCode=code)
-    #
-    #         # Handle the error.
-    #         return m(patron, pin, pool, error)
-    #
-    #     # Errors not specifically known become generic CannotLoan exceptions.
-    #     with pytest.raises(CannotLoan, match="WeirdError"):
-    #         with_error_code("WeirdError")
-    #
-    #     # If the data passed in to _process_checkout_error is not what
-    #     # the real Overdrive API would send, the error is even more
-    #     # generic.
-    #     with pytest.raises(CannotLoan, match="Unknown Error"):
-    #         m(patron, pin, pool, "Not a dict")
-    #
-    #     with pytest.raises(CannotLoan, match="Unknown Error"):
-    #         m(patron, pin, pool, dict(errorCodePresent=False))
-    #
-    #     # Some known errors become specific subclasses of CannotLoan.
-    #     with pytest.raises(PatronLoanLimitReached):
-    #         with_error_code("PatronHasExceededCheckoutLimit")
-    #
-    #     with pytest.raises(PatronLoanLimitReached):
-    #         with_error_code("PatronHasExceededCheckoutLimit_ForCPC")
-    #
-    #     # There are two cases where we need to make follow-up API
-    #     # requests as the result of a failure during the loan process.
-    #
-    #     # First, if the error is "NoCopiesAvailable", we know we have
-    #     # out-of-date availability information. We raise NoAvailableCopies
-    #     # and let the circulation API take care of handling that.
-    #     with pytest.raises(NoAvailableCopies):
-    #         with_error_code("NoCopiesAvailable")
-    #
-    #     # If the error is "TitleAlreadyCheckedOut", then the problem
-    #     # is that the patron tried to take out a new loan instead of
-    #     # fulfilling an existing loan. In this case we don't raise an
-    #     # exception at all; we fulfill the loan and return a LoanInfo
-    #     # object.
-    #     loan = with_error_code("TitleAlreadyCheckedOut")
-    #
-    #     # get_loan was called with the patron's details.
-    #     assert api.get_loan_called_with.pop() == (patron, pin, identifier.identifier)
-    #
-    #     # extract_expiration_date was called on the return value of get_loan.
-    #     assert api.extract_expiration_date_called_with.pop() == api.MOCK_LOAN
-    #
-    #     # And a LoanInfo was created with all relevant information.
-    #     assert isinstance(loan, LoanInfo)
-    #     assert loan.collection_id == pool.collection.id
-    #     assert loan.identifier_type == identifier.type
-    #     assert loan.identifier == identifier.identifier
-    #     assert loan.start_date is None
-    #     assert loan.end_date == api.MOCK_EXPIRATION_DATE
-
-    # def test_extract_expiration_date(self) -> None:
-    #     # Test the code that finds and parses a loan expiration date.
-    #     extract_expiration_date = OverdriveAPI.extract_expiration_date
-    #
-    #     # Success
-    #     assert extract_expiration_date(
-    #         dict(expires="2020-01-02T03:04:05Z")
-    #     ) == datetime_utc(2020, 1, 2, 3, 4, 5)
-    #
-    #     # Various failure cases.
-    #     assert extract_expiration_date(dict(expiresPresent=False)) is None
-    #     assert extract_expiration_date(dict(expires="Wrong date format")) is None
-    #     assert extract_expiration_date("Not a dict") is None  # type: ignore[arg-type]
-    #     assert extract_expiration_date(None) is None  # type: ignore[arg-type]
-
     def test_place_hold(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
@@ -978,73 +869,6 @@ class TestOverdriveAPI:
             emailAddress="another@addre.ss", reserveId=str(pool.identifier.identifier)
         )
 
-    # def test_process_place_hold_response(
-    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    # ):
-    #     # Verify that we can handle various error and non-error responses
-    #     # to a HOLDS_ENDPOINT request.
-    #
-    #     ignore, successful_hold = overdrive_api_fixture.sample_json(
-    #         "successful_hold.json"
-    #     )
-    #
-    #     api = overdrive_api_fixture.api
-    #
-    #     def process_error_response(message):
-    #         # Attempt to process a response that resulted in an error.
-    #         if isinstance(message, (bytes, str)):
-    #             data = dict(errorCode=message)
-    #         else:
-    #             data = message
-    #         response = MockRequestsResponse(400, content=data)
-    #         return api.process_place_hold_response(response, None, None, None)
-    #
-    #     # Some error messages result in specific CirculationExceptions.
-    #     with pytest.raises(CannotRenew):
-    #         process_error_response("NotWithinRenewalWindow")
-    #     with pytest.raises(PatronHoldLimitReached):
-    #         process_error_response("PatronExceededHoldLimit")
-    #     with pytest.raises(AlreadyOnHold):
-    #         process_error_response("AlreadyOnWaitList")
-    #
-    #     # An unrecognized error message results in a generic
-    #     # CannotHold.
-    #     with pytest.raises(CannotHold):
-    #         process_error_response("SomeOtherError")
-    #
-    #     # Same if the error message is missing or the response can't be
-    #     # processed.
-    #     with pytest.raises(CannotHold):
-    #         process_error_response(dict())
-    #     with pytest.raises(CannotHold):
-    #         process_error_response(json.dumps(None))
-    #
-    #     # Same if the error code isn't in the 4xx or 2xx range
-    #     # (which shouldn't happen in real life).
-    #     with pytest.raises(CannotHold):
-    #         api.process_place_hold_response(
-    #             MockRequestsResponse(999), MagicMock(), None, MagicMock()
-    #         )
-    #
-    #     # At this point patron and book details become important --
-    #     # we're going to return a HoldInfo object and potentially make
-    #     # another API request.
-    #     patron = db.patron()
-    #     pin = MagicMock()
-    #     licensepool = db.licensepool(edition=None)
-    #
-    #     # Finally, let's test the case where there was no hold and now
-    #     # there is.
-    #     response = MockRequestsResponse(200, content=successful_hold)
-    #     result = api.process_place_hold_response(response, patron, pin, licensepool)
-    #     assert isinstance(result, HoldInfo)
-    #     assert result.collection(db.session) == licensepool.collection
-    #     assert result.identifier == licensepool.identifier.identifier
-    #     assert result.identifier_type == licensepool.identifier.type
-    #     assert result.start_date == datetime_utc(2015, 3, 26, 11, 30, 29)
-    #     assert result.end_date is None
-    #     assert result.hold_position == 1
-
     def test_checkin(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
@@ -1115,178 +939,7 @@ class TestOverdriveAPI:
 
         # We got the loan, but we were unable to try to return it
         assert len(http.requests) == 1
-        assert "Something went wrong calling the earlyReturn action." in caplog.messages
-
-        # def assert_no_early_return():
-        #     """Call this to verify that patron_request is
-        #     called within checkin() instead of perform_early_return.
-        #     """
-        #     api.checkin(patron, pin, pool)
-        #
-        #     # perform_early_return was not called.
-        #     assert api.perform_early_return_call is None
-        #
-        #     # patron_request was called in an attempt to
-        #     # DELETE an active loan.
-        #     args, kwargs = api.patron_request_call
-        #     assert args == (patron, pin, expect_url)
-        #     assert kwargs == dict(method="DELETE")
-        #     api.patron_request_call = None
-        #
-        # # If there is no loan, there is no perform_early_return.
-        # assert_no_early_return()
-        #
-        # # Same if the loan is not fulfilled...
-        # loan, ignore = pool.loan_to(patron)
-        # assert_no_early_return()
-        #
-        # # If the loan is fulfilled but its LicensePoolDeliveryMechanism has
-        # # no DeliveryMechanism for some reason...
-        # loan.fulfillment = pool.delivery_mechanisms[0]
-        # dm = loan.fulfillment.delivery_mechanism
-        # loan.fulfillment.delivery_mechanism = None
-        # assert_no_early_return()
-        #
-        # # If the loan is fulfilled but the delivery mechanism uses DRM...
-        # loan.fulfillment.delivery_mechanism = dm
-        # assert_no_early_return()
-        #
-        # # If the loan is fulfilled with a DRM-free delivery mechanism,
-        # # perform_early_return _is_ called.
-        # dm.drm_scheme = DeliveryMechanism.NO_DRM
-        # api.checkin(patron, pin, pool)
-        #
-        # assert api.perform_early_return_call == (patron, pin, loan)
-        #
-        # # But if it fails, patron_request is _also_ called.
-        # args, kwargs = api.patron_request_call
-        # assert args == (patron, pin, expect_url)
-        # assert kwargs == dict(method="DELETE")
-        #
-        # # Finally, if the loan is fulfilled with a DRM-free delivery mechanism
-        # # and perform_early_return succeeds, patron_request_call is not
-        # # called -- the title was already returned.
-        # api.patron_request_call = None
-        # api.EARLY_RETURN_SUCCESS = True
-        # api.checkin(patron, pin, pool)
-        # assert api.perform_early_return_call == (patron, pin, loan)
-        # assert api.patron_request_call is None
-
-    # def test_perform_early_return(
-    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    # ):
-    #     http = overdrive_api_fixture.mock_http
-    #
-    #     class Mock(MockOverdriveAPI):
-    #         EARLY_RETURN_URL = "http://early-return/"
-    #
-    #         def get_fulfillment_link(self, *args):
-    #             self.get_fulfillment_link_call = args
-    #             return ("http://fulfillment/", "content/type")
-    #
-    #         def _extract_early_return_url(self, *args):
-    #             self._extract_early_return_url_call = args
-    #             return self.EARLY_RETURN_URL
-    #
-    #     api = Mock(db.session, overdrive_api_fixture.collection, http)
-    #
-    #     # This patron has a loan.
-    #     pool = db.licensepool(None)
-    #     patron = db.patron()
-    #     pin = MagicMock()
-    #     loan, ignore = pool.loan_to(patron)
-    #
-    #     # The loan has been fulfilled and now the patron wants to
-    #     # do early return.
-    #     loan.fulfillment = pool.delivery_mechanisms[0]
-    #
-    #     # Our mocked perform_early_return will make two HTTP requests.
-    #     # The first will be to the fulfill link returned by our mock
-    #     # get_fulfillment_link. The response to this request is a
-    #     # redirect that includes an early return link.
-    #     http.queue_response(
-    #         302,
-    #         other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
-    #     )
-    #
-    #     # The second HTTP request made will be to the early return
-    #     # link 'extracted' from that link by our mock
-    #     # _extract_early_return_url. The response here is a copy of
-    #     # the actual response Overdrive sends in this situation.
-    #     http.queue_response(200, content="Success")
-    #
-    #     # Do the thing.
-    #     # The title was 'returned'.
-    #     assert api.perform_early_return(patron, pin, loan, http.do_get) is True
-    #
-    #     # It worked like this:
-    #     #
-    #     # get_fulfillment_link was called with appropriate arguments.
-    #     assert api.get_fulfillment_link_call == (
-    #         patron,
-    #         pin,
-    #         pool.identifier.identifier,
-    #         "ebook-epub-adobe",
-    #     )
-    #
-    #     # The URL returned by that method was 'requested'.
-    #     assert http.requests.pop(0) == "http://fulfillment/"
-    #
-    #     # The resulting URL was passed into _extract_early_return_url.
-    #     assert api._extract_early_return_url_call == (
-    #         "http://fulfill-this-book/?or=return-early",
-    #     )
-    #
-    #     # Then the URL returned by _that_ method was 'requested'.
-    #     assert http.requests.pop(0) == "http://early-return/"
-    #
-    #     # If no early return URL can be extracted from the fulfillment URL,
-    #     # perform_early_return has no effect.
-    #     #
-    #     api._extract_early_return_url_call = None
-    #     api.EARLY_RETURN_URL = None  # type: ignore
-    #     http.queue_response(
-    #         302, other_headers=dict(location="http://fulfill-this-book/")
-    #     )
-    #
-    #     assert api.perform_early_return(patron, pin, loan, http.do_get) is False
-    #
-    #     # extract_early_return_url_call was called, but since it returned
-    #     # None, no second HTTP request was made.
-    #     assert http.requests.pop(0) == "http://fulfillment/"
-    #     assert api._extract_early_return_url_call == ("http://fulfill-this-book/",)
-    #     assert http.requests == []
-    #
-    #     # If we can't map the delivery mechanism to one of Overdrive's
-    #     # internal formats, perform_early_return has no effect.
-    #     #
-    #     loan.fulfillment.delivery_mechanism.content_type = "not-in/overdrive"
-    #     assert api.perform_early_return(patron, pin, loan, http.do_get) is False
-    #
-    #     # In this case, no HTTP requests were made at all, since we
-    #     # couldn't figure out which arguments to pass into
-    #     # get_fulfillment_link.
-    #     assert http.requests == []
-    #
-    #     # If the final attempt to hit the return URL doesn't result
-    #     # in a 200 status code, perform_early_return has no effect.
-    #     http.queue_response(
-    #         302,
-    #         other_headers=dict(location="http://fulfill-this-book/?or=return-early"),
-    #     )
-    #     http.queue_response(401, content="Unauthorized!")
-    #     assert api.perform_early_return(patron, pin, loan, http.do_get) is False
-    #
-    # def test_extract_early_return_url(self) -> None:
-    #     _extract_early_return_url = OverdriveAPI._extract_early_return_url
-    #     assert _extract_early_return_url("http://no-early-return/") is None
-    #     assert _extract_early_return_url("") is None
-    #     assert _extract_early_return_url(None) is None
-    #
-    #     # This is based on a real Overdrive early return URL.
-    #     has_early_return = "https://openepub-gk.cdn.overdrive.com/OpenEPUBStore1/1577-1/%7B5880F6D0-48AC-44DE-8BF1-FD1CE62E97A8%7DFzr418.epub?e=1518753718&loanExpirationDate=2018-03-01T17%3a12%3a33Z&loanEarlyReturnUrl=https%3a%2f%2fnotifications-ofs.contentreserve.com%2fEarlyReturn%2fnypl%2f037-1374147-00279%2f5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312%3fh%3dVgvxBQHdQxtsbgb43AH6%252bEmpni9LoffkPczNiUz7%252b10%253d&sourceId=nypl&h=j7nGk7qxE71X2ZcdLw%2bqa04jqEw%3d"
-    #     expected = "https://notifications-ofs.contentreserve.com/EarlyReturn/nypl/037-1374147-00279/5480F6E1-48F3-00DE-96C1-FD3CE32D94FD-312?h=VgvxBQHdQxtsbgb43AH6%2bEmpni9LoffkPczNiUz7%2b10%3d"
-    #     assert _extract_early_return_url(has_early_return) == expected
+        assert "Something went wrong calling the earlyReturn action." in caplog.text
 
     def test_place_hold_raises_exception_if_patron_over_hold_limit(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1352,23 +1005,6 @@ class TestOverdriveAPI:
         assert isinstance(data_json, str)
         data = json.loads(data_json)
         assert {"name": "emailAddress", "value": "foo@bar.com"} in data.get("fields")
-
-    # def test_fulfill_returns_fulfillmentinfo_if_returned_by_get_fulfillment_link(
-    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    # ):
-    #     # If get_fulfillment_link returns a Fulfillment, it is returned
-    #     # immediately and the rest of fulfill() does not run.
-    #     fulfillment = create_autospec(Fulfillment)
-    #
-    #     edition, pool = db.edition(with_license_pool=True)
-    #     api = overdrive_api_fixture.api
-    #     api.get_fulfillment_link = create_autospec(
-    #         api.get_fulfillment_link, return_value=fulfillment
-    #     )
-    #     api.internal_format = create_autospec(
-    #         api.internal_format, return_value="format"
-    #     )
-    #     assert api.fulfill(MagicMock(), MagicMock(), pool, MagicMock()) is fulfillment
 
     def test_fulfill_raises_exception_and_updates_formats_for_outdated_format(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1586,29 +1222,40 @@ class TestOverdriveAPI:
         # The delivery mechanisms have been updated.
         assert len(pool.delivery_mechanisms) == 4
         assert {
-            (lpdm.delivery_mechanism.content_type, lpdm.delivery_mechanism.drm_scheme)
+            (
+                lpdm.delivery_mechanism.content_type,
+                lpdm.delivery_mechanism.drm_scheme,
+                lpdm.available,
+            )
             for lpdm in pool.delivery_mechanisms
         } == {
             (
                 MediaTypes.EPUB_MEDIA_TYPE,
                 DeliveryMechanism.ADOBE_DRM,
-            ),
-            (
-                DeliveryMechanism.KINDLE_CONTENT_TYPE,
-                DeliveryMechanism.KINDLE_DRM,
+                True,
             ),
             (
                 DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 DeliveryMechanism.STREAMING_DRM,
+                True,
             ),
             (
-                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
+                MediaTypes.EPUB_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                False,
+            ),
+            (
+                MediaTypes.PDF_MEDIA_TYPE,
+                DeliveryMechanism.NO_DRM,
+                False,
             ),
         }
 
         # The Edition's medium has been corrected.
         assert edition.medium == Edition.BOOK_MEDIUM
+
+        # We don't know these formats for sure though. It turns out later on that different formats are
+        # what is available for this book.
 
     def test_update_availability(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -2081,108 +1728,189 @@ class TestOverdriveAPI:
                 credential, patron, "a pin"
             )
 
-    def test_cannot_fulfill_error_audiobook(
-        self,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        db: DatabaseTransactionFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        patron = db.patron()
-        patron.authorization_identifier = "barcode"
-        # use a real Overdrive API
-        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
-        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-        od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
-        od_api.get_download_link = MagicMock(return_value=None)
+    # def test_cannot_fulfill_error_audiobook(
+    #     self,
+    #     overdrive_api_fixture: OverdriveAPIFixture,
+    #     db: DatabaseTransactionFixture,
+    #     monkeypatch: pytest.MonkeyPatch,
+    # ):
+    #     patron = db.patron()
+    #     patron.authorization_identifier = "barcode"
+    #     # use a real Overdrive API
+    #     od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
+    #     od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
+    #     od_api.get_loan = MagicMock(return_value={"isFormatLockedIn": True})
+    #     od_api.get_download_link = MagicMock(return_value=None)
+    #
+    #     with pytest.raises(CannotFulfill, match="No download link for"):
+    #         od_api.get_fulfillment_link(
+    #             patron, "pin", "odid", "audiobook-overdrive-manifest"
+    #         )
+    #
+    #     # Cannot fulfill error within the get auth function
+    #     monkeypatch.delenv(
+    #         f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
+    #     )
+    #     with pytest.raises(CannotFulfill):
+    #         od_api._palace_context_basic_auth_header
 
-        with pytest.raises(CannotFulfill, match="No download link for"):
-            od_api.get_fulfillment_link(
-                patron, "pin", "odid", "audiobook-overdrive-manifest"
-            )
-
-        # Cannot fulfill error within the get auth function
-        monkeypatch.delenv(
-            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}"
-        )
-        with pytest.raises(CannotFulfill):
-            od_api._palace_context_basic_auth_header
-
-    def test_no_drm_fulfillment(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-
-        patron = db.patron()
-        work = db.work(with_license_pool=True)
-        patron.authorization_identifier = "barcode"
-
-        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
-        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-
-        # Load the mock API data
-        api_data = json.loads(
-            overdrive_api_fixture.data.sample_data("no_drm_fulfill.json")
-        )
-
-        # Mock out the flow
-        od_api.get_loan = MagicMock(return_value=api_data["loan"])
-
-        mock_lock_in_response = create_autospec(Response)
-        mock_lock_in_response.status_code = 200
-        mock_lock_in_response.json.return_value = api_data["lock_in"]
-        od_api.lock_in_format = MagicMock(return_value=mock_lock_in_response)
-
-        od_api.get_fulfillment_link_from_download_link = MagicMock(
-            return_value=(
-                "https://example.org/epub-redirect",
-                "application/epub+zip",
-            )
-        )
-
-        # Mock delivery mechanism
-        delivery_mechanism = create_autospec(LicensePoolDeliveryMechanism)
-        delivery_mechanism.delivery_mechanism = create_autospec(DeliveryMechanism)
-        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.NO_DRM
-        delivery_mechanism.delivery_mechanism.content_type = (
-            Representation.EPUB_MEDIA_TYPE
-        )
-
-        fulfill = od_api.fulfill(
-            patron, "pin", work.active_license_pool(), delivery_mechanism
-        )
-        assert isinstance(fulfill, RedirectFulfillment)
-        assert fulfill.content_type == Representation.EPUB_MEDIA_TYPE
-        assert fulfill.content_link == "https://example.org/epub-redirect"
+    # def test_no_drm_fulfillment(
+    #     self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    # ):
+    #     http = overdrive_api_fixture.mock_http
+    #     patron = db.patron()
+    #     work = db.work(with_license_pool=True)
+    #     patron.authorization_identifier = "barcode"
+    #     api = overdrive_api_fixture.api
+    #     pool = work.active_license_pool()
+    #     delivery_mechanism = pool.set_delivery_mechanism(
+    #         Representation.EPUB_MEDIA_TYPE,
+    #         DeliveryMechanism.NO_DRM,
+    #         None,
+    #     )
+    #
+    #     # Queue up the responses
+    #     overdrive_api_fixture.queue_access_token_response()
+    #     http.queue_response(200, content=overdrive_api_fixture.data.sample_data("checkout_response_no_format_locked_in.json"))
+    #     format_locked_in = Checkout.model_validate_json(overdrive_api_fixture.data.sample_data(
+    #         "checkout_response_locked_in_format.json"))
+    #     http.queue_response(200, content=format_locked_in.get_format("ebook-epub-adobe", raising=True).model_dump_json())
+    #     lock_in_response = Format(format_type="ebook-epub-adobe", links={"contentlink": Link(href="http://example.com/acsm", type="application/vnd.adobe.adept+xml")})
+    #     http.queue_response(200, content=lock_in_response.model_dump_json())
+    #
+    #     fulfill = api.fulfill(
+    #         patron, "pin", work.active_license_pool(), delivery_mechanism
+    #     )
+    #     assert isinstance(fulfill, FetchFulfillment)
+    #     assert fulfill.content_type == "application/vnd.adobe.adept+xml"
+    #     assert fulfill.content_link == "http://example.com/acsm"
 
     def test_drm_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-
+        http = overdrive_api_fixture.mock_http
         patron = db.patron()
         work = db.work(with_license_pool=True)
         patron.authorization_identifier = "barcode"
-
-        od_api = OverdriveAPI(db.session, overdrive_api_fixture.collection)
-        od_api._server_nickname = OverdriveConstants.TESTING_SERVERS
-
-        # Mock get fulfillment link
-        od_api.get_fulfillment_link = MagicMock(
-            return_value=("http://example.com/acsm", "application/vnd.adobe.adept+xml")
+        api = overdrive_api_fixture.api
+        pool = work.active_license_pool()
+        delivery_mechanism = pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            None,
         )
 
-        # Mock delivery mechanism
-        delivery_mechanism = create_autospec(LicensePoolDeliveryMechanism)
-        delivery_mechanism.delivery_mechanism = create_autospec(DeliveryMechanism)
-        delivery_mechanism.delivery_mechanism.drm_scheme = DeliveryMechanism.ADOBE_DRM
-        delivery_mechanism.delivery_mechanism.content_type = (
-            Representation.EPUB_MEDIA_TYPE
+        # Queue up the responses
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            ),
         )
+        format_locked_in = Checkout.model_validate_json(
+            overdrive_api_fixture.data.sample_data(
+                "checkout_response_locked_in_format.json"
+            )
+        )
+        http.queue_response(
+            200,
+            content=format_locked_in.get_format(
+                "ebook-epub-adobe", raising=True
+            ).model_dump_json(),
+        )
+        lock_in_response = Format(
+            format_type="ebook-epub-adobe",
+            links={
+                "contentlink": Link(
+                    href="http://example.com/acsm",
+                    type="application/vnd.adobe.adept+xml",
+                )
+            },
+        )
+        http.queue_response(200, content=lock_in_response.model_dump_json())
 
-        fulfill = od_api.fulfill(
+        fulfill = api.fulfill(
             patron, "pin", work.active_license_pool(), delivery_mechanism
         )
         assert isinstance(fulfill, FetchFulfillment)
         assert fulfill.content_type == "application/vnd.adobe.adept+xml"
         assert fulfill.content_link == "http://example.com/acsm"
+        assert len(http.requests) == 4
+
+        # Test in the case the format was already locked in
+        http.reset_mock()
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_locked_in_format.json"
+            ),
+        )
+        http.queue_response(200, content=lock_in_response.model_dump_json())
+
+        fulfill = api.fulfill(
+            patron, "pin", work.active_license_pool(), delivery_mechanism
+        )
+        assert isinstance(fulfill, FetchFulfillment)
+        assert fulfill.content_type == "application/vnd.adobe.adept+xml"
+        assert fulfill.content_link == "http://example.com/acsm"
+        assert len(http.requests) == 2
+
+        # Test some error cases
+
+        # Test when the format is not available
+        no_drm_delivery_mechanism = pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            None,
+        )
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            ),
+        )
+
+        with pytest.raises(
+            FormatNotAvailable,
+            match="book is not available in the format you requested",
+        ):
+            api.fulfill(
+                patron, "pin", work.active_license_pool(), no_drm_delivery_mechanism
+            )
+
+        # Correct link is missing in the format document
+        response = json.loads(
+            overdrive_api_fixture.data.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            )
+        )
+        del response["actions"]["format"]
+        http.queue_response(200, content=json.dumps(response))
+        with pytest.raises(CannotFulfill, match="Could not lock in format"):
+            api.fulfill(patron, "pin", work.active_license_pool(), delivery_mechanism)
+
+        # Incompatible format
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_book_fulfilled_on_kindle.json"
+            ),
+        )
+        with pytest.raises(FulfilledOnIncompatiblePlatform):
+            api.fulfill(patron, "pin", work.active_license_pool(), delivery_mechanism)
+
+        # No acceptable format
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_locked_in_format.json"
+            ),
+        )
+        with pytest.raises(NoAcceptableFormat):
+            api.fulfill(
+                patron, "pin", work.active_license_pool(), no_drm_delivery_mechanism
+            )
 
     def test_no_recently_changed_books(
         self, overdrive_api_fixture: OverdriveAPIFixture

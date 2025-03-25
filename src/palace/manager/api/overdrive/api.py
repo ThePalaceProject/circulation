@@ -4,7 +4,6 @@ import datetime
 import json
 from collections.abc import Generator, Iterable
 from functools import partial
-from json import JSONDecodeError
 from threading import RLock
 from typing import Any, NamedTuple, TypeVar, cast, overload
 from urllib.parse import urlsplit
@@ -58,13 +57,13 @@ from palace.manager.api.overdrive.exception import (
     InvalidFieldOptionError,
     OverdriveModelError,
     OverdriveResponseException,
-    exception_from_bad_response,
 )
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import (
     BaseOverdriveModel,
     Checkout,
     Checkouts,
+    ErrorResponse,
     Format,
     PatronRequestCallable,
 )
@@ -751,7 +750,7 @@ class OverdriveAPI(
                 allowed_response_codes=["2xx", 401],
             )
         except BadResponseException as e:
-            raise exception_from_bad_response(e) from e
+            ErrorResponse.raise_from_response(e.response, e.message)
         if response.status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -859,26 +858,19 @@ class OverdriveAPI(
                 allowed_response_codes=["2xx"],
             )
         except BadResponseException as e:
-            try:
-                response_data = e.response.json()
-            except JSONDecodeError:
-                self.log.exception(
-                    f"Error parsing Overdrive response. "
-                    f"Status code: {e.response.status_code}. Response: {e.response.text}"
-                )
-                response_data = {}
-            error_code = response_data.get("error")
-            error_description = response_data.get(
-                "error_description", "Failed to authenticate with Overdrive"
+            error = ErrorResponse.from_response(e.response)
+            error_code = error.error_code if error and error.error_code else "Unknown"
+            description = (
+                error.message
+                if error and error.message
+                else "Failed to authenticate with Overdrive"
             )
             debug_message = (
                 f"_refresh_patron_oauth_token failed. Status code: '{e.response.status_code}'. "
-                f"Error: '{error_code}'. Description: '{error_description}'."
+                f"Error: '{error_code}'. Description: '{description}'."
             )
             self.log.info(debug_message + f" Response: '{e.response.text}'")
-            raise PatronAuthorizationFailedException(
-                error_description, debug_message
-            ) from e
+            raise PatronAuthorizationFailedException(description, debug_message) from e
 
         self._update_credential(credential, response.json())
         return credential
@@ -975,12 +967,14 @@ class OverdriveAPI(
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
             raise NotCheckedOut()
-        except OverdriveModelError:
+        except OverdriveModelError as e:
             # Something went wrong following the link in the response from Overdrive,
             # or we could not find the link.
             # We log the error, and treat this loan like it was returned. If it wasn't
             # it may come back via patron sync.
-            self.log.exception("Something went wrong calling the earlyReturn action.")
+            self.log.exception(
+                f"Something went wrong calling the earlyReturn action. {e}"
+            )
         except OverdriveResponseException as e:
             raise CannotReturn(e.error_message) from e
 
@@ -1018,9 +1012,11 @@ class OverdriveAPI(
         if internal_format in OVERDRIVE_PALACE_MANIFEST_FORMATS:
             return self._manifest_fulfillment(patron, pin, format_info)
         else:
-            return self._download_fulfillment(patron, pin, internal_format, format_info)
+            return self._contentlink_fulfillment(
+                patron, pin, internal_format, format_info
+            )
 
-    def _download_fulfillment(
+    def _contentlink_fulfillment(
         self, patron: Patron, pin: str | None, internal_format: str, format_info: Format
     ) -> Fulfillment:
         # If this for Overdrive's streaming reader, and the link expires,

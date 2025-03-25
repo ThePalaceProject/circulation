@@ -1,18 +1,9 @@
+from __future__ import annotations
+
 from collections.abc import Iterable
-from typing import cast
 
 from requests import Response
 
-from palace.manager.api.circulation_exceptions import (
-    AlreadyCheckedOut,
-    AlreadyOnHold,
-    CannotRenew,
-    CirculationException,
-    NoActiveLoan,
-    NoAvailableCopies,
-    PatronHoldLimitReached,
-    PatronLoanLimitReached,
-)
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.problem_detail import ProblemDetail
@@ -21,8 +12,9 @@ from palace.manager.util.problem_detail import ProblemDetail
 class OverdriveResponseException(BadResponseException):
     def __init__(
         self,
-        error_code: str | None,
         error_message: str,
+        error_code: str | None,
+        token: str | None,
         response: Response,
     ) -> None:
         super().__init__(
@@ -31,6 +23,7 @@ class OverdriveResponseException(BadResponseException):
 
         self.error_code = error_code
         self.error_message = error_message
+        self.token = token
 
     @property
     def uri(self) -> str:
@@ -47,54 +40,6 @@ class OverdriveResponseException(BadResponseException):
             title="OverDrive Error",
             detail=self.error_message,
         )
-
-
-def exception_from_bad_response(
-    exc: BadResponseException,
-) -> CirculationException | OverdriveResponseException:
-    """
-    Raise an appropriate exception based on the Overdrive error code
-    returned in the response.
-    """
-
-    # Overdrive usually gives a helpful response to errors, see if the response we got
-    # contains this info.
-    response = exc.response
-    try:
-        json_data = response.json()
-    except:
-        json_data = {}
-    if not isinstance(json_data, dict):
-        json_data = {}
-
-    error_code: str | None = json_data.get("errorCode")
-    error_message: str | None = json_data.get("message")
-
-    if error_code == "TitleNotCheckedOut":
-        return NoActiveLoan(error_message)
-    elif error_code == "NoCopiesAvailable":
-        return NoAvailableCopies(error_message)
-    elif (
-        error_code == "PatronHasExceededCheckoutLimit"
-        or error_code == "PatronHasExceededCheckoutLimit_ForCPC"
-    ):
-        return PatronLoanLimitReached(error_message)
-    elif error_code == "TitleAlreadyCheckedOut":
-        return AlreadyCheckedOut(error_message)
-    elif error_code == "AlreadyOnWaitList":
-        # The book is already on hold.
-        return AlreadyOnHold()
-    elif error_code == "NotWithinRenewalWindow":
-        # The patron has this book checked out and cannot yet
-        # renew their loan.
-        return CannotRenew()
-    elif error_code == "PatronExceededHoldLimit":
-        return PatronHoldLimitReached()
-
-    if error_message is None:
-        error_message = cast(str, exc.message)
-
-    return OverdriveResponseException(error_code, error_message, response)
 
 
 class OverdriveModelError(BasePalaceException):

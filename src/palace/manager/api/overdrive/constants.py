@@ -48,4 +48,4 @@ OVERDRIVE_INCOMPATIBLE_FORMATS = {"ebook-kindle"}
 
 OVERDRIVE_STREAMING_FORMATS = {"ebook-overdrive", "audiobook-overdrive"}
 
-OVERDRIVE_OPEN_FORMATS = {"ebook-epub-open", "ebook-epub-adobe"}
+OVERDRIVE_OPEN_FORMATS = {"ebook-epub-open", "ebook-pdf-open"}
