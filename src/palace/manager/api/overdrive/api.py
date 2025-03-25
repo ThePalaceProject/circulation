@@ -54,7 +54,12 @@ from palace.manager.api.overdrive.constants import (
     OverdriveConstants,
 )
 from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
-from palace.manager.api.overdrive.exception import OverdriveResponseException
+from palace.manager.api.overdrive.exception import (
+    InvalidFieldOptionError,
+    OverdriveModelError,
+    OverdriveResponseException,
+    exception_from_bad_response,
+)
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import (
     BaseOverdriveModel,
@@ -72,11 +77,7 @@ from palace.manager.api.overdrive.settings import (
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
-from palace.manager.core.exceptions import (
-    BasePalaceException,
-    IntegrationException,
-    PalaceValueError,
-)
+from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.core.metadata_layer import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -750,7 +751,7 @@ class OverdriveAPI(
                 allowed_response_codes=["2xx", 401],
             )
         except BadResponseException as e:
-            raise OverdriveResponseException.from_bad_response(e) from e
+            raise exception_from_bad_response(e) from e
         if response.status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
@@ -974,7 +975,7 @@ class OverdriveAPI(
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
             raise NotCheckedOut()
-        except PalaceValueError:
+        except OverdriveModelError:
             # Something went wrong following the link in the response from Overdrive,
             # or we could not find the link.
             # We log the error, and treat this loan like it was returned. If it wasn't
@@ -1118,14 +1119,14 @@ class OverdriveAPI(
         )
         try:
             format_data = loan.action("format", make_request, format_type=format_type)
-        except (PalaceValueError, OverdriveResponseException) as e:
+        except InvalidFieldOptionError:
+            raise FormatNotAvailable(
+                "This book is not available in the format you requested."
+            )
+        except (OverdriveModelError, OverdriveResponseException) as e:
             self.log.exception(
                 f"Error locking in loan. Overdrive ID: {loan.reserve_id}, format: {format_type}",
             )
-            if e.message and e.message.startswith("Invalid value for field formatType"):
-                raise FormatNotAvailable(
-                    "This book is not available in the format you requested."
-                )
             raise CannotFulfill(f"Could not lock in format {format_type}") from e
         return format_data
 
