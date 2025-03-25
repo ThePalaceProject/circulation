@@ -63,7 +63,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.http import HTTP, BadResponseException
+from palace.manager.util.http import HTTP, BadResponseException, ResponseCodesT
 from palace.manager.util.log import LoggerMixin
 
 
@@ -277,7 +277,7 @@ class FetchFulfillment(UrlFulfillment, LoggerMixin):
         content_type: str | None = None,
         *,
         include_headers: dict[str, str] | None = None,
-        allowed_response_codes: list[str | int] | None = None,
+        allowed_response_codes: ResponseCodesT = None,
     ) -> None:
         super().__init__(content_link, content_type)
         self.include_headers = include_headers or {}
