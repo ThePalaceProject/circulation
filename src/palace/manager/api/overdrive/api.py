@@ -61,6 +61,7 @@ from palace.manager.api.overdrive.model import (
     Checkout,
     Checkouts,
     Format,
+    PatronRequestCallable,
 )
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.settings import (
@@ -968,7 +969,7 @@ class OverdriveAPI(
         try:
             loan = self.get_loan(patron, pin, licensepool.identifier.identifier)
             make_request = partial(self.patron_request, patron, pin)
-            loan.action("earlyReturn", make_request)
+            loan.action("early_return", make_request)
         except NoActiveLoan:
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
@@ -1028,7 +1029,7 @@ class OverdriveAPI(
             fulfill_url = flask.request.url
         else:
             fulfill_url = ""
-        download_link = format_info.template(
+        download_link = format_info.template_link(
             "downloadLink",
             errorpageurl=self.DEFAULT_ERROR_URL,
             odreadauthurl=fulfill_url,
@@ -1112,9 +1113,11 @@ class OverdriveAPI(
     def _lock_in_format(
         self, patron: Patron, pin: str | None, format_type: str, loan: Checkout
     ) -> Format:
-        make_request = partial(self.patron_request, patron, pin)
+        make_request: PatronRequestCallable[Format] = partial(
+            self.patron_request, patron, pin, response_type=Format
+        )
         try:
-            format_data = loan.action("format", make_request, formatType=format_type)
+            format_data = loan.action("format", make_request, format_type=format_type)
         except (PalaceValueError, OverdriveResponseException) as e:
             self.log.exception(
                 f"Error locking in loan. Overdrive ID: {loan.reserve_id}, format: {format_type}",
@@ -1124,7 +1127,7 @@ class OverdriveAPI(
                     "This book is not available in the format you requested."
                 )
             raise CannotFulfill(f"Could not lock in format {format_type}") from e
-        return Format.model_validate(format_data)
+        return format_data
 
     @classmethod
     def extract_data_from_hold_response(

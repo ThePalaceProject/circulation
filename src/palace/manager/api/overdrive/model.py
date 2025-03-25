@@ -10,12 +10,12 @@ from pydantic.alias_generators import to_camel
 
 from palace.manager.api.overdrive.constants import OVERDRIVE_PALACE_MANIFEST_FORMATS
 from palace.manager.api.overdrive.exception import (
-    FieldNotFoundError,
+    ExtraFieldsError,
     InvalidFieldOptionError,
     MissingRequiredFieldError,
     MissingSubstitutionsError,
+    NotFoundError,
 )
-from palace.manager.core.exceptions import PalaceValueError
 
 
 class BaseOverdriveModel(BaseModel):
@@ -85,7 +85,10 @@ class ActionField(BaseOverdriveModel):
     optional: bool = False
 
 
-class MakePatronRequestCallable(Protocol):
+T = typing.TypeVar("T", covariant=True)
+
+
+class PatronRequestCallable(Protocol, typing.Generic[T]):
     def __call__(
         self,
         *,
@@ -93,7 +96,7 @@ class MakePatronRequestCallable(Protocol):
         extra_headers: dict[str, str] | None = None,
         data: str | None = None,
         method: str | None = None,
-    ) -> dict[str, typing.Any]: ...
+    ) -> T: ...
 
 
 class Action(BaseOverdriveModel):
@@ -114,7 +117,7 @@ class Action(BaseOverdriveModel):
         Get the field with the given name.
 
         :param name: The name of the field to get. The name can be in camelCase or snake_case.
-        :param raising: If raising is True, raise a PalaceValueError exception if the
+        :param raising: If raising is True, raise a NotFoundError exception if the
                         field is not found, otherwise return None.
 
         :return: The ActionField with the given name, or None if no field is found.
@@ -124,14 +127,12 @@ class Action(BaseOverdriveModel):
             if field.name == camel_name:
                 return field
         if raising:
-            raise FieldNotFoundError(name, camel_name)
+            raise NotFoundError(camel_name, "field", {f.name for f in self.fields})
         return None
 
-    def request(
-        self, make_request: MakePatronRequestCallable, **kwargs: str
-    ) -> dict[str, typing.Any]:
+    def request(self, make_request: PatronRequestCallable[T], **kwargs: str) -> T:
         """
-        Make an HTTP request with the parameters and method specified in the action.
+        Make a HTTP request with the parameters and method specified in the action.
 
         The request data is constructed from the fields in the action, in the format
         that Overdrive expects.
@@ -163,6 +164,9 @@ class Action(BaseOverdriveModel):
                 raise InvalidFieldOptionError(field.name, value, field.options)
             field_data[field.name] = value
 
+        if camel_kwargs:
+            raise ExtraFieldsError(camel_kwargs.keys())
+
         if field_data:
             data = json.dumps(
                 {
@@ -188,13 +192,22 @@ class Format(BaseOverdriveModel):
         default_factory=dict, alias="linkTemplates"
     )
 
-    def template(self, name: str, **kwargs: str) -> str:
-        if name not in self.link_templates:
-            raise PalaceValueError(
-                f"Unknown link template: {name}. "
-                f"Available templates: {', '.join(self.link_templates.keys())}"
-            )
-        return self.link_templates[name].template(**kwargs)
+    def template_link(self, name: str, **kwargs: str) -> str:
+        """
+        Template the LinkTemplate with the given name.
+
+        :raises LinkTemplateNotFoundError: If the link template is not found.
+
+        :param name: Name of the link template. Can be given as snake_case or camelCase.
+        :param kwargs: Substitutions to insert into the link template. These will be passed
+                       to the LinkTemplate.template method.
+
+        :return: The templated link.
+        """
+        camel_name = to_camel(name)
+        if camel_name not in self.link_templates:
+            raise NotFoundError(camel_name, "link template", self.link_templates.keys())
+        return self.link_templates[camel_name].template(**kwargs)
 
 
 class Checkout(BaseOverdriveModel):
@@ -211,7 +224,26 @@ class Checkout(BaseOverdriveModel):
     checkout_date: AwareDatetime | None = Field(None, alias="checkoutDate")
     formats: list[Format] = Field(default_factory=list)
 
-    def get_format(self, format_type: str) -> Format | None:
+    @overload
+    def get_format(self, format_type: str, raising: typing.Literal[True]) -> Format: ...
+
+    @overload
+    def get_format(self, format_type: str, raising: bool = ...) -> Format | None: ...
+
+    def get_format(self, format_type: str, raising: bool = False) -> Format | None:
+        """
+        Get the format data for the given format type.
+
+        If the format type is an internal format, it will be mapped to the public format type
+        before being used to search for the format data.
+
+        :param format_type: The format type to search for.
+        :param raising: If raising is True, raise a NotFoundError exception if the
+                        format is not found, otherwise return None.
+
+        :return: The Format for the given format type, or None if no format is found.
+        """
+
         # If the format type is an internal format, we need to map it to the
         # public format type that Overdrive uses.
         if format_type in OVERDRIVE_PALACE_MANIFEST_FORMATS:
@@ -220,10 +252,24 @@ class Checkout(BaseOverdriveModel):
         for format_data in self.formats:
             if format_data.format_type == format_type:
                 return format_data
+
+        if raising:
+            raise NotFoundError(
+                format_type, "format", {f.format_type for f in self.formats}
+            )
+
         return None
 
     @cached_property
     def supported_formats(self) -> set[str]:
+        """
+        Get the set of formats that are available for this checkout.
+
+        This includes internal formats, public formats, and any formats that can be locked in.
+
+        :return: The set of formats available for this checkout.
+        """
+
         # All the formats listed as available in the checkout
         formats = {f.format_type for f in self.formats}
 
@@ -243,14 +289,22 @@ class Checkout(BaseOverdriveModel):
         return formats
 
     def action(
-        self, name: str, make_request: MakePatronRequestCallable, **kwargs: str
-    ) -> dict[str, typing.Any]:
-        if name not in self.actions:
-            raise PalaceValueError(
-                f"Action {name} is not available for this checkout. "
-                f"Available actions: {', '.join(self.actions.keys())}"
-            )
-        return self.actions[name].call(make_request, **kwargs)
+        self, name: str, make_request: PatronRequestCallable[T], **kwargs: str
+    ) -> T:
+        """
+        Make a HTTP request to the action with the specified name.
+
+        :param name: The name of the action to request, in snake_case or camelCase.
+        :param make_request: The callable used to make the HTTP request.
+        :param kwargs: The values to provide in the request for fields in the action.
+
+        :return: The response from the HTTP request as returned by make_request.
+        """
+
+        camel_name = to_camel(name)
+        if camel_name not in self.actions:
+            raise NotFoundError(camel_name, "action", self.actions.keys())
+        return self.actions[camel_name].request(make_request, **kwargs)
 
 
 class Checkouts(BaseOverdriveModel):

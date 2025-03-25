@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import cast
 
 from requests import Response
@@ -13,7 +14,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -97,7 +98,15 @@ class OverdriveResponseException(BadResponseException):
         return cls(error_code, error_message, response)
 
 
-class MissingSubstitutionsError(PalaceValueError):
+class OverdriveModelError(BasePalaceException):
+    """
+    Raised when there is an error in one of our Overdrive models.
+    """
+
+    ...
+
+
+class MissingSubstitutionsError(OverdriveModelError):
     """
     Raised when templating a LinkTemplate, and some of the required
     substitutions are missing.
@@ -107,33 +116,50 @@ class MissingSubstitutionsError(PalaceValueError):
         super().__init__(f"Missing substitutions: {', '.join(sorted(missing))}")
 
 
-class FieldNotFoundError(PalaceValueError):
-    """
-    Raised when a field is not found in an Action.
-    """
-
-    def __init__(self, name: str, camel_name: str | None) -> None:
-        message = f"No field found with name: {name}"
-        if camel_name and name != camel_name:
-            message += f" ({camel_name})"
-        super().__init__(message)
-
-
-class MissingRequiredFieldError(PalaceValueError):
+class MissingRequiredFieldError(OverdriveModelError):
     """
     Raised when a required field is missing in an Action.
     """
 
     def __init__(self, name: str) -> None:
-        super().__init__(f"Missing required field: {name}")
+        super().__init__(f"Action missing required field: {name}")
 
 
-class InvalidFieldOptionError(PalaceValueError):
+class InvalidFieldOptionError(OverdriveModelError):
     """
     Raised when a field in an Action has an invalid value.
     """
 
     def __init__(self, field: str, value: str, options: set[str]) -> None:
         super().__init__(
-            f"Invalid value for field {field}: {value}. Valid options: {', '.join(sorted(options))}"
+            f"Invalid value for action field {field}: {value}. Valid options: {', '.join(sorted(options))}"
         )
+
+
+class ExtraFieldsError(OverdriveModelError):
+    """
+    Raised when an action is called with a field that is not
+    defined in the action.
+    """
+
+    def __init__(self, fields: Iterable[str]) -> None:
+        field_str = ", ".join(sorted(fields))
+        super().__init__(f"Extra fields for action: {field_str}")
+
+
+class NotFoundError(OverdriveModelError):
+    """
+    Raised when a field / value is not found in the Overdrive API response models.
+    """
+
+    def __init__(
+        self, name: str, type: str, available: Iterable[str] | None = None
+    ) -> None:
+        message = f"{type.capitalize()} not found: {name}."
+        if available:
+            sorted_available = sorted(available)
+            message += (
+                f" Available {type}{'s' if len(sorted_available) != 1 else ''}: "
+                f"{', '.join(sorted(available))}"
+            )
+        super().__init__(message)
