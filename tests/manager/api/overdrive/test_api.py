@@ -735,9 +735,12 @@ class TestOverdriveAPI:
         endpoint = http.requests.pop()
         assert endpoint.endswith("/me/checkouts")
         args = http.requests_args.pop()
-        headers = args.kwargs.pop("headers")
+        headers = args["headers"]
         assert headers.get("Content-Type") == "application/json"
-        assert json.loads(args.kwargs.pop("data")) == {
+
+        data = args["data"]
+        assert isinstance(data, str)
+        assert json.loads(data) == {
             "fields": [{"name": "reserveId", "value": pool.identifier.identifier}]
         }
 
@@ -1316,7 +1319,9 @@ class TestOverdriveAPI:
         # And when we placed it on hold, we passed in foo@bar.com
         # as the email address -- not notifications@example.com.
         args = http.requests_args.pop()
-        data = json.loads(args.kwargs["data"])
+        data_json = args["data"]
+        assert isinstance(data_json, str)
+        data = json.loads(data_json)
         assert {"name": "emailAddress", "value": "foo@bar.com"} in data.get("fields")
 
     def test_fulfill_returns_fulfillmentinfo_if_returned_by_get_fulfillment_link(
@@ -2005,13 +2010,15 @@ class TestOverdriveAPI:
 
         with_pin, without_pin = http.requests_args
 
-        payload = with_pin.kwargs["payload"]
+        payload = with_pin["data"]
+        assert isinstance(payload, dict)
         assert payload["username"] == "barcode"
         assert payload["scope"] == expect_scope
         assert payload["password"] == "a pin"
         assert "password_required" not in payload
 
-        payload = without_pin.kwargs["payload"]
+        payload = without_pin["data"]
+        assert isinstance(payload, dict)
         assert payload["username"] == "barcode"
         assert payload["scope"] == expect_scope
         assert payload["password_required"] == "false"

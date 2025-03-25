@@ -40,7 +40,7 @@ class MockOverdriveAPI(OverdriveAPI):
     ) -> Response:
         url = self.endpoint(url)
         return self.mock_http.do_request(
-            "POST", url, payload=payload, headers=headers, **kwargs
+            "POST", url, data=payload, headers=headers, **kwargs
         )
 
     @override
