@@ -211,7 +211,9 @@ class Axis360API(
     def description(cls) -> str:
         return ""
 
-    def __init__(self, _db: Session, collection: Collection) -> None:
+    def __init__(
+        self, _db: Session, collection: Collection, bearer_token: str = None
+    ) -> None:
         super().__init__(_db, collection)
         settings = self.settings
         self.library_id = settings.external_account_id
@@ -229,7 +231,7 @@ class Axis360API(
         if not self.library_id or not self.username or not self.password:
             raise CannotLoadConfiguration("Axis 360 configuration is incomplete.")
 
-        self._cached_bearer_token: str | None = None
+        self._cached_bearer_token: str | None = bearer_token
         self.verify_certificate: bool = (
             settings.verify_certificate
             if settings.verify_certificate is not None
