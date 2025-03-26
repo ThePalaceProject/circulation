@@ -508,9 +508,9 @@ class TestCheckouts:
             checkouts.links["self"].href
             == "http://patron.api.overdrive.com/v1/patrons/me/checkouts/"
         )
-        assert checkouts.total_items == 4
-        assert checkouts.total_checkouts == 4
-        assert len(checkouts.checkouts) == 4
+        assert checkouts.total_items == 5
+        assert checkouts.total_checkouts == 5
+        assert len(checkouts.checkouts) == 5
 
         checkouts = Checkouts.model_validate_json(
             overdrive_files_fixture.sample_data(
