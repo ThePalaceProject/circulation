@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from celery import shared_task
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, distinct, func, select
 from sqlalchemy.orm import Session, defer, lazyload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
@@ -12,7 +12,12 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
+from palace.manager.sqlalchemy.model.licensing import (
+    License,
+    LicensePool,
+    LicenseStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -237,3 +242,140 @@ def loan_reaper(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_unassociated_loans(task: Task) -> None:
+
+    reap_unassociated_loans_or_holds(task, Loan)
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_unassociated_holds(task: Task) -> None:
+    reap_unassociated_loans_or_holds(task, Hold)
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_loans_in_inactive_collections(task: Task) -> None:
+
+    reap_loans_or_holds_in_inactive_collections(task, Loan)
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_holds_in_inactive_collections(task: Task) -> None:
+    reap_loans_or_holds_in_inactive_collections(task, Hold)
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_loans_with_unavailable_license_pools(task: Task) -> None:
+
+    reap_loans_and_holds_with_unavailable_license_pools(task, Loan)
+
+
+@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+def reap_holds_with_unavailable_license_pools(task: Task) -> None:
+    reap_loans_and_holds_with_unavailable_license_pools(task, Hold)
+
+
+def reap_unassociated_loans_or_holds(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete the loans or holds associated that are no longer available to the patron
+    because the patron's library is no longer associated with the collection which the loan or hold is associated with
+    """
+
+    # query includes all library and collection associations
+    coll_lib_sub = (
+        select(IntegrationLibraryConfiguration.library_id, Collection.id)
+        .join(
+            Collection,
+            Collection.integration_configuration_id
+            == IntegrationLibraryConfiguration.parent_id,
+        )
+        .subquery("coll_lib")
+    )
+
+    # query all loans or holds where the patron's library is not associated with the loan or hold licensepools collection.
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool)
+        .join(Patron)
+        .outerjoin(
+            coll_lib_sub,
+            coll_lib_sub.c.id == LicensePool.collection_id,
+            coll_lib_sub.c.library_id == Patron.library_id,
+        )
+        .where(coll_lib_sub.c.library_id == None)
+        .subquery("loans_with_unassociated_library")
+    )
+
+    # delete all loans or holds matching the ids to delete query.
+    deletion_query = delete(deletion_class).where(
+        deletion_class.id.not_in(ids_to_delete)
+    )
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log(
+        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because the patron's library was no longer associated with the collection."
+    )
+
+
+def reap_loans_or_holds_in_inactive_collections(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete the loans or holds associated with inactive collections
+    """
+    active_colls = Collection.active_collections_filter().subquery("active_collections")
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool)
+        .where(LicensePool.collection_id.not_in(active_colls.c.id))
+        .subquery()
+    )
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log(
+        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because the associated collection is inactive."
+    )
+
+
+def reap_loans_and_holds_with_unavailable_license_pools(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete the loans or holds where the associated licensepool has no licenses with status == "available" or
+    or the license_pool.licenses_owned == 0 and license_pool.licenses_available == 0
+    """
+    avail_license_pools = select(
+        distinct(License.license_pool_id)
+        .where(License.status == LicenseStatus.available)
+        .subquery("available_license_pools")
+    )
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool)
+        .where(
+            or_(
+                LicensePool.id.not_in(avail_license_pools.c.license_pool_id),
+                and_(
+                    LicensePool.licenses_owned == 0, LicensePool.licenses_available == 0
+                ),
+            )
+        )
+        .subquery()
+    )
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log(
+        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because there are no available licenses."
+    )

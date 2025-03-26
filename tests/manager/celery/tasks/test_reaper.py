@@ -11,6 +11,7 @@ from palace.manager.celery.tasks.reaper import (
     loan_reaper,
     measurement_reaper,
     patron_reaper,
+    reap_unassociated_loans,
     work_reaper,
 )
 from palace.manager.service.logging.configuration import LogLevel
@@ -535,3 +536,16 @@ def test_loan_reaper(
 
     # The reaper logged its work.
     assert "Deleted 2 expired loans." in caplog.messages
+
+
+def test_reap_unassociated_loans(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    # create an associated loan
+    # run reaper and verify that it is not deleted.
+    # remove the association
+    # run the reapoer and verify that it is deleted.
+
+    reap_unassociated_loans.delay().wait()

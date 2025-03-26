@@ -57,8 +57,11 @@ from palace.manager.sqlalchemy.model.licensing import (
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicenseStatus,
+    RightsStatus,
 )
-from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
+from palace.manager.sqlalchemy.model.patron import Hold, Loan, LoanAndHoldMixin, Patron
+from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException, ResponseCodesT
@@ -794,20 +797,22 @@ class PatronActivityCirculationAPI(
         self.sync_holds(patron, remote_holds, local_holds)
         self.delete_loans_and_holds_no_longer_available(patron)
 
-    def delete_loans_and_holds_no_longer_available(self, patron: Patron) -> None:
+    def delete_unavailable_loans_or_holds_available(
+        self, loans_and_holds: list[LoanAndHoldMixin]
+    ) -> None:
         """
         Delete the loans an holds associated with the patron that are no longer available to the patron
         due to one or more of the following conditions:
         1. The library is no longer associated with the collection which the loan or hold is associated with
         2. The collection associated with the loan or hold is no longer active
-        3. The license pool is (open access or unlimited use)  AND there is no associated delivery mechanism.
+        3. The license pool does not have at least one license with the "available" status
+        4. The license pool has zero owned licenses and zero available licenses.
 
         """
-        # get all loans and holds for patron
-        loans_and_holds: list[Loan | Hold] = patron.loans + patron.holds
-        # for each loan delete if any of the following are true:
-        library = patron.library
+
         for loan_or_hold in loans_and_holds:
+            # for each loan delete if any of the following are true:
+            library = loan_or_hold.patron.library
             remove = False
             collection: Collection = loan_or_hold.license_pool.collection
             license_pool = loan_or_hold.license_pool
@@ -835,13 +840,25 @@ class PatronActivityCirculationAPI(
                 )
                 remove = True
 
-            # the associated license pool is (unlimited or open access) AND unfulfillable
-            if (
-                license_pool.open_access or license_pool.unlimited_access
-            ) and not license_pool.has_fulfillable_delivery_mechanism:
+            # there is no available license in the license pool
+            has_at_least_one_available_license = any(
+                license.status == LicenseStatus.available
+                for license in loan_or_hold.license_pool.licenses
+            )
+            if not has_at_least_one_available_license:
                 log_message += (
-                    f"\n  * the license pool (id={license_pool.id}) "
-                    f"is open/or unlimited access but is not fulfillable."
+                    f'\n  * the license pool (id={loan_or_hold.license_pool.id}) associated with edition("{title}") '
+                    f'has no licenses with an "available" status'
+                )
+                remove = True
+
+            if (
+                license_pool.licenses_owned == 0
+                and license_pool.licenses_available == 0
+            ):
+                log_message += (
+                    f'\n  * the license pool (id={loan_or_hold.license_pool.id}) associated with edition("{title}") '
+                    f"owns no licenses and has no available_licenses"
                 )
                 remove = True
 
