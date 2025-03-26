@@ -829,6 +829,7 @@ class TestOverdriveAPI:
         pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
 
         # Mock out some functions
+        # TODO: Replace this test with one that doesn't rely so heavily on mocking.
         mock_fill_out_form = create_autospec(
             api.fill_out_form, return_value=("headers", "filled-out form")
         )
