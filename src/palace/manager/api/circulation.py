@@ -869,6 +869,62 @@ class PatronActivityCirculationAPI(
 
         self.sync_loans(patron, remote_loans, local_loans)
         self.sync_holds(patron, remote_holds, local_holds)
+        self.delete_loans_and_holds_no_longer_available(patron)
+
+    def delete_loans_and_holds_no_longer_available(self, patron: Patron) -> None:
+        """
+        Delete the loans an holds associated with the patron that are no longer available to the patron
+        due to one or more of the following conditions:
+        1. The library is no longer associated with the collection which the loan or hold is associated with
+        2. The collection associated with the loan or hold is no longer active
+        3. The license pool is (open access or unlimited use)  AND there is no associated delivery mechanism.
+
+        """
+        # get all loans and holds for patron
+        loans_and_holds: list[Loan | Hold] = patron.loans + patron.holds
+        # for each loan delete if any of the following are true:
+        library = patron.library
+        for loan_or_hold in loans_and_holds:
+            remove = False
+            collection: Collection = loan_or_hold.license_pool.collection
+            license_pool = loan_or_hold.license_pool
+            if license_pool.presentation_edition:
+                title = license_pool.presentation_edition.title
+            else:
+                title = "[no title available]"
+
+            log_message = (
+                f'Removing {loan_or_hold} (title="{title}") from patron(uuid={patron.uuid}) '
+                f"for the following reasons: "
+            )
+            # the collection is no longer associated with the patron's library
+            if library not in collection.associated_libraries:
+                log_message += (
+                    f'\n  * the patron\'s library ("{library.name}") '
+                    f'is no longer associated with the collection ("{collection.name}")'
+                )
+                remove = True
+
+            # the collection associated with this loan or hold is not active
+            if not collection.is_active:
+                log_message += (
+                    f'\n  * the collection("{collection.name}") is not currently active'
+                )
+                remove = True
+
+            # the associated license pool is (unlimited or open access) AND unfulfillable
+            if (
+                license_pool.open_access or license_pool.unlimited_access
+            ) and not license_pool.has_fulfillable_delivery_mechanism:
+                log_message += (
+                    f"\n  * the license pool (id={license_pool.id}) "
+                    f"is open/or unlimited access but is not fulfillable."
+                )
+                remove = True
+
+            if remove:
+                self.log.info(log_message)
+                self._db.delete(loan_or_hold)
 
 
 class CirculationAPI(LoggerMixin):
