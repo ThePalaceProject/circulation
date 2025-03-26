@@ -1041,6 +1041,8 @@ class OverdriveAPI(
         result = download_response.links["contentlink"]
         url = result.href
         media_type = result.type
+        # TODO: we should return a different type of fulfillment for streaming formats
+        #   so we don't have to override this in the circulation API later.
         if internal_format in OVERDRIVE_STREAMING_FORMATS:
             media_type += DeliveryMechanism.STREAMING_PROFILE
         # In case we are a non-drm asset, we should just redirect the client to the asset directly

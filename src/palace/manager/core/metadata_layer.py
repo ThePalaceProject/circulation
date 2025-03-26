@@ -578,6 +578,7 @@ class FormatData(LoggerMixin):
         data_source: DataSource,
         identifier: Identifier,
         resource: Resource | None = None,
+        default_rights_uri: str | None = None,
     ) -> LicensePoolDeliveryMechanism:
         """Apply this FormatData. Creating a new LicensePoolDeliveryMechanism
         if necessary.
@@ -588,16 +589,18 @@ class FormatData(LoggerMixin):
         :param identifier: An Identifier identifying the title.
         :param resource: A Resource representing the book itself in
             a freely redistributable form, if any.
+        :param default_rights_uri: The default rights URI to use if none is
+            specified in the FormatData.
 
         :return: A LicensePoolDeliveryMechanism.
         """
         return LicensePoolDeliveryMechanism.set(
             data_source,
             identifier,
+            rights_uri=self.rights_uri or default_rights_uri,
             resource=resource,
             content_type=self.content_type,
             drm_scheme=self.drm_scheme,
-            rights_uri=self.rights_uri,
             available=self.available,
             update_available=self.update_available,
             db=db,
@@ -1132,6 +1135,7 @@ class CirculationData(LoggerMixin):
                 data_source,
                 identifier,
                 resource,
+                default_rights_uri=self.default_rights_uri,
             )
             new_lpdms.append(lpdm)
 
