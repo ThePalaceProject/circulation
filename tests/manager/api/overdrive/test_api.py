@@ -27,6 +27,7 @@ from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.constants import OverdriveConstants
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import Checkout, Format, Link
+from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -2101,27 +2102,140 @@ class TestSyncBookshelf:
         overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
         overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
 
+        # Before the sync, we don't have any LicensePools or Identifiers.
+        assert db.session.query(LicensePool).count() == 0
+        assert db.session.query(Identifier).count() == 0
+
         patron = db.patron()
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
 
-        # All four loans in the sample data were created.
+        # Loans were created for the four books on loan that
+        # had formats we are able to fulfill. One book is excluded
+        # because it is locked to ebook-pdf-adobe, which we cannot
+        # fulfill.
         assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
 
         # We have created previously unknown LicensePools and
         # Identifiers.
+        assert db.session.query(LicensePool).count() == 4
+        assert db.session.query(Identifier).count() == 4
         assert {
             str(loan.license_pool.identifier.identifier) for loan in loans.values()
         } == {
+            "a4466636-34f5-495a-92ee-3a9c701f46cf",
             "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
             "99409f99-45a5-4238-9e10-98d1435cde04",
-            "993e4b33-823c-40af-8f61-cac54e1cba5d",
             "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
         }
 
-        # We have recorded a new DeliveryMechanism associated with
-        # each loan.
-        mechanisms = {
+        # We created LicensePools for the books on loan. And these LicensePools
+        # accurately reflect the delivery mechanisms that are available for the
+        # books.
+        assert {
+            lp.identifier.identifier: {
+                (
+                    dm.delivery_mechanism.content_type,
+                    dm.delivery_mechanism.drm_scheme,
+                    dm.available,
+                )
+                for dm in lp.delivery_mechanisms
+            }
+            for lp in {loan.license_pool for loan in loans.values()}
+        } == {
+            "a4466636-34f5-495a-92ee-3a9c701f46cf": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    False,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    True,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    False,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    True,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "a5a3d737-34d4-4d69-aad8-eba4e46019a3": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "99409f99-45a5-4238-9e10-98d1435cde04": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+        }
+
+        # Three of the loans are "locked in" to a specific format, for those
+        # loans, we set a delivery mechanism on the loan.
+        assert {
             (
                 loan.license_pool.identifier.identifier,
                 loan.fulfillment.delivery_mechanism.content_type,
@@ -2130,8 +2244,7 @@ class TestSyncBookshelf:
             )
             for loan in loans.values()
             if loan.fulfillment
-        }
-        assert mechanisms == {
+        } == {
             (
                 "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
                 Representation.EPUB_MEDIA_TYPE,
@@ -2161,6 +2274,146 @@ class TestSyncBookshelf:
         loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
         assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
+
+        assert {
+            lp.identifier.identifier: {
+                (
+                    dm.delivery_mechanism.content_type,
+                    dm.delivery_mechanism.drm_scheme,
+                    dm.available,
+                )
+                for dm in lp.delivery_mechanisms
+            }
+            for lp in {loan.license_pool for loan in loans.values()}
+        } == {
+            "a4466636-34f5-495a-92ee-3a9c701f46cf": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    False,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    True,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    False,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    True,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "a5a3d737-34d4-4d69-aad8-eba4e46019a3": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+            "99409f99-45a5-4238-9e10-98d1435cde04": {
+                (
+                    DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                    DeliveryMechanism.STREAMING_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.ADOBE_DRM,
+                    True,
+                ),
+                (
+                    Representation.EPUB_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+                (
+                    Representation.PDF_MEDIA_TYPE,
+                    DeliveryMechanism.NO_DRM,
+                    False,
+                ),
+            },
+        }
+
+    def test_sync_patron_activity_updated_inaccurate_delivery_mechanisms(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        session = db.session
+        data_source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
+        identifiers = {
+            db.identifier(Identifier.OVERDRIVE_ID, ident)
+            for ident in {
+                "a4466636-34f5-495a-92ee-3a9c701f46cf",
+                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                "99409f99-45a5-4238-9e10-98d1435cde04",
+                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+            }
+        }
+        patron = db.patron()
+
+        # Generic format information we use for ebook-overdrive, when we don't know any more
+        # detailed information.
+        od_formats = OverdriveRepresentationExtractor.internal_formats(
+            "ebook-overdrive"
+        )
+
+        # Create the format information for each identifier
+        for identifier in identifiers:
+            for format in od_formats:
+                format.apply(session, data_source, identifier)
+
+        # Queue up the API responses
+        loans_data = overdrive_api_fixture.data.sample_data(
+            "shelf_with_some_checked_out_books.json"
+        )
+        holds_data = overdrive_api_fixture.data.sample_data("no_holds.json")
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
+
+        # Run the activity sync
+        loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
 
     def test_sync_patron_activity_removes_loans_not_present_on_remote(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

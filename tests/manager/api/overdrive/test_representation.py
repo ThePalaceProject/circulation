@@ -229,20 +229,26 @@ class TestOverdriveRepresentationExtractor:
             FormatData(
                 content_type=MediaTypes.EPUB_MEDIA_TYPE,
                 drm_scheme=DeliveryMechanism.ADOBE_DRM,
+                available=True,
+                update_available=False,
             ),
             FormatData(
                 content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
                 drm_scheme=DeliveryMechanism.STREAMING_DRM,
+                available=True,
+                update_available=False,
             ),
             FormatData(
                 content_type=MediaTypes.EPUB_MEDIA_TYPE,
                 drm_scheme=DeliveryMechanism.NO_DRM,
                 available=False,
+                update_available=False,
             ),
             FormatData(
                 content_type=MediaTypes.PDF_MEDIA_TYPE,
                 drm_scheme=DeliveryMechanism.NO_DRM,
                 available=False,
+                update_available=False,
             ),
         }
         assert set(metadata.circulation.formats) == expected_formats

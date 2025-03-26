@@ -17,7 +17,6 @@ from typing_extensions import Unpack
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationInternalFormatsMixin,
-    DeliveryMechanismInfo,
     FetchFulfillment,
     Fulfillment,
     HoldInfo,
@@ -77,7 +76,7 @@ from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
-from palace.manager.core.metadata_layer import ReplacementPolicy
+from palace.manager.core.metadata_layer import FormatData, ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -90,6 +89,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.resource import Representation
@@ -133,6 +133,10 @@ class OverdriveAPI(
         (streaming_text, streaming_drm): "ebook-overdrive",
         (streaming_audio, streaming_drm): "audiobook-overdrive",
         (overdrive_audiobook_manifest, libby_drm): "audiobook-overdrive-manifest",
+    }
+
+    internal_format_to_delivery_mechanism = {
+        v: k for k, v in delivery_mechanism_to_internal_format.items()
     }
 
     # TODO: This is a terrible choice but this URL should never be
@@ -1230,13 +1234,6 @@ class OverdriveAPI(
             )
 
     @classmethod
-    def _internal_format_to_delivery_mechanism(
-        cls, internal_format: str
-    ) -> tuple[str | None, str | None]:
-        lookup = {v: k for k, v in cls.delivery_mechanism_to_internal_format.items()}
-        return lookup[internal_format]
-
-    @classmethod
     def process_checkout_data(
         cls, checkout: Checkout, collection_id: int
     ) -> LoanInfo | None:
@@ -1252,30 +1249,70 @@ class OverdriveAPI(
 
         usable_formats = checkout.supported_formats & OVERDRIVE_FORMATS
 
-        if not usable_formats:
+        if (
+            not usable_formats
+            or checkout.locked_in
+            and not usable_formats & OVERDRIVE_LOCK_IN_FORMATS
+        ):
             # Either this book is not available in any format readable
             # by the default client, or the patron previously chose to
             # fulfill it in a format not readable by the default
-            # client. Either way, we cannot fulfill this loan and we
+            # client. Either way, we cannot fulfill this loan, and we
             # shouldn't show it in the list.
             return None
 
         locked_to = None
         if checkout.locked_in:
-            locked_format = usable_formats & OVERDRIVE_LOCK_IN_FORMATS
-            if len(locked_format) == 1:
-                content_type, drm_scheme = cls._internal_format_to_delivery_mechanism(
-                    locked_format.pop()
+            locked_formats = list(usable_formats & OVERDRIVE_LOCK_IN_FORMATS)
+            if len(locked_formats) == 1:
+                [locked_format] = locked_formats
+                if locked_format in cls.internal_format_to_delivery_mechanism:
+                    content_type, drm_scheme = (
+                        cls.internal_format_to_delivery_mechanism[locked_format]
+                    )
+                    locked_to = FormatData(
+                        content_type=content_type,
+                        drm_scheme=drm_scheme,
+                        rights_uri=RightsStatus.IN_COPYRIGHT,
+                        available=True,
+                        update_available=True,
+                    )
+
+        available_formats = None
+        if "ebook-overdrive" in usable_formats:
+            # Overdrive ebooks don't give us useful format information until we have a loan, so
+            # we take this opportunity to get information about what formats are available. And
+            # include this with the LoanInfo, so that the licensepool can be updated with more
+            # accurate format information.
+
+            # Get all the formats that we create by default for an overdrive ebook. We start them
+            # all with their availability set to False, then update the availability of the formats that
+            # we now know are available.
+            internal_formats = {}
+            for format_data in OverdriveRepresentationExtractor.internal_formats(
+                "ebook-overdrive"
+            ):
+                internal_formats[(format_data.content_type, format_data.drm_scheme)] = (
+                    False
                 )
-                locked_to = DeliveryMechanismInfo(
+
+            for overdrive_format in usable_formats:
+                if overdrive_format in cls.internal_format_to_delivery_mechanism:
+                    content_type, drm_scheme = (
+                        cls.internal_format_to_delivery_mechanism[overdrive_format]
+                    )
+                    internal_formats[(content_type, drm_scheme)] = True
+
+            available_formats = {
+                FormatData(
                     content_type=content_type,
                     drm_scheme=drm_scheme,
+                    rights_uri=RightsStatus.IN_COPYRIGHT,
+                    available=available,
+                    update_available=True,
                 )
-        else:
-            # At this point we have an idea of the formats available, which we might not know
-            # otherwise, so we should update the license pool.
-            # TODO: Figure out DeliveryMechanismInfo in this new world
-            ...
+                for (content_type, drm_scheme), available in internal_formats.items()
+            }
 
         return LoanInfo(
             collection_id=collection_id,
@@ -1284,6 +1321,7 @@ class OverdriveAPI(
             start_date=start,
             end_date=end,
             locked_to=locked_to,
+            available_formats=available_formats,
         )
 
     def default_notification_email_address(

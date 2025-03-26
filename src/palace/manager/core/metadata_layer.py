@@ -6,6 +6,7 @@ from sqlalchemy import Boolean
 from sqlalchemy.orm import Query
 from sqlalchemy.sql import ColumnElement
 
+from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.util.sentinel import SentinelType
 
 """An abstract way of representing incoming metadata and applying it
@@ -547,7 +548,7 @@ class MeasurementData:
 
 
 @dataclass(frozen=True, kw_only=True)
-class FormatData:
+class FormatData(LoggerMixin):
     content_type: str | None
     drm_scheme: str | None
     link: LinkData | None = None
@@ -570,6 +571,83 @@ class FormatData:
 
             if not self.content_type and self.link.media_type:
                 object.__setattr__(self, "content_type", self.link.media_type)
+
+    def apply(
+        self,
+        db: Session,
+        data_source: DataSource,
+        identifier: Identifier,
+        resource: Resource | None = None,
+    ) -> LicensePoolDeliveryMechanism:
+        """Apply this FormatData. Creating a new LicensePoolDeliveryMechanism
+        if necessary.
+
+        :param db: Use this database connection. If this is not supplied
+            the database connection will be taken from the data_source.
+        :param data_source: A DataSource identifying the distributor.
+        :param identifier: An Identifier identifying the title.
+        :param resource: A Resource representing the book itself in
+            a freely redistributable form, if any.
+
+        :return: A LicensePoolDeliveryMechanism.
+        """
+        return LicensePoolDeliveryMechanism.set(
+            data_source,
+            identifier,
+            resource=resource,
+            content_type=self.content_type,
+            drm_scheme=self.drm_scheme,
+            rights_uri=self.rights_uri,
+            available=self.available,
+            update_available=self.update_available,
+            db=db,
+        )
+
+    def apply_to_loan(
+        self,
+        db: Session,
+        loan: Loan,
+    ) -> LicensePoolDeliveryMechanism | None:
+        """Set an appropriate LicensePoolDeliveryMechanism on the given
+        `Loan`, creating the DeliveryMechanism and LicensePoolDeliveryMechanism
+         if necessary.
+
+        :param db: A database session.
+        :param loan: A Loan object.
+        :return: A LicensePoolDeliveryMechanism if one could be set on the
+            given Loan; None otherwise.
+        """
+
+        # Create or update the DeliveryMechanism.
+        delivery_mechanism, _ = DeliveryMechanism.lookup(
+            db, self.content_type, self.drm_scheme
+        )
+
+        if (
+            loan.fulfillment
+            and loan.fulfillment.delivery_mechanism == delivery_mechanism
+        ):
+            # The work has already been done. Do nothing.
+            return None
+
+        # At this point we know we need to update the local delivery
+        # mechanism.
+        pool = loan.license_pool
+        if not pool:
+            # This shouldn't happen, but bail out if it does.
+            self.log.warning(
+                f"No license pool for loan (id:{loan.id}), can't set delivery mechanism."
+            )
+            return None
+
+        # Apply this FormatData, looking up or creating a LicensePoolDeliveryMechanism.
+        lpdm = self.apply(
+            db,
+            pool.data_source,
+            pool.identifier,
+        )
+        loan.fulfillment = lpdm
+        return lpdm
 
 
 class LicenseData(LicenseFunctions):
@@ -1049,16 +1127,11 @@ class CirculationData(LoggerMixin):
             else:
                 resource = None
             # This can cause a non-open-access LicensePool to go open-access.
-            lpdm = LicensePoolDeliveryMechanism.set(
+            lpdm = format.apply(
+                _db,
                 data_source,
                 identifier,
-                format.content_type,
-                format.drm_scheme,
-                format.rights_uri or self.default_rights_uri,
                 resource,
-                available=format.available,
-                update_available=format.update_available,
-                db=_db,
             )
             new_lpdms.append(lpdm)
 

@@ -14,7 +14,6 @@ from palace.manager.api.circulation import (
     BaseCirculationAPI,
     CirculationAPI,
     CirculationInfo,
-    DeliveryMechanismInfo,
     HoldInfo,
     LoanInfo,
 )
@@ -33,13 +32,14 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
+from palace.manager.core.metadata_layer import FormatData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.patron import Loan
-from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
@@ -1207,8 +1207,9 @@ class TestPatronActivityCirculationAPI:
     ):
         # By the time we hear about the patron's loan, they've already
         # locked in an oddball delivery mechanism.
-        mechanism = DeliveryMechanismInfo(
-            Representation.TEXT_HTML_MEDIA_TYPE, DeliveryMechanism.NO_DRM
+        mechanism = FormatData(
+            content_type=Representation.TEXT_HTML_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.NO_DRM,
         )
         data_source = db.default_collection().data_source
         assert data_source is not None
@@ -1233,78 +1234,3 @@ class TestPatronActivityCirculationAPI:
         # ... and (once we commit) with the LicensePool.
         db.session.commit()
         assert loan.fulfillment in pool.delivery_mechanisms
-
-
-class TestDeliveryMechanismInfo:
-    def test_apply(self, db: DatabaseTransactionFixture):
-        # Here's a LicensePool with one non-open-access delivery mechanism.
-        pool = db.licensepool(None)
-        assert False == pool.open_access
-        [mechanism] = [lpdm.delivery_mechanism for lpdm in pool.delivery_mechanisms]
-        assert Representation.EPUB_MEDIA_TYPE == mechanism.content_type
-        assert DeliveryMechanism.ADOBE_DRM == mechanism.drm_scheme
-
-        # This patron has the book out on loan, but as far as we no,
-        # no delivery mechanism has been set.
-        patron = db.patron()
-        loan, ignore = pool.loan_to(patron)
-
-        # When consulting with the source of the loan, we learn that
-        # the patron has locked the delivery mechanism to a previously
-        # unknown mechanism.
-        info = DeliveryMechanismInfo(
-            Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM
-        )
-        info.apply(loan)
-
-        # This results in the addition of a new delivery mechanism to
-        # the LicensePool.
-        [new_mechanism] = [
-            lpdm.delivery_mechanism
-            for lpdm in pool.delivery_mechanisms
-            if lpdm.delivery_mechanism != mechanism
-        ]
-        assert Representation.PDF_MEDIA_TYPE == new_mechanism.content_type
-        assert DeliveryMechanism.NO_DRM == new_mechanism.drm_scheme
-        assert new_mechanism == loan.fulfillment.delivery_mechanism
-        assert RightsStatus.IN_COPYRIGHT == loan.fulfillment.rights_status.uri
-
-        # Calling apply() again with the same arguments does nothing.
-        info.apply(loan)
-        assert 2 == len(pool.delivery_mechanisms)
-
-        # Although it's extremely unlikely that this will happen in
-        # real life, it's possible for this operation to reveal a new
-        # *open-access* delivery mechanism for a LicensePool.
-        link, new = pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD,
-            db.fresh_url(),
-            pool.data_source,
-            Representation.EPUB_MEDIA_TYPE,
-        )
-
-        info = DeliveryMechanismInfo(
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.NO_DRM,
-            RightsStatus.CC0,
-            link.resource,
-        )
-
-        # Calling apply() on the loan we were using before will update
-        # its associated LicensePoolDeliveryMechanism.
-        info.apply(loan)
-        [oa_lpdm] = [
-            lpdm
-            for lpdm in pool.delivery_mechanisms
-            if lpdm.delivery_mechanism not in (mechanism, new_mechanism)
-        ]
-        assert oa_lpdm == loan.fulfillment
-
-        # The correct resource and rights status have been associated
-        # with the new LicensePoolDeliveryMechanism.
-        assert RightsStatus.CC0 == oa_lpdm.rights_status.uri
-        assert link.resource == oa_lpdm.resource
-
-        # The LicensePool is now considered an open-access LicensePool,
-        # since it has an open-access delivery mechanism.
-        assert True == pool.open_access
