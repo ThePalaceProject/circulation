@@ -212,7 +212,7 @@ class Axis360API(
         return ""
 
     def __init__(
-        self, _db: Session, collection: Collection, bearer_token: str = None
+        self, _db: Session, collection: Collection, bearer_token: str | None = None
     ) -> None:
         super().__init__(_db, collection)
         settings = self.settings

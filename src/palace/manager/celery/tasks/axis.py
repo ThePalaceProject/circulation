@@ -152,7 +152,7 @@ def list_identifiers_for_import(
 
 
 def create_api(
-    collection: Collection, session: Session, bearer_token: str = None
+    collection: Collection, session: Session, bearer_token: str | None = None
 ) -> Axis360API:
     return Axis360API(session, collection, bearer_token)
 
@@ -198,7 +198,7 @@ def timestamp(
     return timestamp
 
 
-def _check_if_deadlock(e):
+def _check_if_deadlock(e: Exception) -> None:
     if isinstance(e, OperationalError):
         if not isinstance(e.orig, DeadlockDetected):
             raise e
@@ -252,7 +252,7 @@ def import_identifiers(
             return
 
         api = create_api(session=session, collection=collection)
-
+        bearer_token = api.bearer_token()
         identifier_batch = identifiers[:batch_size]
 
         try:
@@ -273,7 +273,7 @@ def import_identifiers(
     for metadata, circulation in circ_data:
         with task.transaction() as session:
             collection = Collection.by_id(session, id=collection_id)
-            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
+            api = create_api(session=session, collection=collection, bearer_token=bearer_token)  # type: ignore[arg-type]
             try:
                 process_book(task, session, api, metadata, circulation)
                 total_imported_in_current_task += 1
@@ -432,7 +432,7 @@ def reap_collection(
             .all()
         )
 
-    bearer_token: str = None
+    bearer_token: str | None = None
 
     for identifier in identifiers:
         with task.transaction() as session:
