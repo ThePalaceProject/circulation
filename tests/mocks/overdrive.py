@@ -3,12 +3,12 @@ from typing import Any
 
 from requests import Response
 from sqlalchemy.orm import Session
-from typing_extensions import override
+from typing_extensions import Unpack, override
 
 from palace.manager.api.overdrive.api import OverdriveAPI, OverdriveToken
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.http import RequestKwargs
 from tests.mocks.mock import MockHTTPClient
 
 
@@ -44,23 +44,8 @@ class MockOverdriveAPI(OverdriveAPI):
         )
 
     @override
-    def patron_request(
-        self,
-        patron: Patron,
-        pin: str | None,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-        data: str | None = None,
-        exception_on_401: bool = False,
-        method: str | None = None,
+    def _do_patron_request(
+        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
     ) -> Response:
-        with self.mock_http.patch():
-            return super().patron_request(
-                patron,
-                pin,
-                url,
-                extra_headers,
-                data,
-                exception_on_401,
-                method,
-            )
+        url = self.endpoint(url)
+        return self.mock_http.do_request(http_method, url, **kwargs)

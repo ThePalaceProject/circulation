@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Generator
 from typing import TYPE_CHECKING, Any
 
 import isbnlib
@@ -91,81 +90,70 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             link = None
         return link
 
-    format_data_for_overdrive_format: dict[
-        str, list[tuple[str, str | None]] | tuple[str, str | None]
-    ] = {
-        "ebook-pdf-adobe": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
-        "ebook-pdf-open": (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
-        "ebook-epub-adobe": (
-            Representation.EPUB_MEDIA_TYPE,
-            DeliveryMechanism.ADOBE_DRM,
-        ),
-        "ebook-epub-open": (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM),
-        "audiobook-mp3": ("application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM),
-        "music-mp3": ("application/x-od-media", DeliveryMechanism.OVERDRIVE_DRM),
+    _format_data_for_overdrive_format: dict[str, list[FormatData]] = {
         "ebook-overdrive": [
-            (
-                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
+            # When we have an Overdrive ebook, we don't actually know
+            # 100% what format it's in, because Overdrive doesn't
+            # give us that information though the API. We know that
+            # ~95% of the time its available as an Adobe DRM EPUB,
+            # so we'll use that as the default.
+            #
+            # When we go to fulfill the book, Overdrive gives us
+            # more information about the format, so at that point,
+            # if our assumption was wrong, we will mark the Adobe
+            # DRM as unavailable, and add the correct format.
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.ADOBE_DRM,
+                available=True,
             ),
-            (
-                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
+            FormatData(
+                content_type=MediaTypes.PDF_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+            ),
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
+                available=True,
             ),
         ],
         "audiobook-overdrive": [
-            (
-                MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
+            FormatData(
+                content_type=MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.LIBBY_DRM,
+                available=True,
             ),
-            (
-                DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
+                available=True,
             ),
         ],
-        "video-streaming": (
-            DeliveryMechanism.STREAMING_VIDEO_CONTENT_TYPE,
-            DeliveryMechanism.STREAMING_DRM,
-        ),
-        "ebook-kindle": (
-            DeliveryMechanism.KINDLE_CONTENT_TYPE,
-            DeliveryMechanism.KINDLE_DRM,
-        ),
-        "periodicals-nook": (
-            DeliveryMechanism.NOOK_CONTENT_TYPE,
-            DeliveryMechanism.NOOK_DRM,
-        ),
     }
 
     # A mapping of the overdrive format name to end sample content type
     # Overdrive samples are not DRM protected so the links should be
     # stored as the end sample content type
-    sample_format_to_content_type = {
+    _sample_format_to_content_type = {
         "ebook-overdrive": "text/html",
-        "audiobook-wma": "audio/x-ms-wma",
-        "audiobook-mp3": "audio/mpeg",
         "audiobook-overdrive": "text/html",
-        "ebook-epub-adobe": "application/epub+zip",
-        "magazine-overdrive": "text/html",
     }
 
     @classmethod
-    def internal_formats(
-        cls, overdrive_format: str
-    ) -> Generator[tuple[str, str | None]]:
-        """Yield all internal formats for the given Overdrive format.
+    def internal_formats(cls, overdrive_format: str) -> list[FormatData]:
+        """Get all possible internal formats for the given Overdrive format.
 
         Some Overdrive formats become multiple internal formats.
 
-        :yield: A sequence of (content type, DRM system) 2-tuples
+        :return: A list of FormatData objects.
         """
-        result = cls.format_data_for_overdrive_format.get(overdrive_format)
-        if not result:
-            return
-        if isinstance(result, list):
-            yield from result
-        else:
-            yield result
+        return cls._format_data_for_overdrive_format.get(overdrive_format, [])
 
     ignorable_overdrive_formats: set[str] = set()
 
@@ -575,7 +563,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                         if not overdrive_format_name:
                             # Malformed sample
                             continue
-                        content_type = cls.sample_format_to_content_type.get(
+                        content_type = cls._sample_format_to_content_type.get(
                             overdrive_format_name
                         )
                         if not content_type:
@@ -687,10 +675,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 format_id = format["id"]
                 internal_formats = list(cls.internal_formats(format_id))
                 if internal_formats:
-                    for content_type, drm_scheme in internal_formats:
-                        formats.append(
-                            FormatData(content_type=content_type, drm_scheme=drm_scheme)
-                        )
+                    formats.extend(internal_formats)
                 elif format_id not in cls.ignorable_overdrive_formats:
                     cls.logger().error(
                         "Could not process Overdrive format %s for %s",

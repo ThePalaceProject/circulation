@@ -8,6 +8,8 @@ from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverage
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.mocks.overdrive import MockOverdriveAPI
@@ -118,9 +120,22 @@ class TestOverdriveBibliographicCoverageProvider:
         # available in.
         [pool] = identifier.licensed_through
         assert pool.licenses_owned == 0
-        assert {x.delivery_mechanism.name for x in pool.delivery_mechanisms} == {
-            "application/pdf (application/vnd.adobe.adept+xml)",
-            "Kindle via Amazon (Kindle DRM)",
+        assert {
+            (
+                x.delivery_mechanism.content_type,
+                x.delivery_mechanism.drm_scheme,
+                x.available,
+            )
+            for x in pool.delivery_mechanisms
+        } == {
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+            (Representation.PDF_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, True),
+            (
+                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                DeliveryMechanism.STREAMING_DRM,
+                True,
+            ),
         }
 
         # A Work was created and made presentation ready.

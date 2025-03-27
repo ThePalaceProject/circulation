@@ -9,7 +9,7 @@ import pytest
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.core.metadata_layer import LinkData
+from palace.manager.core.metadata_layer import FormatData, LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -17,7 +17,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.resource import Hyperlink
 from tests.fixtures.overdrive import OverdriveAPIFixture
 
 
@@ -194,7 +194,7 @@ class TestOverdriveRepresentationExtractor:
 
         [author] = metadata.contributors
         assert "Rüping, Andreas" == author.sort_name
-        assert "Andreas R&#252;ping" == author.display_name
+        assert "Andreas Rüping" == author.display_name
         assert [Contributor.Role.AUTHOR] == author.roles
 
         subjects = sorted(metadata.subjects, key=lambda x: x.identifier)
@@ -225,28 +225,47 @@ class TestOverdriveRepresentationExtractor:
         ] == sorted(ids)
 
         # Available formats.
-        [kindle, pdf] = sorted(
-            metadata.circulation.formats, key=lambda x: x.content_type
-        )
-        assert DeliveryMechanism.KINDLE_CONTENT_TYPE == kindle.content_type
-        assert DeliveryMechanism.KINDLE_DRM == kindle.drm_scheme
-
-        assert Representation.PDF_MEDIA_TYPE == pdf.content_type
-        assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
+        expected_formats = {
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.ADOBE_DRM,
+                available=True,
+                update_available=False,
+            ),
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
+                available=True,
+                update_available=False,
+            ),
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+                update_available=False,
+            ),
+            FormatData(
+                content_type=MediaTypes.PDF_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
+                update_available=False,
+            ),
+        }
+        assert set(metadata.circulation.formats) == expected_formats
 
         # Links to various resources.
-        shortd, image, longd = sorted(metadata.links, key=lambda x: x.rel)
+        shortd, sample, image, longd = sorted(metadata.links, key=lambda x: x.rel)
 
         assert Hyperlink.DESCRIPTION == longd.rel
-        assert longd.content.startswith("<p>Software documentation")
+        assert longd.content.startswith("Software documentation")
 
         assert Hyperlink.SHORT_DESCRIPTION == shortd.rel
-        assert shortd.content.startswith("<p>Software documentation")
+        assert shortd.content.startswith("Software documentation")
         assert len(shortd.content) < len(longd.content)
 
         assert Hyperlink.IMAGE == image.rel
         assert (
-            "http://images.contentreserve.com/ImageType-100/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg100.jpg"
+            "https://img1.od-cdn.com/ImageType-100/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg100.jpg"
             == image.href
         )
 
@@ -254,7 +273,7 @@ class TestOverdriveRepresentationExtractor:
 
         assert Hyperlink.THUMBNAIL_IMAGE == thumbnail.rel
         assert (
-            "http://images.contentreserve.com/ImageType-200/0128-1/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg200.jpg"
+            "https://img1.od-cdn.com/ImageType-400/0128-1/389/666/5D/%7B3896665D-9D81-4CAC-BD43-FFC5066DE1F5%7DImg400.jpg"
             == thumbnail.href
         )
 
@@ -269,7 +288,7 @@ class TestOverdriveRepresentationExtractor:
         rating = [x for x in measurements if x.quantity_measured == Measurement.RATING][
             0
         ]
-        assert 1 == rating.value
+        assert 2.7 == rating.value
 
         # Request only the bibliographic information.
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
@@ -286,14 +305,7 @@ class TestOverdriveRepresentationExtractor:
 
         assert None == metadata.title
 
-        [kindle, pdf] = sorted(
-            metadata.circulation.formats, key=lambda x: x.content_type
-        )
-        assert DeliveryMechanism.KINDLE_CONTENT_TYPE == kindle.content_type
-        assert DeliveryMechanism.KINDLE_DRM == kindle.drm_scheme
-
-        assert Representation.PDF_MEDIA_TYPE == pdf.content_type
-        assert DeliveryMechanism.ADOBE_DRM == pdf.drm_scheme
+        assert set(metadata.circulation.formats) == set(expected_formats)
 
     @pytest.mark.parametrize(
         "series_position, expected",
@@ -361,39 +373,26 @@ class TestOverdriveRepresentationExtractor:
         # called 'Overdrive'.
         raw, info = overdrive_api_fixture.sample_json("audiobook.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        streaming, manifest, legacy = sorted(
-            metadata.circulation.formats, key=lambda x: x.content_type
-        )
-        assert DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE == streaming.content_type
-        assert (
-            MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE == manifest.content_type
-        )
-        assert "application/x-od-media" == legacy.content_type
-        assert (
-            metadata.duration == 10 * 3600 + 9 * 60 + 1
-        )  # The last formats' duration attribute
+        assert set(metadata.circulation.formats) == {
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
+            ),
+            FormatData(
+                content_type=MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.LIBBY_DRM,
+            ),
+        }
 
-        # The last format will be invalid, so only the first format should work
-        info["formats"][1]["duration"] = "10:09"  # Invalid format
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         assert (
-            metadata.duration == 10 * 3600 + 9 * 60 + 0
-        )  # The first formats' duration attribute
+            metadata.duration == 12 * 3600 + 20 * 60 + 38
+        )  # The last (and only) format's duration is used
 
     def test_book_info_with_sample(self, overdrive_api_fixture: OverdriveAPIFixture):
-        # This book has two samples; one available as a direct download and
-        # one available through a manifest file.
+        # This book has one sample, available as a direct download
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
-        epub_sample, manifest_sample = sorted(samples, key=lambda x: x.media_type or "")
-
-        # Here's the direct download.
-        assert (
-            "http://excerpts.contentreserve.com/FormatType-410/1071-1/9BD/24F/82/BridesofConvenienceBundle9781426803697.epub"
-            == epub_sample.href
-        )
-        assert MediaTypes.EPUB_MEDIA_TYPE == epub_sample.media_type
+        [manifest_sample] = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
 
         # Here's the manifest.
         assert (
@@ -408,15 +407,14 @@ class TestOverdriveRepresentationExtractor:
     ):
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
 
-        # Just use one format, and change a sample type to unknown
-        # Only one (known sample) should be extracted then
+        # Just use one format, and change a sample type to unknown, we should
+        # get no sample links.
         info["formats"] = [info["formats"][1]]
-        info["formats"][0]["samples"][1]["formatType"] = "overdrive-unknown"
+        info["formats"][0]["samples"][0]["formatType"] = "overdrive-unknown"
         metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
         samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
 
-        assert 1 == len(samples)
-        assert samples[0].media_type == MediaTypes.EPUB_MEDIA_TYPE
+        assert len(samples) == 0
 
     def test_book_info_with_grade_levels(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -475,48 +473,42 @@ class TestOverdriveRepresentationExtractor:
         )
         assert None == data
 
-    def test_internal_formats(self):
+    def test_internal_formats(self) -> None:
         # Overdrive's internal format names may correspond to one or more
         # delivery mechanisms.
-        def assert_formats(overdrive_name, *expect):
-            actual = OverdriveRepresentationExtractor.internal_formats(overdrive_name)
-            assert list(expect) == list(actual)
+        internal_formats = OverdriveRepresentationExtractor.internal_formats
 
-        # Most formats correspond to one delivery mechanism.
-        assert_formats(
-            "ebook-pdf-adobe", (MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM)
-        )
-
-        assert_formats(
-            "ebook-epub-open", (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
-        )
-
-        # ebook-overdrive and audiobook-overdrive each correspond to
-        # two delivery mechanisms.
-        assert_formats(
-            "ebook-overdrive",
-            (
-                MediaTypes.OVERDRIVE_EBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
+        assert set(internal_formats("ebook-overdrive")) == {
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.ADOBE_DRM,
             ),
-            (
-                DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_TEXT_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
             ),
-        )
-
-        assert_formats(
-            "audiobook-overdrive",
-            (
-                MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
-                DeliveryMechanism.LIBBY_DRM,
+            FormatData(
+                content_type=MediaTypes.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
             ),
-            (
-                DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
-                DeliveryMechanism.STREAMING_DRM,
+            FormatData(
+                content_type=MediaTypes.PDF_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.NO_DRM,
+                available=False,
             ),
-        )
+        }
+        assert internal_formats("audiobook-overdrive") == [
+            FormatData(
+                content_type=MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.LIBBY_DRM,
+            ),
+            FormatData(
+                content_type=DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
+                drm_scheme=DeliveryMechanism.STREAMING_DRM,
+            ),
+        ]
 
         # An unrecognized format does not correspond to any delivery
         # mechanisms.
-        assert_formats("no-such-format")
+        assert internal_formats("no-such-format") == []

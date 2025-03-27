@@ -39,6 +39,7 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.core.metadata_layer import FormatData
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -53,14 +54,11 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
-from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException, ResponseCodesT
@@ -102,93 +100,6 @@ class CirculationInfo:
         self.data_source_name = data_source_name
         self.identifier_type = identifier_type
         self.identifier = identifier
-
-
-class DeliveryMechanismInfo(CirculationInfo):
-    """A record of a technique that must be (but is not, currently, being)
-    used to fulfill a certain loan.
-
-    Although this class is similar to `FormatInfo` in
-    core/metadata.py, usage here is strictly limited to recording
-    which `LicensePoolDeliveryMechanism` a specific loan is currently
-    locked to.
-
-    If, in the course of investigating a patron's loans, you discover
-    general facts about a LicensePool's availability or formats, that
-    information needs to be stored in a `CirculationData` and applied to
-    the LicensePool separately.
-    """
-
-    def __init__(
-        self,
-        content_type: str | None,
-        drm_scheme: str | None,
-        rights_uri: str | None = RightsStatus.IN_COPYRIGHT,
-        resource: Resource | None = None,
-    ) -> None:
-        """Constructor.
-
-        :param content_type: Once the loan is fulfilled, the resulting document
-            will be of this media type.
-        :param drm_scheme: Fulfilling the loan will require negotiating this DRM
-            scheme.
-        :param rights_uri: Once the loan is fulfilled, the resulting
-            document will be made available under this license or
-            copyright regime.
-        :param resource: The loan can be fulfilled by directly serving the
-            content in the given `Resource`.
-        """
-        self.content_type = content_type
-        self.drm_scheme = drm_scheme
-        self.rights_uri = rights_uri
-        self.resource = resource
-
-    def apply(
-        self,
-        loan: Loan,
-    ) -> LicensePoolDeliveryMechanism | None:
-        """Set an appropriate LicensePoolDeliveryMechanism on the given
-        `Loan`, creating a DeliveryMechanism if necessary.
-
-        :param loan: A Loan object.
-        :return: A LicensePoolDeliveryMechanism if one could be set on the
-            given Loan; None otherwise.
-        """
-        _db = Session.object_session(loan)
-
-        # Create or update the DeliveryMechanism.
-        delivery_mechanism, is_new = DeliveryMechanism.lookup(
-            _db, self.content_type, self.drm_scheme
-        )
-
-        if (
-            loan.fulfillment
-            and loan.fulfillment.delivery_mechanism == delivery_mechanism
-        ):
-            # The work has already been done. Do nothing.
-            return None
-
-        # At this point we know we need to update the local delivery
-        # mechanism.
-        pool = loan.license_pool
-        if not pool:
-            # This shouldn't happen, but bail out if it does.
-            return None
-
-        # Look up the LicensePoolDeliveryMechanism for the way the
-        # server says this book is available, creating the object if
-        # necessary.
-        lpdm = LicensePoolDeliveryMechanism.set(
-            pool.data_source,
-            pool.identifier,
-            self.content_type,
-            self.drm_scheme,
-            self.rights_uri,
-            self.resource,
-            db=_db,
-        )
-        loan.fulfillment = lpdm
-        return lpdm
 
 
 class Fulfillment(ABC):
@@ -352,7 +263,8 @@ class LoanInfo(LoanAndHoldInfoMixin):
     start_date: datetime.datetime | None = None
     end_date: datetime.datetime | None
     external_identifier: str | None = None
-    locked_to: DeliveryMechanismInfo | None = None
+    locked_to: FormatData | None = None
+    available_formats: set[FormatData] | None = None
     license_identifier: str | None = None
 
     @classmethod
@@ -363,7 +275,8 @@ class LoanInfo(LoanAndHoldInfoMixin):
         start_date: datetime.datetime | None = None,
         end_date: datetime.datetime | None,
         external_identifier: str | None = None,
-        locked_to: DeliveryMechanismInfo | None = None,
+        locked_to: FormatData | None = None,
+        available_formats: set[FormatData] | None = None,
         license_identifier: str | None = None,
     ) -> Self:
         collection_id = license_pool.collection_id
@@ -380,6 +293,7 @@ class LoanInfo(LoanAndHoldInfoMixin):
             end_date=end_date,
             external_identifier=external_identifier,
             locked_to=locked_to,
+            available_formats=available_formats,
             license_identifier=license_identifier,
         )
 
@@ -414,14 +328,23 @@ class LoanInfo(LoanAndHoldInfoMixin):
             end=self.end_date,
             external_identifier=self.external_identifier,
         )
+        db = Session.object_session(patron)
 
-        if self.locked_to:
+        if self.available_formats:
+            # We have extra information about the formats that are available
+            # for this licensepool. Sometimes we only get this information
+            # when looking up a loan (e.g. Overdrive) so we capture this
+            # information here.
+            for format in self.available_formats:
+                format.apply(db, license_pool.data_source, license_pool.identifier)
+
+        if self.locked_to is not None:
             # The loan source is letting us know that the loan is
             # locked to a specific delivery mechanism. Even if
             # this is the first we've heard of this loan,
             # it may have been created in another app or through
             # a library-website integration.
-            self.locked_to.apply(loan)
+            self.locked_to.apply_to_loan(db, loan)
         return loan, is_new
 
 
