@@ -28,6 +28,7 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
+from palace.manager.util.log import pluralize
 
 DEFAULT_BATCH_SIZE: int = 25
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
@@ -312,7 +313,7 @@ def import_identifiers(
         )
         task.log.info(
             f"Replacing task to continue importing remaining "
-            f"{identifiers_list_length} identifier{'' if identifiers_list_length == 1 else 's'} "
+            f'{pluralize(identifiers_list_length, "identifier")} '
             f"for collection ({collection_name}, id={collection_id})"
         )
 
@@ -396,7 +397,7 @@ def reap_all_collections(task: Task) -> None:
             )
             count += 1
 
-        task.log.info(f"Finished queuing reap collection tasks.")
+        task.log.info(f"Finished queuing all reap_collection tasks.")
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)

@@ -315,7 +315,7 @@ def test_reap_all_collections(
             mock_reap_collection.apply_async.call_args_list[0].kwargs
             == reap_collection_args
         )
-        assert "Finished queuing reap collection tasks" in caplog.text
+        assert "Finished queuing all reap_collection tasks" in caplog.text
 
 
 def test_reap_collection_configuration_error(
@@ -446,13 +446,12 @@ def test_retry_import_identifiers(
     no_retry_expected: bool,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(protocol=Axis360API.label())
 
     edition, licensepool = db.edition(
         collection=collection,
         with_license_pool=True,
         identifier_type=Identifier.AXIS_360_ID,
-        identifier_id="012345678",
     )
 
     mock_api = MagicMock()
@@ -505,7 +504,7 @@ def test_retry_reap_collection(
     no_retry_expected: bool,
 ):
     set_caplog_level_to_info(caplog)
-    collection = db.collection(name="test_collection", protocol=Axis360API.label())
+    collection = db.collection(protocol=Axis360API.label())
     db.edition(
         with_license_pool=True,
         identifier_type=Identifier.AXIS_360_ID,
