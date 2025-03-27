@@ -386,7 +386,7 @@ class TestOverdriveRepresentationExtractor:
 
         assert (
             metadata.duration == 12 * 3600 + 20 * 60 + 38
-        )  # The last (and only) formats duration is used
+        )  # The last (and only) format's duration is used
 
     def test_book_info_with_sample(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book has one sample, available as a direct download

@@ -93,19 +93,15 @@ class OverdriveRepresentationExtractor(LoggerMixin):
     _format_data_for_overdrive_format: dict[str, list[FormatData]] = {
         "ebook-overdrive": [
             # When we have an Overdrive ebook, we don't actually know
-            # 100% what format it's in, because Overdrive isn't nice
-            # enough to give us that information though the API.
-            # We know that ~95% of the time its available as an
-            # Adobe DRM EPUB, so we'll use that as the default.
+            # 100% what format it's in, because Overdrive doesn't
+            # give us that information though the API. We know that
+            # ~95% of the time its available as an Adobe DRM EPUB,
+            # so we'll use that as the default.
             #
             # When we go to fulfill the book, Overdrive gives us
             # more information about the format, so at that point,
             # if our assumption was wrong, we will mark the Adobe
             # DRM as unavailable, and add the correct format.
-            #
-            # This all is kind of ugly, but Overdrive hasn't been
-            # willing to give us the information we need to do
-            # better.
             FormatData(
                 content_type=MediaTypes.EPUB_MEDIA_TYPE,
                 drm_scheme=DeliveryMechanism.ADOBE_DRM,
@@ -151,7 +147,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
 
     @classmethod
     def internal_formats(cls, overdrive_format: str) -> list[FormatData]:
-        """Yield all internal formats for the given Overdrive format.
+        """Get all possible internal formats for the given Overdrive format.
 
         Some Overdrive formats become multiple internal formats.
 

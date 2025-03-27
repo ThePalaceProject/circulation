@@ -2276,6 +2276,45 @@ class TestSyncBookshelf:
         assert len(loans) == 4
         assert set(loans.values()) == set(patron.loans)
 
+    def test_sync_patron_activity_updated_inaccurate_delivery_mechanisms(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        session = db.session
+        data_source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
+        identifiers = {
+            db.identifier(Identifier.OVERDRIVE_ID, ident)
+            for ident in {
+                "a4466636-34f5-495a-92ee-3a9c701f46cf",
+                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
+                "99409f99-45a5-4238-9e10-98d1435cde04",
+                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
+            }
+        }
+        patron = db.patron()
+
+        # Generic format information we use for ebook-overdrive, when we don't know any more
+        # detailed information.
+        od_formats = OverdriveRepresentationExtractor.internal_formats(
+            "ebook-overdrive"
+        )
+
+        # Create the format information for each identifier
+        for identifier in identifiers:
+            for format in od_formats:
+                format.apply(session, data_source, identifier)
+
+        # Queue up the API responses
+        loans_data = overdrive_api_fixture.data.sample_data(
+            "shelf_with_some_checked_out_books.json"
+        )
+        holds_data = overdrive_api_fixture.data.sample_data("no_holds.json")
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
+        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
+
+        # Run the activity sync
+        loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
+
         assert {
             lp.identifier.identifier: {
                 (
@@ -2376,45 +2415,6 @@ class TestSyncBookshelf:
                 ),
             },
         }
-
-    def test_sync_patron_activity_updated_inaccurate_delivery_mechanisms(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        session = db.session
-        data_source = DataSource.lookup(session, DataSource.OVERDRIVE, autocreate=True)
-        identifiers = {
-            db.identifier(Identifier.OVERDRIVE_ID, ident)
-            for ident in {
-                "a4466636-34f5-495a-92ee-3a9c701f46cf",
-                "a5a3d737-34d4-4d69-aad8-eba4e46019a3",
-                "99409f99-45a5-4238-9e10-98d1435cde04",
-                "a2ec6f3a-ebfe-4c95-9638-2cb13be8de5a",
-            }
-        }
-        patron = db.patron()
-
-        # Generic format information we use for ebook-overdrive, when we don't know any more
-        # detailed information.
-        od_formats = OverdriveRepresentationExtractor.internal_formats(
-            "ebook-overdrive"
-        )
-
-        # Create the format information for each identifier
-        for identifier in identifiers:
-            for format in od_formats:
-                format.apply(session, data_source, identifier)
-
-        # Queue up the API responses
-        loans_data = overdrive_api_fixture.data.sample_data(
-            "shelf_with_some_checked_out_books.json"
-        )
-        holds_data = overdrive_api_fixture.data.sample_data("no_holds.json")
-        overdrive_api_fixture.queue_access_token_response()
-        overdrive_api_fixture.mock_http.queue_response(200, content=loans_data)
-        overdrive_api_fixture.mock_http.queue_response(200, content=holds_data)
-
-        # Run the activity sync
-        loans, holds = overdrive_api_fixture.sync_patron_activity(patron)
 
     def test_sync_patron_activity_removes_loans_not_present_on_remote(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

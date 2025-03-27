@@ -43,7 +43,7 @@ OVERDRIVE_FORMATS = (
 )
 
 # The formats that indicate the book has been fulfilled on an
-# incompatible platform and just can't be fulfilled in Place.
+# incompatible platform and just can't be fulfilled in Palace.
 OVERDRIVE_INCOMPATIBLE_FORMATS = {"ebook-kindle"}
 
 OVERDRIVE_STREAMING_FORMATS = {"ebook-overdrive", "audiobook-overdrive"}

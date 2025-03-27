@@ -716,16 +716,6 @@ class TestFormatData:
         format_data.apply_to_loan(session, loan)
         assert len(pool.delivery_mechanisms) == 2
 
-        # Although it's extremely unlikely that this will happen in
-        # real life, it's possible for this operation to reveal a new
-        # *open-access* delivery mechanism for a LicensePool.
-        link, new = pool.identifier.add_link(
-            Hyperlink.OPEN_ACCESS_DOWNLOAD,
-            db.fresh_url(),
-            pool.data_source,
-            Representation.EPUB_MEDIA_TYPE,
-        )
-
 
 class TestMetadata:
     def test_defaults(self):
