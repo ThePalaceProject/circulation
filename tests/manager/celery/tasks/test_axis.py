@@ -3,7 +3,9 @@ from datetime import timedelta
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from sqlalchemy.orm.exc import ObjectDeletedError
+from psycopg2.errors import DeadlockDetected
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.axis import Axis360API
 from palace.manager.celery.task import Task
@@ -19,6 +21,7 @@ from palace.manager.celery.tasks.axis import (
     reap_collection,
     timestamp,
 )
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -312,7 +315,7 @@ def test_reap_all_collections(
             mock_reap_collection.apply_async.call_args_list[0].kwargs
             == reap_collection_args
         )
-        assert "Finished queuing reap collection tasks" in caplog.text
+        assert "Finished queuing all reap_collection tasks" in caplog.text
 
 
 def test_reap_collection_configuration_error(
@@ -380,13 +383,11 @@ def test_reap_collection_with_requeue(
         )
 
 
-def test_retry_import_identifiers(
+def test_retry_import_identifiers_due_to_integration_exception(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
-    caplog: pytest.LogCaptureFixture,
 ):
-    set_caplog_level_to_info(caplog)
     collection = db.collection(name="test_collection", protocol=Axis360API.label())
 
     edition, licensepool = db.edition(
@@ -401,19 +402,132 @@ def test_retry_import_identifiers(
         mock_create_api.return_value = mock_api
         edition, lp = db.edition(with_license_pool=True)
 
-        mock_api.availability_by_title_ids.return_value = [({}, {})]
-
-        mock_api.update_book.side_effect = [
-            ObjectDeletedError(None),
-            (edition, False, licensepool, False),
+        mock_api.availability_by_title_ids.side_effect = [
+            IntegrationException("not a 401 error"),
+            [
+                (
+                    {},
+                    {},
+                )
+            ],
         ]
+
+        mock_api.update_book.return_value = (edition, False, licensepool, False)
 
         import_identifiers.delay(
             collection_id=collection.id,
             identifiers=[edition.primary_identifier.identifier],
         ).wait()
 
-        assert mock_api.update_book.call_count == 2
+        assert mock_api.availability_by_title_ids.call_count == 2
+        assert mock_api.update_book.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "error, update_count, no_retry_expected",
+    [
+        [ObjectDeletedError(None), 2, False],
+        [StaleDataError(None), 2, False],
+        [OperationalError(params={}, orig=DeadlockDetected(), statement=""), 2, False],
+        [
+            OperationalError(params={}, orig=Exception("other db issue"), statement=""),
+            1,
+            True,
+        ],
+    ],
+)
+def test_retry_import_identifiers(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+    error: Exception,
+    update_count: int,
+    no_retry_expected: bool,
+):
+    set_caplog_level_to_info(caplog)
+    collection = db.collection(protocol=Axis360API.label())
+
+    edition, licensepool = db.edition(
+        collection=collection,
+        with_license_pool=True,
+        identifier_type=Identifier.AXIS_360_ID,
+    )
+
+    mock_api = MagicMock()
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value = mock_api
+        edition, lp = db.edition(with_license_pool=True)
+
+        mock_api.availability_by_title_ids.return_value = [({}, {})]
+
+        mock_api.update_book.side_effect = [
+            error,
+            (edition, False, licensepool, False),
+        ]
+
+        if no_retry_expected:
+            # expect an exception if non-deadlock
+            with pytest.raises(Exception):
+                import_identifiers.delay(
+                    collection_id=collection.id,
+                    identifiers=[edition.primary_identifier.identifier],
+                ).wait()
+        else:
+            import_identifiers.delay(
+                collection_id=collection.id,
+                identifiers=[edition.primary_identifier.identifier],
+            ).wait()
+
+        assert mock_api.update_book.call_count == update_count
+
+
+@pytest.mark.parametrize(
+    "error, update_count, no_retry_expected",
+    [
+        [IntegrationException("non-auth issue"), 2, False],
+        [OperationalError(params={}, orig=DeadlockDetected(), statement=""), 2, False],
+        [
+            OperationalError(params={}, orig=Exception("other db issue"), statement=""),
+            1,
+            True,
+        ],
+    ],
+)
+def test_retry_reap_collection(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    queue_collection_import_lock_fixture: QueueCollectionImportLockFixture,
+    caplog: pytest.LogCaptureFixture,
+    error: Exception,
+    update_count: int,
+    no_retry_expected: bool,
+):
+    set_caplog_level_to_info(caplog)
+    collection = db.collection(protocol=Axis360API.label())
+    db.edition(
+        with_license_pool=True,
+        identifier_type=Identifier.AXIS_360_ID,
+        collection=collection,
+    )
+
+    mock_api = MagicMock()
+    mock_api.update_licensepools_for_identifiers.side_effect = [
+        error,  # first time throw error
+        None,  # second call is successful
+    ]
+
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value = mock_api
+
+        if no_retry_expected:
+            with pytest.raises(Exception):
+                reap_collection.delay(collection_id=collection.id, batch_size=1).wait()
+        else:
+            reap_collection.delay(collection_id=collection.id, batch_size=1).wait()
+
+        update_license_pools = mock_api.update_licensepools_for_identifiers
+        assert update_license_pools.call_count == update_count
 
 
 def test_process_item_creates_presentation_ready_work(
