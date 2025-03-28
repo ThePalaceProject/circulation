@@ -20,10 +20,7 @@ from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
-from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
-)
-from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.service.storage.s3 import S3Service
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
 from palace.manager.util.uuid import uuid_encode
@@ -121,7 +118,7 @@ class PlaytimeEntriesSummationScript(Script):
         self._db.commit()
 
 
-class PlaytimeEntriesReportsScript(Script):
+class PlaytimeEntriesEmailReportsScript(Script):
     REPORT_DATE_FORMAT = "%Y-%m-%d"
 
     @classmethod
@@ -170,10 +167,9 @@ class PlaytimeEntriesReportsScript(Script):
 
     def do_run(self):
         """Produce a report for the given (or default) date range."""
-
         parsed = self.parse_command_line()
-        start: datetime = parsed.start
-        until: datetime = parsed.until
+        start = parsed.start
+        until = parsed.until
 
         formatted_start_date = start.strftime(self.REPORT_DATE_FORMAT)
         formatted_until_date = until.strftime(self.REPORT_DATE_FORMAT)
@@ -183,99 +179,76 @@ class PlaytimeEntriesReportsScript(Script):
             Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, ""
         )
 
+        # format report name for use in csv attachment filename below
+        subject_prefix = reporting_name
+        if len(reporting_name) > 0:
+            subject_prefix += ": "
+
+        email_subject = f"{subject_prefix}Playtime Summaries {formatted_start_date} - {formatted_until_date}"
+        reporting_name_with_no_spaces = reporting_name.replace(" ", "_") + "-"
         link_extension = "csv"
         uid = uuid_encode(uuid.uuid4())
-
-        google_drive: GoogleDriveService = self.services.google_drive.service()
-
-        # create directory hierarchy
-        root_folders = os.environ.get(
-            PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
-            "",
-        ).split("/")
-        nested_folders = root_folders + [
-            "usage_reports",
-            reporting_name,
-            str(start.year),
-        ]
-        folder_results = google_drive.create_nested_folders_if_not_exist(
-            folders=nested_folders
+        linked_file_name = (
+            f"playtime-summary-{reporting_name_with_no_spaces}"
+            f"{formatted_start_date}-{formatted_until_date}-{uid}.{link_extension}"
         )
-        # the root folder is the last path segment in the root folders list
-        root_folder = folder_results[len(root_folders) - 1]
-        leaf_folder = folder_results[-1]
 
-        # get list of collections
-        collection_names = [
-            x[0]
-            for x in self._fetch_distinct_collection_names_in_range(
-                start=start, until=until
+        # Write to a temporary file so we don't overflow the memory
+        with tempfile.NamedTemporaryFile(
+            "w+",
+            prefix=f"playtimereport{formatted_until_date}",
+            suffix=link_extension,
+        ) as temp:
+            # Write the data as a CSV
+            writer = csv.writer(temp)
+            _produce_report(
+                writer,
+                date_label=report_date_label,
+                records=self._fetch_report_records(start=start, until=until),
             )
-        ]
 
-        for collection_name in collection_names:
-            reporting_name_with_no_spaces = (
-                f"{reporting_name}-{collection_name}".replace(" ", "_")
+            # Rewind report
+            temp.seek(0)
+
+            recipient = os.environ.get(
+                Configuration.REPORTING_EMAIL_ENVIRONMENT_VARIABLE
             )
-            file_name_prefix = (
-                f"playtime-summary-{reporting_name_with_no_spaces}-"
-                f"{formatted_start_date}-{formatted_until_date}-{uid}"
-            )
-            linked_file_name = f"{file_name_prefix}.{link_extension}"
-            # Write to a temporary file so we don't overflow the memory
-            with tempfile.NamedTemporaryFile(
-                "w+",
-                prefix=f"{file_name_prefix}",
-                suffix=link_extension,
-            ) as temp:
-                # Write the data as a CSV
-                writer = csv.writer(temp)
-                _produce_report(
-                    writer,
-                    date_label=report_date_label,
-                    records=self._fetch_report_records(
-                        start=start, until=until, collection_name=collection_name
-                    ),
+
+            if recipient:
+                key = (
+                    f"{S3Service.DOWNLOADS_PREFIX}/{reporting_name}/"
+                    f"{linked_file_name}"
                 )
 
-                # Rewind report
-                temp.seek(0)
-
+                # The only way I could get S3 to accept the stream was by
+                # reopening it as a binary stream: otherwise it was a failing on
+                # a "Strings must be encoded before hashing" error from s3.
                 with Path(temp.name).open(
                     "rb",
                 ) as binary_stream:
-
-                    # store stream
-                    stored_stream_result = google_drive.create_file(
-                        file_name=linked_file_name,
-                        parent_folder_id=leaf_folder["id"],
+                    s3_service = self.services.storage.public()
+                    s3_service.store_stream(
+                        key,
+                        binary_stream,
                         content_type="text/csv",
-                        stream=binary_stream,
-                    )
-                    self.log.info(
-                        f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
                     )
 
-    def _fetch_distinct_collection_names_in_range(
-        self, start: datetime, until: datetime
-    ) -> Query:
-        return self._db.query(
-            select(
-                distinct(PlaytimeSummary.collection_name),
-            )
-            .where(
-                and_(
-                    PlaytimeSummary.timestamp >= start,
-                    PlaytimeSummary.timestamp < until,
+                s3_file_link = s3_service.generate_url(key)
+
+                self.services.email.send_email(
+                    subject=email_subject,
+                    receivers=[recipient],
+                    text=(
+                        f"Download Report here -> {s3_file_link} \n\n"
+                        f"This report will be available for download for 30 days."
+                    ),
                 )
-            )
-            .order_by(PlaytimeSummary.collection_name)
-            .subquery()
-        )
+            else:
+                self.log.error("No reporting email found, logging complete report.")
+                temp.seek(0)
+                self.log.warning(temp.read())
 
-    def _fetch_report_records(
-        self, start: datetime, until: datetime, collection_name
-    ) -> Query:
+    def _fetch_report_records(self, start: datetime, until: datetime) -> Query:
         # The loan count query returns only non-empty string isbns and titles if there is more
         # than one row returned with the grouping.  This way we ensure that we do not
         # count the same loan twice in the case we have when a
@@ -299,7 +272,6 @@ class PlaytimeEntriesReportsScript(Script):
                 and_(
                     PlaytimeSummary.timestamp >= start,
                     PlaytimeSummary.timestamp < until,
-                    PlaytimeSummary.collection_name == collection_name,
                 )
             )
             .group_by(
@@ -324,7 +296,6 @@ class PlaytimeEntriesReportsScript(Script):
                 and_(
                     PlaytimeSummary.timestamp >= start,
                     PlaytimeSummary.timestamp < until,
-                    PlaytimeSummary.collection_name == collection_name,
                 )
             )
             .group_by(

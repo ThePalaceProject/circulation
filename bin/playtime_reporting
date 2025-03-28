@@ -2,6 +2,6 @@
 """Sum the playtimes for audiobooks."""
 
 
-from palace.manager.scripts.playtime_entries import PlaytimeEntriesReportsScript
+from palace.manager.scripts.playtime_entries import PlaytimeEntriesEmailReportsScript
 
-PlaytimeEntriesReportsScript().run()
+PlaytimeEntriesEmailReportsScript().run()

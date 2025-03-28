@@ -264,7 +264,6 @@ jobs:
           path: ${{ runner.temp }}
           pattern: digests-${{ matrix.arch.name }}
 
-
       # This sets the environment variable referenced in the docker-compose file
       # for the image to use for the scripts container to the digest of the image
       # that was built in the build job.
@@ -294,20 +293,12 @@ jobs:
 
       - name: Pull & Start containers
         run: docker compose up -d
-        env:
-          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: '${{secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON}}'
-
 
       - name: Run webapp image tests
         run: ./docker/ci/test_webapp.sh webapp
-        env:
-          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: '${{secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON}}'
-
 
       - name: Run scripts image tests
         run: ./docker/ci/test_scripts.sh scripts
-        env:
-          PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: '${{secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON}}'
 
       - name: Output logs
         if: failure()
@@ -369,8 +360,6 @@ jobs:
             poetry install --without ci --no-root --sync &&
             pytest --no-cov tests
           "
-        env:
-          PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: '${{secrets.PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON}}'
 
       - name: Stop container
         if: always()

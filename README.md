@@ -251,8 +251,7 @@ a storage service, you can set the following environment variables:
 #### Reporting
 
 - `PALACE_REPORTING_NAME`: (Optional) A name used to identify the CM instance associated with generated reports.
-- `PALACE_GOOGLE_DRIVE_SERVICE_INFO_JSON`: (Optional) A JSON string containing a Google Drive service account configuration.
-  - c.f. [Creating service account credentials](https://developers.google.com/workspace/guides/create-credentials#service-account)
+- `SIMPLIFIED_REPORTING_EMAIL`: (Required) Email address of recipient of reports.
 
 #### Logging
 
@@ -667,7 +666,6 @@ Make sure the ports and usernames are updated to reflect the local configuration
 # Set environment variables
 export PALACE_TEST_DATABASE_URL="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
 export PALACE_TEST_SEARCH_URL="http://localhost:9200"
-export PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON=`cat /path/to/service_account_json_file`
 
 # Run tox
 tox -e "py310"
