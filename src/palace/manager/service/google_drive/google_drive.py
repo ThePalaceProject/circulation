@@ -17,7 +17,7 @@ else:
     pass
 
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3 import File
+    from googleapiclient._apis.drive.v3 import File, Permission
 
 
 class GoogleDriveService(LoggerMixin):
@@ -119,3 +119,52 @@ class GoogleDriveService(LoggerMixin):
             parent_id = folder["id"]
 
         return results
+
+    def share(
+        self,
+        file_or_folder_id: str,
+        email_addresses: list[str],
+        role: str = "reader",
+    ) -> list[Permission]:
+        """
+        Share this folder or file with the specified email addresses.
+        If the folder or file has already been shared with the email address in the same
+        role, the existing permission will be returned rather than creating a new one.
+        """
+        new_permission: dict[str, Any] = {
+            "type": "user",
+            "role": role,
+        }
+
+        results: list[Permission] = []
+        for email_address in email_addresses:
+            result = None
+            new_permission["emailAddress"] = email_address
+
+            permission_list = (
+                self.service.permissions()
+                .list(fileId=file_or_folder_id, fields="*")
+                .execute()
+            )
+            for permission_info in permission_list["permissions"]:
+                # create a new dictionary with the keys from the permission to be created
+                # and the values from the existing permission and compare them
+                perm_fields_to_compare = {
+                    key: permission_info.get(key, None) for key in new_permission
+                }
+                # if permission already exists return it with the results
+                if new_permission == perm_fields_to_compare:
+                    result = permission_info
+                    break
+
+            if result is None:
+                result = (
+                    self.service.permissions()
+                    .create(body=new_permission, fileId=file_or_folder_id, fields="*")  # type: ignore[arg-type]
+                    .execute()
+                )
+            results.append(result)
+        return results
+
+    def unshare(self, file_id: str, permission_id: str) -> None:
+        self.service.permissions().delete(fileId=file_id, permissionId=permission_id)
