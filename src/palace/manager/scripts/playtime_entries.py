@@ -21,7 +21,7 @@ from sqlalchemy.sql.functions import sum
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
 from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
+    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE,
 )
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
@@ -80,6 +80,7 @@ class PlaytimeEntriesSummationScript(Script):
                 e.collection_name,
                 e.library_name,
                 e.loan_identifier,
+                e.data_source_name,
             )
 
         by_group = defaultdict(int)
@@ -98,6 +99,7 @@ class PlaytimeEntriesSummationScript(Script):
                 collection_name,
                 library_name,
                 loan_identifier,
+                data_source_name,
             ) = group
 
             # Update the playtime summary.
@@ -112,6 +114,7 @@ class PlaytimeEntriesSummationScript(Script):
                 collection_name=collection_name,
                 library_name=library_name,
                 loan_identifier=loan_identifier,
+                data_source_name=data_source_name,
             )
             self.log.info(
                 f"Added {seconds} to {identifier_str} ({collection_name} in {library_name} with loan id of "
@@ -189,38 +192,23 @@ class PlaytimeEntriesReportsScript(Script):
         google_drive: GoogleDriveService = self.services.google_drive.service()
 
         # create directory hierarchy
-        root_folders = os.environ.get(
-            PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
-            "",
-        ).split("/")
-        nested_folders = root_folders + [
-            "usage_reports",
-            reporting_name,
-            str(start.year),
-        ]
-        folder_results = google_drive.create_nested_folders_if_not_exist(
-            folders=nested_folders
+        root_folder_id = os.environ.get(
+            PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE, None
         )
-        # the root folder is the last path segment in the root folders list
-        root_folder = folder_results[len(root_folders) - 1]
-        leaf_folder = folder_results[-1]
 
         # get list of collections
-        collection_names = [
+        data_source_names = [
             x[0]
-            for x in self._fetch_distinct_collection_names_in_range(
+            for x in self._fetch_distinct_data_source_names_in_range(
                 start=start, until=until
             )
         ]
 
-        for collection_name in collection_names:
+        for data_source_name in data_source_names:
             reporting_name_with_no_spaces = (
-                f"{reporting_name}-{collection_name}".replace(" ", "_")
+                f"{reporting_name}-{data_source_name}".replace(" ", "_")
             )
-            file_name_prefix = (
-                f"playtime-summary-{reporting_name_with_no_spaces}-"
-                f"{formatted_start_date}-{formatted_until_date}-{uid}"
-            )
+            file_name_prefix = f"{formatted_start_date}-{formatted_until_date}-playtime-summary-{reporting_name_with_no_spaces}-{uid}"
             linked_file_name = f"{file_name_prefix}.{link_extension}"
             # Write to a temporary file so we don't overflow the memory
             with tempfile.NamedTemporaryFile(
@@ -234,7 +222,9 @@ class PlaytimeEntriesReportsScript(Script):
                     writer,
                     date_label=report_date_label,
                     records=self._fetch_report_records(
-                        start=start, until=until, collection_name=collection_name
+                        start=start,
+                        until=until,
+                        data_source_name=data_source_name,
                     ),
                 )
 
@@ -244,9 +234,21 @@ class PlaytimeEntriesReportsScript(Script):
                 with Path(temp.name).open(
                     "rb",
                 ) as binary_stream:
+                    nested_folders = [
+                        data_source_name,
+                        "Usage Report",
+                        reporting_name,
+                        str(start.year),
+                    ]
+                    folder_results = google_drive.create_nested_folders_if_not_exist(
+                        folders=nested_folders,
+                        parent_folder_id=root_folder_id,
+                    )
+                    # the lef folder is the last path segment in the result list
+                    leaf_folder = folder_results[-1]
 
-                    # store stream
-                    stored_stream_result = google_drive.create_file(
+                    # store file
+                    google_drive.create_file(
                         file_name=linked_file_name,
                         parent_folder_id=leaf_folder["id"],
                         content_type="text/csv",
@@ -254,14 +256,15 @@ class PlaytimeEntriesReportsScript(Script):
                     )
                     self.log.info(
                         f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
+                        f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
                     )
 
-    def _fetch_distinct_collection_names_in_range(
+    def _fetch_distinct_data_source_names_in_range(
         self, start: datetime, until: datetime
     ) -> Query:
         return self._db.query(
             select(
-                distinct(PlaytimeSummary.collection_name),
+                distinct(PlaytimeSummary.data_source_name),
             )
             .where(
                 and_(
@@ -269,12 +272,12 @@ class PlaytimeEntriesReportsScript(Script):
                     PlaytimeSummary.timestamp < until,
                 )
             )
-            .order_by(PlaytimeSummary.collection_name)
+            .order_by(PlaytimeSummary.data_source_name)
             .subquery()
         )
 
     def _fetch_report_records(
-        self, start: datetime, until: datetime, collection_name
+        self, start: datetime, until: datetime, data_source_name
     ) -> Query:
         # The loan count query returns only non-empty string isbns and titles if there is more
         # than one row returned with the grouping.  This way we ensure that we do not
@@ -299,7 +302,7 @@ class PlaytimeEntriesReportsScript(Script):
                 and_(
                     PlaytimeSummary.timestamp >= start,
                     PlaytimeSummary.timestamp < until,
-                    PlaytimeSummary.collection_name == collection_name,
+                    PlaytimeSummary.data_source_name == data_source_name,
                 )
             )
             .group_by(
@@ -324,7 +327,7 @@ class PlaytimeEntriesReportsScript(Script):
                 and_(
                     PlaytimeSummary.timestamp >= start,
                     PlaytimeSummary.timestamp < until,
-                    PlaytimeSummary.collection_name == collection_name,
+                    PlaytimeSummary.data_source_name == data_source_name,
                 )
             )
             .group_by(

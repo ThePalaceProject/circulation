@@ -20,9 +20,10 @@ from palace.manager.scripts.playtime_entries import (
     PlaytimeEntriesSummationScript,
 )
 from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE,
+    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
@@ -52,6 +53,7 @@ def create_playtime_entries(
             collection_name=collection.name,
             library_name=library.name or "",
             loan_identifier=loan_identifier,
+            data_source_name=collection.data_source.name,
         )
         db.session.add(inserted)
         all_inserted.append(inserted)
@@ -354,6 +356,9 @@ class TestPlaytimeEntriesSummationScript:
         l1_name = "Library 1"
         l2_name = "Library 2"
 
+        ds_name_1 = "datasource 1"
+        ds_name_2 = "datasource 2"
+
         id1 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=id1_value)
         id2 = db.identifier(identifier_type=Identifier.ISBN, foreign_id=id2_value)
         id1_urn = id1.urn
@@ -528,6 +533,7 @@ def playtime(
         collection_name=collection.name,
         library_name=library.name,
         loan_identifier=loan_identifier,
+        data_source_name=collection.data_source.name,
     )
 
 
@@ -540,10 +546,17 @@ class TestPlaytimeEntriesEmailReportsScript:
     ):
         identifier = db.identifier()
         collection = db.collection("collection b")
+        collection.data_source = DataSource.lookup(
+            db.session, name="ds_b", autocreate=True
+        )
         library = db.default_library()
-        edition = db.edition()
+        edition = db.edition(data_source_name=collection.data_source.name)
         identifier2 = edition.primary_identifier
         collection2 = db.collection("collection a")
+        collection2.data_source = DataSource.lookup(
+            db.session, name="ds_a", autocreate=True
+        )
+
         library2 = db.library()
 
         identifier3 = db.identifier()
@@ -679,7 +692,7 @@ class TestPlaytimeEntriesEmailReportsScript:
                 "palace.manager.scripts.playtime_entries.os.environ",
                 new={
                     Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
-                    PALACE_GOOGLE_DRIVE_ROOT_ENVIRONMENT_VARIABLE: "palace-test",
+                    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE: "palace-test",
                 },
             ),
         ):
@@ -816,19 +829,25 @@ class TestPlaytimeEntriesEmailReportsScript:
 
         store_stream_call_list = mock_google_drive_service.create_file.call_args_list
         assert (
-            f"playtime-summary-test_cm-collection_a-{cutoff.year}"
+            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
             in store_stream_call_list[0].kwargs["file_name"]
         )
         assert (
-            f"playtime-summary-test_cm-collection_b-{cutoff.year}"
+            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
             in store_stream_call_list[1].kwargs["file_name"]
         )
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
-        assert nested_method.call_count == 1
+        assert nested_method.call_count == 2
         assert nested_method.call_args_list[0].kwargs["folders"] == [
-            "palace-test",
-            "usage_reports",
+            "ds_a",
+            "Usage Report",
+            "test cm",
+            "2025",
+        ]
+        assert nested_method.call_args_list[1].kwargs["folders"] == [
+            "ds_b",
+            "Usage Report",
             "test cm",
             "2025",
         ]

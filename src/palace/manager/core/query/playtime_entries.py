@@ -61,6 +61,7 @@ class PlaytimeEntries:
                         timestamp=entry.during_minute,
                         total_seconds_played=entry.seconds_played,
                         loan_identifier=loan_identifier,
+                        data_source_name=collection.data_source.name,
                     )
             except IntegrityError as ex:
                 logging.getLogger("Time Tracking").error(

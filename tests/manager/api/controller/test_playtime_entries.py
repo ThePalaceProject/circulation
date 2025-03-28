@@ -177,6 +177,7 @@ class TestPlaytimeEntriesController:
     ):
         identifier = db.identifier()
         collection = db.default_collection()
+        data_source_name = "ds1"
         library = db.default_library()
         patron = db.patron()
         # Attach the identifier to the collection
@@ -203,6 +204,7 @@ class TestPlaytimeEntriesController:
                 collection_name=collection.name,
                 library_name=library.name or "",
                 loan_identifier=loan_identifier,
+                data_source_name=data_source_name,
             )
         )
 
