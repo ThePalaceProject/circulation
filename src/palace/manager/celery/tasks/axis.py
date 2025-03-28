@@ -2,7 +2,9 @@ import time
 from datetime import datetime
 
 from celery import shared_task
+from psycopg2.errors import DeadlockDetected
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
@@ -13,6 +15,7 @@ from palace.manager.api.circulation import (
     SettingsType,
 )
 from palace.manager.celery.task import Task
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.metadata_layer import CirculationData, Metadata
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
@@ -25,6 +28,7 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.backoff import exponential_backoff
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
+from palace.manager.util.log import pluralize
 
 DEFAULT_BATCH_SIZE: int = 25
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
@@ -148,8 +152,10 @@ def list_identifiers_for_import(
             return title_ids
 
 
-def create_api(collection: Collection, session: Session) -> Axis360API:
-    return Axis360API(session, collection)
+def create_api(
+    collection: Collection, session: Session, bearer_token: str | None = None
+) -> Axis360API:
+    return Axis360API(session, collection, bearer_token)
 
 
 def _check_api_credentials(task: Task, collection: Collection, api: Axis360API) -> bool:
@@ -191,6 +197,12 @@ def timestamp(
         ),
     )
     return timestamp
+
+
+def _check_if_deadlock(e: Exception) -> None:
+    if isinstance(e, OperationalError):
+        if not isinstance(e.orig, DeadlockDetected):
+            raise e
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
@@ -241,23 +253,34 @@ def import_identifiers(
             return
 
         api = create_api(session=session, collection=collection)
-
+        bearer_token = api.bearer_token()
         identifier_batch = identifiers[:batch_size]
-        circ_data = [
-            (metadata, circulation)
-            for metadata, circulation in api.availability_by_title_ids(
-                title_ids=identifier_batch
+
+        try:
+            circ_data = [
+                (metadata, circulation)
+                for metadata, circulation in api.availability_by_title_ids(
+                    title_ids=identifier_batch
+                )
+            ]
+        except IntegrationException as e:
+            wait_time = exponential_backoff(task.request.retries)
+            task.log.exception(
+                f"Something unexpected went wrong while retrieving a batch of titles for collection "
+                f'"{collection_name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
             )
-        ]
+            raise task.retry(countdown=wait_time)
 
     for metadata, circulation in circ_data:
         with task.transaction() as session:
             collection = Collection.by_id(session, id=collection_id)
-            api = create_api(session=session, collection=collection)  # type: ignore[arg-type]
+            api = create_api(session=session, collection=collection, bearer_token=bearer_token)  # type: ignore[arg-type]
             try:
                 process_book(task, session, api, metadata, circulation)
                 total_imported_in_current_task += 1
-            except (ObjectDeletedError, StaleDataError) as e:
+            except (ObjectDeletedError, StaleDataError, OperationalError) as e:
+                _check_if_deadlock(e)
+
                 wait_time = exponential_backoff(task.request.retries)
                 task.log.exception(
                     f"Something unexpected went wrong while processing a batch of titles for collection "
@@ -290,7 +313,7 @@ def import_identifiers(
         )
         task.log.info(
             f"Replacing task to continue importing remaining "
-            f"{identifiers_list_length} identifier{'' if identifiers_list_length == 1 else 's'} "
+            f'{pluralize(identifiers_list_length, "identifier")} '
             f"for collection ({collection_name}, id={collection_id})"
         )
 
@@ -374,10 +397,10 @@ def reap_all_collections(task: Task) -> None:
             )
             count += 1
 
-        task.log.info(f"Finished queuing reap collection tasks.")
+        task.log.info(f"Finished queuing all reap_collection tasks.")
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_collection(
     task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
 ) -> None:
@@ -410,6 +433,8 @@ def reap_collection(
             .all()
         )
 
+    bearer_token: str | None = None
+
     for identifier in identifiers:
         with task.transaction() as session:
             identifier = session.merge(identifier)
@@ -417,11 +442,27 @@ def reap_collection(
             # We just checked that the collection exists, so it should still exist. Assert
             # that is does for the sake of the type checker.
             assert collection is not None
-            api = create_api(session=session, collection=collection)
-            if not _check_api_credentials(task, collection, api):
-                return
+            try:
+                api = create_api(
+                    session=session, collection=collection, bearer_token=bearer_token
+                )
+                if not _check_api_credentials(task, collection, api):
+                    return
 
-            api.update_licensepools_for_identifiers(identifiers=[identifier])
+                # store the bearer token for subsequent api calls so that we're minimizing the calls for fresh bearer
+                # tokens since every new api instance requires a new bearer token.
+                bearer_token = api.bearer_token()
+
+                api.update_licensepools_for_identifiers(identifiers=[identifier])
+            except (IntegrationException, OperationalError) as e:
+                _check_if_deadlock(e)
+                wait_time = exponential_backoff(task.request.retries)
+                task.log.exception(
+                    f"Something unexpected went wrong while updating license pools for identifier({identifier}) "
+                    f'in collection("{collection_name}") task(id={task.request.id} due to {e}. '
+                    f"Retrying in {wait_time} seconds."
+                )
+                raise task.retry(countdown=wait_time)
 
     task.log.info(
         f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
