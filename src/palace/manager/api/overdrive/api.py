@@ -785,9 +785,8 @@ class OverdriveAPI(
                 # We were unable to validate the response as the expected type. Log some relevant details and
                 # raise a BadResponseException.
                 self.log.exception(
-                    "Unable to validate Overdrive response as type %s: %s",
-                    response_type.__name__,
-                    e.errors(),
+                    "Unable to validate Overdrive response. %s",
+                    str(e),
                 )
                 raise OverdriveValidationError(
                     response.url,
