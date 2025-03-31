@@ -422,6 +422,7 @@ class TestOverdriveAPI:
             excinfo.value.problem_detail.detail
             == "The server made a request to url, and got an unexpected or invalid response."
         )
+        assert excinfo.value.problem_detail.debug_message is not None
         assert "Invalid JSON" in excinfo.value.problem_detail.debug_message
         assert "1 validation error for Checkout" in caplog.text
 
