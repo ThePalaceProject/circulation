@@ -379,9 +379,10 @@ class TestOverdriveAPI:
         overdrive_api_fixture.queue_access_token_response("bearer token")
         http.queue_response(401)
         overdrive_api_fixture.queue_access_token_response("new bearer token")
-        http.queue_response(200, content=json.dumps("at last, the content"))
+        http.queue_response(200, content="at last, the content")
         assert (
-            api.patron_request(patron, "pin", db.fresh_url()) == "at last, the content"
+            api.patron_request(patron, "pin", db.fresh_url()).text
+            == "at last, the content"
         )
 
         # The bearer token has been updated.
@@ -873,7 +874,7 @@ class TestOverdriveAPI:
         # Finally, extract_data_from_hold_response was called on
         # the return value of patron_request
         mock_extract_data_from_hold_response.assert_called_once_with(
-            mock_patron_request.return_value
+            mock_patron_request.return_value.json.return_value
         )
 
         # Now we need to test two more cases.

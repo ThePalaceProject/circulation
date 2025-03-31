@@ -9,6 +9,7 @@ from typing import Any, NamedTuple, TypeVar, cast, overload
 from urllib.parse import urlsplit
 
 import flask
+from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
@@ -56,6 +57,7 @@ from palace.manager.api.overdrive.exception import (
     InvalidFieldOptionError,
     OverdriveModelError,
     OverdriveResponseException,
+    OverdriveValidationError,
 )
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import (
@@ -699,7 +701,7 @@ class OverdriveAPI(
         method: str | None = ...,
         response_type: None = ...,
         exception_on_401: bool = ...,
-    ) -> dict[str, Any]: ...
+    ) -> Response: ...
 
     @overload
     def patron_request(
@@ -724,7 +726,7 @@ class OverdriveAPI(
         method: str | None = None,
         response_type: type[TOverdriveModel] | None = None,
         exception_on_401: bool = False,
-    ) -> dict[str, Any] | TOverdriveModel:
+    ) -> Response | TOverdriveModel:
         """
         Make an HTTP request on behalf of a patron to Overdrive's API.
 
@@ -775,9 +777,24 @@ class OverdriveAPI(
                 )
 
         if response_type is None:
-            return response.json()  # type: ignore[no-any-return]
+            return response
         else:
-            return response_type.model_validate_json(response.content)
+            try:
+                return response_type.model_validate_json(response.content)
+            except ValidationError as e:
+                # We were unable to validate the response as the expected type. Log some relevant details and
+                # raise a BadResponseException.
+                self.log.exception(
+                    "Unable to validate Overdrive response as type %s: %s",
+                    response_type.__name__,
+                    e.errors(),
+                )
+                raise OverdriveValidationError(
+                    response.url,
+                    "Error validating Overdrive response",
+                    response,
+                    debug_message=str(e),
+                ) from e
 
     def _do_patron_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
@@ -1169,7 +1186,7 @@ class OverdriveAPI(
         )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> dict[str, Any]:
-        return self.patron_request(patron, pin, self.HOLDS_ENDPOINT)
+        return self.patron_request(patron, pin, self.HOLDS_ENDPOINT).json()  # type: ignore[no-any-return]
 
     @classmethod
     def _pd(cls, d: str | None) -> datetime.datetime | None:
@@ -1349,7 +1366,9 @@ class OverdriveAPI(
         # preferred email address for notifications.
         address = None
         try:
-            data = self.patron_request(patron, pin, self.PATRON_INFORMATION_ENDPOINT)
+            data = self.patron_request(
+                patron, pin, self.PATRON_INFORMATION_ENDPOINT
+            ).json()
             address = data.get("lastHoldEmail")
 
             # Great! Except, it's possible that this address is the
@@ -1394,7 +1413,7 @@ class OverdriveAPI(
         try:
             data = self.patron_request(
                 patron, pin, self.HOLDS_ENDPOINT, headers, document
-            )
+            ).json()
         except OverdriveResponseException as e:
             raise CannotHold(e.error_code) from e
         position, date = self.extract_data_from_hold_response(data)
