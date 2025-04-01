@@ -20,12 +20,11 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, aliased, mapper, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
-from sqlalchemy.sql.expression import and_, delete, or_
+from sqlalchemy.sql.expression import and_, or_
 from sqlalchemy.sql.functions import count
 
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.integration.goals import Goals
-from palace.manager.opds.odl.info import Loan
 from palace.manager.service.redis.key import RedisKeyMixin
 from palace.manager.sqlalchemy.constants import DataSourceConstants, EditionConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
@@ -43,7 +42,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import create
 
@@ -660,15 +658,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
             )
 
         _db = Session.object_session(self)
-
-        # delete loans  associated with the collection.
-        _db.execute(
-            delete(Loan).join(LicensePool).where(LicensePool.collection_id == self.id)
-        )
-        # delete holds associated with the collection.
-        _db.execute(
-            delete(Hold).join(LicensePool).where(LicensePool.collection_id == self.id)
-        )
 
         # Disassociate all libraries from this collection.
         self.associated_libraries.clear()
