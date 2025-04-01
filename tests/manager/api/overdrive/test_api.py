@@ -840,6 +840,63 @@ class TestOverdriveAPI:
         assert loan.start_date is None
         assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
 
+        # If the book we checked out is only available in a format that the app cannot read,
+        # we return the book, and raise a CannotLoan error.
+        http.reset_mock()
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_unsupported.json"
+            ),
+        )
+        http.queue_response(200, content="")
+        with pytest.raises(
+            CannotLoan,
+            match="This book is not available in a supported format",
+        ):
+            api.checkout(patron, pin, pool, None)
+
+        # We made requests to checkout the book and return it.
+        assert list(zip(http.requests_methods, http.requests)) == [
+            (
+                "post",
+                "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts",
+            ),
+            (
+                "delete",
+                "https://patron.api.overdrive.com/v1/patrons/me/checkouts/4f40589f-03e7-41b6-9d9a-5e6fd77fdf98",
+            ),
+        ]
+
+        # If the book was already checked out, we still raise an error, but we don't return the book.
+        http.reset_mock()
+        http.queue_response(
+            400, content=overdrive_api_fixture.error_message("TitleAlreadyCheckedOut")
+        )
+        http.queue_response(
+            200,
+            content=overdrive_api_fixture.data.sample_data(
+                "checkout_response_unsupported.json"
+            ),
+        )
+        with pytest.raises(
+            CannotLoan,
+            match="This book is not available in a supported format",
+        ):
+            api.checkout(patron, pin, pool, None)
+
+        # We made requests to checkout the book and get the loan information, but not to return it.
+        assert list(zip(http.requests_methods, http.requests)) == [
+            (
+                "post",
+                "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts",
+            ),
+            (
+                "get",
+                f"https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts/{identifier.identifier}",
+            ),
+        ]
+
     def test_place_hold(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
@@ -945,7 +1002,7 @@ class TestOverdriveAPI:
         )
         checkout_response_dict = json.loads(checkout_response)
         http.queue_response(200, content=checkout_response)
-        http.queue_response(200, content="{}")
+        http.queue_response(200, content="")
 
         # In most circumstances we do not bother calling
         # perform_early_return; we just call patron_request.
