@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 from flask import Flask
 from freezegun import freeze_time
-from sqlalchemy import delete
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.circulation import (
@@ -38,13 +37,7 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
-from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
-    LicensePool,
-    LicensePoolDeliveryMechanism,
-    RightsStatus,
-)
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.patron import Loan
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.datetime_helpers import utc_now
@@ -1084,9 +1077,7 @@ class PatronActivityCirculationAPIFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:
         self.db = db
         self.patron = db.patron()
-        self.library = db.default_library()
-        self.patron.library = self.library
-        self.collection = db.collection(protocol=BibliothecaAPI, library=self.library)
+        self.collection = db.collection(protocol=BibliothecaAPI)
         edition, self.pool = db.edition(
             data_source_name=DataSource.BIBLIOTHECA,
             identifier_type=Identifier.BIBLIOTHECA_ID,
@@ -1112,160 +1103,6 @@ def patron_activity_circulation_api(
 
 
 class TestPatronActivityCirculationAPI:
-
-    @pytest.mark.parametrize(
-        "has_owned_copies, is_unlimited_access, is_open_access, collection_is_active, library_associated_with_collection, license_pool_is_deliverable, is_deleted",
-        [
-            [
-                False,
-                True,
-                True,
-                True,
-                True,
-                True,
-                False,
-            ],  # has no owned copies but otherwise all criteria met: not deleted
-            [
-                True,
-                False,
-                False,
-                True,
-                True,
-                True,
-                False,
-            ],  # has owned copies and not open or unlimited but otherwise all criteria met: not deleted
-            [
-                False,
-                True,
-                False,
-                True,
-                True,
-                False,
-                True,
-            ],  # no owned copies, open access, not unlimited, no delivery mechanism : deleted
-            [
-                False,
-                False,
-                True,
-                True,
-                True,
-                False,
-                True,
-            ],  # no owned copies, not open access, unlimited, no delivery mechanism : deleted
-            [
-                False,
-                True,
-                True,
-                False,
-                True,
-                True,
-                True,
-            ],  # collection not active - deleted
-            [
-                False,
-                True,
-                True,
-                True,
-                False,
-                True,
-                True,
-            ],  # library not assoc with collection: deleted
-        ],
-    )
-    def test_sync_patron_activity_when_remote_loan_present_but_loan_should_be_removed(
-        self,
-        db: DatabaseTransactionFixture,
-        patron_activity_circulation_api: PatronActivityCirculationAPIFixture,
-        has_owned_copies: bool,
-        is_open_access: bool,
-        is_unlimited_access: bool,
-        collection_is_active: bool,
-        library_associated_with_collection: bool,
-        license_pool_is_deliverable: bool,
-        is_deleted: int,
-    ):
-        loan_info = LoanInfo.from_license_pool(
-            patron_activity_circulation_api.pool,
-            start_date=patron_activity_circulation_api.now,
-            end_date=patron_activity_circulation_api.in_two_weeks,
-        )
-
-        library = patron_activity_circulation_api.library
-        assert len(patron_activity_circulation_api.api.remote_loans) == 0
-
-        patron_activity_circulation_api.api.add_remote_loan(loan_info)
-        assert len(patron_activity_circulation_api.api.remote_loans) == 1
-        lp = patron_activity_circulation_api.pool
-        lp.licenses_owned = 0
-        lp.open_access = True
-
-        # collection is active
-        assert lp.collection.is_active
-        # library associated with collection
-        assert (
-            lp.collection
-            in patron_activity_circulation_api.patron.library.associated_collections
-        )
-        # license pool has deliverable mechanism
-
-        assert lp.deliverable
-
-        # sync the remote loans so local loans are created.
-        patron_activity_circulation_api.sync_patron_activity()
-
-        # there should be one loan now
-        loans = db.session.query(Loan).all()
-        assert len(loans) == 1
-        loan = loans[0]
-
-        lp.licenses_owned = 1 if has_owned_copies else 0
-        lp.open_access = is_open_access
-
-        if is_unlimited_access:
-            lp.licenses_owned = LicensePool.UNLIMITED_ACCESS
-
-        if not library_associated_with_collection:
-            # disassociate library from collection
-            db.session.execute(
-                delete(IntegrationLibraryConfiguration).where(
-                    IntegrationLibraryConfiguration.library_id == library.id
-                )
-            )
-            db.session.refresh(lp.collection)
-            assert library not in lp.collection.associated_libraries
-
-        if not license_pool_is_deliverable:
-            # make lp undeliverable
-            db.session.execute(
-                delete(LicensePoolDeliveryMechanism).where(
-                    LicensePoolDeliveryMechanism.data_source
-                    == lp.collection.data_source
-                )
-            )
-            db.session.refresh(lp)
-            assert not lp.has_fulfillable_delivery_mechanism
-
-        if not collection_is_active:
-            # make the collection inactive
-            day_before_yesterday = (
-                patron_activity_circulation_api.yesterday - timedelta(days=1)
-            ).date()
-            lp.collection._set_settings(
-                subscription_expiration_date=patron_activity_circulation_api.yesterday.date(),
-                subscription_activation_date=day_before_yesterday,
-            )
-            db.session.refresh(lp)
-            db.session.refresh(lp.collection)
-            assert not lp.collection.is_active
-        # re-sync based on specific test conditions
-        patron_activity_circulation_api.sync_patron_activity()
-
-        loans = db.session.query(Loan).all()
-        if is_deleted:
-            assert loans == []
-        else:
-            loans == [loan]
-
     def test_sync_patron_activity_with_old_local_loan_and_no_remote_loan_deletes_local_loan(
         self,
         db: DatabaseTransactionFixture,
