@@ -1,0 +1,69 @@
+{
+  "reserveId" : "6a600b7a-afda-4f0f-a32c-5be178267b0e",
+  "crossRefId" : 505744,
+  "expires" : "2025-03-29T18:13:30Z",
+  "isFormatLockedIn" : false,
+  "formats" : [ {
+    "reserveId" : "6a600b7a-afda-4f0f-a32c-5be178267b0e",
+    "crossRefId" : 505744,
+    "formatType" : "audiobook-overdrive",
+    "links" : {
+      "self" : {
+        "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e/formats/audiobook-overdrive",
+        "type" : "application/vnd.overdrive.circulation.api+json"
+      }
+    },
+    "linkTemplates" : {
+      "downloadLink" : {
+        "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e/formats/audiobook-overdrive/downloadlink?errorpageurl={errorpageurl}&odreadauthurl={odreadauthurl}",
+        "type" : "application/vnd.overdrive.circulation.api+json"
+      },
+      "downloadLinkV2" : {
+        "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e/formats/audiobook-overdrive/downloadlink?errorurl={errorurl}&successurl={successurl}",
+        "type" : "application/vnd.overdrive.circulation.api+json"
+      }
+    }
+  } ],
+  "links" : {
+    "self" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    },
+    "metadata" : {
+      "href" : "https://api.overdrive.com/v1/collections/v1P3BBQ0AAN8VAAB1GQAA0n/products/6a600b7a-afda-4f0f-a32c-5be178267b0e/metadata",
+      "type" : "application/vnd.overdrive.api+json"
+    },
+    "bundledChildren" : [ {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/5BC2C0AB-A195-4751-9745-624E9365945D",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    }, {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/EBFE8CD2-B9E7-43B8-8A95-243E5EE395FB",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    } ],
+    "downloadRedirect" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e/formats/downloadredirect",
+      "type" : "application/vnd.overdrive.circulation.api+json"
+    }
+  },
+  "actions" : {
+    "format" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e/formats",
+      "type" : "application/json",
+      "method" : "POST",
+      "fields" : [ {
+        "name" : "reserveId",
+        "type" : "text",
+        "value" : "6a600b7a-afda-4f0f-a32c-5be178267b0e"
+      }, {
+        "name" : "formatType",
+        "type" : "text",
+        "options" : [ "audiobook-mp3" ]
+      } ]
+    },
+    "earlyReturn" : {
+      "href" : "https://patron.api.overdrive.com/v1/patrons/me/checkouts/6a600b7a-afda-4f0f-a32c-5be178267b0e",
+      "method" : "DELETE"
+    }
+  },
+  "checkoutDate" : "2025-03-28T18:13:30Z"
+}

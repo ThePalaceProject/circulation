@@ -25,6 +25,7 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.config import Configuration
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.constants import OverdriveConstants
+from palace.manager.api.overdrive.exception import OverdriveValidationError
 from palace.manager.api.overdrive.fulfillment import OverdriveManifestFulfillment
 from palace.manager.api.overdrive.model import Checkout, Format, Link
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
@@ -379,9 +380,10 @@ class TestOverdriveAPI:
         overdrive_api_fixture.queue_access_token_response("bearer token")
         http.queue_response(401)
         overdrive_api_fixture.queue_access_token_response("new bearer token")
-        http.queue_response(200, content=json.dumps("at last, the content"))
+        http.queue_response(200, content="at last, the content")
         assert (
-            api.patron_request(patron, "pin", db.fresh_url()) == "at last, the content"
+            api.patron_request(patron, "pin", db.fresh_url()).text
+            == "at last, the content"
         )
 
         # The bearer token has been updated.
@@ -396,6 +398,33 @@ class TestOverdriveAPI:
         http.queue_response(401)
         with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
             api.patron_request(patron, "pin", db.fresh_url())
+
+    def test_patron_request_raises_validation_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """
+        If patron request can't validate the response, it raises a OverdriveValidationError.
+        """
+        http = overdrive_api_fixture.mock_http
+
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(200, content="not json")
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_api_fixture.api.patron_request(
+                db.patron(), "pin", db.fresh_url(), response_type=Checkout
+            )
+
+        assert (
+            excinfo.value.problem_detail.detail
+            == "The server made a request to url, and got an unexpected or invalid response."
+        )
+        assert excinfo.value.problem_detail.debug_message is not None
+        assert "Invalid JSON" in excinfo.value.problem_detail.debug_message
+        assert "1 validation error for Checkout" in caplog.text
 
     def test_advantage_differences(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -873,7 +902,7 @@ class TestOverdriveAPI:
         # Finally, extract_data_from_hold_response was called on
         # the return value of patron_request
         mock_extract_data_from_hold_response.assert_called_once_with(
-            mock_patron_request.return_value
+            mock_patron_request.return_value.json.return_value
         )
 
         # Now we need to test two more cases.

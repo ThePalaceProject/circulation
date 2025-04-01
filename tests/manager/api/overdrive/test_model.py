@@ -395,6 +395,12 @@ class TestCheckout:
         )
         assert checkout.reserve_id == "2BF132F7-215E-461B-B103-007CCED1915A"
 
+        checkout = Checkout.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "checkout_response_bundled_children.json"
+            )
+        )
+
     def test_get_format(self, checkouts_fixture: CheckoutsFixture) -> None:
         checkout = Checkout.model_validate_json(
             checkouts_fixture.files.sample_data(
