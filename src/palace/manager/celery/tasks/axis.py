@@ -382,12 +382,12 @@ def reap_all_collections(
     task: Task, delay_in_seconds_between_reap_collection_tasks: int = 180
 ) -> None:
     """
-    A shared task that  kicks off a reap collection task for each Axis 360 collection.
+    A shared task that  kicks off a reap_collection task for each Axis 360 collection.
     Palace Managers can be configured with many Axis collections which may have identical or nearly identical
     lists of identifiers.  As a result reaping Axis collections in parallel can lead to frequent
     deadlocks when launched in parallel.
 
-    The default 60 second delay between launching of reap_collection subtasks is based on
+    The default delay of 3 minutes between launching of reap_collection sub-tasks is based on
     observations of performance in a local environment.  I observed that reaping in batches 100
     can take from 10-20 seconds in my development environment. The production environment was
     observed to be about 2 to 3 times slower.  Therefore,  a minute delay between task initiation provides a reasonable
