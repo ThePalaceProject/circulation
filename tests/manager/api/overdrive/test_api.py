@@ -868,6 +868,20 @@ class TestOverdriveAPI:
             ),
         ]
 
+        # We updated the pool's delivery mechanisms, so we know that no supported formats are available
+        # in the future.
+        assert {
+            (
+                dm.delivery_mechanism.content_type,
+                dm.delivery_mechanism.drm_scheme,
+                dm.available,
+            )
+            for dm in pool.delivery_mechanisms
+        } == {
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, False),
+            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+        }
+
         # If the book was already checked out, we still raise an error, but we don't return the book.
         http.reset_mock()
         http.queue_response(
