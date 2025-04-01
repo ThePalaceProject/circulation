@@ -244,37 +244,37 @@ def loan_reaper(task: Task) -> None:
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_unassociated_loans(task: Task) -> None:
 
     reap_unassociated_loans_or_holds(task, Loan)
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_unassociated_holds(task: Task) -> None:
     reap_unassociated_loans_or_holds(task, Hold)
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_loans_in_inactive_collections(task: Task) -> None:
 
     reap_loans_or_holds_in_inactive_collections(task, Loan)
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_holds_in_inactive_collections(task: Task) -> None:
     reap_loans_or_holds_in_inactive_collections(task, Hold)
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_loans_with_unavailable_license_pools(task: Task) -> None:
 
-    reap_loans_and_holds_with_unavailable_license_pools(task, Loan)
+    reap_loans_or_holds_with_unavailable_license_pools(task, Loan)
 
 
-@shared_task(queue=QueueNames.high, bind=True, max_retries=4)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_holds_with_unavailable_license_pools(task: Task) -> None:
-    reap_loans_and_holds_with_unavailable_license_pools(task, Hold)
+    reap_loans_or_holds_with_unavailable_license_pools(task, Hold)
 
 
 def reap_unassociated_loans_or_holds(
@@ -346,7 +346,7 @@ def reap_loans_or_holds_in_inactive_collections(
     )
 
 
-def reap_loans_and_holds_with_unavailable_license_pools(
+def reap_loans_or_holds_with_unavailable_license_pools(
     task: Task, deletion_class: type[Loan | Hold]
 ) -> None:
     """

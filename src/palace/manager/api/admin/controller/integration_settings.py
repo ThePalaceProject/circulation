@@ -20,6 +20,10 @@ from palace.manager.api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
+from palace.manager.celery.tasks.reaper import (
+    reap_unassociated_holds,
+    reap_unassociated_loans,
+)
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import (
@@ -380,6 +384,12 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         """
         for library_integration in removed:
             self._db.delete(library_integration)
+
+        if removed:
+            # ensure that all loans and holds related
+            # with the deleted library integrations are purged.
+            reap_unassociated_loans.delay()
+            reap_unassociated_holds.delay()
 
     def process_updated_libraries(
         self,
