@@ -314,7 +314,7 @@ class Checkout(BaseOverdriveModel):
     cross_ref_id: int | None = Field(None, alias="crossRefId")
     expires: AwareDatetime
     locked_in: bool = Field(..., alias="isFormatLockedIn")
-    links: dict[str, Link] = Field(default_factory=dict)
+    links: dict[str, Link | list[Link]] = Field(default_factory=dict)
     actions: dict[str, Action] = Field(default_factory=dict)
     checkout_date: AwareDatetime | None = Field(None, alias="checkoutDate")
     formats: list[Format] = Field(default_factory=list)

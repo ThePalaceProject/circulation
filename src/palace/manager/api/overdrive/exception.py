@@ -50,6 +50,14 @@ class OverdriveModelError(BasePalaceException):
     ...
 
 
+class OverdriveValidationError(BadResponseException, OverdriveModelError):
+    """
+    Raise when we are unable to validate a response from Overdrive.
+    """
+
+    ...
+
+
 class MissingSubstitutionsError(OverdriveModelError):
     """
     Raised when templating a LinkTemplate, and some of the required
