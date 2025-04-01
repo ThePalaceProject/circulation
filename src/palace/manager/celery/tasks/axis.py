@@ -435,7 +435,7 @@ def reap_collection(
 
             collection_name = collection.name
 
-            def log_completion_message():
+            def log_completion_message() -> None:
                 task.log.info(
                     f'Reaping of collection (name="{collection_name}", id={collection_id}) complete.'
                 )
