@@ -30,7 +30,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.log import pluralize
 
-DEFAULT_BATCH_SIZE: int = 25
+DEFAULT_BATCH_SIZE: int = 100
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 TARGET_MAX_EXECUTION_SECONDS = 120
 
@@ -378,9 +378,24 @@ def get_collections_by_protocol(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def reap_all_collections(task: Task) -> None:
+def reap_all_collections(
+    task: Task, delay_in_seconds_between_reap_collection_tasks: int = 180
+) -> None:
     """
     A shared task that  kicks off a reap collection task for each Axis 360 collection.
+    Palace Managers can be configured with many Axis collections which may have identical or nearly identical
+    lists of identifiers.  As a result reaping Axis collections in parallel can lead to frequent
+    deadlocks when launched in parallel.
+
+    The default 60 second delay between launching of reap_collection subtasks is based on
+    observations of performance in a local environment.  I observed that reaping in batches 100
+    can take from 10-20 seconds in my development environment. The production environment was
+    observed to be about 2 to 3 times slower.  Therefore,  a minute delay between task initiation provides a reasonable
+    empirically based time buffer such that batches of axis identifiers are not reaped simultaneously and won't likely
+    cause a pile-up in the case of occasional deadlocks.
+
+    In this way we minimize, if not completely eliminate, the possibility of a deadlock while also balancing that with
+    decent performance.
     """
     with task.session() as session:
         count = 0
@@ -390,7 +405,8 @@ def reap_all_collections(task: Task) -> None:
             )
             reap_collection.apply_async(
                 kwargs={"collection_id": collection.id},
-                countdown=count * 5,  # stagger the execution of the collection import
+                countdown=count
+                * delay_in_seconds_between_reap_collection_tasks,  # stagger the execution subtasks
                 # in order to minimize chance of deadlocks caused by
                 # simultaneous updates to the metadata when CM has multiple
                 # axis collections configured with overlapping content
@@ -402,87 +418,76 @@ def reap_all_collections(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_collection(
-    task: Task, collection_id: int, offset: int = 0, batch_size: int = 25
+    task: Task, collection_id: int, offset: int = 0, batch_size: int = 100
 ) -> None:
     """
     Update the editions and license pools (and in the process reap where appropriate)
     associated with a collection.  This task will process {batch_size} books (each in
     a separate task) and requeue itself for further processing.
     """
-
     start_seconds = time.perf_counter()
-
     with task.transaction() as session:
-        collection = Collection.by_id(session, collection_id)
-        if not collection:
-            task.log.error(f"Collection not found:  {collection_id} : ignoring...")
-            return
-
-        collection_name = collection.name
-
-        identifiers = (
-            session.scalars(
-                select(Identifier)
-                .join(Identifier.licensed_through)
-                .where(LicensePool.collection == collection)
-                .order_by(Identifier.id)
-                .limit(batch_size)
-                .offset(offset)
-            )
-            .unique()
-            .all()
-        )
-
-    bearer_token: str | None = None
-
-    for identifier in identifiers:
-        with task.transaction() as session:
-            identifier = session.merge(identifier)
+        try:
             collection = Collection.by_id(session, collection_id)
-            # We just checked that the collection exists, so it should still exist. Assert
-            # that is does for the sake of the type checker.
-            assert collection is not None
-            try:
-                api = create_api(
-                    session=session, collection=collection, bearer_token=bearer_token
+            if not collection:
+                task.log.error(f"Collection not found:  {collection_id} : ignoring...")
+                return
+
+            collection_name = collection.name
+
+            def log_completion_message():
+                task.log.info(
+                    f'Reaping of collection (name="{collection_name}", id={collection_id}) complete.'
                 )
-                if not _check_api_credentials(task, collection, api):
-                    return
 
-                # store the bearer token for subsequent api calls so that we're minimizing the calls for fresh bearer
-                # tokens since every new api instance requires a new bearer token.
-                bearer_token = api.bearer_token()
-
-                api.update_licensepools_for_identifiers(identifiers=[identifier])
-            except (IntegrationException, OperationalError) as e:
-                _check_if_deadlock(e)
-                wait_time = exponential_backoff(task.request.retries)
-                task.log.exception(
-                    f"Something unexpected went wrong while updating license pools for identifier({identifier}) "
-                    f'in collection("{collection_name}") task(id={task.request.id} due to {e}. '
-                    f"Retrying in {wait_time} seconds."
+            identifiers = (
+                session.scalars(
+                    select(Identifier)
+                    .join(Identifier.licensed_through)
+                    .where(LicensePool.collection == collection)
+                    .order_by(Identifier.id)
+                    .limit(batch_size)
+                    .offset(offset)
                 )
-                raise task.retry(countdown=wait_time)
+                .unique()
+                .all()
+            )
+            if not identifiers:
+                log_completion_message()
+                return
 
-    task.log.info(
-        f'Reaper updated {len(identifiers)} books in collection (name="{collection_name}", id={collection_id}.'
-    )
+            api = create_api(
+                session=session,
+                collection=collection,
+            )
+
+            _check_api_credentials(task, collection, api)
+
+            api.update_licensepools_for_identifiers(identifiers=identifiers)
+        except (IntegrationException, OperationalError) as e:
+            _check_if_deadlock(e)
+            wait_time = exponential_backoff(task.request.retries)
+            task.log.exception(
+                f"An error was encountered while attempting to update license pools for {len(identifiers)} "
+                f'in collection("{collection_name}") task(id={task.request.id} due to {e}. '
+                f"Retrying in {wait_time} seconds."
+            )
+            raise task.retry(countdown=wait_time)
+
     # Requeue at the next offset if the batch if identifiers list was full otherwise do nothing since
     # the run is complete.
 
     task.log.info(
         f"reap_collection task at offset={offset} with {len(identifiers)} identifiers for collection "
-        f'(name="{collection_name}", id={collection_id}): elapsed seconds={time.perf_counter() - start_seconds: 0.2}'
+        f'(name="{collection_name}", id={collection_id}): elapsed seconds={time.perf_counter() - start_seconds: .2f}'
     )
 
     if len(identifiers) >= batch_size:
         new_offset = offset + len(identifiers)
-
         task.log.info(
             f"Re-queuing reap_collection task at offset={new_offset} for collection "
             f'(name="{collection_name}", id={collection_id}).'
         )
-
         raise task.replace(
             reap_collection.s(
                 collection_id=collection_id,
@@ -490,8 +495,5 @@ def reap_collection(
                 batch_size=batch_size,
             )
         )
-
     else:
-        task.log.info(
-            f'Reaping of collection (name="{collection_name}", id={collection_id}) complete.'
-        )
+        log_completion_message()
