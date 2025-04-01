@@ -923,6 +923,7 @@ class OverdriveAPI(
         payload_dict = dict(fields=[dict(name="reserveId", value=overdrive_id)])
         payload = json.dumps(payload_dict)
 
+        already_checked_out = False
         try:
             checkout = self.patron_request(
                 patron,
@@ -943,12 +944,34 @@ class OverdriveAPI(
             # happen if the patron borrows a book through Libby and
             # then immediately borrows the same book through Palace.
             checkout = self.get_loan(patron, pin, identifier.identifier)
+            already_checked_out = True
 
-        # At this point we know what formats this book is available in. If this
-        # item has never been fulfilled, then this might be the first time we
-        # know this information. So we take the opportunity to update the licensepool
-        # with the new information.
-        self._set_licensepool_delivery_mechanism_availability(licensepool, checkout)
+        # At this point we know all available formats for this book.
+        # For Overdrive ebooks, this may be our first complete view of format availability.
+        if "ebook-overdrive" in checkout.supported_formats:
+            self._set_licensepool_delivery_mechanism_availability(licensepool, checkout)
+
+            # Handle books that are only available in the `ebook-overdrive` format,
+            # which the Palace mobile app cannot read. This case is rare but possible.
+            if checkout.supported_formats == {"ebook-overdrive"}:
+                title = (
+                    licensepool.presentation_edition.title
+                    if licensepool.presentation_edition
+                    else "<unknown>"
+                )
+                author = (
+                    licensepool.presentation_edition.author
+                    if licensepool.presentation_edition
+                    else "<unknown>"
+                )
+                self.log.error(
+                    f"Patron checked out a book that is not available in a supported format. "
+                    f"Overdrive ID: '{checkout.reserve_id}' Title: '{title}' Author: '{author}'"
+                )
+                if not already_checked_out:
+                    make_request = partial(self.patron_request, patron, pin)
+                    checkout.action("early_return", make_request)
+                raise CannotLoan("This book is not available in a supported format.")
 
         # Create the loan info.
         return LoanInfo.from_license_pool(
