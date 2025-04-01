@@ -304,20 +304,18 @@ def reap_unassociated_loans_or_holds(
         .outerjoin(
             coll_lib_sub,
             coll_lib_sub.c.id == LicensePool.collection_id,
-            coll_lib_sub.c.library_id == Patron.library_id,
+            coll_lib_sub.c.library_id == Patron.library_id,  #  type: ignore[arg-type]
         )
         .where(coll_lib_sub.c.library_id == None)
         .subquery("loans_with_unassociated_library")
     )
 
     # delete all loans or holds matching the ids to delete query.
-    deletion_query = delete(deletion_class).where(
-        deletion_class.id.not_in(ids_to_delete)
-    )
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
 
     with task.transaction() as tx:
         deletion_count = _execute_delete(tx, deletion_query)
-    task.log(
+    task.log.info(
         f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
         f"because the patron's library was no longer associated with the collection."
     )
@@ -329,19 +327,21 @@ def reap_loans_or_holds_in_inactive_collections(
     """
     Delete the loans or holds associated with inactive collections
     """
-    active_colls = Collection.active_collections_filter().subquery("active_collections")
+    active_colls = Collection.active_collections_filter(
+        sa_select=select(Collection.id)
+    ).subquery("active_collections")
     ids_to_delete = (
         select(deletion_class.id)
         .join(LicensePool)
-        .where(LicensePool.collection_id.not_in(active_colls.c.id))
+        .where(LicensePool.collection_id.not_in(active_colls))
         .subquery()
     )
     deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
 
     with task.transaction() as tx:
         deletion_count = _execute_delete(tx, deletion_query)
-    task.log(
-        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+    task.log.info(
+        f"deleted {pluralize(deletion_count, deletion_class.__name__.lower())} "
         f"because the associated collection is inactive."
     )
 
@@ -353,8 +353,8 @@ def reap_loans_or_holds_with_unavailable_license_pools(
     Delete the loans or holds where the associated licensepool has no licenses with status == "available" or
     or the license_pool.licenses_owned == 0 and license_pool.licenses_available == 0
     """
-    avail_license_pools = select(
-        distinct(License.license_pool_id)
+    avail_license_pools = (
+        select(distinct(License.license_pool_id))
         .where(License.status == LicenseStatus.available)
         .subquery("available_license_pools")
     )
@@ -363,10 +363,10 @@ def reap_loans_or_holds_with_unavailable_license_pools(
         .join(LicensePool)
         .where(
             or_(
-                LicensePool.id.not_in(avail_license_pools.c.license_pool_id),
                 and_(
                     LicensePool.licenses_owned == 0, LicensePool.licenses_available == 0
                 ),
+                LicensePool.id.not_in(avail_license_pools),
             )
         )
         .subquery()
@@ -375,7 +375,7 @@ def reap_loans_or_holds_with_unavailable_license_pools(
 
     with task.transaction() as tx:
         deletion_count = _execute_delete(tx, deletion_query)
-    task.log(
-        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+    task.log.info(
+        f"deleted {pluralize(deletion_count, deletion_class.__name__.lower())} "
         f"because there are no available licenses."
     )
