@@ -300,9 +300,7 @@ class HTTP(LoggerMixin):
         try:
             if verbose:
                 logging.info(
-                    f"Sending {http_method} request to {url}: kwargs {kwargs!r}",
-                    url,
-                    kwargs,
+                    f"Sending {http_method} request to {url}: kwargs {kwargs!r}"
                 )
 
             request_start_time = time.time()
@@ -327,11 +325,7 @@ class HTTP(LoggerMixin):
 
             if verbose:
                 logging.info(
-                    "Response from %s: %s %r %r",
-                    url,
-                    response.status_code,
-                    response.headers,
-                    response.content,
+                    f"Response from {url}: {response.status_code} {response.headers!r} {response.content!r}"
                 )
         except requests.exceptions.Timeout as e:
             # Wrap the requests-specific Timeout exception

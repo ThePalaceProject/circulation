@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from functools import partial
 from typing import Any
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 import requests
@@ -10,6 +10,7 @@ from requests import Response
 from requests_mock import Mocker
 
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
+from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.util.http import (
     HTTP,
     BadResponseException,
@@ -132,6 +133,43 @@ class TestHTTP:
             RequestTimedOut, match="Timeout accessing http://url/: I give up"
         ):
             HTTP._request_with_timeout("PUT", "http://url/", immediately_timeout)
+
+    @mock.patch("palace.manager.util.http.manager.__version__", None)
+    def test_request_with_timeout_verbose(self, caplog: pytest.LogCaptureFixture):
+        """
+        When the verbose flag is set, we log the request and response.
+        """
+        caplog.set_level(LogLevel.info)
+        mock_process_response = create_autospec(HTTP._process_response)
+        make_request = MagicMock(
+            return_value=MockRequestsResponse(
+                204, headers={"test": "response header"}, content="Success!"
+            )
+        )
+
+        response = HTTP._request_with_timeout(
+            "POST",
+            "http://url/",
+            make_request,
+            process_response_with=mock_process_response,
+            verbose=True,
+            headers={"header": "value"},
+        )
+
+        assert make_request.call_count == 1
+        assert make_request.call_args.args == ("POST", "http://url/")
+
+        assert mock_process_response.call_count == 1
+        assert response == mock_process_response.return_value
+
+        assert (
+            "Sending POST request to http://url/: kwargs {'headers': {'User-Agent':"
+            " 'Palace Manager/1.x.x', 'header': 'value'}, 'timeout': 20}"
+        ) in caplog.messages
+        assert (
+            "Response from http://url/: 204 {'test': 'response header'} b'Success!'"
+            in caplog.messages
+        )
 
     def test_request_with_network_failure(self) -> None:
         def immediately_fail(*args, **kwargs) -> Response:
