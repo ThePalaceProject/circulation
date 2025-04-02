@@ -365,15 +365,12 @@ def test_reap_collection_with_requeue(
         reap_collection.delay(collection_id=collection.id, batch_size=2).wait()
 
         update_license_pools = mock_api.update_licensepools_for_identifiers
-        assert update_license_pools.call_count == 3
+        assert update_license_pools.call_count == 2
 
         assert update_license_pools.call_args_list[0].kwargs == {
-            "identifiers": identifiers[0:1]
+            "identifiers": identifiers[0:2]
         }
         assert update_license_pools.call_args_list[1].kwargs == {
-            "identifiers": identifiers[1:2]
-        }
-        assert update_license_pools.call_args_list[2].kwargs == {
             "identifiers": identifiers[2:]
         }
         assert f"Re-queuing reap_collection task at offset=2" in caplog.text
