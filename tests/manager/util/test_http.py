@@ -134,6 +134,7 @@ class TestHTTP:
         ):
             HTTP._request_with_timeout("PUT", "http://url/", immediately_timeout)
 
+    @mock.patch("palace.manager.util.http.manager.__version__", None)
     def test_request_with_timeout_verbose(self, caplog: pytest.LogCaptureFixture):
         """
         When the verbose flag is set, we log the request and response.
