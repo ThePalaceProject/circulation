@@ -511,13 +511,7 @@ class LicensePool(Base):
     @property
     def deliverable(self):
         """This LicensePool can actually be delivered to patrons."""
-        return (
-            self.open_access or self.unlimited_access or self.licenses_owned > 0
-        ) and self.has_fulfillable_delivery_mechanism
-
-    @property
-    def has_fulfillable_delivery_mechanism(self) -> bool:
-        return any(
+        return (self.open_access or self.licenses_owned > 0) and any(
             [
                 dm.delivery_mechanism.default_client_can_fulfill
                 for dm in self.available_delivery_mechanisms
