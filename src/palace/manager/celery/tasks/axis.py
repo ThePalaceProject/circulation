@@ -67,7 +67,7 @@ def import_all_collections(
         task.log.info(f'Finished queuing {count} collection{"s" if count > 1 else ""}.')
 
 
-@shared_task(queue=QueueNames.default, bind=True)
+@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def list_identifiers_for_import(
     task: Task,
     collection_id: int,
@@ -120,21 +120,33 @@ def list_identifiers_for_import(
             task_run_start_time = utc_now()
             # loop through feed :  for every {batch_size} items, pack them in a list and pass along to sub task for
             # processing
-            api = create_api(collection, session)
-            if not _check_api_credentials(task, collection, api):
-                return None
+            try:
+                api = create_api(collection, session)
+                if not _check_api_credentials(task, collection, api):
+                    return None
 
-            task.log.info(
-                f"Starting process of queuing items in collection {collection_name} (id={collection_id} "
-                f"for import that have changed since {start_time_of_last_scan}. "
-            )
-            # start stopwatch
-            start_seconds = time.perf_counter()
-            title_ids: list[str] = []
-            for metadata, circulation in api.recent_activity(start_time_of_last_scan):
-                if metadata.primary_identifier is not None:
-                    title_ids.append(metadata.primary_identifier.identifier)
-            elapsed_time = time.perf_counter() - start_seconds
+                task.log.info(
+                    f"Starting process of queuing items in collection {collection_name} (id={collection_id} "
+                    f"for import that have changed since {start_time_of_last_scan}. "
+                )
+                # start stopwatch
+                start_seconds = time.perf_counter()
+                title_ids: list[str] = []
+                for metadata, circulation in api.recent_activity(
+                    start_time_of_last_scan
+                ):
+                    if metadata.primary_identifier is not None:
+                        title_ids.append(metadata.primary_identifier.identifier)
+                elapsed_time = time.perf_counter() - start_seconds
+
+            except IntegrationException as e:
+                wait_time = exponential_backoff(task.request.retries)
+                task.log.exception(
+                    f"Something unexpected went wrong while retrieving a batch of titles for collection "
+                    f'"{collection_name}" task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds.'
+                )
+                raise task.retry(countdown=wait_time)
+
             achievements = (
                 f"Total items queued for import:  {len(title_ids)}; "
                 f"elapsed time: {elapsed_time:0.2f}"
