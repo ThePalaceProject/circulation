@@ -20,6 +20,10 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.circulation import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
+from palace.manager.celery.tasks.reaper import (
+    reap_unassociated_holds,
+    reap_unassociated_loans,
+)
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
@@ -131,9 +135,15 @@ class CollectionSettingsController(
 
             # Update library settings
             if libraries_data:
-                self.process_libraries(
+                new, updated, removed = self.process_libraries(
                     integration, libraries_data, impl_cls.library_settings_class()
                 )
+
+                if removed:
+                    # ensure that all loans and holds related
+                    # with the deleted library integrations are purged.
+                    reap_unassociated_loans.delay()
+                    reap_unassociated_holds.delay()
 
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)

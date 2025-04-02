@@ -20,10 +20,6 @@ from palace.manager.api.admin.problem_details import (
     NO_SUCH_LIBRARY,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.celery.tasks.reaper import (
-    reap_unassociated_holds,
-    reap_unassociated_loans,
-)
 from palace.manager.core.problem_details import INTERNAL_SERVER_ERROR, INVALID_INPUT
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import (
@@ -385,12 +381,6 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         for library_integration in removed:
             self._db.delete(library_integration)
 
-        if removed:
-            # ensure that all loans and holds related
-            # with the deleted library integrations are purged.
-            reap_unassociated_loans.delay()
-            reap_unassociated_holds.delay()
-
     def process_updated_libraries(
         self,
         libraries: list[UpdatedLibrarySettingsTuple],
@@ -408,7 +398,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         service: IntegrationConfiguration,
         libraries_data: str,
         settings_class: type[BaseSettings],
-    ) -> None:
+    ) -> ChangedLibrariesTuple:
         """
         Process the library settings for a service. This will create new
         IntegrationLibraryConfigurations for any libraries that don't have one,
@@ -419,6 +409,8 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         self.process_deleted_libraries(removed)
         self.process_updated_libraries(new, settings_class)
         self.process_updated_libraries(updated, settings_class)
+
+        return ChangedLibrariesTuple(new=new, updated=updated, removed=removed)
 
     def delete_service(self, service_id: int) -> Response:
         """
