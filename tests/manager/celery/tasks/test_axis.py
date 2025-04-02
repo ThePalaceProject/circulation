@@ -83,6 +83,29 @@ def test_list_identifiers_for_import_configuration_error(
     assert "Failed to authenticate with Axis 360 API" in caplog.text
 
 
+def test_list_identifiers_for_import_integration_error(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+    collection = db.collection(name="test_collection", protocol=Axis360API)
+    test_ids = ["a", "b", "c"]
+    with patch.object(axis, "create_api") as mock_create_api:
+        mock_create_api.return_value.recent_activity.side_effect = [
+            IntegrationException("service", "uh oh"),
+            generate_test_metadata_and_circulation_objects(test_ids),
+        ]
+        result_test_ids = list_identifiers_for_import.delay(
+            collection_id=collection.id
+        ).wait()
+        assert result_test_ids == test_ids
+    assert (
+        "Something unexpected went wrong while retrieving a batch of titles"
+        in caplog.text
+    )
+
+
 def set_caplog_level_to_info(caplog):
     caplog.set_level(
         logging.INFO,
