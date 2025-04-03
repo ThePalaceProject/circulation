@@ -410,8 +410,6 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         self.process_updated_libraries(new, settings_class)
         self.process_updated_libraries(updated, settings_class)
 
-        return ChangedLibrariesTuple(new=new, updated=updated, removed=removed)
-
     def delete_service(self, service_id: int) -> Response:
         """
         Delete a service.

@@ -222,7 +222,6 @@ def loan_reaper(task: Task) -> None:
     """
     Remove expired and abandoned loans from the database.
     """
-
     now = utc_now()
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
@@ -242,7 +241,6 @@ def loan_reaper(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_unassociated_loans(task: Task) -> None:
-
     reap_unassociated_loans_or_holds(task, Loan)
 
 
@@ -253,7 +251,6 @@ def reap_unassociated_holds(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_loans_in_inactive_collections(task: Task) -> None:
-
     reap_loans_or_holds_in_inactive_collections(task, Loan)
 
 
@@ -270,7 +267,6 @@ def reap_unassociated_loans_or_holds(
     because the patron's library is no longer associated with the collection
     containing the loan or hold's license pool.
     """
-
     ids_to_delete = (
         select(deletion_class.id)
         .join(LicensePool, LicensePool.id == deletion_class.license_pool_id)
