@@ -398,7 +398,7 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
         service: IntegrationConfiguration,
         libraries_data: str,
         settings_class: type[BaseSettings],
-    ) -> ChangedLibrariesTuple:
+    ) -> None:
         """
         Process the library settings for a service. This will create new
         IntegrationLibraryConfigurations for any libraries that don't have one,

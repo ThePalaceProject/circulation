@@ -135,15 +135,9 @@ class CollectionSettingsController(
 
             # Update library settings
             if libraries_data:
-                new, updated, removed = self.process_libraries(
+                self.process_libraries(
                     integration, libraries_data, impl_cls.library_settings_class()
                 )
-
-                if removed:
-                    # ensure that all loans and holds related
-                    # with the deleted library integrations are purged.
-                    reap_unassociated_loans.delay()
-                    reap_unassociated_holds.delay()
 
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
@@ -153,6 +147,17 @@ class CollectionSettingsController(
             return e.problem_detail
 
         return Response(str(integration.id), response_code)
+
+    def process_deleted_libraries(
+        self, removed: list[IntegrationLibraryConfiguration]
+    ) -> None:
+        super().process_deleted_libraries(removed)
+
+        if removed:
+            # ensure that all loans and holds related
+            # with the deleted library integrations are purged.
+            reap_unassociated_loans.delay()
+            reap_unassociated_holds.delay()
 
     def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()
