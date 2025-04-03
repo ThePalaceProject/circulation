@@ -30,9 +30,8 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.log import pluralize
 
-DEFAULT_BATCH_SIZE: int = 100
+DEFAULT_BATCH_SIZE: int = 10
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
-TARGET_MAX_EXECUTION_SECONDS = 120
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -430,7 +429,10 @@ def reap_all_collections(
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def reap_collection(
-    task: Task, collection_id: int, offset: int = 0, batch_size: int = 100
+    task: Task,
+    collection_id: int,
+    offset: int = 0,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> None:
     """
     Update the editions and license pools (and in the process reap where appropriate)
