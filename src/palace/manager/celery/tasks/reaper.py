@@ -266,36 +266,27 @@ def reap_unassociated_loans_or_holds(
     task: Task, deletion_class: type[Loan | Hold]
 ) -> None:
     """
-    Delete the loans or holds associated that are no longer available to the patron
-    because the patron's library is no longer associated with the collection which the loan or hold is associated with
+    Delete loans or holds that are no longer available to the patron
+    because the patron's library is no longer associated with the collection
+    containing the loan or hold's license pool.
     """
 
-    # query includes all library and collection associations
-    coll_lib_sub = (
-        select(IntegrationLibraryConfiguration.library_id, Collection.id)
-        .join(
-            Collection,
-            Collection.integration_configuration_id
-            == IntegrationLibraryConfiguration.parent_id,
-        )
-        .subquery("coll_lib")
-    )
-
-    # query all loans or holds where the patron's library is not associated with the loan or hold licensepools collection.
     ids_to_delete = (
         select(deletion_class.id)
-        .join(LicensePool)
-        .join(Patron)
+        .join(LicensePool, LicensePool.id == deletion_class.license_pool_id)
+        .join(Patron, Patron.id == deletion_class.patron_id)
+        .join(Collection, Collection.id == LicensePool.collection_id)
         .outerjoin(
-            coll_lib_sub,
-            coll_lib_sub.c.id == LicensePool.collection_id,
-            coll_lib_sub.c.library_id == Patron.library_id,  #  type: ignore[arg-type]
+            IntegrationLibraryConfiguration,
+            and_(
+                Collection.integration_configuration_id
+                == IntegrationLibraryConfiguration.parent_id,
+                IntegrationLibraryConfiguration.library_id == Patron.library_id,
+            ),
         )
-        .where(coll_lib_sub.c.library_id == None)
-        .subquery("loans_with_unassociated_library")
+        .where(IntegrationLibraryConfiguration.parent_id == None)
     )
-
-    # delete all loans or holds matching the ids to delete query.
+    # Delete all loans or holds matching the ids to delete query
     deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
 
     with task.transaction() as tx:
