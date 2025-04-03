@@ -936,7 +936,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param feed: OPDS 2.0 feed
         :return: A list of 2-tuples containing publication's identifiers and their last modified dates
         """
-        last_update_dates = []
+        last_update_dates: list[tuple[str | None, datetime | None]] = []
         try:
             parsed_feed = self._parse_feed(feed)
         except ValidationError:
