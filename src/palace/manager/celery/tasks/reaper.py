@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from celery import shared_task
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, distinct, func, select
 from sqlalchemy.orm import Session, defer, lazyload
 from sqlalchemy.sql import Delete
 from sqlalchemy.sql.elements import or_
@@ -12,7 +12,11 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    License,
+    LicensePool,
+    LicenseStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -237,3 +241,49 @@ def loan_reaper(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_loans_with_unavailable_license_pools(task: Task) -> None:
+
+    reap_loans_or_holds_with_unavailable_license_pools(task, Loan)
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_holds_with_unavailable_license_pools(task: Task) -> None:
+    reap_loans_or_holds_with_unavailable_license_pools(task, Hold)
+
+
+def reap_loans_or_holds_with_unavailable_license_pools(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete the loans or holds where the associated licensepool has no licenses with status == "available" or
+    or the license_pool.licenses_owned == 0 and license_pool.licenses_available == 0
+    """
+    avail_license_pools = (
+        select(distinct(License.license_pool_id))
+        .where(License.status == LicenseStatus.available)
+        .subquery("available_license_pools")
+    )
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool)
+        .where(
+            or_(
+                and_(
+                    LicensePool.licenses_owned == 0, LicensePool.licenses_available == 0
+                ),
+                LicensePool.id.not_in(avail_license_pools),
+            )
+        )
+        .subquery()
+    )
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log.info(
+        f"deleted {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because there are no available licenses."
+    )

@@ -11,8 +11,11 @@ from palace.manager.celery.tasks.reaper import (
     loan_reaper,
     measurement_reaper,
     patron_reaper,
+    reap_holds_with_unavailable_license_pools,
+    reap_loans_with_unavailable_license_pools,
     work_reaper,
 )
+from palace.manager.core.opds2_import import OPDS2API
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -22,7 +25,7 @@ from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.devicetokens import DeviceToken, DeviceTokenTypes
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicenseStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
@@ -535,3 +538,125 @@ def test_loan_reaper(
 
     # The reaper logged its work.
     assert "Deleted 2 expired loans." in caplog.messages
+
+
+@pytest.mark.parametrize(
+    "license_unavailable,no_license_owned_and_available",
+    [
+        pytest.param(True, False, id="license unavaiable"),
+        pytest.param(False, True, id="no licenses owned and available"),
+    ],
+)
+def test_reap_loans_with_unavailable_license_pools(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    caplog: pytest.LogCaptureFixture,
+    license_unavailable: bool,
+    no_license_owned_and_available: bool,
+):
+    caplog.set_level(LogLevel.info)
+
+    # create a collection associated with the patrons library
+    library = db.library(short_name="my_library")
+    biblio_collection = db.collection(protocol=OPDS2API, library=library)
+    patron = db.patron(library=library)
+
+    # create an associated loan
+    edition, lp_biblio = db.edition(
+        with_license_pool=True,
+        collection=biblio_collection,
+        data_source_name=DataSource.BIBBLIO,
+    )
+
+    now = utc_now()
+    assert not patron.loans
+
+    # make a loan
+    lp_biblio.loan_to(patron, start=now, end=now + datetime.timedelta(days=14))
+    assert len(patron.loans) == 1
+
+    # check the conditions are will not result in deletion
+    assert lp_biblio.licenses_owned > 0
+    assert lp_biblio.licenses_available > 0
+
+    db.license(pool=lp_biblio, status=LicenseStatus.available)
+
+    assert [l for l in lp_biblio.licenses if l.status == LicenseStatus.available]
+
+    # run reaper and verify that it is not deleted.
+    reap_loans_with_unavailable_license_pools.delay().wait()
+
+    if license_unavailable:
+        for lic in lp_biblio.licenses:
+            lic.status = LicenseStatus.unavailable
+
+    if no_license_owned_and_available:
+        lp_biblio.licenses_owned = 0
+        lp_biblio.licenses_available = 0
+
+    # run the reaper and verify that it is deleted.
+    reap_loans_with_unavailable_license_pools.delay().wait()
+    assert "deleted 1 loan" in caplog.text
+    db.session.refresh(patron)
+    assert not patron.loans
+
+
+@pytest.mark.parametrize(
+    "license_unavailable,no_license_owned_and_available",
+    [
+        pytest.param(True, False, id="license unavaiable"),
+        pytest.param(False, True, id="no licenses owned and available"),
+    ],
+)
+def test_reap_holds_with_unavailable_license_pools(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    caplog: pytest.LogCaptureFixture,
+    license_unavailable: bool,
+    no_license_owned_and_available: bool,
+):
+    caplog.set_level(LogLevel.info)
+
+    # create a collection associated with the patrons library
+    library = db.library(short_name="my_library")
+    biblio_collection = db.collection(protocol=OPDS2API, library=library)
+    patron = db.patron(library=library)
+
+    # create an associated hold
+    edition, lp_biblio = db.edition(
+        with_license_pool=True,
+        collection=biblio_collection,
+        data_source_name=DataSource.BIBBLIO,
+    )
+
+    now = utc_now()
+    assert not patron.holds
+
+    # make a hold
+    lp_biblio.on_hold_to(patron, start=now, end=now + datetime.timedelta(days=14))
+    assert len(patron.holds) == 1
+
+    # check the conditions are will not result in deletion
+    assert lp_biblio.licenses_owned > 0
+    assert lp_biblio.licenses_available > 0
+
+    db.license(pool=lp_biblio, status=LicenseStatus.available)
+
+    assert [l for l in lp_biblio.licenses if l.status == LicenseStatus.available]
+
+    # run reaper and verify that it is not deleted.
+    reap_holds_with_unavailable_license_pools.delay().wait()
+
+    if license_unavailable:
+        for lic in lp_biblio.licenses:
+            lic.status = LicenseStatus.unavailable
+
+    if no_license_owned_and_available:
+        lp_biblio.licenses_owned = 0
+        lp_biblio.licenses_available = 0
+
+    # run the reaper and verify that it is deleted.
+    reap_holds_with_unavailable_license_pools.delay().wait()
+    assert "deleted 1 hold" in caplog.text
+    db.session.refresh(patron)
+    assert not patron.holds
