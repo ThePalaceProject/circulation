@@ -177,13 +177,6 @@ def beat_schedule() -> dict[str, Any]:
                 hour="3",
             ),  # Once a day at 3:00 AM
         },
-        "reap_holds_with_unavailable_license_pools": {
-            "task": "reaper.reap_holds_with_unavailable_license_pools",
-            "schedule": crontab(
-                minute="05",
-                hour="3",
-            ),  # Once a day at 3:05 AM
-        },
     }
 
 
