@@ -808,7 +808,14 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         self,
         publication: dict[str, Any],
     ) -> opds2.BasePublication:
-        return opds2.Publication.model_validate(publication)
+        try:
+            return opds2.Publication.model_validate(publication)
+        except ValidationError as e:
+            raw_identifier = publication.get("metadata", {}).get("identifier")
+            self.log.exception(
+                f"Error validating publication (identifier: {raw_identifier}): {e}"
+            )
+            raise
 
     @staticmethod
     def _is_acquisition_link(link: opds2.Link) -> bool:
@@ -895,7 +902,11 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             )
 
     def _parse_feed(self, feed: str | bytes) -> opds2.PublicationFeedNoValidation:
-        return opds2.PublicationFeedNoValidation.model_validate_json(feed)
+        try:
+            return opds2.PublicationFeedNoValidation.model_validate_json(feed)
+        except ValidationError as e:
+            self.log.exception(f"Error parsing feed: {e}")
+            raise
 
     def extract_next_links(self, feed: str | bytes) -> list[str]:
         """Extracts "next" links from the feed.
@@ -925,18 +936,21 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         :param feed: OPDS 2.0 feed
         :return: A list of 2-tuples containing publication's identifiers and their last modified dates
         """
+        last_update_dates = []
         try:
             parsed_feed = self._parse_feed(feed)
-
-            return [
-                (publication.metadata.identifier, publication.metadata.modified)
-                for publication in [
-                    self._get_publication(publication)
-                    for publication in parsed_feed.publications
-                ]
-            ]
         except ValidationError:
-            return []
+            return last_update_dates
+
+        for publication_dict in parsed_feed.publications:
+            try:
+                publication = self._get_publication(publication_dict)
+            except ValidationError:
+                continue
+            last_update_dates.append(
+                (publication.metadata.identifier, publication.metadata.modified)
+            )
+        return last_update_dates
 
     def _parse_feed_links(self, links: CompactCollection[opds2.StrictLink]) -> None:
         """Parse the global feed links. Currently only parses the token endpoint link"""
@@ -967,7 +981,6 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         try:
             parsed_feed = self._parse_feed(feed)
         except ValidationError:
-            self.log.exception("Error validating feed")
             return {}, {}
 
         publication_metadata_dictionary = {}
