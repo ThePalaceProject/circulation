@@ -32,6 +32,7 @@ from palace.manager.util.log import pluralize
 
 DEFAULT_BATCH_SIZE: int = 10
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
+MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS = 20
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -390,7 +391,8 @@ def get_collections_by_protocol(
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reap_all_collections(
-    task: Task, delay_in_seconds_between_reap_collection_tasks: int = 20
+    task: Task,
+    delay_in_seconds_between_reap_collection_tasks: int = MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS,
 ) -> None:
     """
     A shared task that  kicks off a reap_collection task for each Axis 360 collection.
@@ -401,13 +403,20 @@ def reap_all_collections(
     The default delay of 20 seconds between launching of reap_collection sub-tasks is based on
     observations of performance in a local environment.  I observed that reaping in batches 10 seconds
     can take from 2-4 seconds in my development environment. The production environment was
-    observed to be about 2 to 3 times slower.  Therefore,  a 20 second delay between task initiation provides a reasonable
+    observed to be about 2 to 3 times slower.  Therefore,a 20 second delay between task initiation provides a reasonable
     empirically based time buffer such that batches of axis identifiers are not reaped simultaneously and won't likely
-    cause a pile-up in the case of occasional deadlocks.
+    cause a pile-up in the case of occasional deadlocks.  With the redis visibility_timeout set to one hour, this will
+    allow for a maximum of 180 collections.  Due to the visibility_timeout constraint,  20 seconds will be the maximum
+    delay:  any value over 20 will be ignored and the default will be used in its place.
 
     In this way we minimize, if not completely eliminate, the possibility of a deadlock while also balancing that with
     decent performance.
     """
+    delay_in_seconds_between_reap_collection_tasks = min(
+        MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS,
+        delay_in_seconds_between_reap_collection_tasks,
+    )
+
     with task.session() as session:
         count = 0
         for collection in get_collections_by_protocol(task, session, Axis360API):
