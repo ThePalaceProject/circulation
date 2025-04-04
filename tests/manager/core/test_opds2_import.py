@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from dateutil.tz import tzutc
+from pydantic import ValidationError
 from requests import Response
 
 from palace.manager.api.circulation import (
@@ -120,6 +121,29 @@ class TestOPDS2Importer(OPDS2Test):
     POSTMODERNISM_PROQUEST_IDENTIFIER = (
         "urn:librarysimplified.org/terms/id/ProQuest%20Doc%20ID/181639"
     )
+
+    def test__get_publication(
+        self,
+        opds2_importer_fixture: OPDS2ImporterFixture,
+        opds2_files_fixture: OPDS2FilesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        importer = opds2_importer_fixture.importer
+
+        # Normally _get_publication just turns a publications dict into a Publication model
+        opds2_feed = json.loads(opds2_files_fixture.sample_text("feed.json"))
+        publication_dict = opds2_feed["publications"][0]
+        publication = importer._get_publication(publication_dict)
+        assert publication.metadata.identifier == "urn:isbn:978-3-16-148410-0"
+
+        # However if there is a validation error, it adds a helpful log message
+        # before raising the validation error
+        with pytest.raises(
+            ValidationError, match="3 validation errors for Publication"
+        ):
+            importer._get_publication({})
+
+        assert "3 validation errors for Publication" in caplog.text
 
     @pytest.mark.parametrize(
         "name,manifest_type",
@@ -711,9 +735,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert extract_last_update_dates(b"garbage") == []
 
         # Feed with last update dates
-        assert extract_last_update_dates(
-            opds2_files_fixture.sample_data("feed.json")
-        ) == [
+        expected_dates = [
             (
                 "urn:isbn:978-3-16-148410-0",
                 datetime.datetime(2015, 9, 29, 17, 0, tzinfo=datetime.timezone.utc),
@@ -727,6 +749,16 @@ class TestOPDS2Importer(OPDS2Test):
                 datetime.datetime(2022, 9, 12, 21, 4, tzinfo=datetime.timezone.utc),
             ),
         ]
+
+        assert (
+            extract_last_update_dates(opds2_files_fixture.sample_data("feed.json"))
+            == expected_dates
+        )
+
+        # Feed with bad publication - we still get dates from valid items in feed
+        feed_dict = json.loads(opds2_files_fixture.sample_data("feed.json"))
+        feed_dict["publications"].insert(0, {})
+        assert extract_last_update_dates(json.dumps(feed_dict)) == expected_dates
 
 
 class Opds2ApiFixture:
