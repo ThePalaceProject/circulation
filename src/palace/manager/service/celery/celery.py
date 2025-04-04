@@ -88,10 +88,10 @@ def beat_schedule() -> dict[str, Any]:
         "axis_reap_all_collections": {
             "task": "axis.reap_all_collections",
             "schedule": crontab(
-                day_of_week="5",
+                day_of_week="6",
                 minute="0",
                 hour="4",
-            ),  # Every Friday at 4:00 AM
+            ),  # Every Saturday at 4:00 AM
         },
         "credential_reaper": {
             "task": "reaper.credential_reaper",
