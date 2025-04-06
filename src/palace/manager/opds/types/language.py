@@ -39,7 +39,9 @@ class LanguageTag(str):
             return value
 
         if not isinstance(value, str):
-            raise ValueError(f"Expected str, got {type(value).__name__}")
+            raise ValueError(
+                f"Language tag must be a string, got {type(value).__name__}"
+            )
 
         if len(value) == 0:
             raise ValueError("Language tag cannot be empty")

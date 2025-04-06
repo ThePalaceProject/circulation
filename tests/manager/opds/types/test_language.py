@@ -62,6 +62,14 @@ class TestLanguageTag:
         new_language_code = LanguageTag(language_code)
         assert new_language_code is language_code
 
+        # Empty strings should raise an error
+        with pytest.raises(ValueError, match="Language tag cannot be empty"):
+            LanguageTag("")
+
+        # Other types should raise an error
+        with pytest.raises(ValueError, match="Language tag must be a string, got int"):
+            LanguageTag(123)
+
     def test_repr(self) -> None:
         language_code = LanguageTag("eng-UK")
         assert repr(language_code) == "<LanguageCode: eng-UK>"
