@@ -68,7 +68,7 @@ class TestLanguageTag:
 
         # Other types should raise an error
         with pytest.raises(ValueError, match="Language tag must be a string, got int"):
-            LanguageTag(123)
+            LanguageTag(123)  # type: ignore[arg-type]
 
     def test_repr(self) -> None:
         language_code = LanguageTag("eng-UK")
