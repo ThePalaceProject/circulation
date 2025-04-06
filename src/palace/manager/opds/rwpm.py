@@ -10,7 +10,7 @@ from typing import Literal, TypeVar
 from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveFloat, PositiveInt
 
 from palace.manager.opds.base import BaseOpdsModel
-from palace.manager.opds.types.language import LanguageCode, LanguageMap
+from palace.manager.opds.types.language import LanguageMap, LanguageTag
 from palace.manager.opds.types.link import BaseLink, CompactCollection
 from palace.manager.opds.util import (
     StrModelOrTuple,
@@ -117,10 +117,10 @@ class Link(BaseLink):
     width: PositiveInt | None = None
     bitrate: PositiveFloat | None = None
     duration: PositiveFloat | None = None
-    language: StrOrTuple[LanguageCode] | None = None
+    language: StrOrTuple[LanguageTag] | None = None
 
     @cached_property
-    def languages(self) -> Sequence[LanguageCode]:
+    def languages(self) -> Sequence[LanguageTag]:
         return obj_or_tuple_to_tuple(self.language)
 
     alternate: CompactCollection[Link] = Field(default_factory=CompactCollection)
@@ -271,10 +271,10 @@ class Metadata(BaseOpdsModel):
 
     modified: AwareDatetime | None = None
     published: AwareDatetime | date | None = None
-    language: StrOrTuple[LanguageCode] | None = None
+    language: StrOrTuple[LanguageTag] | None = None
 
     @cached_property
-    def languages(self) -> Sequence[LanguageCode]:
+    def languages(self) -> Sequence[LanguageTag]:
         return obj_or_tuple_to_tuple(self.language)
 
     author: StrModelOrTuple[Contributor] | None = None
