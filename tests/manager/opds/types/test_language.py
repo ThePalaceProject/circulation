@@ -3,16 +3,18 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from palace.manager.opds.types.language import LanguageCode, LanguageMap
+from palace.manager.opds.types.language import LanguageMap, LanguageTag
 
 
-class TestLanguageCode:
+class TestLanguageTag:
 
     @pytest.mark.parametrize(
         "language_code, expected",
         [
             ("ENG", "eng"),
             ("en", "eng"),
+            ("en-CA", "eng"),
+            ("en_uk", "eng"),
             ("fra", "fra"),
             ("fR", "fra"),
         ],
@@ -21,11 +23,10 @@ class TestLanguageCode:
         """
         Languages are always normalized to the 3-letter ISO 639-2 code.
         """
-        assert LanguageCode._validate_language_code(language_code) == expected
-        assert LanguageCode(language_code) == expected
-        assert TypeAdapter(LanguageCode).validate_python(language_code) == expected
+        assert LanguageTag(language_code) == expected
+        assert TypeAdapter(LanguageTag).validate_python(language_code) == expected
         assert (
-            TypeAdapter(LanguageCode).validate_json(json.dumps(language_code))
+            TypeAdapter(LanguageTag).validate_json(json.dumps(language_code))
             == expected
         )
 
@@ -33,30 +34,52 @@ class TestLanguageCode:
         language_code = "foo"
 
         with pytest.raises(ValueError, match="Invalid language code 'foo'"):
-            LanguageCode(language_code)
-
-        with pytest.raises(ValueError, match="Invalid language code 'foo'"):
-            LanguageCode._validate_language_code(language_code)
+            LanguageTag(language_code)
 
         with pytest.raises(
             ValidationError, match="Value error, Invalid language code 'foo'"
         ):
-            TypeAdapter(LanguageCode).validate_python(language_code)
+            TypeAdapter(LanguageTag).validate_python(language_code)
 
         with pytest.raises(
             ValidationError, match="Value error, Invalid language code 'foo'"
         ):
-            TypeAdapter(LanguageCode).validate_json(json.dumps(language_code))
+            TypeAdapter(LanguageTag).validate_json(json.dumps(language_code))
+
+    def test_serialization(self) -> None:
+        language_code = LanguageTag("en-CA")
+        assert language_code == "eng"
+        assert isinstance(language_code, LanguageTag)
+        assert json.loads(TypeAdapter(LanguageTag).dump_json(language_code)) == "en-CA"
 
     def test_constructor(self) -> None:
-        language_code = LanguageCode("eng")
+        language_code = LanguageTag("eng")
         assert language_code == "eng"
         assert isinstance(language_code, str)
-        assert isinstance(language_code, LanguageCode)
+        assert isinstance(language_code, LanguageTag)
 
         # Can be constructed with a LanguageCode, which is a no-op
-        new_language_code = LanguageCode(language_code)
+        new_language_code = LanguageTag(language_code)
         assert new_language_code is language_code
+
+        # Empty strings should raise an error
+        with pytest.raises(ValueError, match="Language tag cannot be empty"):
+            LanguageTag("")
+
+        # Other types should raise an error
+        with pytest.raises(ValueError, match="Language tag must be a string, got int"):
+            LanguageTag(123)  # type: ignore[arg-type]
+
+    def test_repr(self) -> None:
+        language_code = LanguageTag("eng-UK")
+        assert repr(language_code) == "<LanguageTag: eng-UK>"
+
+    def test_properties(self) -> None:
+        language_code = LanguageTag("en-Latn-GB-x-private")
+        assert language_code.primary_language == "en"
+        assert language_code.code == str(language_code) == "eng"
+        assert language_code.subtags == ("en", "latn", "gb", "x", "private")
+        assert language_code.original == "en-Latn-GB-x-private"
 
 
 class TestLanguageMap:
@@ -196,7 +219,7 @@ class TestLanguageMap:
         # Test round-trip to json
         assert (
             json.loads(ta.dump_json(test_map))
-            == {LanguageCode(l): v for l, v in string.items()}
+            == {LanguageTag(l): v for l, v in string.items()}
             if isinstance(string, dict)
             else string
         )

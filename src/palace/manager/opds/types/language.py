@@ -9,34 +9,60 @@ from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 
-class LanguageCode(str):
+class LanguageTag(str):
     """
-    LanguageCode parses 2-letter or 3-letter ISO 639-2 language codes. Making sure
-    they are valid language codes and normalizing them to 3-letter codes.
+    Parses a subset of IETF BCP 47 language tags.
+
+    https://datatracker.ietf.org/doc/bcp47/
+
+    The class expects the `primary language` to be a 2-letter or 3-letter ISO 639-2 language
+    code. It splits the language tag into its sub-tags, parses the primary language tag,
+    validates it's a valid language code, and normalizes it to a 3-letter code.
+
+    This handles the most common cases that we see in feeds we parse.
+
+    TODO: We may want to replace this with a more complete implementation of
+      BCP 47. Especially if we are able to find a library that we can leverage.
+      I did some research, but at the time of writing, I wasn't able to find one.
     """
 
-    __slots__ = ()
+    __slots__ = ("_original", "_subtags")
+
+    _original: str
+    _subtags: tuple[str, ...]
 
     def __new__(
         cls,
-        value: str,
-    ) -> LanguageCode:
-        if isinstance(value, LanguageCode):
+        value: str | LanguageTag,
+    ) -> LanguageTag:
+        if isinstance(value, LanguageTag):
             return value
-        return super().__new__(cls, cls._validate_language_code(value))
 
-    @staticmethod
-    def _validate_language_code(language_code: str) -> str:
-        language = None
-        if len(language_code) == 2:
-            language = pycountry.languages.get(alpha_2=language_code)
-        elif len(language_code) == 3:
-            language = pycountry.languages.get(alpha_3=language_code)
+        if not isinstance(value, str):
+            raise ValueError(
+                f"Language tag must be a string, got {type(value).__name__}"
+            )
 
-        if language is None:
-            raise ValueError(f"Invalid language code '{language_code}'")
+        if len(value) == 0:
+            raise ValueError("Language tag cannot be empty")
 
-        return language.alpha_3  # type: ignore[no-any-return]
+        # First we split the language tag into its sub-tags.
+        subtags = tuple([t.lower() for t in value.replace("_", "-").split("-")])
+        primary_language = subtags[0]
+
+        code = None
+        if len(primary_language) == 2:
+            code = pycountry.languages.get(alpha_2=primary_language)
+        elif len(primary_language) == 3:
+            code = pycountry.languages.get(alpha_3=primary_language)
+
+        if code is None:
+            raise ValueError(f"Invalid language code '{primary_language}'")
+
+        language_code = super().__new__(cls, code.alpha_3)
+        language_code._original = value
+        language_code._subtags = subtags
+        return language_code
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -47,8 +73,43 @@ class LanguageCode(str):
         """
         return core_schema.no_info_after_validator_function(
             cls,
-            core_schema.str_schema(min_length=2, max_length=3),
+            core_schema.str_schema(
+                serialization=core_schema.plain_serializer_function_ser_schema(
+                    lambda t: t.original, when_used="json"
+                ),
+            ),
         )
+
+    @property
+    def original(self) -> str:
+        """
+        Return the original language tag that was passed to the constructor.
+        """
+        return self._original
+
+    @property
+    def subtags(self) -> tuple[str, ...]:
+        """
+        Return the sub-tags of the language tag.
+        """
+        return self._subtags
+
+    @property
+    def primary_language(self) -> str:
+        """
+        Return the primary language of the language tag.
+        """
+        return self._subtags[0]
+
+    @property
+    def code(self) -> str:
+        """
+        Return the 3-letter ISO 639-2 language code.
+        """
+        return str(self)
+
+    def __repr__(self) -> str:
+        return f"<{self.__class__.__name__}: {self._original}>"
 
 
 T = TypeVar("T")
@@ -71,7 +132,7 @@ class LanguageMap(Mapping[str, str]):
         :param value: Either a string or a dictionary with language codes as keys
             and translations as values.
         """
-        self._mapping: dict[LanguageCode | None, str] = {}
+        self._mapping: dict[LanguageTag | None, str] = {}
         self._hash: int | None = None
 
         if isinstance(value, str):
@@ -81,12 +142,12 @@ class LanguageMap(Mapping[str, str]):
                 raise ValueError("Must provide at least one translation")
 
             self._mapping = {
-                LanguageCode(lang): translation for lang, translation in value.items()
+                LanguageTag(lang): translation for lang, translation in value.items()
             }
         self._default_language = next(iter(self._mapping.keys()))
 
     @property
-    def default_language(self) -> LanguageCode | None:
+    def default_language(self) -> LanguageTag | None:
         return self._default_language
 
     @staticmethod
@@ -152,7 +213,7 @@ class LanguageMap(Mapping[str, str]):
 
         :raises ValueError: If the language code is invalid.
         """
-        language_code = LanguageCode(language) if language else self.default_language
+        language_code = LanguageTag(language) if language else self.default_language
         return self._mapping.get(language_code, default)
 
     def __getitem__(self, language: str | None) -> str:

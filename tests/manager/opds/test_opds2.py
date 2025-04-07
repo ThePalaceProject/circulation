@@ -102,7 +102,7 @@ def test_publication_feed_failures(
     assert [e.get("msg") for e in errors] == [
         "Field required",
         "Field required",
-        "String should have at most 3 characters",
+        "Value error, Invalid language code 'enzz'",
         "Value error, Invalid language code 'qx'",
         "Input should be a valid string or OPDS object",
         "Field required",
@@ -120,7 +120,7 @@ def test_publication_feed_failures(
     errors = exc_info.value.errors()
     assert len(errors) == 1
     assert [e.get("msg") for e in errors] == [
-        "String should have at most 3 characters",
+        "Value error, Invalid language code 'this is a bad language code'",
     ]
 
 
