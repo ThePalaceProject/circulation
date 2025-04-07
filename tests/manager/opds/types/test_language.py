@@ -72,7 +72,7 @@ class TestLanguageTag:
 
     def test_repr(self) -> None:
         language_code = LanguageTag("eng-UK")
-        assert repr(language_code) == "<LanguageCode: eng-UK>"
+        assert repr(language_code) == "<LanguageTag: eng-UK>"
 
     def test_properties(self) -> None:
         language_code = LanguageTag("en-Latn-GB-x-private")
