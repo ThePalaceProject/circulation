@@ -120,7 +120,7 @@ def test_publication_feed_failures(
     errors = exc_info.value.errors()
     assert len(errors) == 1
     assert [e.get("msg") for e in errors] == [
-        "String should have at most 3 characters",
+        "Value error, Invalid language code 'this is a bad language code'",
     ]
 
 
