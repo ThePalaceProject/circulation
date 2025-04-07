@@ -22,6 +22,7 @@ from palace.manager.api.odl.importer import (
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.metadata_layer import LicenseData
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -29,11 +30,7 @@ from palace.manager.sqlalchemy.constants import (
 )
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
-    LicensePool,
-    LicenseStatus,
-)
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import datetime_helpers

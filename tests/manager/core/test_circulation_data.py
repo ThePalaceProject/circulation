@@ -13,14 +13,11 @@ from palace.manager.core.metadata_layer import (
     ReplacementPolicy,
     SubjectData,
 )
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
-    LicenseStatus,
-    RightsStatus,
-)
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture

@@ -19,16 +19,12 @@ from palace.manager.core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl import odl
-from palace.manager.opds.odl.info import LicenseInfo
+from palace.manager.opds.odl.info import LicenseInfo, LicenseStatus
 from palace.manager.opds.odl.odl import Opds2OrOpds2WithOdlPublication
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
-    LicenseStatus,
-    RightsStatus,
-)
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util.http import HTTP, GetRequestCallable
 

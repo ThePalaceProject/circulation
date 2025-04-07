@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
 from palace.manager.integration.configuration.formats import FormatPriorities
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import CollectionMissing
@@ -23,7 +24,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     Hold,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    LicenseStatus,
     Loan,
     RightsStatus,
 )

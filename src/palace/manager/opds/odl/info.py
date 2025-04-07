@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from enum import Enum
 from functools import cached_property
 
 from pydantic import AwareDatetime, Field, NonNegativeInt
@@ -8,7 +11,16 @@ from palace.manager.opds.odl.protection import Protection
 from palace.manager.opds.odl.terms import Terms
 from palace.manager.opds.opds2 import Price
 from palace.manager.opds.util import StrOrTuple, obj_or_tuple_to_tuple
-from palace.manager.sqlalchemy.model.licensing import LicenseStatus
+
+
+class LicenseStatus(Enum):
+    preorder = "preorder"
+    available = "available"
+    unavailable = "unavailable"
+
+    @classmethod
+    def get(cls, value: str) -> LicenseStatus:
+        return cls.__members__.get(value.lower(), cls.unavailable)
 
 
 class Loan(BaseOpdsModel):
