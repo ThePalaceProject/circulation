@@ -19,7 +19,7 @@ class LicenseStatus(Enum):
     unavailable = "unavailable"
 
     @classmethod
-    def get(cls, value: str):
+    def get(cls, value: str) -> LicenseStatus:
         return cls.__members__.get(value.lower(), cls.unavailable)
 
 
