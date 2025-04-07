@@ -16,11 +16,11 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
     library_report_integrations,
 )
 from palace.manager.core.opds_import import OPDSImporterSettings
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicenseStatus
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now

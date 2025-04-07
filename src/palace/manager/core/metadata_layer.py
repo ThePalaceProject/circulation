@@ -33,6 +33,7 @@ from sqlalchemy.sql.expression import and_, or_
 from typing_extensions import Self, TypedDict, Unpack
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -48,7 +49,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicenseFunctions,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    LicenseStatus,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource

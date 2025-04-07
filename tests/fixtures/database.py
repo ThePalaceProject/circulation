@@ -57,6 +57,7 @@ from palace.manager.integration.base import SettingsType as TIntegrationSettings
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.integration_registry.base import IntegrationRegistry
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import (
@@ -83,7 +84,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     License,
     LicensePool,
     LicensePoolDeliveryMechanism,
-    LicenseStatus,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Patron

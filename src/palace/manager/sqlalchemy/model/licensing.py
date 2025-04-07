@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-from enum import Enum as PythonEnum
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -27,6 +26,7 @@ from sqlalchemy.orm.session import Session
 
 from palace.manager.api.circulation_exceptions import CannotHold, CannotLoan
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     EditionConstants,
@@ -52,16 +52,6 @@ if TYPE_CHECKING:
 
 class PolicyException(BasePalaceException):
     pass
-
-
-class LicenseStatus(PythonEnum):
-    preorder = "preorder"
-    available = "available"
-    unavailable = "unavailable"
-
-    @classmethod
-    def get(cls, value: str):
-        return cls.__members__.get(value.lower(), cls.unavailable)
 
 
 class LicenseFunctions:
