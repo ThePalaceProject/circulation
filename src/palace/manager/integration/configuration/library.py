@@ -10,6 +10,7 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     ValidationInfo,
+    field_serializer,
     field_validator,
     model_validator,
 )
@@ -609,3 +610,18 @@ class LibrarySettings(BaseSettings):
                     languages.append(validated_language)
             return languages
         return value
+
+    @field_serializer(
+        "large_collection_languages",
+        "small_collection_languages",
+        "tiny_collection_languages",
+    )
+    def serialize_courses_in_order(
+        self, languages: list[str] | None
+    ) -> list[str] | None:
+        """
+        Sort the list of languages in alphabetical order before sending it to the client.
+        """
+        if languages is None:
+            return None
+        return sorted(languages)
