@@ -880,7 +880,7 @@ class TestOverdriveAPI:
         ):
             api.checkout(patron, pin, pool, None)
 
-        # We made requests to checkout the book and return it. The first request is to get the patrons
+        # We made requests to checkout the book and return it. The first request is to get the patron's
         # oauth token, so we ignore it here.
         [checkout_request_method, loan_info_request_method] = http.requests_methods[1:]
         [checkout_request_url, loan_info_request_url] = http.requests[1:]
