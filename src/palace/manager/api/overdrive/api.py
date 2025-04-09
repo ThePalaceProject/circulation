@@ -951,9 +951,9 @@ class OverdriveAPI(
         if "ebook-overdrive" in checkout.supported_formats:
             self._set_licensepool_delivery_mechanism_availability(licensepool, checkout)
 
-            # Handle books that are only available in the `ebook-overdrive` format,
-            # which the Palace mobile app cannot read. This case is rare but possible.
-            if checkout.supported_formats == {"ebook-overdrive"}:
+            # Handle books that are not available in any formats that the mobile
+            # apps can read.
+            if not checkout.supported_formats & OVERDRIVE_LOCK_IN_FORMATS:
                 title = (
                     licensepool.presentation_edition.title
                     if licensepool.presentation_edition
