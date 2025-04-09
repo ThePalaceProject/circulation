@@ -10,7 +10,6 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     ValidationInfo,
-    field_serializer,
     field_validator,
     model_validator,
 )
@@ -596,7 +595,7 @@ class LibrarySettings(BaseSettings):
     ) -> list[str] | None:
         """Verify that collection languages are valid."""
         if value is not None:
-            languages = []
+            languages = set()
             for language in value:
                 validated_language = LanguageCodes.string_to_alpha_3(language)
                 if validated_language is None:
@@ -607,19 +606,6 @@ class LibrarySettings(BaseSettings):
                         )
                     )
                 if validated_language not in languages:
-                    languages.append(validated_language)
-            return languages
+                    languages.add(validated_language)
+            return sorted(languages)
         return value
-
-    @field_serializer(
-        "large_collection_languages",
-        "small_collection_languages",
-        "tiny_collection_languages",
-    )
-    def serialize_languages(self, languages: list[str] | None) -> list[str] | None:
-        """
-        Sort the list of languages in alphabetical order before sending it to the client.
-        """
-        if languages is None:
-            return None
-        return sorted(languages)

@@ -58,7 +58,7 @@ class TestConfiguration:
         library.update_settings(
             LibrarySettings.model_construct(large_collection_languages=["spa", "jpn"])
         )
-        assert C.large_collection_languages(library) == ["spa", "jpn"]
+        assert C.large_collection_languages(library) == ["jpn", "spa"]
 
     def test_estimate_language_collection_for_library(
         self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
