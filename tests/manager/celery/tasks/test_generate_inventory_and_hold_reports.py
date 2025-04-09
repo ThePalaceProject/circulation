@@ -110,6 +110,7 @@ def test_job_run(
     ds = collection.data_source
     assert ds is not None
 
+    # Add a book for testing.
     title = "展翅高飞 : Whistling Wings"
     author = "Laura Goering"
     language = "eng"
@@ -224,6 +225,17 @@ def test_job_run(
     shared_patrons_in_hold_queue = 4
     licensepool.patrons_in_hold_queue = shared_patrons_in_hold_queue
 
+    # Add a book that doesn't have any holds, so we can verify that it's not in the holds report.
+    no_holds_work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    no_holds_identifier_value = (
+        no_holds_work.presentation_edition.primary_identifier.identifier
+    )
+
+    # The identifier value should be different from the one we used for the hold.
+    assert no_holds_identifier_value != identifier_value
+
     assert library.id
 
     # for testing, don't delete the files associated with the attachments so we can read them after the script
@@ -270,56 +282,80 @@ def test_job_run(
                 assert "test_library" in inventory_report_zip_entry.name
                 inventory_report_csv = zip_csv_entry_to_dict(inventory_report_zip_entry)
 
-                assert len(inventory_report_csv) == 1
-                for row in inventory_report_csv:
-                    assert len(row) == 17
-                    assert row["title"] == title
-                    assert row["author"] == author
-                    assert row["identifier"] == identifier_value
-                    assert row["isbn"] == isbn
-                    assert row["language"] == language
-                    assert row["publisher"] == publisher
-                    assert row["audience"] == "young adult"
-                    assert row["genres"] == "genre_a,genre_z"
-                    assert row["format"] == edition.BOOK_MEDIUM
-                    assert row["data_source"] == data_source
-                    assert row["collection_name"] == collection_name
-                    assert float(row["days_remaining_on_license"]) == float(
-                        days_remaining
-                    )
-                    assert row["shared_active_loan_count"] == "0"
-                    assert row["library_active_loan_count"] == "0"
-                    assert row["remaining_loans"] == str(checkouts_left)
-                    assert row["allowed_concurrent_users"] == str(terms_concurrency)
-                    assert (
-                        expiration.strftime("%Y-%m-%d %H:%M:%S.%f")
-                        in row["license_expiration"]
-                    )
+                # The inventory report should have two rows, since we have two books.
+                assert len(inventory_report_csv) == 2
+                # One row should be our well-described test book...
+                row = next(
+                    r
+                    for r in inventory_report_csv
+                    if r["identifier"] == identifier_value
+                )
+                # ... and the other should be our poorly-described book with no holds.
+                _ = next(
+                    r
+                    for r in inventory_report_csv
+                    if r["identifier"] == no_holds_identifier_value
+                )
+
+                # Ensure that our test book is described properly in the inventory report.
+                assert len(row) == 17
+                assert row["title"] == title
+                assert row["author"] == author
+                assert row["identifier"] == identifier_value
+                assert row["isbn"] == isbn
+                assert row["language"] == language
+                assert row["publisher"] == publisher
+                assert row["audience"] == "young adult"
+                assert row["genres"] == "genre_a,genre_z"
+                assert row["format"] == edition.BOOK_MEDIUM
+                assert row["data_source"] == data_source
+                assert row["collection_name"] == collection_name
+                assert float(row["days_remaining_on_license"]) == float(days_remaining)
+                assert row["shared_active_loan_count"] == "0"
+                assert row["library_active_loan_count"] == "0"
+                assert row["remaining_loans"] == str(checkouts_left)
+                assert row["allowed_concurrent_users"] == str(terms_concurrency)
+                assert (
+                    expiration.strftime("%Y-%m-%d %H:%M:%S.%f")
+                    in row["license_expiration"]
+                )
 
                 assert holds_report_zip_entry
                 assert "test_library" in holds_report_zip_entry.name
                 assert holds_report_zip_entry
                 holds_report_csv = zip_csv_entry_to_dict(holds_report_zip_entry)
+                # Only our well-described test book should be in the holds report, since the other has no holds.
                 assert len(holds_report_csv) == 1
+                row = next(
+                    r for r in holds_report_csv if r["identifier"] == identifier_value
+                )
+                no_holds_row = next(
+                    (
+                        r
+                        for r in holds_report_csv
+                        if r["identifier"] == no_holds_identifier_value
+                    ),
+                    None,
+                )
+                assert no_holds_row is None
 
-                for row in holds_report_csv:
-                    assert len(row) == 13
-                    assert row["title"] == title
-                    assert row["author"] == author
-                    assert row["identifier"] == identifier_value
-                    assert row["isbn"] == isbn
-                    assert row["language"] == language
-                    assert row["publisher"] == publisher
-                    assert row["audience"] == "young adult"
-                    assert row["genres"] == "genre_a,genre_z"
-                    assert row["format"] == edition.BOOK_MEDIUM
-                    assert row["data_source"] == data_source
-                    assert row["collection_name"] == collection_name
-                    assert (
-                        int(row["shared_active_hold_count"])
-                        == shared_patrons_in_hold_queue
-                    )
-                    assert int(row["library_active_hold_count"]) == 3
+                # Ensure that our test book is described properly in the holds report.
+                assert len(row) == 13
+                assert row["title"] == title
+                assert row["author"] == author
+                assert row["identifier"] == identifier_value
+                assert row["isbn"] == isbn
+                assert row["language"] == language
+                assert row["publisher"] == publisher
+                assert row["audience"] == "young adult"
+                assert row["genres"] == "genre_a,genre_z"
+                assert row["format"] == edition.BOOK_MEDIUM
+                assert row["data_source"] == data_source
+                assert row["collection_name"] == collection_name
+                assert (
+                    int(row["shared_active_hold_count"]) == shared_patrons_in_hold_queue
+                )
+                assert int(row["library_active_hold_count"]) == 3
     finally:
         os.remove(reports_zip)
 
