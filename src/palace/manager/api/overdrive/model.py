@@ -356,7 +356,7 @@ class Checkout(BaseOverdriveModel):
         return None
 
     @cached_property
-    def supported_formats(self) -> set[str]:
+    def available_formats(self) -> set[str]:
         """
         Get the set of formats that are available for this checkout.
 
