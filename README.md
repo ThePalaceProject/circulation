@@ -253,6 +253,9 @@ a storage service, you can set the following environment variables:
 - `PALACE_REPORTING_NAME`: (Optional) A name used to identify the CM instance associated with generated reports.
 - `PALACE_GOOGLE_DRIVE_SERVICE_INFO_JSON`: (Optional) A JSON string containing a Google Drive service account configuration.
   - c.f. [Creating service account credentials](https://developers.google.com/workspace/guides/create-credentials#service-account)
+- `PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID`: (Optional) The ID for a Google Drive Parent Folder/Shared Drive.
+  - e.g. Given the google drive folder at : `https://drive.google.com/drive/u/1/folders/0AGtlKYStJaC3Uk9PVZ`,
+  `0AGtlKYStJaC3Uk9PVZ` (not a real folder ID) is the value that should be assigned environment variable.
 
 #### Logging
 
