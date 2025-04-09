@@ -605,7 +605,6 @@ class LibrarySettings(BaseSettings):
                             f'"{field_label}": "{language}" is not a valid language code.'
                         )
                     )
-                if validated_language not in languages:
-                    languages.add(validated_language)
+                languages.add(validated_language)
             return sorted(languages)
         return value

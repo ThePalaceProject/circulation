@@ -58,8 +58,8 @@ def test_validate_language_codes_error(
 def test_serialize_language(library_settings: LibrarySettingsFixture) -> None:
     settings = library_settings(
         large_collection_languages=["fre", "eng"],
-        small_collection_languages=["ja", "chi"],
-        tiny_collection_languages=["eng", "chi"],
+        small_collection_languages=["ja", "chinese"],
+        tiny_collection_languages=["english", "chi"],
     )
 
     # When serialized, they are normalized to alpha-3 codes and sorted
