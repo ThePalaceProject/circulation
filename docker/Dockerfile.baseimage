@@ -18,7 +18,7 @@ RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
     /bd_build/cleanup.sh
 
-ARG POETRY_VERSION=1.7.1
+ARG POETRY_VERSION=2.1.1
 
 # Install required packages including python, pip, compiliers and libraries needed
 # to build the python wheels we need and poetry.
