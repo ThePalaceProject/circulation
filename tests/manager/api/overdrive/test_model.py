@@ -445,13 +445,13 @@ class TestCheckout:
             "audiobook-overdrive", raising=True
         ) is checkout.get_format("audiobook-overdrive-manifest", raising=True)
 
-    def test_supported_formats(self, checkouts_fixture: CheckoutsFixture) -> None:
+    def test_available_formats(self, checkouts_fixture: CheckoutsFixture) -> None:
         checkout = Checkout.model_validate_json(
             checkouts_fixture.files.sample_data(
                 "checkout_response_no_format_locked_in.json"
             )
         )
-        assert checkout.supported_formats == {
+        assert checkout.available_formats == {
             "ebook-epub-adobe",
             "ebook-kindle",
             "ebook-overdrive",
@@ -462,7 +462,7 @@ class TestCheckout:
                 Format(format_type="audiobook-overdrive", links={}, link_templates={}),
             ],
         )
-        assert checkout.supported_formats == {
+        assert checkout.available_formats == {
             "audiobook-overdrive",
             "audiobook-overdrive-manifest",
         }

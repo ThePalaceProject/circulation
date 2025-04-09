@@ -948,12 +948,12 @@ class OverdriveAPI(
 
         # At this point we know all available formats for this book.
         # For Overdrive ebooks, this may be our first complete view of format availability.
-        if "ebook-overdrive" in checkout.supported_formats:
+        if "ebook-overdrive" in checkout.available_formats:
             self._set_licensepool_delivery_mechanism_availability(licensepool, checkout)
 
             # Handle books that are not available in any formats that the mobile
             # apps can read.
-            if not checkout.supported_formats & OVERDRIVE_LOCK_IN_FORMATS:
+            if not checkout.available_formats & OVERDRIVE_LOCK_IN_FORMATS:
                 title = (
                     licensepool.presentation_edition.title
                     if licensepool.presentation_edition
@@ -993,7 +993,7 @@ class OverdriveAPI(
                 )
                 continue
 
-            if internal_format in checkout.supported_formats:
+            if internal_format in checkout.available_formats:
                 delivery_mechanism.available = True
             else:
                 delivery_mechanism.available = False
@@ -1136,7 +1136,7 @@ class OverdriveAPI(
 
         format_info = loan.get_format(format_type)
         if format_info is None:
-            available_formats = loan.supported_formats
+            available_formats = loan.available_formats
             if OVERDRIVE_INCOMPATIBLE_FORMATS & available_formats:
                 # The most likely explanation is that the patron
                 # already had this book delivered to their Kindle.
@@ -1288,7 +1288,7 @@ class OverdriveAPI(
         start = checkout.checkout_date
         end = checkout.expires
 
-        usable_formats = checkout.supported_formats & OVERDRIVE_FORMATS
+        usable_formats = checkout.available_formats & OVERDRIVE_FORMATS
 
         if (
             not usable_formats
