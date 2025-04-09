@@ -840,14 +840,38 @@ class TestOverdriveAPI:
         assert loan.start_date is None
         assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
 
+    @pytest.mark.parametrize(
+        "response_file",
+        [
+            "checkout_response_unsupported.json",
+            "checkout_response_unsupported_kindle.json",
+        ],
+    )
+    def test_checkout_unsupported_format(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        response_file: str,
+    ):
+        # Verify the process of checking out a book.
+        patron = db.patron()
+        pin = "1234"
+        api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
+        pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.NO_DRM,
+            available=True,
+            rights_uri=None,
+        )
+
         # If the book we checked out is only available in a format that the app cannot read,
         # we return the book, and raise a CannotLoan error.
-        http.reset_mock()
+        overdrive_api_fixture.queue_access_token_response()
         http.queue_response(
             201,
-            content=overdrive_api_fixture.data.sample_data(
-                "checkout_response_unsupported.json"
-            ),
+            content=overdrive_api_fixture.data.sample_data(response_file),
         )
         http.queue_response(200, content="")
         with pytest.raises(
@@ -856,17 +880,21 @@ class TestOverdriveAPI:
         ):
             api.checkout(patron, pin, pool, None)
 
-        # We made requests to checkout the book and return it.
-        assert list(zip(http.requests_methods, http.requests)) == [
-            (
-                "post",
-                "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts",
-            ),
-            (
-                "delete",
-                "https://patron.api.overdrive.com/v1/patrons/me/checkouts/4f40589f-03e7-41b6-9d9a-5e6fd77fdf98",
-            ),
-        ]
+        # We made requests to checkout the book and return it. The first request is to get the patron's
+        # oauth token, so we ignore it here.
+        [checkout_request_method, loan_info_request_method] = http.requests_methods[1:]
+        [checkout_request_url, loan_info_request_url] = http.requests[1:]
+
+        assert checkout_request_method == "post"
+        assert (
+            checkout_request_url
+            == "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts"
+        )
+
+        assert loan_info_request_method == "delete"
+        assert (
+            "patron.api.overdrive.com/v1/patrons/me/checkouts/" in loan_info_request_url
+        )
 
         # We updated the pool's delivery mechanisms, so we know that no supported formats are available
         # in the future.
@@ -889,9 +917,7 @@ class TestOverdriveAPI:
         )
         http.queue_response(
             200,
-            content=overdrive_api_fixture.data.sample_data(
-                "checkout_response_unsupported.json"
-            ),
+            content=overdrive_api_fixture.data.sample_data(response_file),
         )
         with pytest.raises(
             CannotLoan,
@@ -900,16 +926,19 @@ class TestOverdriveAPI:
             api.checkout(patron, pin, pool, None)
 
         # We made requests to checkout the book and get the loan information, but not to return it.
-        assert list(zip(http.requests_methods, http.requests)) == [
-            (
-                "post",
-                "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts",
-            ),
-            (
-                "get",
-                f"https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts/{identifier.identifier}",
-            ),
-        ]
+        [checkout_request_method, loan_info_request_method] = http.requests_methods
+        [checkout_request_url, loan_info_request_url] = http.requests
+
+        assert checkout_request_method == "post"
+        assert (
+            checkout_request_url
+            == "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts"
+        )
+
+        assert loan_info_request_method == "get"
+        assert (
+            "patron.api.overdrive.com/v1/patrons/me/checkouts/" in loan_info_request_url
+        )
 
     def test_place_hold(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
