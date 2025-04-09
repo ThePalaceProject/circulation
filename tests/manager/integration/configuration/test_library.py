@@ -53,3 +53,17 @@ def test_validate_language_codes_error(
 
     assert excinfo.value.problem_detail.detail is not None
     assert '"xyz" is not a valid language code' in excinfo.value.problem_detail.detail
+
+
+def test_serialize_language(library_settings: LibrarySettingsFixture) -> None:
+    settings = library_settings(
+        large_collection_languages=["fre", "eng"],
+        small_collection_languages=["ja", "chinese"],
+        tiny_collection_languages=["english", "chi"],
+    )
+
+    # When serialized, they are normalized to alpha-3 codes and sorted
+    serialized = settings.model_dump()
+    assert serialized["large_collection_languages"] == ["eng", "fre"]
+    assert serialized["small_collection_languages"] == ["chi", "jpn"]
+    assert serialized["tiny_collection_languages"] == ["chi", "eng"]

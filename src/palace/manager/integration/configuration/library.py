@@ -595,7 +595,7 @@ class LibrarySettings(BaseSettings):
     ) -> list[str] | None:
         """Verify that collection languages are valid."""
         if value is not None:
-            languages = []
+            languages = set()
             for language in value:
                 validated_language = LanguageCodes.string_to_alpha_3(language)
                 if validated_language is None:
@@ -605,7 +605,6 @@ class LibrarySettings(BaseSettings):
                             f'"{field_label}": "{language}" is not a valid language code.'
                         )
                     )
-                if validated_language not in languages:
-                    languages.append(validated_language)
-            return languages
+                languages.add(validated_language)
+            return sorted(languages)
         return value

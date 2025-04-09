@@ -144,7 +144,9 @@ class IntegrationSettingsController(ABC, Generic[T], LoggerMixin):
             api = self.registry[service.protocol]
             if issubclass(api, HasLibraryIntegrationConfiguration):
                 libraries = []
-                for library_settings in service.library_configurations:
+                for library_settings in sorted(
+                    service.library_configurations, key=lambda x: x.library.name
+                ):
                     library_info = self.configured_service_library_info(
                         library_settings
                     )

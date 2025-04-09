@@ -4,11 +4,12 @@ import random
 import string
 from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import pytest_alembic
 from pytest_alembic.config import Config
+from sqlalchemy import text
 
 from palace.manager.sqlalchemy.session import json_serializer
 from tests.fixtures.database import DatabaseFixture
@@ -17,7 +18,7 @@ from tests.fixtures.services import ServicesFixture
 if TYPE_CHECKING:
     import alembic.config
     from pytest_alembic import MigrationContext
-    from sqlalchemy.engine import Connection, Engine
+    from sqlalchemy.engine import Engine, Row
 
 
 @pytest.fixture
@@ -62,88 +63,79 @@ def alembic_runner(
         yield runner
 
 
-class RandomName(Protocol):
-    def __call__(self, length: int | None = None) -> str: ...
+class AlembicDatabaseFixture:
+    def __init__(self, alembic_engine: Engine) -> None:
+        self._engine = alembic_engine
 
-
-@pytest.fixture
-def random_name() -> RandomName:
-    def fixture(length: int | None = None) -> str:
+    @staticmethod
+    def random_name(length: int | None = None) -> str:
         if length is None:
             length = 10
         return "".join(random.choices(string.ascii_lowercase, k=length))
 
-    return fixture
+    def fetch_library(self, library_id: int) -> Row:
+        with self._engine.connect() as connection:
+            result = connection.execute(
+                text("SELECT * FROM libraries WHERE id = :id"),
+                id=library_id,
+            )
+            return result.one()
 
-
-class CreateLibrary(Protocol):
-    def __call__(
+    def library(
         self,
-        connection: Connection,
         name: str | None = None,
         short_name: str | None = None,
-    ) -> int: ...
-
-
-@pytest.fixture
-def create_library(random_name: RandomName) -> CreateLibrary:
-    def fixture(
-        connection: Connection,
-        name: str | None = None,
-        short_name: str | None = None,
+        settings: dict[str, Any] | None = None,
     ) -> int:
         if name is None:
-            name = random_name()
+            name = self.random_name()
         if short_name is None:
-            short_name = random_name()
+            short_name = self.random_name()
 
         args = {
             "name": name,
             "short_name": short_name,
+            "public_key": self.random_name(),
+            "private_key": self.random_name(),
+            "is_default": "false",
         }
 
-        args["public_key"] = random_name()
-        args["private_key"] = random_name()
-
-        settings_dict = {
+        default_settings = {
             "website": "http://library.com",
             "help_web": "http://library.com/support",
         }
-        args["settings_dict"] = json_serializer(settings_dict)
+
+        if settings is not None:
+            default_settings.update(settings)
+
+        args["settings_dict"] = json_serializer(default_settings)
 
         keys = ",".join(args.keys())
         values = ",".join([f"'{value}'" for value in args.values()])
-        library = connection.execute(
-            f"INSERT INTO libraries ({keys}) VALUES ({values}) returning id"
-        ).fetchone()
+
+        with self._engine.connect() as connection:
+            library = connection.execute(
+                f"INSERT INTO libraries ({keys}) VALUES ({values}) returning id"
+            ).fetchone()
 
         assert library is not None
         assert isinstance(library.id, int)
         return library.id
 
-    return fixture
-
-
-class CreateCollection(Protocol):
-    def __call__(
-        self,
-        connection: Connection,
-        integration_configuration_id: int | None = None,
-    ) -> int: ...
-
 
 @pytest.fixture
-def create_collection(random_name: RandomName) -> CreateCollection:
-    def fixture(
-        connection: Connection,
-        integration_configuration_id: int | None = None,
-    ) -> int:
-        collection = connection.execute(
-            "INSERT INTO collections (integration_configuration_id) VALUES (%s) returning id",
-            integration_configuration_id,
-        ).fetchone()
-        assert collection is not None
-        assert isinstance(collection.id, int)
-        return collection.id
+def alembic_database(
+    alembic_engine: Engine,
+) -> AlembicDatabaseFixture:
+    """
+    Fixture to create database records for alembic tests.
 
-    return fixture
+    By its nature, this fixture will not be stable since Alembic deals
+    with modifications to the database schema. This means the fixture
+    needs to accommodate creating and modifying records across different
+    schema versions.
+
+    It's still helpful to have a central place to create records, even if it
+    requires occasional updates to handle schema changes.
+    """
+    return AlembicDatabaseFixture(alembic_engine=alembic_engine)
