@@ -616,9 +616,7 @@ class LibrarySettings(BaseSettings):
         "small_collection_languages",
         "tiny_collection_languages",
     )
-    def serialize_courses_in_order(
-        self, languages: list[str] | None
-    ) -> list[str] | None:
+    def serialize_languages(self, languages: list[str] | None) -> list[str] | None:
         """
         Sort the list of languages in alphabetical order before sending it to the client.
         """
