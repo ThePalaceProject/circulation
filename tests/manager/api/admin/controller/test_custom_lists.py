@@ -50,7 +50,7 @@ class TestCustomListsController:
         one_entry, ignore = create(
             admin_librarian_fixture.ctrl.db.session,
             CustomList,
-            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            name="One entry list",
             library=admin_librarian_fixture.ctrl.db.default_library(),
             auto_update_enabled=True,
             auto_update_query=auto_update_query,
@@ -63,7 +63,7 @@ class TestCustomListsController:
         no_entries, ignore = create(
             admin_librarian_fixture.ctrl.db.session,
             CustomList,
-            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            name="A no entries list",
             library=admin_librarian_fixture.ctrl.db.default_library(),
             auto_update_enabled=False,
         )
@@ -87,31 +87,33 @@ class TestCustomListsController:
             assert isinstance(lists, list)
             assert 2 == len(lists)
 
-            [l1, l2] = sorted(lists, key=lambda l: l.get("id"))
+            # The lists are returned in alphabetical order by name, so the first list
+            # is the one with no entries.
+            [no_entries_response, one_entry_response] = lists
 
-            assert one_entry.id == l1.get("id")
-            assert one_entry.name == l1.get("name")
-            assert 1 == l1.get("entry_count")
-            assert 1 == len(l1.get("collections"))
-            [c] = l1.get("collections")
+            assert one_entry.id == one_entry_response.get("id")
+            assert one_entry.name == one_entry_response.get("name")
+            assert 1 == one_entry_response.get("entry_count")
+            assert 1 == len(one_entry_response.get("collections"))
+            [c] = one_entry_response.get("collections")
             assert collection.name == c.get("name")
             assert collection.id == c.get("id")
             assert collection.protocol == c.get("protocol")
-            assert True == l1.get("auto_update")
-            assert auto_update_query == l1.get("auto_update_query")
-            assert CustomList.INIT == l1.get("auto_update_status")
-            assert False == l1.get("is_shared")
-            assert True == l1.get("is_owner")
+            assert True == one_entry_response.get("auto_update")
+            assert auto_update_query == one_entry_response.get("auto_update_query")
+            assert CustomList.INIT == one_entry_response.get("auto_update_status")
+            assert False == one_entry_response.get("is_shared")
+            assert True == one_entry_response.get("is_owner")
 
-            assert no_entries.id == l2.get("id")
-            assert no_entries.name == l2.get("name")
-            assert 0 == l2.get("entry_count")
-            assert 0 == len(l2.get("collections"))
-            assert False == l2.get("auto_update")
-            assert None == l2.get("auto_update_query")
-            assert CustomList.INIT == l2.get("auto_update_status")
-            assert True == l2.get("is_shared")
-            assert True == l2.get("is_owner")
+            assert no_entries.id == no_entries_response.get("id")
+            assert no_entries.name == no_entries_response.get("name")
+            assert 0 == no_entries_response.get("entry_count")
+            assert 0 == len(no_entries_response.get("collections"))
+            assert False == no_entries_response.get("auto_update")
+            assert None == no_entries_response.get("auto_update_query")
+            assert CustomList.INIT == no_entries_response.get("auto_update_status")
+            assert True == no_entries_response.get("is_shared")
+            assert True == no_entries_response.get("is_owner")
 
         admin_librarian_fixture.admin.remove_role(
             AdminRole.LIBRARIAN, admin_librarian_fixture.ctrl.db.default_library()
@@ -451,8 +453,12 @@ class TestCustomListsController:
             data_source=data_source,
         )
 
-        work1 = admin_librarian_fixture.ctrl.db.work(with_license_pool=True)
-        work2 = admin_librarian_fixture.ctrl.db.work(with_license_pool=True)
+        work1 = admin_librarian_fixture.ctrl.db.work(
+            title="Second", with_license_pool=True
+        )
+        work2 = admin_librarian_fixture.ctrl.db.work(
+            title="First", with_license_pool=True
+        )
         list.add_entry(work1)
         list.add_entry(work2)
 
@@ -475,12 +481,14 @@ class TestCustomListsController:
             ]
             assert self_custom_list_link == feed.feed.id
 
+            # The feed entries are sorted by title, so the first entry is work2, and the
+            # second entry is work1.
             [entry1, entry2] = feed.entries
-            assert work1.title == entry1.get("title")
-            assert work2.title == entry2.get("title")
+            assert work2.title == entry1.get("title")
+            assert work1.title == entry2.get("title")
 
-            assert work1.presentation_edition.author == entry1.get("author")
-            assert work2.presentation_edition.author == entry2.get("author")
+            assert work2.presentation_edition.author == entry1.get("author")
+            assert work1.presentation_edition.author == entry2.get("author")
 
     def test_custom_list_get_with_pagination(
         self,

@@ -84,7 +84,7 @@ class CustomListsController(
             for list in library.shared_custom_lists:
                 custom_lists.append(self._list_as_json(list, is_owner=False))
 
-            return dict(custom_lists=custom_lists)
+            return dict(custom_lists=sorted(custom_lists, key=lambda x: x["name"]))
 
         if flask.request.method == "POST":
             list_ = CustomListPostRequest.model_validate(
