@@ -96,13 +96,15 @@ class GoogleDriveService(LoggerMixin):
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
         return file
 
-    def create_nested_folders_if_not_exist(self, folders: list[str] = []) -> list[File]:
+    def create_nested_folders_if_not_exist(
+        self, folders: list[str] = [], parent_folder_id: str | None = None
+    ) -> list[File]:
         """
         Creates a hierarchy of nested folders based on the list of folder names.
         Any of the folders already exist, they will be returned with the results.
         """
         results: list[File] = []
-        parent_id = None
+        parent_id = parent_folder_id
         for folder_name in folders:
             body: dict[str, Any] = {
                 "name": folder_name,
