@@ -23,6 +23,7 @@ from sqlalchemy.sql.expression import or_
 
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
@@ -31,7 +32,6 @@ from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
-    from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.lane import Lane
     from palace.manager.sqlalchemy.model.library import Library
 
@@ -136,9 +136,10 @@ class CustomList(Base):
     def entries_having_works(cls, _db: Session, list_id: int):
         return (
             _db.query(Work)
-            .join(Work.custom_list_entries)
+            .join(CustomListEntry)
+            .join(Edition)
             .filter(CustomListEntry.list_id == list_id)
-            .order_by(Work.id)
+            .order_by(Edition.sort_title)
         )
 
     @classmethod
