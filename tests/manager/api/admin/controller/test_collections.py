@@ -557,7 +557,15 @@ class TestCollectionSettings:
         assert l1_settings is not None
         assert "the_ils" == l1_settings.settings_dict.get("ils_name")
 
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_loans"
+            ) as reap_loans,
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_holds"
+            ) as reap_holds,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -570,7 +578,10 @@ class TestCollectionSettings:
                     ("libraries", json.dumps([])),
                 ]
             )
+
             response = controller.process_collections()
+            assert reap_loans.delay.call_count == 1
+            assert reap_holds.delay.call_count == 1
             assert response.status_code == 200
             assert isinstance(response, Response)
 
@@ -667,7 +678,15 @@ class TestCollectionSettings:
             short_name="L1",
         )
 
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_loans"
+            ) as reap_loans,
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_holds"
+            ) as reap_holds,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -684,6 +703,8 @@ class TestCollectionSettings:
                 ]
             )
             response = controller.process_collections()
+            assert reap_loans.delay.call_count == 0
+            assert reap_holds.delay.call_count == 0
             assert response.status_code == 200
 
         # Additional settings were set on the collection+library.
@@ -693,7 +714,15 @@ class TestCollectionSettings:
         assert "14" == l1_settings.settings_dict.get("ebook_loan_duration")
 
         # Remove the connection between collection and library.
-        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+        with (
+            flask_app_fixture.test_request_context_system_admin("/", method="POST"),
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_loans"
+            ) as reap_loans,
+            patch(
+                "palace.manager.api.admin.controller.collection_settings.reap_unassociated_holds"
+            ) as reap_holds,
+        ):
             flask.request.form = ImmutableMultiDict(
                 [
                     ("id", str(collection.integration_configuration.id)),
@@ -706,7 +735,10 @@ class TestCollectionSettings:
                     ("libraries", json.dumps([])),
                 ]
             )
+
             response = controller.process_collections()
+            assert reap_loans.delay.call_count == 1
+            assert reap_holds.delay.call_count == 1
             assert response.status_code == 200
             assert isinstance(response, Response)
 
