@@ -33,7 +33,7 @@ def upgrade() -> None:
 
     # update existing playtime entries with associated data source name where available.
     conn.execute(
-        "update playtime_entries pe set data_source_name = ic.settings->'data_source' "
+        "update playtime_entries pe set data_source_name = ic.settings->>'data_source' "
         "from collections c, integration_configurations ic "
         "where pe.collection_id = c.id and  c.integration_configuration_id = ic.id and "
         "ic.settings->'data_source' is not null"
@@ -48,7 +48,7 @@ def upgrade() -> None:
     # update existing playtime summaries with associated data source name where available.
 
     conn.execute(
-        "update playtime_summaries ps set data_source_name = ic.settings->'data_source' "
+        "update playtime_summaries ps set data_source_name = ic.settings->>'data_source' "
         "from collections c, integration_configurations ic "
         "where ps.collection_id = c.id and  c.integration_configuration_id = ic.id and "
         "ic.settings->'data_source' is not null"
