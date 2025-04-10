@@ -347,7 +347,10 @@ class GenerateInventoryAndHoldsReportsJob(Job):
                 FROM integration_library_configurations ilc
                 WHERE ilc.parent_id = ic.id
             ) collection_sharing ON TRUE
-            WHERE lib.id = :library_id AND ic.id IN :integration_ids
+            WHERE lib.id = :library_id
+              AND ic.id IN :integration_ids
+              -- Only include items with holds in this library
+              AND COALESCE(lib_holds.active_hold_count, 0) > 0
             ORDER BY ed.sort_title, ed.sort_author, d.name, ic.name
         """
 
