@@ -34,6 +34,11 @@ class PlaytimeEntries:
         responses = []
         summary = PlaytimeEntriesPostSummary()
         today = utc_now().date()
+        data_source_name = (
+            "Unknown"
+            if not collection or not collection.data_source
+            else collection.data_source.name
+        )
         for entry in data.time_entries:
             status_code = 201
             message = "Created"
@@ -61,6 +66,7 @@ class PlaytimeEntries:
                         timestamp=entry.during_minute,
                         total_seconds_played=entry.seconds_played,
                         loan_identifier=loan_identifier,
+                        data_source_name=data_source_name,
                     )
             except IntegrityError as ex:
                 logging.getLogger("Time Tracking").error(

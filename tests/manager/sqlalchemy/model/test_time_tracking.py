@@ -32,6 +32,7 @@ class TestPlaytimeEntries:
             total_seconds_played=30,
             tracking_id="tracking-id",
             loan_identifier="loan-id",
+            data_source_name=collection.data_source.name,
         )
 
         assert entry.identifier == identifier
@@ -67,6 +68,7 @@ class TestPlaytimeEntries:
                 total_seconds_played=61,
                 tracking_id="tracking-id",
                 loan_identifier=loan_id,
+                data_source_name=collection.data_source.name,
             )
         assert "max_total_seconds_played_constraint" in raised.exconly()
         db.session.rollback()
@@ -90,6 +92,7 @@ class TestPlaytimeEntries:
             total_seconds_played=60,
             tracking_id="tracking-id-0",
             loan_identifier=loan_id,
+            data_source_name=collection.data_source.name,
         )
         # Different identifier same tracking id is ok
         create(
@@ -105,6 +108,7 @@ class TestPlaytimeEntries:
             total_seconds_played=60,
             tracking_id="tracking-id-0",
             loan_identifier="loan-id-2",
+            data_source_name=collection.data_source.name,
         )
         # Same identifier different tracking id is ok
         create(
@@ -120,6 +124,7 @@ class TestPlaytimeEntries:
             total_seconds_played=60,
             tracking_id="tracking-id-1",
             loan_identifier=loan_id,
+            data_source_name=collection.data_source.name,
         )
         with pytest.raises(IntegrityError) as raised:
             # Same identifier same tracking id is not ok
@@ -136,6 +141,7 @@ class TestPlaytimeEntries:
                 total_seconds_played=60,
                 tracking_id="tracking-id-0",
                 loan_identifier=loan_id,
+                data_source_name=collection.data_source.name,
             )
         assert (
             f"Key (tracking_id, identifier_str, collection_name, library_name)=(tracking-id-0, {identifier.urn}, {collection.name}, {library.name}) already exists"
@@ -149,6 +155,7 @@ class TestPlaytimeSummaries:
         collection = db.default_collection()
         library = db.default_library()
         loan_id = "loan-id"
+        data_source_name = "ds1"
 
         create(
             db.session,
@@ -162,6 +169,7 @@ class TestPlaytimeSummaries:
             timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
             total_seconds_played=600,
             loan_identifier=loan_id,
+            data_source_name=data_source_name,
         )
 
         # Same identifier string with same timestamp
@@ -178,6 +186,7 @@ class TestPlaytimeSummaries:
                 timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
                 total_seconds_played=600,
                 loan_identifier=loan_id,
+                data_source_name=data_source_name,
             )
         assert (
             f'Key ("timestamp", identifier_str, collection_name, library_name, loan_identifier)=(2000-01-01 12:00:00+00, {identifier.urn}, {collection.name}, {library.name}, {loan_id}) already exists'
@@ -200,6 +209,7 @@ class TestPlaytimeSummaries:
                 timestamp=datetime.datetime(2000, 1, 1, 12, 00, 1),
                 total_seconds_played=600,
                 loan_identifier=loan_id,
+                data_source_name=data_source_name,
             )
         assert "timestamp_minute_boundary_constraint" in raised.exconly()
 
@@ -221,6 +231,7 @@ class TestPlaytimeSummaries:
             timestamp=datetime.datetime(2000, 1, 1, 12, 00, 00),
             total_seconds_played=600,
             loan_identifier=loan_id,
+            data_source_name=collection.data_source.name,
         )
 
         assert entry.identifier == identifier

@@ -55,6 +55,7 @@ class PlaytimeEntry(Base):
     # Related objects can be deleted, so we keep string representation.
     identifier_str: Mapped[str] = Column(String, nullable=False)
     collection_name: Mapped[str] = Column(String, nullable=False)
+    data_source_name: Mapped[str] = Column(String, nullable=False)
     library_name: Mapped[str] = Column(String, nullable=False)
 
     timestamp: Mapped[datetime.datetime] = Column(
@@ -113,6 +114,7 @@ class PlaytimeSummary(Base):
     # Related objects can be deleted, so we keep string representation.
     identifier_str: Mapped[str] = Column(String, nullable=False)
     collection_name: Mapped[str] = Column(String, nullable=False)
+    data_source_name: Mapped[str] = Column(String, nullable=False)
     library_name: Mapped[str] = Column(String, nullable=False)
 
     # This should be a per-minute datetime
@@ -155,6 +157,7 @@ class PlaytimeSummary(Base):
         collection_name: str,
         library_name: str | None,
         loan_identifier: str,
+        data_source_name: str,
     ) -> PlaytimeSummary:
         """Add playtime (in seconds) to it's associated minute-level summary record."""
         # Update each label with its current value, if its foreign key is present.
@@ -189,6 +192,7 @@ class PlaytimeSummary(Base):
                 "identifier_str": identifier_str,
                 "collection_name": collection_name,
                 "library_name": library_name,
+                "data_source_name": data_source_name,
             }.items()
             if k not in lookup_keys
         }
