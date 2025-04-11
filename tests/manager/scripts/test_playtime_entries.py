@@ -688,7 +688,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
         )
 
-        with (patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,):
+        with patch("palace.manager.scripts.playtime_entries.csv.writer") as writer:
             # Act
             PlaytimeEntriesReportsScript(db.session).run()
 
