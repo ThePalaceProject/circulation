@@ -19,9 +19,6 @@ from palace.manager.scripts.playtime_entries import (
     PlaytimeEntriesReportsScript,
     PlaytimeEntriesSummationScript,
 )
-from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE,
-)
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -30,7 +27,7 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import datetime_utc, previous_months, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.services import ServicesEmailFixture, ServicesFixture
+from tests.fixtures.services import ServicesFixture
 
 
 def create_playtime_entries(
@@ -542,8 +539,8 @@ class TestPlaytimeEntriesEmailReportsScript:
     def test_do_run(
         self,
         db: DatabaseTransactionFixture,
-        services_email_fixture: ServicesEmailFixture,
         services_fixture: ServicesFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         identifier = db.identifier()
         collection = db.collection("collection b")
@@ -681,24 +678,17 @@ class TestPlaytimeEntriesEmailReportsScript:
         )
 
         reporting_name = "test cm"
-
-        mock_google_drive_service = create_autospec(GoogleDriveService)
-        services_fixture.services.google_drive.service.override(
-            mock_google_drive_service
-        )
-
         parent_folder_id = "palace-test"
 
-        with (
-            patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,
-            patch(
-                "palace.manager.scripts.playtime_entries.os.environ",
-                new={
-                    Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE: reporting_name,
-                    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE: parent_folder_id,
-                },
-            ),
-        ):
+        mock_google_drive_service = create_autospec(GoogleDriveService)
+        drive_container = services_fixture.services.google_drive()
+        drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
+        drive_container.service.override(mock_google_drive_service)
+        monkeypatch.setenv(
+            Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
+        )
+
+        with (patch("palace.manager.scripts.playtime_entries.csv.writer") as writer,):
             # Act
             PlaytimeEntriesReportsScript(db.session).run()
 

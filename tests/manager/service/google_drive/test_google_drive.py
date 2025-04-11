@@ -1,63 +1,93 @@
 from __future__ import annotations
 
-import json
 import os
 import random
 import string
 from io import BytesIO
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from palace.manager.service.google_drive.google_drive import GoogleDriveService
-
-service_account_info_json = os.getenv(
-    "PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON"
-)
+from palace.manager.service.google_drive.configuration import GoogleDriveConfiguration
+from tests.fixtures.services import ServicesFixture
 
 
 class GoogleDriveTestFixture:
-    def __init__(self):
+    def __init__(self, services_fixture: ServicesFixture) -> None:
+        self.services_fixture = services_fixture
+        self.container = services_fixture.services.google_drive()
 
-        if not service_account_info_json:
-            # the only time this condition should be true is when testing locally and the above env variable is unset
-            # or the test coverage analysis is being performed.
-            self.google_drive_service = MagicMock()
+        test_credentials = os.getenv(
+            "PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON"
+        )
+        if test_credentials:
+            # Load configuration with our test credentials, when we do this
+            # we will make actual requests out to google drive in our tests.
+            self.mock_api_client = None
+            self.container.config.from_dict(
+                GoogleDriveConfiguration(
+                    service_account_info_json=test_credentials,
+                ).model_dump()
+            )
         else:
-            service_account_info: dict[str, Any] = json.loads(service_account_info_json)
-            self.google_drive_service = GoogleDriveService(service_account_info)
+            # Otherwise we mock the google drive api client, and just test
+            # that we make the correct calls to the mock.
+            self.mock_api_client = MagicMock()
+            self.container.api_client.override(self.mock_api_client)
+        self.service = self.container.service()
+
+    def random_string(self, length: int = 10) -> str:
+        return "".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(length)
+        )
+
+    def files_result(
+        self, file: dict[str, str] | None = None
+    ) -> dict[str, list[dict[str, str]]]:
+        files = []
+        if file is not None:
+            files.append(file)
+        return {"files": files}
+
+    def file_data(
+        self, name: str | None = None, id: str | None = None
+    ) -> dict[str, str]:
+        return {
+            "id": id or self.random_string(),
+            "name": name or self.random_string(),
+        }
 
 
 @pytest.fixture
-def google_drive_service_fixture() -> GoogleDriveTestFixture:
-    fixture = GoogleDriveTestFixture()
-    return fixture
-
-
-def generate_random_strings(length):
-    return "".join(
-        random.choice(string.ascii_letters + string.digits) for _ in range(length)
-    )
+def google_drive_service_fixture(
+    services_fixture: ServicesFixture,
+) -> GoogleDriveTestFixture:
+    return GoogleDriveTestFixture(services_fixture)
 
 
 class TestGoogleDriveService:
-
-    def test_factory(self):
-        google_drive_service = GoogleDriveService.factory(
-            service_account_info_json=service_account_info_json,
-        )
-        assert google_drive_service is not None
-
     def test_create_nested_folders(
         self, google_drive_service_fixture: GoogleDriveTestFixture
-    ):
-        service = google_drive_service_fixture.google_drive_service
-        parent_name = generate_random_strings(10)
+    ) -> None:
+        fixture = google_drive_service_fixture
+        service = fixture.service
+        parent_name = fixture.random_string()
+        mock_api_client = fixture.mock_api_client
+
+        if mock_api_client:
+            mock_api_client.files.return_value.list.return_value.execute.side_effect = [
+                fixture.files_result(),
+                fixture.files_result(file=fixture.file_data()),
+                fixture.files_result(file=fixture.file_data()),
+                fixture.files_result(file=fixture.file_data()),
+                fixture.files_result(file=fixture.file_data()),
+                fixture.files_result(),
+                fixture.files_result(),
+            ]
 
         # start by sanity checking the non-existence of the root folder
         folder_info = service.get_file(name=parent_name)
-        # assert folder_info is None
+        assert folder_info is None
 
         # create a parent and child folder
         folders = [parent_name, "child_dir"]
@@ -85,10 +115,22 @@ class TestGoogleDriveService:
         folder_info = service.get_file(parent_name)
         assert folder_info is None
 
-    def test_create_file(self, google_drive_service_fixture: GoogleDriveTestFixture):
-        service = google_drive_service_fixture.google_drive_service
-        file_name = generate_random_strings(10) + ".txt"
+    def test_create_file(
+        self, google_drive_service_fixture: GoogleDriveTestFixture
+    ) -> None:
+        fixture = google_drive_service_fixture
+        service = fixture.service
+        file_name = fixture.random_string() + ".txt"
+        mock_api_client = fixture.mock_api_client
 
+        if mock_api_client:
+            mock_api_client.files.return_value.list.return_value.execute.side_effect = [
+                fixture.files_result(),
+                fixture.files_result(file=fixture.file_data(file_name, "123")),
+            ]
+            mock_api_client.files.return_value.create.return_value.execute.return_value = fixture.file_data(
+                file_name, "123"
+            )
         stored_file = service.create_file(
             file_name=file_name,
             stream=BytesIO(b"Hello world"),
@@ -99,7 +141,7 @@ class TestGoogleDriveService:
         assert stored_file["name"] == file_name
 
         retrieved_info = service.get_file(name=file_name)
-
+        assert retrieved_info
         assert stored_file["id"] == retrieved_info["id"]
         assert stored_file["name"] == retrieved_info["name"]
         # clean up
@@ -108,9 +150,19 @@ class TestGoogleDriveService:
     def test_create_existing_file_fails(
         self, google_drive_service_fixture: GoogleDriveTestFixture
     ):
-        service = google_drive_service_fixture.google_drive_service
-        file_name = generate_random_strings(10) + ".txt"
+        fixture = google_drive_service_fixture
+        service = fixture.service
+        file_name = fixture.random_string() + ".txt"
+        mock_api_client = fixture.mock_api_client
 
+        if mock_api_client:
+            mock_api_client.files.return_value.list.return_value.execute.side_effect = [
+                fixture.files_result(),
+                fixture.files_result(file=fixture.file_data(file_name)),
+            ]
+            mock_api_client.files.return_value.create.return_value.execute.return_value = fixture.file_data(
+                file_name
+            )
         stored_file = service.create_file(
             file_name=file_name,
             stream=BytesIO(b"Hello world"),

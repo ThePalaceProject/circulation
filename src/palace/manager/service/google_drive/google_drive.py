@@ -1,53 +1,28 @@
 from __future__ import annotations
 
-import json
-import sys
 from io import IOBase
 from typing import TYPE_CHECKING, Any
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 from palace.manager.util.log import LoggerMixin
 
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
-
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3 import File
+    from googleapiclient._apis.drive.v3 import DriveResource, File
 
 
 class GoogleDriveService(LoggerMixin):
-    def __init__(
-        self,
-        service_account_info: dict[str, Any],
-    ) -> None:
-
-        scopes = ["https://www.googleapis.com/auth/drive"]
-        credentials = service_account.Credentials.from_service_account_info(
-            info=service_account_info, scopes=scopes
-        )
-
-        self.service = build("drive", "v3", credentials=credentials)
-
-    @classmethod
-    def factory(cls, service_account_info_json: str = "{}") -> GoogleDriveService:
-        return GoogleDriveService(
-            service_account_info=json.loads(service_account_info_json)
-        )
+    def __init__(self, api_client: DriveResource) -> None:
+        self.api_client = api_client
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
-
         query = f"name = '{name}'"
 
         if parent_folder_id:
             query += f" and '{parent_folder_id}' in parents"
 
         results = (
-            self.service.files()
+            self.api_client.files()
             .list(
                 q=query,
                 pageSize=10,
@@ -63,7 +38,7 @@ class GoogleDriveService(LoggerMixin):
             return None
 
     def delete_file(self, file_id: str) -> None:
-        self.service.files().delete(fileId=file_id).execute()
+        self.api_client.files().delete(fileId=file_id).execute()
 
     def create_file(
         self,
@@ -86,7 +61,7 @@ class GoogleDriveService(LoggerMixin):
             parents = [parent_folder_id] if parent_folder_id else []
             file_metadata = dict(name=file_name, parents=parents)
             file = (
-                self.service.files()
+                self.api_client.files()
                 .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
                 .execute()
             )
@@ -116,7 +91,7 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = self.service.files().create(body=body).execute()  # type: ignore[arg-type]
+                folder = self.api_client.files().create(body=body).execute()  # type: ignore[arg-type]
             results.append(folder)
             parent_id = folder["id"]
 

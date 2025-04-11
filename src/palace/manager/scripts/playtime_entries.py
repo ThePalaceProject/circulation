@@ -20,9 +20,6 @@ from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
-from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE,
-)
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
@@ -192,9 +189,7 @@ class PlaytimeEntriesReportsScript(Script):
         google_drive: GoogleDriveService = self.services.google_drive.service()
 
         # create directory hierarchy
-        root_folder_id = os.environ.get(
-            PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE, None
-        )
+        root_folder_id = self.services.google_drive.config.parent_folder_id()
 
         # get list of collections
         data_source_names = [
