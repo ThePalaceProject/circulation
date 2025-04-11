@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import HttpMockSequence, MediaIoBaseUpload
 
 from palace.manager.util.log import LoggerMixin
 
@@ -22,21 +22,24 @@ if TYPE_CHECKING:
 
 class GoogleDriveService(LoggerMixin):
     def __init__(
-        self,
-        service_account_info: dict[str, Any],
+        self, credentials: Any | None, http: HttpMockSequence | None = None
     ) -> None:
 
-        scopes = ["https://www.googleapis.com/auth/drive"]
-        credentials = service_account.Credentials.from_service_account_info(
-            info=service_account_info, scopes=scopes
-        )
+        if credentials:
+            assert not http
+        if http:
+            assert not credentials
 
-        self.service = build("drive", "v3", credentials=credentials)
+        self.service = build("drive", "v3", credentials=credentials, http=http)
 
     @classmethod
     def factory(cls, service_account_info_json: str = "{}") -> GoogleDriveService:
+        scopes = ["https://www.googleapis.com/auth/drive"]
+        credentials = service_account.Credentials.from_service_account_info(
+            info=json.loads(service_account_info_json), scopes=scopes
+        )
         return GoogleDriveService(
-            service_account_info=json.loads(service_account_info_json)
+            service_account_info=json.loads(credentials=credentials)
         )
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
