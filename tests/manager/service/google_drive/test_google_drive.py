@@ -2,15 +2,23 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
+from typing import TYPE_CHECKING
 
 import pytest
+from googleapiclient.discovery import build
 from googleapiclient.http import HttpMockSequence
 
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 
+if TYPE_CHECKING:
+    pass
+
 
 def drive_service(http: HttpMockSequence) -> GoogleDriveService:
-    return GoogleDriveService(http=http, credentials=None)
+    api_client = build(
+        "drive", "v3", credentials=None, http=http
+    )  #  type: ignore[call-overload]
+    return GoogleDriveService(api_client=api_client)
 
 
 class TestGoogleDriveService:
