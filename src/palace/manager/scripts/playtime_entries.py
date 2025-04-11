@@ -235,7 +235,7 @@ class PlaytimeEntriesReportsScript(Script):
                     folders=nested_folders,
                     parent_folder_id=root_folder_id,
                 )
-                # the lef folder is the last path segment in the result list
+                # the leaf folder is the last path segment in the result list
                 leaf_folder = folder_results[-1]
 
                 # store file

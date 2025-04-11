@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime, timedelta
 from io import IOBase, StringIO
 from typing import Any, Literal
-from unittest.mock import create_autospec
+from unittest.mock import DEFAULT, create_autospec
 
 import pytest
 import pytz
@@ -693,10 +693,10 @@ class TestPlaytimeEntriesEmailReportsScript:
             nonlocal output_data
             stream.seek(0)
             output_data[file_name] = stream.read().decode("utf-8")
-            return {}
+            return DEFAULT
 
         mock_google_drive_service = create_autospec(GoogleDriveService)
-        mock_google_drive_service.create_file = mock_create_file
+        mock_google_drive_service.create_file.side_effect = mock_create_file
         drive_container = services_fixture.services.google_drive()
         drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
         drive_container.service.override(mock_google_drive_service)
@@ -729,6 +729,11 @@ class TestPlaytimeEntriesEmailReportsScript:
             "total seconds",
             "loan count",
         ]
+
+        assert (
+            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
+            in ds_a_filename
+        )
 
         assert ds_a_data == [
             headers,
@@ -784,6 +789,11 @@ class TestPlaytimeEntriesEmailReportsScript:
             ],
         ]
 
+        assert (
+            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
+            in ds_b_filename
+        )
+
         assert ds_b_data == [
             headers,
             [
@@ -818,14 +828,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             ],  # Identifier with edition
         ]
 
-        assert (
-            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
-            in ds_a_filename
-        )
-        assert (
-            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
-            in ds_b_filename
-        )
+        assert mock_google_drive_service.create_file.call_count == 2
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
         assert nested_method.call_count == 2
