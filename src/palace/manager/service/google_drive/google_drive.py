@@ -1,43 +1,20 @@
 from __future__ import annotations
 
-import json
-import sys
 from io import IOBase
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 from palace.manager.util.log import LoggerMixin
 
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
-
 if TYPE_CHECKING:
-    from googleapiclient._apis.drive.v3 import File
+    from googleapiclient._apis.drive.v3 import DriveResource, File
 
 
 class GoogleDriveService(LoggerMixin):
-    def __init__(
-        self,
-        service_account_info: dict[str, Any],
-    ) -> None:
 
-        scopes = ["https://www.googleapis.com/auth/drive"]
-        credentials = service_account.Credentials.from_service_account_info(
-            info=service_account_info, scopes=scopes
-        )
-
-        self.service = build("drive", "v3", credentials=credentials)
-
-    @classmethod
-    def factory(cls, service_account_info_json: str = "{}") -> GoogleDriveService:
-        return GoogleDriveService(
-            service_account_info=json.loads(service_account_info_json)
-        )
+    def __init__(self, api_client: DriveResource) -> None:
+        self.api_client = api_client
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
 
@@ -47,7 +24,7 @@ class GoogleDriveService(LoggerMixin):
             query += f" and '{parent_folder_id}' in parents"
 
         results = (
-            self.service.files()
+            self.api_client.files()
             .list(
                 q=query,
                 pageSize=10,
@@ -56,14 +33,11 @@ class GoogleDriveService(LoggerMixin):
             .execute()
         )
 
-        files = results["files"]
+        files: list[File] = results["files"]
         if files:
             return files[0]
         else:
             return None
-
-    def delete_file(self, file_id: str) -> None:
-        self.service.files().delete(fileId=file_id).execute()
 
     def create_file(
         self,
@@ -73,25 +47,22 @@ class GoogleDriveService(LoggerMixin):
         parent_folder_id: str | None = None,
     ) -> File:
 
-        try:
-            # check that the file doesn't already exist since google drive will create multiple files (with different
-            # ids) in the same directory which we don't ever want.
-            file = self.get_file(name=file_name, parent_folder_id=parent_folder_id)
-            if file:
-                raise FileExistsError(
-                    f'A file named "{file_name}" already exists in folder(id={parent_folder_id}'
-                )
-
-            media = MediaIoBaseUpload(stream, mimetype=content_type)
-            parents = [parent_folder_id] if parent_folder_id else []
-            file_metadata = dict(name=file_name, parents=parents)
-            file = (
-                self.service.files()
-                .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
-                .execute()
+        # check that the file doesn't already exist since google drive will create multiple files (with different
+        # ids) in the same directory which we don't ever want.
+        file = self.get_file(name=file_name, parent_folder_id=parent_folder_id)
+        if file:
+            raise FileExistsError(
+                f'A file named "{file_name}" already exists in folder(id={parent_folder_id}'
             )
-        finally:
-            stream.close()
+
+        media = MediaIoBaseUpload(stream, mimetype=content_type)
+        parents = [parent_folder_id] if parent_folder_id else []
+        file_metadata: File = {"name": file_name, "parents": parents}
+        file = (
+            self.api_client.files()
+            .create(body=file_metadata, media_body=media, fields="*")
+            .execute()
+        )
 
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
         return file
@@ -106,7 +77,7 @@ class GoogleDriveService(LoggerMixin):
         results: list[File] = []
         parent_id = parent_folder_id
         for folder_name in folders:
-            body: dict[str, Any] = {
+            body: File = {
                 "name": folder_name,
                 "mimeType": "application/vnd.google-apps.folder",
             }
@@ -116,7 +87,8 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = self.service.files().create(body=body).execute()  # type: ignore[arg-type]
+                folder = self.api_client.files().create(body=body).execute()
+
             results.append(folder)
             parent_id = folder["id"]
 
