@@ -375,7 +375,7 @@ jobs:
           bash -c "
             cat src/palace/manager/_version.py &&
             source env/bin/activate &&
-            poetry install --without ci --no-root --sync &&
+            poetry sync --without ci --no-root &&
             pytest --no-cov tests
           "
         env:
