@@ -31,6 +31,13 @@ jobs:
       exec-repo: ${{ steps.ghcr-repo.outputs.exec }}
       exec-meta: ${{ steps.meta-exec.outputs.json }}
 
+    # https://docs.docker.com/build/ci/github-actions/local-registry/
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+
 # This build is heavily based on this example from the docker buildx documentation:
 # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
 
@@ -85,6 +92,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
 
       # If the base image build was changed, we build it first, so we can test
       # using these changes throughout the rest of the build. If the base image
@@ -97,7 +106,7 @@ jobs:
             baseimage:
               - 'docker/Dockerfile.baseimage'
 
-      # Build the base image, only if needed, and load it into the local docker daemon.
+      # Build the base image, only if needed, and load it into the local registry.
       - name: Build base image
         id: build-baseimage
         uses: docker/build-push-action@v6
@@ -108,8 +117,8 @@ jobs:
           cache-from: |
             type=registry,ref=${{ steps.ghcr-repo.outputs.baseimage }}:latest
             type=registry,ref=ghcr.io/thepalaceproject/circ-baseimage:latest
-          load: true
-          tags: circ-baseimage:local-build
+          push: true
+          tags: localhost:5000/circ-baseimage:local-build
         if: steps.changes.outputs.baseimage == 'true'
 
       - name: Login to GitHub Container Registry
@@ -128,7 +137,7 @@ jobs:
           docker buildx imagetools inspect ${{ steps.ghcr-repo.outputs.baseimage }}:latest > /dev/null
           tag_exists=$?
           if [[ "${{ steps.changes.outputs.baseimage }}" == "true" ]]; then
-            tag="circ-baseimage:local-build"
+            tag="localhost:5000/circ-baseimage:local-build"
           elif [[ $tag_exists -eq 0 ]]; then
             tag="${{ steps.ghcr-repo.outputs.baseimage }}:latest"
           else
