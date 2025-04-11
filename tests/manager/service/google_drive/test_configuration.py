@@ -13,7 +13,7 @@ def test_invalid_service_account_path_validation_fail():
             "PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON:  Value error, "
             "Unable to parse service_account_info_json: 'blah'"
         ),
-    ) as exc_info:
+    ):
         GoogleDriveConfiguration(service_account_info_json="blah")
 
 
