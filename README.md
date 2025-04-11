@@ -670,7 +670,6 @@ Make sure the ports and usernames are updated to reflect the local configuration
 # Set environment variables
 export PALACE_TEST_DATABASE_URL="postgresql://simplified_test:test@localhost:9005/simplified_circulation_test"
 export PALACE_TEST_SEARCH_URL="http://localhost:9200"
-export PALACE_TEST_GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON=`cat /path/to/service_account_json_file`
 
 # Run tox
 tox -e "py310"
