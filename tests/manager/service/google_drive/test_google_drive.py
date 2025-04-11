@@ -30,7 +30,7 @@ class GoogleDriveTestFixture:
                 ).model_dump()
             )
         else:
-            # Otherwise we mock the google drive api client, and just test
+            # Otherwise we mock the Google Drive api client, and just test
             # that we make the correct calls to the mock.
             self.mock_api_client = MagicMock()
             self.container.api_client.override(self.mock_api_client)
@@ -123,6 +123,8 @@ class TestGoogleDriveService:
         file_name = fixture.random_string() + ".txt"
         mock_api_client = fixture.mock_api_client
 
+        expected_data = "Hello world 🌎".encode()
+
         if mock_api_client:
             mock_api_client.files.return_value.list.return_value.execute.side_effect = [
                 fixture.files_result(),
@@ -131,14 +133,26 @@ class TestGoogleDriveService:
             mock_api_client.files.return_value.create.return_value.execute.return_value = fixture.file_data(
                 file_name, "123"
             )
+            mock_api_client.files.return_value.get_media.return_value.execute.return_value = (
+                expected_data
+            )
+
+        stream = BytesIO()
+        stream.write(expected_data)
         stored_file = service.create_file(
             file_name=file_name,
-            stream=BytesIO(b"Hello world"),
+            stream=stream,
             content_type="text/plain",
         )
         assert stored_file
         assert stored_file["id"]
         assert stored_file["name"] == file_name
+
+        # Confirm the contents of the uploaded file
+        assert (
+            service.api_client.files().get_media(fileId=stored_file["id"]).execute()
+            == expected_data
+        )
 
         retrieved_info = service.get_file(name=file_name)
         assert retrieved_info

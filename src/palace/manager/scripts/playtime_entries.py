@@ -8,7 +8,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timedelta
-from pathlib import Path
+from io import TextIOWrapper
 from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
@@ -207,12 +207,14 @@ class PlaytimeEntriesReportsScript(Script):
             linked_file_name = f"{file_name_prefix}.{link_extension}"
             # Write to a temporary file so we don't overflow the memory
             with tempfile.NamedTemporaryFile(
-                "w+",
+                "w+b",
                 prefix=f"{file_name_prefix}",
                 suffix=link_extension,
             ) as temp:
                 # Write the data as a CSV
-                writer = csv.writer(temp)
+                writer = csv.writer(
+                    TextIOWrapper(temp, encoding="utf-8", write_through=True)
+                )
                 _produce_report(
                     writer,
                     date_label=report_date_label,
@@ -223,36 +225,30 @@ class PlaytimeEntriesReportsScript(Script):
                     ),
                 )
 
-                # Rewind report
-                temp.seek(0)
+                nested_folders = [
+                    data_source_name,
+                    "Usage Report",
+                    reporting_name,
+                    str(start.year),
+                ]
+                folder_results = google_drive.create_nested_folders_if_not_exist(
+                    folders=nested_folders,
+                    parent_folder_id=root_folder_id,
+                )
+                # the lef folder is the last path segment in the result list
+                leaf_folder = folder_results[-1]
 
-                with Path(temp.name).open(
-                    "rb",
-                ) as binary_stream:
-                    nested_folders = [
-                        data_source_name,
-                        "Usage Report",
-                        reporting_name,
-                        str(start.year),
-                    ]
-                    folder_results = google_drive.create_nested_folders_if_not_exist(
-                        folders=nested_folders,
-                        parent_folder_id=root_folder_id,
-                    )
-                    # the lef folder is the last path segment in the result list
-                    leaf_folder = folder_results[-1]
-
-                    # store file
-                    google_drive.create_file(
-                        file_name=linked_file_name,
-                        parent_folder_id=leaf_folder["id"],
-                        content_type="text/csv",
-                        stream=binary_stream,
-                    )
-                    self.log.info(
-                        f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
-                        f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
-                    )
+                # store file
+                google_drive.create_file(
+                    file_name=linked_file_name,
+                    parent_folder_id=leaf_folder["id"],
+                    content_type="text/csv",
+                    stream=temp,
+                )
+                self.log.info(
+                    f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
+                    f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
+                )
 
     def _fetch_distinct_data_source_names_in_range(
         self, start: datetime, until: datetime

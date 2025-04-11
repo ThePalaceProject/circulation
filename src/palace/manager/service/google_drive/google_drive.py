@@ -48,25 +48,22 @@ class GoogleDriveService(LoggerMixin):
         parent_folder_id: str | None = None,
     ) -> File:
 
-        try:
-            # check that the file doesn't already exist since google drive will create multiple files (with different
-            # ids) in the same directory which we don't ever want.
-            file = self.get_file(name=file_name, parent_folder_id=parent_folder_id)
-            if file:
-                raise FileExistsError(
-                    f'A file named "{file_name}" already exists in folder(id={parent_folder_id}'
-                )
-
-            media = MediaIoBaseUpload(stream, mimetype=content_type)
-            parents = [parent_folder_id] if parent_folder_id else []
-            file_metadata = dict(name=file_name, parents=parents)
-            file = (
-                self.api_client.files()
-                .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
-                .execute()
+        # check that the file doesn't already exist since google drive will create multiple files (with different
+        # ids) in the same directory which we don't ever want.
+        file = self.get_file(name=file_name, parent_folder_id=parent_folder_id)
+        if file:
+            raise FileExistsError(
+                f'A file named "{file_name}" already exists in folder(id={parent_folder_id}'
             )
-        finally:
-            stream.close()
+
+        media = MediaIoBaseUpload(stream, mimetype=content_type)
+        parents = [parent_folder_id] if parent_folder_id else []
+        file_metadata = dict(name=file_name, parents=parents)
+        file = (
+            self.api_client.files()
+            .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
+            .execute()
+        )
 
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
         return file

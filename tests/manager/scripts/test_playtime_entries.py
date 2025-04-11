@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 import re
 from datetime import date, datetime, timedelta
-from typing import Literal
-from unittest.mock import call, create_autospec, patch
+from io import IOBase, StringIO
+from typing import Any, Literal
+from unittest.mock import create_autospec
 
 import pytest
 import pytz
@@ -586,7 +588,7 @@ class TestPlaytimeEntriesEmailReportsScript:
             ),
         ]
         strongest_isbn = isbn_ids["i2"].identifier
-        no_isbn = None
+        no_isbn = ""
 
         # We're using the RecursiveEquivalencyCache, so must refresh it.
         EquivalentIdentifiersCoverageProvider(db.session).run()
@@ -680,7 +682,21 @@ class TestPlaytimeEntriesEmailReportsScript:
         reporting_name = "test cm"
         parent_folder_id = "palace-test"
 
+        output_data: dict[str, str] = {}
+
+        def mock_create_file(
+            file_name: str,
+            stream: IOBase,
+            content_type: str,
+            parent_folder_id: str | None = None,
+        ) -> dict[str, Any]:
+            nonlocal output_data
+            stream.seek(0)
+            output_data[file_name] = stream.read().decode("utf-8")
+            return {}
+
         mock_google_drive_service = create_autospec(GoogleDriveService)
+        mock_google_drive_service.create_file = mock_create_file
         drive_container = services_fixture.services.google_drive()
         drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
         drive_container.service.override(mock_google_drive_service)
@@ -688,20 +704,22 @@ class TestPlaytimeEntriesEmailReportsScript:
             Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
         )
 
-        with patch("palace.manager.scripts.playtime_entries.csv.writer") as writer:
-            # Act
-            PlaytimeEntriesReportsScript(db.session).run()
+        # Act
+        PlaytimeEntriesReportsScript(db.session).run()
 
         # Assert
-        assert (
-            writer().writerow.call_count == 10
-        )  # 1 header, 5 identifier,collection,library entries
+        assert len(output_data) == 2
+        [(ds_a_filename, ds_a_data), (ds_b_filename, ds_b_data)] = [
+            (k, [r for r in csv.reader(StringIO(v))]) for k, v in output_data.items()
+        ]
+
+        assert len(ds_a_data) == 6
+        assert len(ds_b_data) == 4
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
         column1 = f"{cutoff} - {until}"
-        call_args = writer().writerow.call_args_list
-        headers = (
+        headers = [
             "date",
             "urn",
             "isbn",
@@ -710,124 +728,103 @@ class TestPlaytimeEntriesEmailReportsScript:
             "title",
             "total seconds",
             "loan count",
-        )
-        assert call_args == [
-            call(headers),
-            call(
-                (
-                    column1,
-                    identifier.urn,
-                    strongest_isbn,
-                    collection2.name,
-                    library2.name,
-                    None,
-                    300,
-                    1,
-                )
-            ),
-            call(
-                (
-                    column1,
-                    identifier3.urn,
-                    None,
-                    collection2.name,
-                    library2.name,
-                    None,
-                    800,
-                    0,
-                )
-            ),
-            call(
-                (
-                    column1,
-                    identifier3.urn,
-                    None,
-                    collection2.name,
-                    library2.name,
-                    "A test",
-                    13,
-                    0,
-                )
-            ),
-            call(
-                (
-                    column1,
-                    identifier3.urn,
-                    None,
-                    collection2.name,
-                    library2.name,
-                    "Z test",
-                    4,
-                    1,
-                )
-            ),
-            call(
-                (
-                    column1,
-                    identifier.urn,
-                    strongest_isbn,
-                    collection2.name,
-                    library.name,
-                    None,
-                    100,
-                    1,
-                )
-            ),
-            call(headers),
-            call(
-                (
-                    column1,
-                    identifier.urn,
-                    strongest_isbn,
-                    collection.name,
-                    library2.name,
-                    None,
-                    200,
-                    1,
-                )
-            ),
-            call(
-                (
-                    column1,
-                    identifier.urn,
-                    strongest_isbn,
-                    collection.name,
-                    library.name,
-                    None,
-                    3,
-                    1,
-                )
-            ),  # Identifier without edition
-            call(
-                (
-                    column1,
-                    identifier2.urn,
-                    no_isbn,
-                    collection.name,
-                    library.name,
-                    edition.title,
-                    11,
-                    1,
-                )
-            ),  # Identifier with edition
         ]
 
-        # verify the number of unique loans
+        assert ds_a_data == [
+            headers,
+            [
+                column1,
+                identifier.urn,
+                strongest_isbn,
+                collection2.name,
+                library2.name,
+                "",
+                "300",
+                "1",
+            ],
+            [
+                column1,
+                identifier3.urn,
+                "",
+                collection2.name,
+                library2.name,
+                "",
+                "800",
+                "0",
+            ],
+            [
+                column1,
+                identifier3.urn,
+                "",
+                collection2.name,
+                library2.name,
+                "A test",
+                "13",
+                "0",
+            ],
+            [
+                column1,
+                identifier3.urn,
+                "",
+                collection2.name,
+                library2.name,
+                "Z test",
+                "4",
+                "1",
+            ],
+            [
+                column1,
+                identifier.urn,
+                strongest_isbn,
+                collection2.name,
+                library.name,
+                "",
+                "100",
+                "1",
+            ],
+        ]
 
-        # count only the int values (ie skip the rows with headers)
-        assert len(loan_identifiers) == sum(
-            [x.args[0][7] if isinstance(x.args[0][7], int) else 0 for x in call_args]
-        )
-        assert mock_google_drive_service.create_file.call_count == 2
+        assert ds_b_data == [
+            headers,
+            [
+                column1,
+                identifier.urn,
+                strongest_isbn,
+                collection.name,
+                library2.name,
+                "",
+                "200",
+                "1",
+            ],
+            [
+                column1,
+                identifier.urn,
+                strongest_isbn,
+                collection.name,
+                library.name,
+                "",
+                "3",
+                "1",
+            ],  # Identifier without edition
+            [
+                column1,
+                identifier2.urn,
+                no_isbn,
+                collection.name,
+                library.name,
+                edition.title,
+                "11",
+                "1",
+            ],  # Identifier with edition
+        ]
 
-        store_stream_call_list = mock_google_drive_service.create_file.call_args_list
         assert (
             f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
-            in store_stream_call_list[0].kwargs["file_name"]
+            in ds_a_filename
         )
         assert (
             f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
-            in store_stream_call_list[1].kwargs["file_name"]
+            in ds_b_filename
         )
 
         nested_method = mock_google_drive_service.create_nested_folders_if_not_exist
