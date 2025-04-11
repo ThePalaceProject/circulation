@@ -30,7 +30,9 @@ class GoogleDriveService(LoggerMixin):
         if http:
             assert not credentials
 
-        self.service = build("drive", "v3", credentials=credentials, http=http)
+        self.service = build(
+            "drive", "v3", credentials=credentials, http=http  # type:ignore[arg-type]
+        )
 
     @classmethod
     def factory(cls, service_account_info_json: str = "{}") -> GoogleDriveService:
@@ -38,9 +40,7 @@ class GoogleDriveService(LoggerMixin):
         credentials = service_account.Credentials.from_service_account_info(
             info=json.loads(service_account_info_json), scopes=scopes
         )
-        return GoogleDriveService(
-            service_account_info=json.loads(credentials=credentials)
-        )
+        return GoogleDriveService(credentials=credentials)
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
 
@@ -50,7 +50,7 @@ class GoogleDriveService(LoggerMixin):
             query += f" and '{parent_folder_id}' in parents"
 
         results = (
-            self.service.files()
+            self.service.files()  # type: ignore[attr-defined]
             .list(
                 q=query,
                 pageSize=10,
@@ -59,14 +59,11 @@ class GoogleDriveService(LoggerMixin):
             .execute()
         )
 
-        files = results["files"]
+        files: list[File] = results["files"]
         if files:
             return files[0]
         else:
             return None
-
-    def delete_file(self, file_id: str) -> None:
-        self.service.files().delete(fileId=file_id).execute()
 
     def create_file(
         self,
@@ -89,13 +86,14 @@ class GoogleDriveService(LoggerMixin):
             parents = [parent_folder_id] if parent_folder_id else []
             file_metadata = dict(name=file_name, parents=parents)
             file = (
-                self.service.files()
-                .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
+                self.service.files()  # type: ignore[attr-defined]
+                .create(body=file_metadata, media_body=media, fields="*")
                 .execute()
             )
         finally:
             stream.close()
 
+        assert file
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
         return file
 
@@ -119,7 +117,12 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = self.service.files().create(body=body).execute()  # type: ignore[arg-type]
+                folder = (
+                    self.service.files()  # type: ignore[attr-defined]
+                    .create(body=body)
+                    .execute()
+                )
+            assert folder
             results.append(folder)
             parent_id = folder["id"]
 
