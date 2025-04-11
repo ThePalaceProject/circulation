@@ -8,7 +8,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime, timedelta
-from pathlib import Path
+from io import TextIOWrapper
 from typing import TYPE_CHECKING, Any, Protocol
 
 import dateutil.parser
@@ -20,9 +20,6 @@ from sqlalchemy.sql.functions import sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script
-from palace.manager.service.google_drive.configuration import (
-    PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE,
-)
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
@@ -192,9 +189,7 @@ class PlaytimeEntriesReportsScript(Script):
         google_drive: GoogleDriveService = self.services.google_drive.service()
 
         # create directory hierarchy
-        root_folder_id = os.environ.get(
-            PALACE_GOOGLE_DRIVE_PARENT_FOLDER_ID_ENVIRONMENT_VARIABLE, None
-        )
+        root_folder_id = self.services.google_drive.config.parent_folder_id()
 
         # get list of collections
         data_source_names = [
@@ -212,12 +207,14 @@ class PlaytimeEntriesReportsScript(Script):
             linked_file_name = f"{file_name_prefix}.{link_extension}"
             # Write to a temporary file so we don't overflow the memory
             with tempfile.NamedTemporaryFile(
-                "w+",
+                "w+b",
                 prefix=f"{file_name_prefix}",
                 suffix=link_extension,
             ) as temp:
                 # Write the data as a CSV
-                writer = csv.writer(temp)
+                writer = csv.writer(
+                    TextIOWrapper(temp, encoding="utf-8", write_through=True)
+                )
                 _produce_report(
                     writer,
                     date_label=report_date_label,
@@ -228,36 +225,30 @@ class PlaytimeEntriesReportsScript(Script):
                     ),
                 )
 
-                # Rewind report
-                temp.seek(0)
+                nested_folders = [
+                    data_source_name,
+                    "Usage Report",
+                    reporting_name,
+                    str(start.year),
+                ]
+                folder_results = google_drive.create_nested_folders_if_not_exist(
+                    folders=nested_folders,
+                    parent_folder_id=root_folder_id,
+                )
+                # the leaf folder is the last path segment in the result list
+                leaf_folder = folder_results[-1]
 
-                with Path(temp.name).open(
-                    "rb",
-                ) as binary_stream:
-                    nested_folders = [
-                        data_source_name,
-                        "Usage Report",
-                        reporting_name,
-                        str(start.year),
-                    ]
-                    folder_results = google_drive.create_nested_folders_if_not_exist(
-                        folders=nested_folders,
-                        parent_folder_id=root_folder_id,
-                    )
-                    # the lef folder is the last path segment in the result list
-                    leaf_folder = folder_results[-1]
-
-                    # store file
-                    google_drive.create_file(
-                        file_name=linked_file_name,
-                        parent_folder_id=leaf_folder["id"],
-                        content_type="text/csv",
-                        stream=binary_stream,
-                    )
-                    self.log.info(
-                        f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
-                        f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
-                    )
+                # store file
+                google_drive.create_file(
+                    file_name=linked_file_name,
+                    parent_folder_id=leaf_folder["id"],
+                    content_type="text/csv",
+                    stream=temp,
+                )
+                self.log.info(
+                    f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
+                    f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
+                )
 
     def _fetch_distinct_data_source_names_in_range(
         self, start: datetime, until: datetime
