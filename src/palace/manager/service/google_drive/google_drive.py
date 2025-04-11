@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import IOBase
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -58,10 +58,10 @@ class GoogleDriveService(LoggerMixin):
 
         media = MediaIoBaseUpload(stream, mimetype=content_type)
         parents = [parent_folder_id] if parent_folder_id else []
-        file_metadata = dict(name=file_name, parents=parents)
+        file_metadata: File = {"name": file_name, "parents": parents}
         file = (
             self.api_client.files()
-            .create(body=file_metadata, media_body=media, fields="*")  # type: ignore[arg-type]
+            .create(body=file_metadata, media_body=media, fields="*")
             .execute()
         )
 
@@ -78,7 +78,7 @@ class GoogleDriveService(LoggerMixin):
         results: list[File] = []
         parent_id = parent_folder_id
         for folder_name in folders:
-            body: dict[str, Any] = {
+            body: File = {
                 "name": folder_name,
                 "mimeType": "application/vnd.google-apps.folder",
             }
@@ -88,7 +88,7 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = self.api_client.files().create(body=body).execute()  # type: ignore[arg-type]
+                folder = self.api_client.files().create(body=body).execute()
             results.append(folder)
             parent_id = folder["id"]
 
