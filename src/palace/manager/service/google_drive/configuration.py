@@ -30,8 +30,11 @@ class GoogleDriveConfiguration(ServiceConfiguration):
     @classmethod
     def validate_service_account_info_json(cls, v: Any) -> Any:
         # No validation if service_account_info_json is not provided.
-        if isinstance(v, (str, bytes)):
-            # If it's a string, try to parse it as JSON
+        if v == "":
+            # if it is an empty string return None
+            return None
+        elif isinstance(v, (str, bytes)):
+            # If it's a non-empty string, try to parse it as JSON
             try:
                 return json.loads(v)
             except:

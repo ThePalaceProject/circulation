@@ -6,7 +6,7 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.google_drive.configuration import GoogleDriveConfiguration
 
 
-def test_invalid_service_account_path_validation_fail():
+def test_invalid_service_account_info_validation_fail():
     with pytest.raises(
         CannotLoadConfiguration,
         match=(
@@ -30,3 +30,8 @@ def test_service_account_path_validation_success():
     configuration = GoogleDriveConfiguration(
         service_account_info_json=service_account_info_json
     )
+
+    # an empty string should result in None
+    configuration = GoogleDriveConfiguration(service_account_info_json="")
+
+    assert configuration.service_account_info_json is None
