@@ -18,7 +18,7 @@ RUN apt-get update && \
     apt-get upgrade -y --no-install-recommends -o Dpkg::Options::="--force-confold" && \
     /bd_build/cleanup.sh
 
-ARG POETRY_VERSION=1.7.1
+ARG POETRY_VERSION=2.1.1
 
 # Install required packages including python, pip, compiliers and libraries needed
 # to build the python wheels we need and poetry.
@@ -62,7 +62,7 @@ RUN python3 -m venv env && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
     . env/bin/activate && \
     pip install --upgrade pip && \
-    poetry install --only main,pg --sync --no-root && \
+    poetry sync --only main,pg --no-root && \
     # TODO: This can be removed once NLTK merges https://github.com/sloria/TextBlob/pull/469
     python3 -m nltk.downloader punkt_tab && \
     python3 -m textblob.download_corpora lite && \
