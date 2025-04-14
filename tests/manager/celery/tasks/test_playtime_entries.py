@@ -9,9 +9,6 @@ from unittest.mock import DEFAULT, create_autospec
 
 import pytest
 import pytz
-from fixtures.celery import CeleryFixture
-from fixtures.database import DatabaseTransactionFixture
-from fixtures.services import ServicesFixture
 from freezegun import freeze_time
 from sqlalchemy.sql.expression import and_, null
 
@@ -35,6 +32,9 @@ from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import datetime_utc, previous_months, utc_now
+from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.services import ServicesFixture
 
 
 def create_playtime_entries(

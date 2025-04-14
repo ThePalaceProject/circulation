@@ -1,10 +1,10 @@
 import csv
-import datetime
 import os
 import tempfile
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
+from datetime import date, datetime, timedelta
 from io import TextIOWrapper
 from typing import Any, Protocol
 
@@ -18,16 +18,19 @@ from palace.manager.api.config import Configuration
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.datetime_helpers import previous_months, utc_now
 from palace.manager.util.uuid import uuid_encode
 
 
 @shared_task(queue=QueueNames.high, bind=True)
-def sum_playtime_entries(task: Task):
+def sum_playtime_entries(task: Task) -> None:
     # Reap older processed entries
     older_than, _ = previous_months(number_of_months=1)
-    older_than_ts = datetime.datetime(
+    older_than_ts = datetime(
         older_than.year, older_than.month, older_than.day, tzinfo=pytz.UTC
     )
 
@@ -43,7 +46,7 @@ def sum_playtime_entries(task: Task):
         task.log.info(f"Deleted {deleted} entries. Older than {older_than_ts}")
 
         # Collect everything from one hour ago, reducing entries still in flux
-        cut_off = utc_now() - datetime.timedelta(hours=1)
+        cut_off = utc_now() - timedelta(hours=1)
 
         # Fetch the unprocessed entries
         result = tx.query(PlaytimeEntry).filter(
@@ -56,7 +59,19 @@ def sum_playtime_entries(task: Task):
         # factored in, in case any of the foreign keys are missing.
         # Since timestamps should be on minute-boundaries the aggregation
         # can be written to PlaytimeSummary directly
-        def group_key_for_entry(e: PlaytimeEntry) -> tuple:
+        def group_key_for_entry(
+            e: PlaytimeEntry,
+        ) -> tuple[
+            datetime,
+            Identifier | None,
+            Collection | None,
+            Library | None,
+            str,
+            str,
+            str,
+            str,
+            str,
+        ]:
             return (
                 e.timestamp,
                 e.identifier,
@@ -69,7 +84,7 @@ def sum_playtime_entries(task: Task):
                 e.data_source_name,
             )
 
-        by_group = defaultdict(int)
+        by_group: dict[Any, int] = defaultdict(int)
         for entry in result.all():
             by_group[group_key_for_entry(entry)] += entry.total_seconds_played
             entry.processed = True
@@ -121,8 +136,8 @@ REPORT_DATE_FORMAT = "%Y-%m-%d"
 @shared_task(queue=QueueNames.high, bind=True)
 def generate_playtime_report(
     task: Task,
-    start: datetime.date | None = None,
-    until: datetime.date | None = None,
+    start: date | None = None,
+    until: date | None = None,
 ) -> None:
 
     default_start, default_until = (
@@ -149,7 +164,7 @@ def generate_playtime_report(
     google_drive: GoogleDriveService = task.services.google_drive.service()
 
     # create directory hierarchy
-    root_folder_id = task.services.google_drive.config.parent_folder_id()
+    root_folder_id = task.services.google_drive.config.parent_folder_id()  # type: ignore[attr-defined]
 
     with task.session() as session:
         # get list of collections
@@ -205,7 +220,7 @@ def generate_playtime_report(
                     file_name=linked_file_name,
                     parent_folder_id=leaf_folder["id"],
                     content_type="text/csv",
-                    stream=temp,
+                    stream=temp,  # type: ignore[arg-type]
                 )
                 task.log.info(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
@@ -214,8 +229,8 @@ def generate_playtime_report(
 
 
 def _fetch_distinct_data_source_names_in_range(
-    session: Session, start: datetime, until: datetime
-) -> Query:
+    session: Session, start: date, until: date
+) -> Query[Any]:
     return session.query(
         select(
             distinct(PlaytimeSummary.data_source_name),
@@ -232,8 +247,11 @@ def _fetch_distinct_data_source_names_in_range(
 
 
 def _fetch_report_records(
-    session: Session, start: datetime, until: datetime, data_source_name
-) -> Query:
+    session: Session,
+    start: date,
+    until: date,
+    data_source_name: str,
+) -> Query[Any]:
     # The loan count query returns only non-empty string isbns and titles if there is more
     # than one row returned with the grouping.  This way we ensure that we do not
     # count the same loan twice in the case we have when a
@@ -323,7 +341,7 @@ def _fetch_report_records(
     )
 
 
-def _produce_report(writer: Writer, date_label, records=None) -> None:
+def _produce_report(writer: Writer, date_label: str, records: Iterable[Any]) -> None:
     if not records:
         records = []
     writer.writerow(
