@@ -20,6 +20,10 @@ from palace.manager.api.admin.problem_details import (
 from palace.manager.api.admin.util.flask import get_request_admin
 from palace.manager.api.circulation import CirculationApiType
 from palace.manager.celery.tasks.collection_delete import collection_delete
+from palace.manager.celery.tasks.reaper import (
+    reap_unassociated_holds,
+    reap_unassociated_loans,
+)
 from palace.manager.core.selftest import HasSelfTests
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
@@ -143,6 +147,17 @@ class CollectionSettingsController(
             return e.problem_detail
 
         return Response(str(integration.id), response_code)
+
+    def process_deleted_libraries(
+        self, removed: list[IntegrationLibraryConfiguration]
+    ) -> None:
+        super().process_deleted_libraries(removed)
+
+        if removed:
+            # ensure that all loans and holds related
+            # with the deleted library integrations are purged.
+            reap_unassociated_loans.delay()
+            reap_unassociated_holds.delay()
 
     def process_delete(self, service_id: int) -> Response | ProblemDetail:
         self.require_system_admin()

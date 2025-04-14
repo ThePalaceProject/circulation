@@ -12,6 +12,7 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.integration import IntegrationLibraryConfiguration
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.patron import Annotation, Hold, Loan, Patron
@@ -221,7 +222,6 @@ def loan_reaper(task: Task) -> None:
     """
     Remove expired and abandoned loans from the database.
     """
-
     now = utc_now()
     deletion_query = delete(Loan).where(
         Loan.license_pool_id == LicensePool.id,
@@ -237,3 +237,82 @@ def loan_reaper(task: Task) -> None:
         rows_removed = _execute_delete(session, deletion_query)
 
     task.log.info(f"Deleted {pluralize(rows_removed, 'expired loan')}.")
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_unassociated_loans(task: Task) -> None:
+    reap_unassociated_loans_or_holds(task, Loan)
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_unassociated_holds(task: Task) -> None:
+    reap_unassociated_loans_or_holds(task, Hold)
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_loans_in_inactive_collections(task: Task) -> None:
+    reap_loans_or_holds_in_inactive_collections(task, Loan)
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reap_holds_in_inactive_collections(task: Task) -> None:
+    reap_loans_or_holds_in_inactive_collections(task, Hold)
+
+
+def reap_unassociated_loans_or_holds(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete loans or holds that are no longer available to the patron
+    because the patron's library is no longer associated with the collection
+    containing the loan or hold's license pool.
+    """
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool, LicensePool.id == deletion_class.license_pool_id)
+        .join(Patron, Patron.id == deletion_class.patron_id)
+        .join(Collection, Collection.id == LicensePool.collection_id)
+        .outerjoin(
+            IntegrationLibraryConfiguration,
+            and_(
+                Collection.integration_configuration_id
+                == IntegrationLibraryConfiguration.parent_id,
+                IntegrationLibraryConfiguration.library_id == Patron.library_id,
+            ),
+        )
+        .where(IntegrationLibraryConfiguration.parent_id == None)
+    )
+    # Delete all loans or holds matching the ids to delete query
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log.info(
+        f"deleted {deletion_count} {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because the patron's library was no longer associated with the collection."
+    )
+
+
+def reap_loans_or_holds_in_inactive_collections(
+    task: Task, deletion_class: type[Loan | Hold]
+) -> None:
+    """
+    Delete the loans or holds associated with inactive collections
+    """
+    active_colls = Collection.active_collections_filter(
+        sa_select=select(Collection.id)
+    ).subquery("active_collections")
+    ids_to_delete = (
+        select(deletion_class.id)
+        .join(LicensePool)
+        .where(LicensePool.collection_id.not_in(active_colls))
+        .subquery()
+    )
+    deletion_query = delete(deletion_class).where(deletion_class.id.in_(ids_to_delete))
+
+    with task.transaction() as tx:
+        deletion_count = _execute_delete(tx, deletion_query)
+    task.log.info(
+        f"deleted {pluralize(deletion_count, deletion_class.__name__.lower())} "
+        f"because the associated collection is inactive."
+    )
