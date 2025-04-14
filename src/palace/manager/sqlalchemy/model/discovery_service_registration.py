@@ -3,9 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column
-from sqlalchemy import Enum as AlchemyEnum
-from sqlalchemy import ForeignKey, Integer, Unicode
+from sqlalchemy import Column, Enum as AlchemyEnum, ForeignKey, Integer, Unicode
 from sqlalchemy.orm import Mapped, relationship
 
 from palace.manager.sqlalchemy.model.base import Base

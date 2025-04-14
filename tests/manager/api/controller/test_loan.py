@@ -7,8 +7,7 @@ from urllib.parse import quote
 
 import feedparser
 import pytest
-from flask import Response as FlaskResponse
-from flask import url_for
+from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.axis import Axis360API, Axis360Fulfillment

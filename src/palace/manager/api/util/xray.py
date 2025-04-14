@@ -1,7 +1,6 @@
 import os
 
-from aws_xray_sdk.core import AWSXRayRecorder
-from aws_xray_sdk.core import patch as xray_patch
+from aws_xray_sdk.core import AWSXRayRecorder, patch as xray_patch
 from aws_xray_sdk.core.models.segment import Segment
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 from aws_xray_sdk.ext.httplib import add_ignored as httplib_add_ignored

@@ -1,7 +1,9 @@
 from palace.manager.core import classifier
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.classifier.keyword import KeywordBasedClassifier as Keyword
-from palace.manager.core.classifier.keyword import LCSHClassifier as LCSH
+from palace.manager.core.classifier.keyword import (
+    KeywordBasedClassifier as Keyword,
+    LCSHClassifier as LCSH,
+)
 
 
 class TestLCSH:

@@ -6,8 +6,10 @@ import pytest
 from pytest import MonkeyPatch
 from requests import RequestException
 
-from palace.manager.api.admin.config import Configuration as AdminConfig
-from palace.manager.api.admin.config import OperationalMode
+from palace.manager.api.admin.config import (
+    Configuration as AdminConfig,
+    OperationalMode,
+)
 
 
 class MonkeyPatchEnvFixture:

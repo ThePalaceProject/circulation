@@ -1,9 +1,13 @@
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BeforeValidator, GetCoreSchemaHandler
-from pydantic import HttpUrl as HttpUrlPydantic
-from pydantic import RedisDsn as RedisDsnPydantic
-from pydantic import UrlConstraints
+from pydantic import (
+    AfterValidator,
+    BeforeValidator,
+    GetCoreSchemaHandler,
+    HttpUrl as HttpUrlPydantic,
+    RedisDsn as RedisDsnPydantic,
+    UrlConstraints,
+)
 from pydantic_core import CoreSchema, Url, core_schema
 
 

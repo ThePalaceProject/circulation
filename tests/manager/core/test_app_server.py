@@ -7,8 +7,7 @@ from unittest.mock import MagicMock, PropertyMock
 import flask
 import pytest
 from flask import Flask, Response, make_response
-from flask_babel import Babel
-from flask_babel import lazy_gettext as _
+from flask_babel import Babel, lazy_gettext as _
 from freezegun import freeze_time
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture

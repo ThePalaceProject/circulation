@@ -3,9 +3,15 @@ from __future__ import annotations
 from pprint import pformat
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Column
-from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy import ForeignKey, Index, Integer, Unicode, select
+from sqlalchemy import (
+    Column,
+    Enum as SQLAlchemyEnum,
+    ForeignKey,
+    Index,
+    Integer,
+    Unicode,
+    select,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, Session, relationship

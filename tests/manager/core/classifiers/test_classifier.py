@@ -19,8 +19,10 @@ from palace.manager.core.classifier.age import (
     InterestLevelClassifier,
 )
 from palace.manager.core.classifier.ddc import DeweyDecimalClassifier as DDC
-from palace.manager.core.classifier.keyword import FASTClassifier as FAST
-from palace.manager.core.classifier.keyword import LCSHClassifier as LCSH
+from palace.manager.core.classifier.keyword import (
+    FASTClassifier as FAST,
+    LCSHClassifier as LCSH,
+)
 from palace.manager.core.classifier.lcc import LCCClassifier as LCC
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.core.classifier.work import WorkClassifier

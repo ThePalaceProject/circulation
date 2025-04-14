@@ -21,9 +21,7 @@ from opensearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
-)
-from opensearch_dsl.query import Query as BaseQuery
-from opensearch_dsl.query import (
+    Query as BaseQuery,
     Range,
     Regexp,
     Term,

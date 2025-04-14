@@ -4,9 +4,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Literal, overload
 
-from sqlalchemy import Column, DateTime
-from sqlalchemy import Enum as SaEnum
-from sqlalchemy import Unicode, delete, select
+from sqlalchemy import Column, DateTime, Enum as SaEnum, Unicode, delete, select
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, Session
 from typing_extensions import Self

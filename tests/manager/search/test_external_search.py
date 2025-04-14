@@ -17,9 +17,7 @@ from opensearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
-)
-from opensearch_dsl.query import Query as opensearch_dsl_query
-from opensearch_dsl.query import (
+    Query as opensearch_dsl_query,
     Range,
     Term,
     Terms,

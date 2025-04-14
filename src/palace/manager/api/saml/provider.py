@@ -16,8 +16,7 @@ from palace.manager.api.saml.metadata.model import (
     SAMLSubjectPatronIDExtractor,
 )
 from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.util.problem_detail import ProblemDetail
-from palace.manager.util.problem_detail import ProblemDetail as pd
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetail as pd
 
 SAML_INVALID_SUBJECT = pd(
     "http://librarysimplified.org/terms/problem/saml/invalid-subject",

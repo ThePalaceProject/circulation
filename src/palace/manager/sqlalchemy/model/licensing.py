@@ -11,9 +11,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-)
-from sqlalchemy import Enum as AlchemyEnum
-from sqlalchemy import (
+    Enum as AlchemyEnum,
     ForeignKey,
     Index,
     Integer,

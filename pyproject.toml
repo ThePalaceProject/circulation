@@ -20,6 +20,7 @@ relative_files = true
 source = ["src"]
 
 [tool.isort]
+combine_as_imports = true
 known_first_party = ["palace"]
 known_third_party = ["alembic"]
 profile = "black"

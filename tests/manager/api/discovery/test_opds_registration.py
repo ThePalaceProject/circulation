@@ -31,8 +31,6 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create, get_one
 from palace.manager.util.problem_detail import (
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
-from palace.manager.util.problem_detail import (
     ProblemDetail,
     ProblemDetailException,
 )

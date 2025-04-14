@@ -25,13 +25,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 from typing_extensions import Self
 
-from palace.manager.api.authentication.base import AuthenticationProvider
-from palace.manager.api.authentication.base import SettingsType as TAuthProviderSettings
+from palace.manager.api.authentication.base import (
+    AuthenticationProvider,
+    SettingsType as TAuthProviderSettings,
+)
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     BaseCirculationApiSettings,
+    SettingsType as TCirculationSettings,
 )
-from palace.manager.api.circulation import SettingsType as TCirculationSettings
 from palace.manager.api.discovery.opds_registration import (
     OpdsRegistrationService,
     OpdsRegistrationServiceSettings,
@@ -52,8 +54,8 @@ from palace.manager.core.opds_import import OPDSAPI, OPDSImporterSettings
 from palace.manager.integration.base import (
     HasIntegrationConfiguration,
     HasLibraryIntegrationConfiguration,
+    SettingsType as TIntegrationSettings,
 )
-from palace.manager.integration.base import SettingsType as TIntegrationSettings
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
