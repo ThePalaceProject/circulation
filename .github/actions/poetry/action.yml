@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version of poetry to install"
     required: false
-    default: "1.7.1"
+    default: "2.1.1"
   cache:
     description: "Cache poetry packages"
     required: false
