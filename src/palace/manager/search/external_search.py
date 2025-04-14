@@ -23,7 +23,12 @@ from opensearch_dsl.query import (
     Nested,
 )
 from opensearch_dsl.query import Query as BaseQuery
-from opensearch_dsl.query import Range, Regexp, Term, Terms
+from opensearch_dsl.query import (
+    Range,
+    Regexp,
+    Term,
+    Terms,
+)
 from spellchecker import SpellChecker
 
 from palace.manager.core.classifier import Classifier

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""Re-generate presentation editions of any Works that need it.
-"""
+"""Re-generate presentation editions of any Works that need it."""
 
 
 from palace.manager.core.coverage import WorkPresentationEditionCoverageProvider

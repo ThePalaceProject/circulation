@@ -21,9 +21,9 @@ def upgrade() -> None:
     # https://www.postgresql.org/docs/current/functions-matching.html#FUNCTIONS-POSIX-REGEXP
     op.execute(
         "UPDATE works SET summary_text = regexp_replace("
-        "  summary_text, '[^\u0020-\uD7FF\u0009\u000A\u000D\uE000-\uFFFD\U00010000-\U0010FFFF]+', '', 'g'"
+        "  summary_text, '[^\u0020-\ud7ff\u0009\u000a\u000d\ue000-\ufffd\U00010000-\U0010ffff]+', '', 'g'"
         ") WHERE "
-        "summary_text ~ '[^\u0020-\uD7FF\u0009\u000A\u000D\uE000-\uFFFD\U00010000-\U0010FFFF]'"
+        "summary_text ~ '[^\u0020-\ud7ff\u0009\u000a\u000d\ue000-\ufffd\U00010000-\U0010ffff]'"
     )
 
 

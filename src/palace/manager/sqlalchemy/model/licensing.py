@@ -7,7 +7,11 @@ import logging
 from enum import IntEnum, auto
 from typing import TYPE_CHECKING, Literal, overload
 
-from sqlalchemy import Boolean, Column, DateTime
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+)
 from sqlalchemy import Enum as AlchemyEnum
 from sqlalchemy import (
     ForeignKey,

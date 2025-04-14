@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""Re-index Equivalent identifiers
-"""
+"""Re-index Equivalent identifiers"""
 
 
 from palace.manager.core.equivalents_coverage import (
