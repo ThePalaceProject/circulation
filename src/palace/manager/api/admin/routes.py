@@ -4,8 +4,10 @@ from functools import wraps
 import flask
 from flask import Response, make_response, redirect, url_for
 
-from palace.manager.api.admin.config import Configuration as AdminClientConfig
-from palace.manager.api.admin.config import OperationalMode
+from palace.manager.api.admin.config import (
+    Configuration as AdminClientConfig,
+    OperationalMode,
+)
 from palace.manager.api.admin.dashboard_stats import generate_statistics
 from palace.manager.api.admin.model.dashboard_statistics import StatisticsResponse
 from palace.manager.api.admin.templates import (

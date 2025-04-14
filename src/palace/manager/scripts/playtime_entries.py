@@ -14,9 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import dateutil.parser
 import pytz
 from sqlalchemy.sql.expression import and_, distinct, false, select, true
-from sqlalchemy.sql.functions import coalesce, count
-from sqlalchemy.sql.functions import max as sql_max
-from sqlalchemy.sql.functions import sum
+from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 
 from palace.manager.core.config import Configuration
 from palace.manager.scripts.base import Script

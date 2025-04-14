@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""Re-classify any Works that need it.
-"""
+"""Re-classify any Works that need it."""
 
 
 from palace.manager.core.coverage import WorkClassificationCoverageProvider

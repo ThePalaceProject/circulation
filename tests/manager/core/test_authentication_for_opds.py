@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from palace.manager.util.authentication_for_opds import (
     AuthenticationForOPDSDocument as Doc,
+    OPDSAuthenticationFlow as Flow,
 )
-from palace.manager.util.authentication_for_opds import OPDSAuthenticationFlow as Flow
 
 
 class MockFlow(Flow):

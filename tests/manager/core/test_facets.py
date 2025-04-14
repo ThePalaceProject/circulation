@@ -1,5 +1,4 @@
-from palace.manager.core.facets import FacetConfig
-from palace.manager.core.facets import FacetConstants as Facets
+from palace.manager.core.facets import FacetConfig, FacetConstants as Facets
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

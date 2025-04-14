@@ -12,9 +12,11 @@ from urllib.parse import (
 from flask import redirect
 from flask_babel import lazy_gettext as _
 
-from palace.manager.util.problem_detail import ProblemDetail
-from palace.manager.util.problem_detail import ProblemDetail as pd
-from palace.manager.util.problem_detail import json as pd_json
+from palace.manager.util.problem_detail import (
+    ProblemDetail,
+    ProblemDetail as pd,
+    json as pd_json,
+)
 
 SAML_INVALID_REQUEST = pd(
     "http://librarysimplified.org/terms/problem/saml/invalid-saml-request",

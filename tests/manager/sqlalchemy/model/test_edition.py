@@ -419,7 +419,7 @@ class TestEdition:
             None,
             overdrive,
             "text/plain",
-            "\u0000💣ü🔥\u0001\u000C",
+            "\u0000💣ü🔥\u0001\u000c",
         )
         work.set_summary(l2.resource)
         assert work.summary_text == "💣ü🔥"

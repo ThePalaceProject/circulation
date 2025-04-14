@@ -21,9 +21,12 @@ from opensearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
+    Query as BaseQuery,
+    Range,
+    Regexp,
+    Term,
+    Terms,
 )
-from opensearch_dsl.query import Query as BaseQuery
-from opensearch_dsl.query import Range, Regexp, Term, Terms
 from spellchecker import SpellChecker
 
 from palace.manager.core.classifier import Classifier

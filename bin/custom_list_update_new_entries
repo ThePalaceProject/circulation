@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""Updates CustomLists with newly added entries if they are configured for it
-"""
+"""Updates CustomLists with newly added entries if they are configured for it"""
 from palace.manager.scripts.customlist import CustomListUpdateEntriesScript
 from palace.manager.sqlalchemy.session import production_session
 from palace.manager.util.cache import CachedData

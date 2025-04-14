@@ -494,7 +494,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         identifiers_by_urn = dict()
 
         def find_existing_identifiers(
-            identifier_details: list[tuple[str, str]]
+            identifier_details: list[tuple[str, str]],
         ) -> None:
             if not identifier_details:
                 return

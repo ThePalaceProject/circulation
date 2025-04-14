@@ -22,8 +22,6 @@ from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.problem_detail import (
     JSON_MEDIA_TYPE as PROBLEM_DETAIL_JSON_MEDIA_TYPE,
-)
-from palace.manager.util.problem_detail import (
     BaseProblemDetailException,
     ProblemDetail,
     ProblemDetailException,

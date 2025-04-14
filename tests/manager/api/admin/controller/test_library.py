@@ -30,8 +30,9 @@ from palace.manager.core.facets import FacetConstants
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.announcements import (
     SETTING_NAME as ANNOUNCEMENTS_SETTING_NAME,
+    Announcement,
+    AnnouncementData,
 )
-from palace.manager.sqlalchemy.model.announcements import Announcement, AnnouncementData
 from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException

@@ -31,8 +31,8 @@ from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.announcements import (
     SETTING_NAME as ANNOUNCEMENT_SETTING_NAME,
+    Announcement,
 )
-from palace.manager.sqlalchemy.model.announcements import Announcement
 from palace.manager.sqlalchemy.model.library import Library, LibraryLogo
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.session import json_serializer

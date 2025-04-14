@@ -48,7 +48,7 @@ class TestXMLProcessor:
         assert "Third" == tag3.text
 
     def test_invalid_characters_are_stripped(self) -> None:
-        data = b'<?xml version="1.0" encoding="utf-8"><tag>I enjoy invalid characters, such as \x00\x01 and \x1F. But I also like \xe2\x80\x9csmart quotes\xe2\x80\x9d.</tag>'
+        data = b'<?xml version="1.0" encoding="utf-8"><tag>I enjoy invalid characters, such as \x00\x01 and \x1f. But I also like \xe2\x80\x9csmart quotes\xe2\x80\x9d.</tag>'
         parser = MockProcessor("/tag")
         [tag] = parser.process_all(data)
         assert (

@@ -17,9 +17,11 @@ from opensearch_dsl.query import (
     MatchPhrase,
     MultiMatch,
     Nested,
+    Query as opensearch_dsl_query,
+    Range,
+    Term,
+    Terms,
 )
-from opensearch_dsl.query import Query as opensearch_dsl_query
-from opensearch_dsl.query import Range, Term, Terms
 from psycopg2.extras import NumericRange
 
 from palace.manager.core.classifier import Classifier
@@ -344,7 +346,7 @@ class TestExternalSearchWithWorks:
         result.tiffany = _work(title="Breakfast at Tiffany's")
 
         result.les_mis = _work()
-        result.les_mis.presentation_edition.title = "Les Mis\u00E9rables"
+        result.les_mis.presentation_edition.title = "Les Mis\u00e9rables"
 
         result.modern_romance = _work(title="Modern Romance")
 

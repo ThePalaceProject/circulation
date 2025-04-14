@@ -957,7 +957,7 @@ class TestErrorParser:
             ),
             (
                 # Simulate an unexpected response, which cannot be decoded as a string.
-                b"\xDE\xAD\xBE\xEF",
+                b"\xde\xad\xbe\xef",
                 None,
                 "Unreadable error message (Unicode decode error).",
             ),
