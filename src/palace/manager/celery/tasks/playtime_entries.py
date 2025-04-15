@@ -28,6 +28,10 @@ from palace.manager.util.uuid import uuid_encode
 
 @shared_task(queue=QueueNames.high, bind=True)
 def sum_playtime_entries(task: Task) -> None:
+    """
+    This task sums up unprocessed playtime entries, inserts them into the playtime_summaries table and removes
+    older, processed playtime entries.
+    """
     # Reap older processed entries
     older_than, _ = previous_months(number_of_months=1)
     older_than_ts = datetime(
@@ -139,6 +143,10 @@ def generate_playtime_report(
     start: date | None = None,
     until: date | None = None,
 ) -> None:
+    """
+    This task generates a CSV report of playtime summaries based on a date range and uploads that report to
+    a shared Google Drive. If no date range is supplied, it will include summaries from the previous month.
+    """
 
     default_start, default_until = (
         date for date in previous_months(number_of_months=1)
