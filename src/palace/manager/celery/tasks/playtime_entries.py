@@ -230,7 +230,7 @@ def generate_playtime_report(
 
 def _fetch_distinct_data_source_names_in_range(
     session: Session, start: date, until: date
-) -> Query:
+) -> Query:  # type: ignore[type-arg]
     return session.query(
         select(
             distinct(PlaytimeSummary.data_source_name),
@@ -251,7 +251,7 @@ def _fetch_report_records(
     start: date,
     until: date,
     data_source_name: str,
-) -> Query:
+) -> Query:  # type: ignore[type-arg]
     # The loan count query returns only non-empty string isbns and titles if there is more
     # than one row returned with the grouping.  This way we ensure that we do not
     # count the same loan twice in the case we have when a
