@@ -20,6 +20,8 @@ from palace.manager.core.app_server import (
     ErrorHandler,
     URNLookupController,
     URNLookupHandler,
+    _parse_cache_control,
+    cache_control_headers,
     compressible,
     load_facets_from_request,
     load_pagination_from_request,
@@ -677,3 +679,86 @@ def test_raises_problem_detail(flask_app_fixture: FlaskAppFixture) -> None:
     with flask_app_fixture.test_request_context():
         result = func()
     assert isinstance(result, Response)
+
+
+class TestCacheControlHeaders:
+    def test__parse_cache_control_directives(self) -> None:
+        parse = _parse_cache_control
+
+        assert parse(None) == {}
+        assert parse("") == {}
+        assert parse(",,,") == {}
+        assert parse("no-cache") == {"no-cache": None}
+        assert parse("no-cache, no-store") == {
+            "no-cache": None,
+            "no-store": None,
+        }
+        assert parse("no-cache, no-store,   max-age=100") == {
+            "no-cache": None,
+            "no-store": None,
+            "max-age": 100,
+        }
+        assert parse("foo=nonsense,  bar=42") == {
+            "bar": 42,
+        }
+
+    def test_cache_control_headers(self, flask_app_fixture: FlaskAppFixture) -> None:
+        request_func = partial(flask.Response, "Hello, world!")
+
+        # With default argument, the decorator doesn't add max-age
+        decorated = cache_control_headers()(request_func)
+        with flask_app_fixture.test_request_context():
+            no_max_age = decorated()
+        assert "Cache-Control" not in no_max_age.headers
+
+        # Setting default_max_age to 10 adds the header
+        decorated = cache_control_headers(default_max_age=10)(request_func)
+        with flask_app_fixture.test_request_context():
+            response = decorated()
+        assert (
+            "Cache-Control" in response.headers
+            and response.headers["Cache-Control"] == "max-age=10"
+        )
+
+        # The default_max_age parameter is only used if the response doesn't have a cache-control header
+        decorated = cache_control_headers(default_max_age=10)(request_func)
+        with flask_app_fixture.test_request_context():
+            response = decorated(headers={"Cache-Control": "no-cache"})
+        assert (
+            "Cache-Control" in response.headers
+            and response.headers["Cache-Control"] == "no-cache"
+        )
+
+        # The decorator takes into account the requests cache-control header
+
+        # A request with "no-cache" or "no-store" will override any existing header and set it to "no-store"
+        decorated = cache_control_headers()(request_func)
+        with flask_app_fixture.test_request_context(
+            headers={"Cache-Control": "no-cache"}
+        ):
+            response = decorated("Cache-Control: max-age=150")
+        assert (
+            "Cache-Control" in response.headers
+            and response.headers["Cache-Control"] == "no-store"
+        )
+
+        decorated = cache_control_headers()(request_func)
+        with flask_app_fixture.test_request_context(
+            headers={"Cache-Control": "no-store"}
+        ):
+            response = decorated("Cache-Control: max-age=150")
+        assert (
+            "Cache-Control" in response.headers
+            and response.headers["Cache-Control"] == "no-store"
+        )
+
+        # A request with a max-age will override any existing header and set it to the new max-age
+        decorated = cache_control_headers()(request_func)
+        with flask_app_fixture.test_request_context(
+            headers={"Cache-Control": "max-age=100"}
+        ):
+            response = decorated("Cache-Control: max-age=150")
+        assert (
+            "Cache-Control" in response.headers
+            and response.headers["Cache-Control"] == "max-age=100"
+        )

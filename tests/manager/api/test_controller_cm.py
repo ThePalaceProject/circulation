@@ -30,9 +30,6 @@ class TestCirculationManager:
         # configuration settings.
         mock_db = MagicMock()
 
-        services_fixture.set_sitewide_config_option(
-            "authentication_document_cache_time", 12
-        )
         mock_load_settings = create_autospec(CirculationManager.load_settings)
         mock_setup_controllers = create_autospec(
             CirculationManager.setup_one_time_controllers
@@ -48,7 +45,6 @@ class TestCirculationManager:
         assert mock_load_settings.called
         assert mock_setup_controllers.called
 
-        assert manager.authentication_for_opds_documents.max_age == 12
         assert manager.services is services_fixture.services
         assert manager.analytics is services_fixture.analytics_fixture.analytics_mock
         assert manager.external_search is services_fixture.search_fixture.index_mock
@@ -75,10 +71,6 @@ class TestCirculationManager:
         assert 1 == len(manager.top_level_lanes)
         assert 1 == len(manager.circulation_apis)
 
-        # The authentication document cache has a default value for
-        # max_age.
-        assert 3600 == manager.authentication_for_opds_documents.max_age
-
         # Now let's create a brand new library, never before seen.
         library = circulation_fixture.db.library()
         circulation_fixture.library_setup(library)
@@ -99,10 +91,6 @@ class TestCirculationManager:
             web_client="http://registration",
         )
 
-        # And a library-specific configuration setting.
-        manager.authentication_for_opds_documents["test"] = "document"
-        assert len(manager.authentication_for_opds_documents) == 1
-
         # Then reload the CirculationManager...
         circulation_fixture.manager.load_settings()
 
@@ -121,9 +109,6 @@ class TestCirculationManager:
 
         # So have the patron web domains
         assert {"http://sitewide", "http://registration"} == manager.patron_web_domains
-
-        # The authentication document cache has been cleared
-        assert len(manager.authentication_for_opds_documents) == 0
 
         # Controllers that don't depend on site configuration
         # have not been reloaded.

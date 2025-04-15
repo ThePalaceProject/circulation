@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 import flask
 from dependency_injector.wiring import Provide, inject
-from expiringdict import ExpiringDict
 from flask_babel import lazy_gettext as _
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -161,12 +160,6 @@ class CirculationManager(LoggerMixin):
         )
         self.setup_one_time_controllers()
         self.patron_web_domains: set[str] = set()
-        authentication_document_cache_time = (
-            self.services.config.sitewide.authentication_document_cache_time()
-        )
-        self.authentication_for_opds_documents = ExpiringDict(
-            max_len=1000, max_age_seconds=authentication_document_cache_time
-        )
         self.load_settings()
 
     def load_facets_from_request(self, *args, **kwargs):
@@ -322,7 +315,6 @@ class CirculationManager(LoggerMixin):
 
         self.patron_web_domains = self.get_patron_web_domains()
         self.setup_configuration_dependent_controllers()
-        self.authentication_for_opds_documents.clear()
 
     def log_lanes(self, lanelist=None, level=0):
         """Output information about the lane layout."""
@@ -423,25 +415,7 @@ class CirculationManager(LoggerMixin):
 
     @property
     def authentication_for_opds_document(self):
-        """Make sure the current request's library has an Authentication For
-        OPDS document in the cache, then return the cached version.
-
-        If the cache is disabled, a fresh document is created every time.
-
-        If the query argument `debug` is provided and the
-        WSGI_DEBUG_KEY site-wide setting is set to True, the
-        authentication document is annotated with a '_debug' section
-        describing the current WSGI environment. Since this can reveal
-        internal details of deployment, it should only be enabled when
-        diagnosing deployment problems.
         """
-        name = get_request_library().short_name
-        value = self.authentication_for_opds_documents.get(name, None)
-        if value is None:
-            # The document was not in the cache, either because it's
-            # expired or because the cache itself has been disabled.
-            # Create a new one and stick it in the cache for next
-            # time.
-            value = self.auth.create_authentication_document()
-            self.authentication_for_opds_documents[name] = value
-        return value
+        Return the Authentication For OPDS document for the current request's library.
+        """
+        return self.auth.create_authentication_document()
