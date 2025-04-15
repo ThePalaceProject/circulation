@@ -105,7 +105,7 @@ def raises_problem_detail(f: Callable[P, T]) -> Callable[P, T | Response]:
     return decorated
 
 
-def _parse_cache_control(cache_control_header: str | None) -> dict[str, str | None]:
+def _parse_cache_control(cache_control_header: str | None) -> dict[str, int | None]:
     """
     Parse the Cache-Control header into a dictionary of directives.
 
