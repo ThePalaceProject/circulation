@@ -230,8 +230,7 @@ def generate_playtime_report(
                     file_name=linked_file_name,
                     parent_folder_id=leaf_folder["id"],
                     content_type="text/csv",
-                    stream=temp,  # type: ignore[arg-type]
-                    # I strove to avoid this type: ignore statement but couldn't find a good workaround.
+                    stream=temp,
                 )
                 task.log.info(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
