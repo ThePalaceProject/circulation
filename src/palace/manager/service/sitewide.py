@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import NonNegativeInt, field_validator
+from pydantic import field_validator
 
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
@@ -14,7 +14,6 @@ from palace.manager.util.pydantic import HttpUrl
 class SitewideConfiguration(ServiceConfiguration):
     base_url: HttpUrl | None = None
     patron_web_hostnames: list[HttpUrl] | Literal["*"] = []
-    authentication_document_cache_time: NonNegativeInt = 3600
     quicksight_authorized_arns: dict[str, list[str]] | None = None
 
     @field_validator("patron_web_hostnames", mode="before")

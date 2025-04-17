@@ -105,6 +105,80 @@ def raises_problem_detail(f: Callable[P, T]) -> Callable[P, T | Response]:
     return decorated
 
 
+def _parse_cache_control(cache_control_header: str | None) -> dict[str, int | None]:
+    """
+    Parse the Cache-Control header into a dictionary of directives.
+
+    https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
+    """
+    cache_control_header = cache_control_header or ""
+
+    directives: dict[str, int | None] = {}
+    for directive in cache_control_header.split(","):
+        directive = directive.strip().lower()
+        if not directive:
+            continue
+
+        if "=" in directive:
+            key, value = directive.split("=", 1)
+            try:
+                int_val = int(value)
+            except ValueError:
+                continue
+            directives[key] = int_val
+        else:
+            directives[directive] = None
+
+    return directives
+
+
+def cache_control_headers(
+    default_max_age: int | None = None,
+) -> Callable[[Callable[P, Response]], Callable[P, Response]]:
+    """
+    Decorator that manages Cache-Control headers on Flask responses based on request and configuration.
+
+    This decorator processes incoming request Cache-Control headers and adds appropriate Cache-Control
+    headers to responses.
+
+    Note: This decorator allows incoming requests to override cache settings, potentially bypassing
+          the cache. This could enable malicious users to cause excessive load on the server. Use
+          with caution.
+    Todo: Consider restricting this functionality to authenticated users in the future.
+
+    :param default_max_age: Optional integer specifying the default max-age in seconds
+            to set on responses that don't already have Cache-Control headers
+    """
+
+    def decorator(f: Callable[P, Response]) -> Callable[P, Response]:
+        @wraps(f)
+        def decorated(*args: P.args, **kwargs: P.kwargs) -> Response:
+            """Set cache control headers on the response."""
+            response = f(*args, **kwargs)
+
+            # Check if the incoming request has a Cache-Control header
+            directives = _parse_cache_control(
+                flask.request.headers.get("Cache-Control")
+            )
+
+            if "no-cache" in directives or "no-store" in directives:
+                # Set the response to be non-cacheable.
+                response.headers["Cache-Control"] = "no-store"
+            elif "max-age" in directives and directives["max-age"]:
+                # Set the response to be cacheable for the specified max-age.
+                response.headers["Cache-Control"] = f"max-age={directives['max-age']}"
+            elif (
+                "Cache-Control" not in response.headers and default_max_age is not None
+            ):
+                # If no Cache-Control header is set, use the default max-age.
+                response.headers["Cache-Control"] = f"max-age={default_max_age}"
+            return response
+
+        return decorated
+
+    return decorator
+
+
 def compressible(f):
     """Decorate a function to make it transparently handle whatever
     compression the client has announced it supports.

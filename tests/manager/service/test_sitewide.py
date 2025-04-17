@@ -122,32 +122,6 @@ class TestSitewideConfiguration:
             assert config.patron_web_hostnames == expected
 
     @pytest.mark.parametrize(
-        "authentication_document_cache_time, expected",
-        [
-            (None, 3600),
-            ("12", 12),
-            ("0", 0),
-            ("foo", CannotLoadConfiguration),
-            ("-12", CannotLoadConfiguration),
-        ],
-    )
-    def test_authentication_document_cache_time(
-        self,
-        sitewide_configuration_fixture: SitewideConfigurationFixture,
-        authentication_document_cache_time: str | None,
-        expected: int | type[Exception],
-    ):
-        sitewide_configuration_fixture.set(
-            "PALACE_AUTHENTICATION_DOCUMENT_CACHE_TIME",
-            authentication_document_cache_time,
-        )
-
-        context = sitewide_configuration_fixture.get_context_manager(expected)
-        with context:
-            config = SitewideConfiguration()
-            assert config.authentication_document_cache_time == expected
-
-    @pytest.mark.parametrize(
         "quicksight_authorized_arns, expected",
         [
             ("invalid json", CannotLoadConfiguration),

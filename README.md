@@ -220,8 +220,6 @@ Celery and caching, we recommend that you use a separate database for each purpo
    be a single hostname (`http://catalog.library.org`) or a pipe-separated list of hostnames
    (`http://catalog.library.org|https://beta.library.org`). You can also set this to `*` to allow access from any host,
    but you must not do this in a production environment -- only during development. (optional)
-- `PALACE_AUTHENTICATION_DOCUMENT_CACHE_TIME`: Cache time for authentication documents (in seconds). The default is
-   3600 (optional).
 
 #### Storage Service
 

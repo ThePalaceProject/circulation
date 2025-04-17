@@ -6,6 +6,7 @@ from flask_cors.core import get_cors_options, set_cors_headers
 
 from palace.manager.api.app import app
 from palace.manager.core.app_server import (
+    cache_control_headers,
     compressible,
     raises_problem_detail,
     returns_problem_detail,
@@ -216,6 +217,7 @@ def library_dir_route(path, *args, **kwargs):
 @has_library
 @allows_patron_web
 @returns_problem_detail
+@cache_control_headers(default_max_age=3600)
 @compressible
 def index():
     return app.manager.index_controller()
@@ -224,6 +226,7 @@ def index():
 @library_route("/authentication_document")
 @has_library
 @returns_problem_detail
+@cache_control_headers(default_max_age=3600)
 @compressible
 def authentication_document():
     return app.manager.index_controller.authentication_document()
@@ -234,6 +237,7 @@ def authentication_document():
 @has_library
 @allows_patron_web
 @returns_problem_detail
+@cache_control_headers()
 @compressible
 def acquisition_groups(lane_identifier):
     return app.manager.opds_feeds.groups(lane_identifier)
