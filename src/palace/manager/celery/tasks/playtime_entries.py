@@ -26,7 +26,7 @@ from palace.manager.util.datetime_helpers import previous_months, utc_now
 from palace.manager.util.uuid import uuid_encode
 
 
-@shared_task(queue=QueueNames.high, bind=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def sum_playtime_entries(task: Task) -> None:
     """
     This task sums up unprocessed playtime entries, inserts them into the playtime_summaries table and removes
@@ -137,7 +137,7 @@ class Writer(Protocol):
 REPORT_DATE_FORMAT = "%Y-%m-%d"
 
 
-@shared_task(queue=QueueNames.high, bind=True)
+@shared_task(queue=QueueNames.default, bind=True)
 def generate_playtime_report(
     task: Task,
     start: date | None = None,
