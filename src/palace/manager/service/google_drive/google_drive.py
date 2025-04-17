@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import IOBase
-from typing import TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, cast
 
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -42,7 +42,7 @@ class GoogleDriveService(LoggerMixin):
     def create_file(
         self,
         file_name: str,
-        stream: IOBase,
+        stream: IO[bytes],
         content_type: str,
         parent_folder_id: str | None = None,
     ) -> File:
@@ -55,7 +55,9 @@ class GoogleDriveService(LoggerMixin):
                 f'A file named "{file_name}" already exists in folder(id={parent_folder_id}'
             )
 
-        media = MediaIoBaseUpload(stream, mimetype=content_type)
+        # We cast this to IOBase, because the type hints for MediaIoBaseUpload
+        # specify this as a IOBase, but it will accept the more generic IO[bytes]
+        media = MediaIoBaseUpload(cast(IOBase, stream), mimetype=content_type)
         parents = [parent_folder_id] if parent_folder_id else []
         file_metadata: File = {"name": file_name, "parents": parents}
         file = (
