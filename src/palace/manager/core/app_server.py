@@ -138,8 +138,13 @@ def cache_control_headers(
     """
     Decorator that manages Cache-Control headers on Flask responses based on request and configuration.
 
-    This decorator processes both incoming request Cache-Control headers and adds
-    appropriate Cache-Control headers to responses.
+    This decorator processes incoming request Cache-Control headers and adds appropriate Cache-Control
+    headers to responses.
+
+    Note: This decorator allows incoming requests to override cache settings, potentially bypassing
+          the cache. This could enable malicious users to cause excessive load on the server. Use
+          with caution.
+    Todo: Consider restricting this functionality to authenticated users in the future.
 
     :param default_max_age: Optional integer specifying the default max-age in seconds
             to set on responses that don't already have Cache-Control headers
