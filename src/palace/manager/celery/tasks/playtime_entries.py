@@ -17,7 +17,6 @@ from sqlalchemy.sql.functions import coalesce, count, max as sql_max, sum
 from palace.manager.api.config import Configuration
 from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
-from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
@@ -169,10 +168,11 @@ def generate_playtime_report(
     link_extension = "csv"
     uid = uuid_encode(uuid.uuid4())
 
-    google_drive: GoogleDriveService = task.services.google_drive.service()
+    google_drive_container = task.services.google_drive()
+    google_drive = google_drive_container.service()
 
     # create directory hierarchy
-    root_folder_id = task.services.google_drive.config.parent_folder_id()  # type: ignore[attr-defined]
+    root_folder_id: str | None = google_drive_container.config.parent_folder_id()
 
     with task.session() as session:
         # get list of collections
@@ -228,7 +228,7 @@ def generate_playtime_report(
                     file_name=linked_file_name,
                     parent_folder_id=leaf_folder["id"],
                     content_type="text/csv",
-                    stream=temp,  # type: ignore[arg-type]
+                    stream=temp,
                 )
                 task.log.info(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
@@ -238,7 +238,7 @@ def generate_playtime_report(
 
 def _fetch_distinct_data_source_names_in_range(
     session: Session, start: date, until: date
-) -> Query:  # type: ignore[type-arg]
+) -> Query[str]:
     return session.query(
         select(
             distinct(PlaytimeSummary.data_source_name),
@@ -259,7 +259,7 @@ def _fetch_report_records(
     start: date,
     until: date,
     data_source_name: str,
-) -> Query:  # type: ignore[type-arg]
+) -> Query[tuple[str, str, str, str, str, int, int]]:
     # The loan count query returns only non-empty string isbns and titles if there is more
     # than one row returned with the grouping.  This way we ensure that we do not
     # count the same loan twice in the case we have when a
