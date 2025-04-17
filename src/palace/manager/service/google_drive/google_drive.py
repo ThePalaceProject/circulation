@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from io import IOBase
-from tempfile import _TemporaryFileWrapper
 from typing import TYPE_CHECKING
 
 from googleapiclient.http import MediaIoBaseUpload
@@ -43,7 +42,7 @@ class GoogleDriveService(LoggerMixin):
     def create_file(
         self,
         file_name: str,
-        stream: IOBase | _TemporaryFileWrapper[bytes],
+        stream: IOBase,
         content_type: str,
         parent_folder_id: str | None = None,
     ) -> File:

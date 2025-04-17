@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import os
 import tempfile
@@ -228,7 +230,8 @@ def generate_playtime_report(
                     file_name=linked_file_name,
                     parent_folder_id=leaf_folder["id"],
                     content_type="text/csv",
-                    stream=temp,
+                    stream=temp,  # type: ignore[arg-type]
+                    # I strove to avoid this type: ignore statement but couldn't find a good workaround.
                 )
                 task.log.info(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
@@ -259,7 +262,7 @@ def _fetch_report_records(
     start: date,
     until: date,
     data_source_name: str,
-) -> Query[tuple[str, str, str, str, str, int, int]]:
+) -> Query[Any]:
     # The loan count query returns only non-empty string isbns and titles if there is more
     # than one row returned with the grouping.  This way we ensure that we do not
     # count the same loan twice in the case we have when a
