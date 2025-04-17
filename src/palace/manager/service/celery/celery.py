@@ -177,6 +177,19 @@ def beat_schedule() -> dict[str, Any]:
                 hour="3",
             ),  # Once a day at 3:00 AM
         },
+        "generate_playtime_report": {
+            "task": "playtime_entries.generate_playtime_report",
+            "schedule": crontab(
+                minute="0", hour="4", day_of_month="2"
+            ),  # On the second day of the month at 4:00 AM
+        },
+        "sum_playtime_entries": {
+            "task": "playtime_entries.sum_playtime_entries",
+            "schedule": crontab(
+                minute="0",
+                hour="8,20",
+            ),  # Every 12 hours, but spaced after hour 8 to reduce job cluttering
+        },
     }
 
 

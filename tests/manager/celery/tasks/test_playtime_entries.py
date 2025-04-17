@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import re
 from datetime import date, datetime, timedelta
 from io import IOBase, StringIO
 from typing import Any, Literal
@@ -9,17 +8,17 @@ from unittest.mock import DEFAULT, create_autospec
 
 import pytest
 import pytz
-from freezegun import freeze_time
 from sqlalchemy.sql.expression import and_, null
 
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
+from palace.manager.celery.tasks.playtime_entries import (
+    REPORT_DATE_FORMAT,
+    generate_playtime_report,
+    sum_playtime_entries,
+)
 from palace.manager.core.config import Configuration
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
-)
-from palace.manager.scripts.playtime_entries import (
-    PlaytimeEntriesReportsScript,
-    PlaytimeEntriesSummationScript,
 )
 from palace.manager.service.google_drive.google_drive import GoogleDriveService
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -27,7 +26,8 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
-from palace.manager.util.datetime_helpers import datetime_utc, previous_months, utc_now
+from palace.manager.util.datetime_helpers import previous_months, utc_now
+from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 
@@ -68,8 +68,12 @@ def date2k(h=0, m=0):
     ) + timedelta(minutes=m, hours=h)
 
 
-class TestPlaytimeEntriesSummationScript:
-    def test_summation(self, db: DatabaseTransactionFixture):
+class TestSumPlaytimeEntriesTask:
+    def test_summation(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
         P = PlaytimeTimeEntry
         dk = date2k
         identifier = db.identifier()
@@ -171,7 +175,7 @@ class TestPlaytimeEntriesSummationScript:
 
         presummation_entries = db.session.query(PlaytimeEntry).count()
 
-        PlaytimeEntriesSummationScript(db.session).run()
+        sum_playtime_entries.delay().wait()
 
         postsummation_entries = db.session.query(PlaytimeEntry).count()
 
@@ -283,7 +287,11 @@ class TestPlaytimeEntriesSummationScript:
         assert id2c2l2time.total_seconds_played == 100
         assert id2c2l2time.timestamp == dk()
 
-    def test_reap_processed_entries(self, db: DatabaseTransactionFixture):
+    def test_reap_processed_entries(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
         P = PlaytimeTimeEntry
         dk = date2k
         identifier = db.identifier()
@@ -306,14 +314,15 @@ class TestPlaytimeEntriesSummationScript:
             P(id="5", during_minute=utc_now(), seconds_played=30),
         )
 
-        PlaytimeEntriesSummationScript(db.session).run()
+        sum_playtime_entries.delay().wait()
+
         # Nothing reaped yet
         assert db.session.query(PlaytimeEntry).count() == 6
         # Last entry is not processed
         assert [e.processed for e in entries] == [True, True, True, True, True, False]
 
         # Second run
-        PlaytimeEntriesSummationScript(db.session).run()
+        sum_playtime_entries.delay().wait()
         # Only 2 should be left
         assert db.session.query(PlaytimeEntry).count() == 2
         assert list(
@@ -322,7 +331,11 @@ class TestPlaytimeEntriesSummationScript:
             .values(PlaytimeEntry.tracking_id)
         ) == [("4",), ("5",)]
 
-    def test_deleted_related_rows(self, db: DatabaseTransactionFixture):
+    def test_deleted_related_rows(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+    ):
         def related_rows(table, present: Literal["all"] | Literal["none"]):
             """Query for the presence of related identifier, collection, and library rows."""
             condition = (
@@ -403,7 +416,7 @@ class TestPlaytimeEntriesSummationScript:
         assert db.session.query(PlaytimeSummary).count() == 0
 
         # Summarize those records.
-        PlaytimeEntriesSummationScript(db.session).run()
+        sum_playtime_entries.delay().wait()
 
         # Now we should have two summary records.
         assert db.session.query(PlaytimeSummary).count() == 2
@@ -474,7 +487,7 @@ class TestPlaytimeEntriesSummationScript:
         assert related_rows(PlaytimeSummary, present="none").count() == 2
 
         # Run the summarization script again.
-        PlaytimeEntriesSummationScript(db.session).run()
+        sum_playtime_entries.delay().wait()
 
         # We should have the same summary records, none of which have links.
         assert db.session.query(PlaytimeSummary).count() == 2
@@ -537,10 +550,11 @@ def playtime(
     )
 
 
-class TestPlaytimeEntriesEmailReportsScript:
-    def test_do_run(
+class TestGeneratePlaytimeReport:
+    def test(
         self,
         db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
         monkeypatch: pytest.MonkeyPatch,
     ):
@@ -705,7 +719,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         )
 
         # Act
-        PlaytimeEntriesReportsScript(db.session).run()
+        generate_playtime_report.delay().wait()
 
         # Assert
         assert len(output_data) == 2
@@ -731,7 +745,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         ]
 
         assert (
-            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
             in ds_a_filename
         )
 
@@ -790,7 +804,7 @@ class TestPlaytimeEntriesEmailReportsScript:
         ]
 
         assert (
-            f"{cutoff.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-{until.strftime(PlaytimeEntriesReportsScript.REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
             in ds_b_filename
         )
 
@@ -850,148 +864,3 @@ class TestPlaytimeEntriesEmailReportsScript:
                 "2025",
             ],
         }
-
-    @pytest.mark.parametrize(
-        "current_utc_time, start_arg, expected_start, until_arg, expected_until",
-        [
-            # Default values from two dates within the same month (next two cases).
-            [
-                datetime(2020, 1, 1, 0, 0, 0),
-                None,
-                datetime_utc(2019, 12, 1, 0, 0, 0),
-                None,
-                datetime_utc(2020, 1, 1, 0, 0, 0),
-            ],
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                None,
-                datetime_utc(2019, 12, 1, 0, 0, 0),
-                None,
-                datetime_utc(2020, 1, 1, 0, 0, 0),
-            ],
-            # `start` specified, `until` defaulted.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                "2019-06-11",
-                datetime_utc(2019, 6, 11, 0, 0, 0),
-                None,
-                datetime_utc(2020, 1, 1, 0, 0, 0),
-            ],
-            # `start` defaulted, `until` specified.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                None,
-                datetime_utc(2019, 12, 1, 0, 0, 0),
-                "2019-12-20",
-                datetime_utc(2019, 12, 20, 0, 0, 0),
-            ],
-            # When both dates are specified, the current datetime doesn't matter.
-            # Both dates specified, but we test at a specific time here anyway.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                "2018-07-03",
-                datetime_utc(2018, 7, 3, 0, 0, 0),
-                "2019-04-30",
-                datetime_utc(2019, 4, 30, 0, 0, 0),
-            ],
-            # The same dates are specified, but we test at the actual current time.
-            [
-                utc_now(),
-                "2018-07-03",
-                datetime_utc(2018, 7, 3, 0, 0, 0),
-                "2019-04-30",
-                datetime_utc(2019, 4, 30, 0, 0, 0),
-            ],
-            # The same dates are specified, but we test at the actual current time.
-            [
-                utc_now(),
-                "4099-07-03",
-                datetime_utc(4099, 7, 3, 0, 0, 0),
-                "4150-04-30",
-                datetime_utc(4150, 4, 30, 0, 0, 0),
-            ],
-        ],
-    )
-    def test_parse_command_line(
-        self,
-        current_utc_time: datetime,
-        start_arg: str | None,
-        expected_start: datetime,
-        until_arg: str | None,
-        expected_until: datetime,
-    ):
-        start_args = ["--start", start_arg] if start_arg else []
-        until_args = ["--until", until_arg] if until_arg else []
-        cmd_args = start_args + until_args
-
-        with freeze_time(current_utc_time):
-            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
-        assert expected_start == parsed.start
-        assert expected_until == parsed.until
-        assert pytz.UTC == parsed.start.tzinfo
-        assert pytz.UTC == parsed.until.tzinfo
-
-    @pytest.mark.parametrize(
-        "current_utc_time, start_arg, expected_start, until_arg, expected_until",
-        [
-            # `start` specified, `until` defaulted.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                "2020-02-01",
-                datetime_utc(2020, 2, 1, 0, 0, 0),
-                None,
-                datetime_utc(2020, 1, 1, 0, 0, 0),
-            ],
-            # `start` defaulted, `until` specified.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                None,
-                datetime_utc(2019, 12, 1, 0, 0, 0),
-                "2019-06-11",
-                datetime_utc(2019, 6, 11, 0, 0, 0),
-            ],
-            # When both dates are specified, the current datetime doesn't matter.
-            # Both dates specified, but we test at a specific time here anyway.
-            [
-                datetime(2020, 1, 31, 0, 0, 0),
-                "2019-04-30",
-                datetime_utc(2019, 4, 30, 0, 0, 0),
-                "2018-07-03",
-                datetime_utc(2018, 7, 3, 0, 0, 0),
-            ],
-            # The same dates are specified, but we test at the actual current time.
-            [
-                utc_now(),
-                "2019-04-30",
-                datetime_utc(2019, 4, 30, 0, 0, 0),
-                "2018-07-03",
-                datetime_utc(2018, 7, 3, 0, 0, 0),
-            ],
-            # The same dates are specified, but we test at the actual current time.
-            [
-                utc_now(),
-                "4150-04-30",
-                datetime_utc(4150, 4, 30, 0, 0, 0),
-                "4099-07-03",
-                datetime_utc(4099, 7, 3, 0, 0, 0),
-            ],
-        ],
-    )
-    def test_parse_command_line_start_not_before_until(
-        self,
-        capsys,
-        current_utc_time: datetime,
-        start_arg: str | None,
-        expected_start: datetime,
-        until_arg: str | None,
-        expected_until: datetime,
-    ):
-        start_args = ["--start", start_arg] if start_arg else []
-        until_args = ["--until", until_arg] if until_arg else []
-        cmd_args = start_args + until_args
-
-        with freeze_time(current_utc_time), pytest.raises(SystemExit) as excinfo:
-            parsed = PlaytimeEntriesReportsScript.parse_command_line(cmd_args=cmd_args)
-        _, err = capsys.readouterr()
-        assert 2 == excinfo.value.code
-        assert re.search(r"start date \(.*\) must be before until date \(.*\).", err)

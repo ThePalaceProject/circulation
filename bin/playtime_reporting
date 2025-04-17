@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-"""Sum the playtimes for audiobooks."""
-
-
+"""Generate  play times report for audiobooks."""
 from palace.manager.scripts.playtime_entries import PlaytimeEntriesReportsScript
 
 PlaytimeEntriesReportsScript().run()
