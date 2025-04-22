@@ -354,12 +354,7 @@ class SIP2AuthenticationProvider(
 
         # Log in was successful so test patron's test credentials
         if login.success:
-            results = [
-                r for r in super(SIP2AuthenticationProvider, self)._run_self_tests(_db)
-            ]
-            yield from results
-
-            if results[0].success:
+            if self.test_username:
 
                 def raw_patron_information():
                     info = sip.patron_information(
@@ -377,6 +372,8 @@ class SIP2AuthenticationProvider(
                 yield self.run_test(
                     ("Raw test patron information"), raw_patron_information
                 )
+
+            yield from super()._run_self_tests(_db)
 
     def info_to_patrondata(
         self, info: dict[str, Any] | ProblemDetail, validate_password: bool = True

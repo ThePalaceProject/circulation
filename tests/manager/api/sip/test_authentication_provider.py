@@ -778,25 +778,25 @@ class TestSIP2AuthenticationProvider:
         )
         assert results[1].success == True
 
-        assert results[2].name == "Authenticating test patron"
+        assert results[2].name == "Patron information request"
         assert results[2].success == True
-
-        # Since test patron authentication is true, we can now see self
-        # test results for syncing metadata and the raw data from `patron_information`
-        assert results[3].name == "Syncing patron metadata"
-        assert results[3].success == True
-
-        assert results[4].name == "Patron information request"
-        assert results[4].success == True
-        assert results[4].result == provider.client.patron_information_request(
+        assert results[2].result == provider.client.patron_information_request(
             "usertest1", "userpassword1"
         )
 
-        assert results[5].name == "Raw test patron information"
-        assert results[5].success == True
-        assert results[5].result == json.dumps(
+        assert results[3].name == "Raw test patron information"
+        assert results[3].success == True
+        assert results[3].result == json.dumps(
             client.patron_information_parser(
                 TestSIP2AuthenticationProvider.sierra_valid_login
             ),
             indent=1,
         )
+
+        assert results[4].name == "Authenticating test patron"
+        assert results[4].success == True
+
+        # Since test patron authentication is true, we can now see self
+        # test results for syncing metadata and the raw data from `patron_information`
+        assert results[5].name == "Syncing patron metadata"
+        assert results[5].success == True
