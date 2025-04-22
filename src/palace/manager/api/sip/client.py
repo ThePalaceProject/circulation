@@ -232,6 +232,9 @@ class SIPClient(Constants, LoggerMixin):
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
 
+    # Default timeout in seconds for socket connections.
+    DEFAULT_TIMEOUT = 3
+
     # These are the subfield names associated with the 'patron status'
     # field as specified in the SIP2 spec.
     CHARGE_PRIVILEGES_DENIED = "charge privileges denied"
@@ -330,7 +333,7 @@ class SIPClient(Constants, LoggerMixin):
         self.ssl_contexts = ssl_contexts
         self.ssl_verification = ssl_verification
         self.encoding = encoding
-        self.timeout = timeout or 3
+        self.timeout = timeout or self.DEFAULT_TIMEOUT
 
         # Turn the separator string into a regular expression that splits
         # field name/field value pairs on the separator string.
