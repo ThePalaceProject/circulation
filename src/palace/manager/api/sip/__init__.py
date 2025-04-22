@@ -178,6 +178,21 @@ class SIP2Settings(BasicAuthProviderSettings):
             },
         ),
     )
+    timeout: int = FormField(
+        3,
+        form=ConfigurationFormItem(
+            label="Timeout",
+            description=(
+                "The number of seconds to wait for a response from the SIP2 server "
+                "before timing out. The default is 3 seconds. <em>Use caution</em> when increasing "
+                "this value, as it can slow down the authentication process. Value must be "
+                "between 1 and 9 seconds."
+            ),
+            type=ConfigurationFormItemType.NUMBER,
+        ),
+        ge=1,
+        le=9,
+    )
 
 
 class SIP2LibrarySettings(BasicAuthProviderLibrarySettings):
@@ -238,6 +253,7 @@ class SIP2AuthenticationProvider(
         self.ssl_verification = settings.ssl_verification
         self.dialect = settings.ils
         self.institution_id = library_settings.institution_id
+        self.timeout = settings.timeout
         self._client = client
 
         # Check if patrons should be blocked based on SIP status
@@ -270,6 +286,7 @@ class SIP2AuthenticationProvider(
             ssl_verification=self.ssl_verification,
             encoding=self.encoding.lower(),
             dialect=self.dialect,
+            timeout=self.timeout,
         )
 
     @classmethod

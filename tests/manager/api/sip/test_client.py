@@ -144,22 +144,17 @@ class TestSIPClient:
     network connections.
     """
 
-    def test_connect(self):
+    @pytest.mark.parametrize("timeout", [None, 1, 10])
+    def test_connect(self, timeout: int | None):
         target_server = object()
-        sip = SIPClient(target_server, 999)
+        sip = SIPClient(target_server, 999, timeout=timeout)
 
-        old_socket = socket.socket
-
-        # Mock the socket.socket function.
-        socket.socket = MockSocket
-
-        # Call connect() and make sure timeout is set properly.
-        try:
+        with patch.object(socket, "socket", MockSocket):
+            # Call connect() and make sure timeout is set properly.
             sip.connect()
-            assert 3 == sip.connection.timeout
-        finally:
-            # Un-mock the socket.socket function
-            socket.socket = old_socket
+            if timeout is None:
+                timeout = 3
+            assert sip.connection.timeout == timeout
 
     def test_secure_connect_insecure(self, mock_socket: MockSocketFixture):
         self.context: MagicMock | None = None
