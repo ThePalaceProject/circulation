@@ -231,8 +231,6 @@ class Constants:
 class SIPClient(Constants, LoggerMixin):
     # Maximum retries of a SIP message before failing.
     MAXIMUM_RETRIES = 5
-    # Timeout in seconds
-    TIMEOUT = 3
 
     # These are the subfield names associated with the 'patron status'
     # field as specified in the SIP2 spec.
@@ -288,6 +286,7 @@ class SIPClient(Constants, LoggerMixin):
         self,
         target_server,
         target_port,
+        *,
         login_user_id=None,
         login_password=None,
         location_code=None,
@@ -300,6 +299,7 @@ class SIPClient(Constants, LoggerMixin):
         ssl_contexts: Callable[[ssl._SSLMethod], ssl.SSLContext] = ssl.SSLContext,
         encoding=Constants.DEFAULT_ENCODING,
         dialect=Dialect.GENERIC_ILS,
+        timeout: int | None = None,
     ):
         """Initialize a client for (but do not connect to) a SIP2 server.
 
@@ -312,6 +312,8 @@ class SIPClient(Constants, LoggerMixin):
         :param encoding: The character encoding to use when sending or
             receiving bytes over the wire. The default, Code Page 850,
             is per the (ancient) SIP2 spec.
+        :param timeout: The timeout when waiting for a response from the SIP2
+            server.
         """
         self.target_server = target_server
         if not target_port:
@@ -328,6 +330,7 @@ class SIPClient(Constants, LoggerMixin):
         self.ssl_contexts = ssl_contexts
         self.ssl_verification = ssl_verification
         self.encoding = encoding
+        self.timeout = timeout or 3
 
         # Turn the separator string into a regular expression that splits
         # field name/field value pairs on the separator string.
@@ -338,7 +341,7 @@ class SIPClient(Constants, LoggerMixin):
         self.separator_re = re.compile(escaped + "([A-Z][A-Z])")
 
         self.sequence_number = 0
-        self.connection = None
+        self.connection: socket.socket | None = None
         self.login_user_id = login_user_id
         if login_user_id:
             if not login_password:
@@ -397,7 +400,7 @@ class SIPClient(Constants, LoggerMixin):
             else:
                 self.connection = self.make_insecure_connection()
 
-            self.connection.settimeout(self.TIMEOUT)
+            self.connection.settimeout(self.timeout)
             self.connection.connect((self.target_server, self.target_port))
         except OSError as message:
             raise OSError(
@@ -912,7 +915,7 @@ class SIPClient(Constants, LoggerMixin):
         done = False
         data = b""
         while not done:
-            if time.time() - start_time > self.TIMEOUT:
+            if time.time() - start_time > self.timeout:
                 raise OSError("Timeout reading from socket.")
             tmp = self.connection.recv(4096)
             data = data + tmp

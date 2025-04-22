@@ -143,6 +143,7 @@ class TestSIP2AuthenticationProvider:
             ils=Dialect.AG_VERSO,
             encoding=Sip2Encoding.utf8,
             patron_status_block=False,
+            timeout=9,
         )
         library_settings = create_library_settings(institution_id="MAIN")
         provider = create_provider(settings=settings, library_settings=library_settings)
@@ -158,6 +159,7 @@ class TestSIP2AuthenticationProvider:
         assert Dialect.AG_VERSO == provider.dialect
         assert Sip2Encoding.utf8.value == provider.encoding
         assert provider.patron_status_should_block is False
+        assert 9 == provider.timeout
 
         # And it's possible to get a SIP2Client that's configured
         # based on the same values.
@@ -168,6 +170,7 @@ class TestSIP2AuthenticationProvider:
         assert "MAIN" == client.institution_id
         assert "server.com" == client.target_server
         assert 1234 == client.target_port
+        assert 9 == client.timeout
 
     def test_initialize_from_settings_defaults(
         self,
