@@ -348,6 +348,7 @@ def _fetch_report_records(
         combined_sq.c.collection_name,
         combined_sq.c.library_name,
         combined_sq.c.identifier_str,
+        combined_sq.c.title,
     )
 
 
