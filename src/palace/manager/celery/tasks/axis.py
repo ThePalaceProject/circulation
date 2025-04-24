@@ -30,7 +30,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.log import pluralize
 
-DEFAULT_BATCH_SIZE: int = 10
+DEFAULT_BATCH_SIZE: int = 50
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS = 20
 
@@ -311,9 +311,14 @@ def import_identifiers(
 
     elapsed_seconds = time.perf_counter() - start_seconds
 
+    average_secs_per_book = (
+        ""
+        if total_imported_in_current_task == 0
+        else f" or {(elapsed_seconds/total_imported_in_current_task):.3f} secs per book"
+    )
     task.log.info(
         f'Imported {total_imported_in_current_task} books into collection(name="{collection_name}", '
-        f"id={collection_id} in {elapsed_seconds:.2f} secs"
+        f"id={collection_id} in {elapsed_seconds:.2f} secs {average_secs_per_book}"
     )
 
     processed_count += total_imported_in_current_task

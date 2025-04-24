@@ -1669,7 +1669,10 @@ class LicensePoolDeliveryMechanism(Base):
         if not dirty and update_available and available is not None:
             lpdm.available = available
 
-        if not lpdm.rights_status or rights_status.uri != RightsStatus.UNKNOWN:
+        if not lpdm.rights_status or (
+            lpdm.rights_status != rights_status
+            and rights_status.uri != RightsStatus.UNKNOWN
+        ):
             # We have better information available about the
             # rights status of this delivery mechanism.
             lpdm.rights_status = rights_status
@@ -1746,12 +1749,15 @@ class LicensePoolDeliveryMechanism(Base):
     def set_rights_status(self, uri):
         _db = Session.object_session(self)
         status = RightsStatus.lookup(_db, uri)
-        self.rights_status = status
+
+        changed = self.rights_status != status
         # A change to a LicensePoolDeliveryMechanism's rights status
         # might affect the open-access status of its associated
         # LicensePools.
-        for pool in self.license_pools:
-            pool.set_open_access_status()
+        if changed:
+            self.rights_status = status
+            for pool in self.license_pools:
+                pool.set_open_access_status()
         return status
 
     @property

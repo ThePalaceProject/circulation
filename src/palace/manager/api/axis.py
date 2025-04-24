@@ -663,10 +663,9 @@ class Axis360API(
         )
 
         # NOTE: availability is bibliographic.circulation, so it's a
-        # little redundant to call availability.apply() -- it's taken
+        # unnecessary to call availability.apply() -- it's taken
         # care of inside bibliographic.apply().
         bibliographic.apply(edition, self.collection, replace=policy, db=self._db)
-        availability.apply(self._db, self.collection, replace=policy)
         return edition, new_edition, license_pool, new_license_pool
 
     def _fetch_remote_availability(
