@@ -620,9 +620,7 @@ class Axis360API(
         """
         remainder = set(identifiers)
         for bibliographic, availability in self._fetch_remote_availability(identifiers):
-            edition, ignore1, license_pool, ignore2 = self.update_book(
-                bibliographic, availability
-            )
+            edition, ignore1, license_pool, ignore2 = self.update_book(bibliographic)
             identifier = license_pool.identifier
             if identifier in remainder:
                 remainder.remove(identifier)
@@ -637,20 +635,21 @@ class Axis360API(
     def update_book(
         self,
         bibliographic: Metadata,
-        availability: CirculationData,
         analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.
 
         :param bibliographic: A Metadata object containing
-            bibliographic data about this title.
-        :param availability: A CirculationData object containing
-            availability data about this title.
+            bibliographic and circulation (ie availability) data about this title
         """
-        license_pool, new_license_pool = availability.license_pool(
+        # The axis the bibliographic metadata always includes the circulation data
+        assert bibliographic.circulation
+
+        license_pool, new_license_pool = bibliographic.circulation.license_pool(
             self._db, self.collection
         )
+
         edition, new_edition = bibliographic.edition(self._db)
         license_pool.presentation_edition = edition
         policy = ReplacementPolicy(
@@ -662,9 +661,6 @@ class Axis360API(
             analytics=analytics,
         )
 
-        # NOTE: availability is bibliographic.circulation, so it is
-        # unnecessary to call availability.apply() -- it's taken
-        # care of inside bibliographic.apply().
         bibliographic.apply(edition, self.collection, replace=policy, db=self._db)
         return edition, new_edition, license_pool, new_license_pool
 

@@ -16,7 +16,7 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.core.metadata_layer import CirculationData, Metadata
+from palace.manager.core.metadata_layer import Metadata
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -288,7 +288,7 @@ def import_identifiers(
             collection = Collection.by_id(session, id=collection_id)
             api = create_api(session=session, collection=collection, bearer_token=bearer_token)  # type: ignore[arg-type]
             try:
-                process_book(task, session, api, metadata, circulation)
+                process_book(task, session, api, metadata)
                 total_imported_in_current_task += 1
             except (ObjectDeletedError, StaleDataError, OperationalError) as e:
                 _check_if_deadlock(e)
@@ -355,10 +355,9 @@ def process_book(
     _db: Session,
     api: Axis360API,
     metadata: Metadata,
-    circulation: CirculationData,
 ) -> None:
     edition, new_edition, license_pool, new_license_pool = api.update_book(
-        bibliographic=metadata, availability=circulation
+        bibliographic=metadata,
     )
 
     task.log.info(
