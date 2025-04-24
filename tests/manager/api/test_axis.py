@@ -134,6 +134,7 @@ class Axis360Fixture:
             db.session, db.default_library()
         )
         self.api = MockAxis360API(db.session, self.collection)
+        self.BIBLIOGRAPHIC_DATA.circulation = self.AVAILABILITY_DATA
 
     def sample_data(self, filename):
         return self.files.sample_data(filename)
@@ -578,6 +579,8 @@ class TestAxis360API:
                         licenses_owned=7,
                         licenses_available=6,
                     )
+
+                    metadata.circulation = availability
                     yield metadata, availability
 
                     # The rest have been 'forgotten' by Axis 360.
@@ -773,6 +776,8 @@ class TestAxis360API:
             licenses_owned=8,
             licenses_available=7,
         )
+
+        axis360.BIBLIOGRAPHIC_DATA.circulation = new_circulation
 
         e2, e_new, lp2, lp_new = api.update_book(
             axis360.BIBLIOGRAPHIC_DATA,
