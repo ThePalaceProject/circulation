@@ -107,6 +107,15 @@ class OPDS2ImporterFixture:
         self.collection.data_source = self.data_source
         self.importer = OPDS2Importer(db.session, self.collection)
 
+    @staticmethod
+    def get_delivery_mechanisms(
+        license_pool: LicensePool,
+    ) -> set[tuple[str, str | None]]:
+        return {
+            (dm.delivery_mechanism.content_type, dm.delivery_mechanism.drm_scheme)
+            for dm in license_pool.delivery_mechanisms
+        }
+
 
 @pytest.fixture
 def opds2_importer_fixture(
@@ -297,16 +306,9 @@ class TestOPDS2Importer(OPDS2Test):
         assert LicensePool.UNLIMITED_ACCESS == moby_dick_license_pool.licenses_available
         assert True == moby_dick_license_pool.should_track_playtime
 
-        assert 1 == len(moby_dick_license_pool.delivery_mechanisms)
-        [moby_dick_delivery_mechanism] = moby_dick_license_pool.delivery_mechanisms
-        assert (
-            DeliveryMechanism.NO_DRM
-            == moby_dick_delivery_mechanism.delivery_mechanism.drm_scheme
-        )
-        assert (
-            MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE
-            == moby_dick_delivery_mechanism.delivery_mechanism.content_type
-        )
+        assert opds2_importer_fixture.get_delivery_mechanisms(
+            moby_dick_license_pool
+        ) == {(MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, DeliveryMechanism.NO_DRM)}
 
         # 2.2. Edition with non open-access acquisition links (Adventures of Huckleberry Finn)
         huckleberry_finn_license_pool = self._get_license_pool_by_identifier(
@@ -323,28 +325,12 @@ class TestOPDS2Importer(OPDS2Test):
         )
         assert False == huckleberry_finn_license_pool.should_track_playtime
 
-        assert 2 == len(huckleberry_finn_license_pool.delivery_mechanisms)
-        huckleberry_finn_delivery_mechanisms = (
-            huckleberry_finn_license_pool.delivery_mechanisms
-        )
-
-        assert (
-            DeliveryMechanism.ADOBE_DRM
-            == huckleberry_finn_delivery_mechanisms[0].delivery_mechanism.drm_scheme
-        )
-        assert (
-            MediaTypes.EPUB_MEDIA_TYPE
-            == huckleberry_finn_delivery_mechanisms[0].delivery_mechanism.content_type
-        )
-
-        assert (
-            DeliveryMechanism.LCP_DRM
-            == huckleberry_finn_delivery_mechanisms[1].delivery_mechanism.drm_scheme
-        )
-        assert (
-            MediaTypes.EPUB_MEDIA_TYPE
-            == huckleberry_finn_delivery_mechanisms[1].delivery_mechanism.content_type
-        )
+        assert opds2_importer_fixture.get_delivery_mechanisms(
+            huckleberry_finn_license_pool
+        ) == {
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.LCP_DRM),
+        }
 
         # 2.3 Edition with non open-access acquisition links (The Politics of Postmodernism)
         postmodernism_license_pool = self._get_license_pool_by_identifier(
@@ -358,28 +344,12 @@ class TestOPDS2Importer(OPDS2Test):
             == postmodernism_license_pool.licenses_available
         )
 
-        assert 2 == len(postmodernism_license_pool.delivery_mechanisms)
-        postmodernism_delivery_mechanisms = (
-            postmodernism_license_pool.delivery_mechanisms
-        )
-
-        assert (
-            DeliveryMechanism.ADOBE_DRM
-            == postmodernism_delivery_mechanisms[0].delivery_mechanism.drm_scheme
-        )
-        assert (
-            MediaTypes.EPUB_MEDIA_TYPE
-            == postmodernism_delivery_mechanisms[0].delivery_mechanism.content_type
-        )
-
-        assert (
-            DeliveryMechanism.ADOBE_DRM
-            == postmodernism_delivery_mechanisms[1].delivery_mechanism.drm_scheme
-        )
-        assert (
-            MediaTypes.PDF_MEDIA_TYPE
-            == postmodernism_delivery_mechanisms[1].delivery_mechanism.content_type
-        )
+        assert opds2_importer_fixture.get_delivery_mechanisms(
+            postmodernism_license_pool
+        ) == {
+            (MediaTypes.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+            (MediaTypes.PDF_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM),
+        }
 
         # 3. Make sure that work objects contain all the required metadata
         assert isinstance(works, list)
