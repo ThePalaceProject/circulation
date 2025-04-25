@@ -1873,11 +1873,13 @@ class DeliveryMechanism(Base, HasSessionCache):
         # EPUB books
         (MediaTypes.EPUB_MEDIA_TYPE, NO_DRM),
         (MediaTypes.EPUB_MEDIA_TYPE, ADOBE_DRM),
+        (MediaTypes.EPUB_MEDIA_TYPE, LCP_DRM),
         # PDF books
         (MediaTypes.PDF_MEDIA_TYPE, NO_DRM),
         # Various audiobook formats
         (None, FINDAWAY_DRM),
         (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, NO_DRM),
+        (MediaTypes.AUDIOBOOK_MANIFEST_MEDIA_TYPE, LCP_DRM),
         (MediaTypes.OVERDRIVE_AUDIOBOOK_MANIFEST_MEDIA_TYPE, LIBBY_DRM),
     }
 
