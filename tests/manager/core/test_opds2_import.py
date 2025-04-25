@@ -110,7 +110,7 @@ class OPDS2ImporterFixture:
     @staticmethod
     def get_delivery_mechanisms(
         license_pool: LicensePool,
-    ) -> set[tuple[str, str | None]]:
+    ) -> set[tuple[str | None, str | None]]:
         return {
             (dm.delivery_mechanism.content_type, dm.delivery_mechanism.drm_scheme)
             for dm in license_pool.delivery_mechanisms
