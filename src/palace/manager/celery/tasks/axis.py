@@ -16,7 +16,7 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.core.metadata_layer import CirculationData, Metadata
+from palace.manager.core.metadata_layer import Metadata
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -30,7 +30,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException
 from palace.manager.util.log import pluralize
 
-DEFAULT_BATCH_SIZE: int = 10
+DEFAULT_BATCH_SIZE: int = 50
 DEFAULT_START_TIME = datetime_utc(1970, 1, 1)
 MAX_DELAY_IN_SECONDS_BETWEEN_REAP_TASKS = 20
 
@@ -288,7 +288,7 @@ def import_identifiers(
             collection = Collection.by_id(session, id=collection_id)
             api = create_api(session=session, collection=collection, bearer_token=bearer_token)  # type: ignore[arg-type]
             try:
-                process_book(task, session, api, metadata, circulation)
+                process_book(task, session, api, metadata)
                 total_imported_in_current_task += 1
             except (ObjectDeletedError, StaleDataError, OperationalError) as e:
                 _check_if_deadlock(e)
@@ -311,9 +311,14 @@ def import_identifiers(
 
     elapsed_seconds = time.perf_counter() - start_seconds
 
+    average_secs_per_book = (
+        ""
+        if total_imported_in_current_task == 0
+        else f" or {(elapsed_seconds/total_imported_in_current_task):.3f} secs per book"
+    )
     task.log.info(
         f'Imported {total_imported_in_current_task} books into collection(name="{collection_name}", '
-        f"id={collection_id} in {elapsed_seconds:.2f} secs"
+        f"id={collection_id} in {elapsed_seconds:.2f} secs {average_secs_per_book}"
     )
 
     processed_count += total_imported_in_current_task
@@ -350,10 +355,9 @@ def process_book(
     _db: Session,
     api: Axis360API,
     metadata: Metadata,
-    circulation: CirculationData,
 ) -> None:
     edition, new_edition, license_pool, new_license_pool = api.update_book(
-        bibliographic=metadata, availability=circulation
+        bibliographic=metadata,
     )
 
     task.log.info(

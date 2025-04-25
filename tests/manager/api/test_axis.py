@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import datetime
 import json
 import socket
@@ -89,9 +90,15 @@ def axis_files_fixture() -> AxisFilesFixture:
     return AxisFilesFixture()
 
 
+primary_identifier = IdentifierData(
+    type=Identifier.AXIS_360_ID, identifier="0003642860"
+)
+
+
 class Axis360Fixture:
     # Sample bibliographic and availability data you can use in a test
     # without having to parse it from an XML file.
+
     BIBLIOGRAPHIC_DATA = Metadata(
         DataSource.AXIS_360,
         publisher="Random House Inc",
@@ -99,9 +106,7 @@ class Axis360Fixture:
         title="Faith of My Fathers : A Family Memoir",
         imprint="Random House Inc2",
         published=datetime_utc(2000, 3, 7, 0, 0),
-        primary_identifier=IdentifierData(
-            type=Identifier.AXIS_360_ID, identifier="0003642860"
-        ),
+        primary_identifier=primary_identifier,
         identifiers=[IdentifierData(type=Identifier.ISBN, identifier="9780375504587")],
         contributors=[
             ContributorData(
@@ -115,16 +120,15 @@ class Axis360Fixture:
             ),
             SubjectData(type=Subject.FREEFORM_AUDIENCE, identifier="Adult"),
         ],
-    )
-
-    AVAILABILITY_DATA = CirculationData(
-        data_source=DataSource.AXIS_360,
-        primary_identifier=BIBLIOGRAPHIC_DATA.primary_identifier,
-        licenses_owned=9,
-        licenses_available=8,
-        licenses_reserved=0,
-        patrons_in_hold_queue=0,
-        last_checked=datetime_utc(2015, 5, 20, 2, 9, 8),
+        circulation=CirculationData(
+            data_source=DataSource.AXIS_360,
+            primary_identifier=primary_identifier,
+            licenses_owned=9,
+            licenses_available=8,
+            licenses_reserved=0,
+            patrons_in_hold_queue=0,
+            last_checked=datetime_utc(2015, 5, 20, 2, 9, 8),
+        ),
     )
 
     def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
@@ -578,6 +582,8 @@ class TestAxis360API:
                         licenses_owned=7,
                         licenses_available=6,
                     )
+
+                    metadata.circulation = availability
                     yield metadata, availability
 
                     # The rest have been 'forgotten' by Axis 360.
@@ -738,7 +744,6 @@ class TestAxis360API:
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(
             axis360.BIBLIOGRAPHIC_DATA,
-            axis360.AVAILABILITY_DATA,
             analytics=cast(Analytics, analytics),
         )
         # A new LicensePool and Edition were created.
@@ -774,9 +779,13 @@ class TestAxis360API:
             licenses_available=7,
         )
 
+        # deepcopy would be preferable here, but I was running into low level errors.
+        # A shallow copy should be sufficient here.
+        bibliographic = copy.copy(axis360.BIBLIOGRAPHIC_DATA)
+        bibliographic.circulation = new_circulation
+
         e2, e_new, lp2, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA,
-            new_circulation,
+            bibliographic=bibliographic,
             analytics=cast(Analytics, analytics),
         )
 
