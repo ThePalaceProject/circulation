@@ -999,11 +999,15 @@ class OverdriveAPI(
                 if existing_hold:
                     self._db.delete(existing_hold)
 
-                # TODO: Should we suggest that the patron can use Libby to read the book?
-                raise CannotLoan(
+                msg = (
                     "This book is not available in a format supported by the Palace app. "
                     "We apologize for the inconvenience."
                 )
+
+                if not do_early_return:
+                    msg += " You may be able to read this book by logging into the Overdrive website."
+
+                raise CannotLoan(msg)
 
         # Create the loan info.
         return LoanInfo.from_license_pool(
