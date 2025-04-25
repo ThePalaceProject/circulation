@@ -18,6 +18,7 @@ from palace.manager.api.circulation_exceptions import (
     FormatNotAvailable,
     FulfilledOnIncompatiblePlatform,
     NoAcceptableFormat,
+    NoAvailableCopies,
     NotCheckedOut,
     PatronAuthorizationFailedException,
     PatronHoldLimitReached,
@@ -40,6 +41,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     RightsStatus,
 )
+from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
@@ -806,39 +808,50 @@ class TestOverdriveAPI:
         with pytest.raises(CannotLoan, match="Some error details"):
             api.checkout(patron, pin, pool, None)
 
-        # If the error is "TitleAlreadyCheckedOut", we know that somehow we already have this title
+        # If the error is "TitleAlreadyCheckedOut" or "NoCopiesAvailable", we know that somehow we already have this title
         # checked out. In that case we make a second request to get the loan information, and return a LoanInfo object.
-        http.queue_response(
-            400, content=overdrive_api_fixture.error_message("TitleAlreadyCheckedOut")
-        )
-        http.queue_response(
-            201,
-            content=overdrive_api_fixture.data.sample_data(
-                "checkout_response_no_format_locked_in.json"
-            ),
-        )
-        loan = api.checkout(patron, pin, pool, None)
-
-        # During the checkout process, we get information about the books formats and update them correctly
-        assert {
-            (
-                dm.delivery_mechanism.content_type,
-                dm.delivery_mechanism.drm_scheme,
-                dm.available,
+        for err in ["TitleAlreadyCheckedOut", "NoCopiesAvailable"]:
+            http.queue_response(400, content=overdrive_api_fixture.error_message(err))
+            http.queue_response(
+                201,
+                content=overdrive_api_fixture.data.sample_data(
+                    "checkout_response_no_format_locked_in.json"
+                ),
             )
-            for dm in pool.delivery_mechanisms
-        } == {
-            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, True),
-            (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
-        }
+            loan = api.checkout(patron, pin, pool, None)
 
-        # The return value is a LoanInfo object with all relevant info.
-        assert isinstance(loan, LoanInfo)
-        assert loan.collection_id == pool.collection.id
-        assert loan.identifier_type == identifier.type
-        assert loan.identifier == identifier.identifier
-        assert loan.start_date is None
-        assert loan.end_date == datetime(2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc)
+            # During the checkout process, we get information about the books formats and update them correctly
+            assert {
+                (
+                    dm.delivery_mechanism.content_type,
+                    dm.delivery_mechanism.drm_scheme,
+                    dm.available,
+                )
+                for dm in pool.delivery_mechanisms
+            } == {
+                (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM, True),
+                (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM, False),
+            }
+
+            # The return value is a LoanInfo object with all relevant info.
+            assert isinstance(loan, LoanInfo)
+            assert loan.collection_id == pool.collection.id
+            assert loan.identifier_type == identifier.type
+            assert loan.identifier == identifier.identifier
+            assert loan.start_date is None
+            assert loan.end_date == datetime(
+                2014, 11, 26, 14, 22, 00, tzinfo=timezone.utc
+            )
+
+        # If we don't actually have an active loan, we raise the original exception.
+        http.queue_response(
+            400, content=overdrive_api_fixture.error_message("NoCopiesAvailable")
+        )
+        http.queue_response(
+            400, content=overdrive_api_fixture.error_message("TitleNotCheckedOut")
+        )
+        with pytest.raises(NoAvailableCopies):
+            api.checkout(patron, pin, pool, None)
 
     @pytest.mark.parametrize(
         "response_file",
@@ -876,7 +889,7 @@ class TestOverdriveAPI:
         http.queue_response(200, content="")
         with pytest.raises(
             CannotLoan,
-            match="This book is not available in a supported format",
+            match="This book is not available in a format supported by the Palace app",
         ):
             api.checkout(patron, pin, pool, None)
 
@@ -921,7 +934,7 @@ class TestOverdriveAPI:
         )
         with pytest.raises(
             CannotLoan,
-            match="This book is not available in a supported format",
+            match="This book is not available in a format supported by the Palace app",
         ):
             api.checkout(patron, pin, pool, None)
 
@@ -939,6 +952,24 @@ class TestOverdriveAPI:
         assert (
             "patron.api.overdrive.com/v1/patrons/me/checkouts/" in loan_info_request_url
         )
+
+        # If the patron has a hold on the book, but after checkout it is in an unsupported format,
+        # we don't return the book, but we delete the hold since its been converted to a loan and
+        # we return an error.
+        pool.on_hold_to(patron, position=0)
+        assert db.session.query(Hold).count() == 1
+        http.reset_mock()
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data(response_file),
+        )
+        with pytest.raises(
+            CannotLoan,
+            match="This book is not available in a format supported by the Palace app",
+        ):
+            api.checkout(patron, pin, pool, None)
+
+        assert db.session.query(Hold).count() == 0
 
     def test_place_hold(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

@@ -37,6 +37,7 @@ from palace.manager.api.circulation_exceptions import (
     FulfilledOnIncompatiblePlatform,
     NoAcceptableFormat,
     NoActiveLoan,
+    NoAvailableCopies,
     NotCheckedOut,
     PatronAuthorizationFailedException,
 )
@@ -93,8 +94,9 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
     RightsStatus,
 )
-from palace.manager.sqlalchemy.model.patron import Patron
+from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
@@ -936,15 +938,22 @@ class OverdriveAPI(
         except OverdriveResponseException as e:
             code = e.error_message
             raise CannotLoan(code) from e
-        except AlreadyCheckedOut:
-            # Client should have used a fulfill link instead, but
-            # we can handle it.
+        except (AlreadyCheckedOut, NoAvailableCopies) as e:
+            # The client should have used a fulfill link instead, but we'll handle this case.
+            # When a book has holds, the Overdrive API returns NoAvailableCopies error even if
+            # the patron already has an active loan. To address this, we check if the patron
+            # already has a loan for this title - if so, we return that loan instead of raising
+            # an exception.
             #
-            # NOTE: It's very unlikely this will happen, but it could
-            # happen if the patron borrows a book through Libby and
-            # then immediately borrows the same book through Palace.
-            checkout = self.get_loan(patron, pin, identifier.identifier)
-            already_checked_out = True
+            # NOTE: This scenario is rare but possible, typically occurring when a patron borrows
+            # a book through Libby and then immediately attempts to borrow the same title through
+            # Palace.
+            try:
+                checkout = self.get_loan(patron, pin, identifier.identifier)
+                already_checked_out = True
+            except NoActiveLoan:
+                # Reraise the original exception.
+                raise e from None
 
         # At this point we know all available formats for this book.
         # For Overdrive ebooks, this may be our first complete view of format availability.
@@ -968,10 +977,33 @@ class OverdriveAPI(
                     f"Patron checked out a book that is not available in a supported format. "
                     f"Overdrive ID: '{checkout.reserve_id}' Title: '{title}' Author: '{author}'"
                 )
-                if not already_checked_out:
+
+                existing_hold = get_one(
+                    self._db,
+                    Hold,
+                    patron=patron,
+                    license_pool=licensepool,
+                    on_multiple="interchangeable",
+                )
+
+                # Only do an early return if this is a fresh checkout and the patron isn't
+                # converting a hold to a checkout.
+                do_early_return = not already_checked_out and existing_hold is None
+
+                if do_early_return:
                     make_request = partial(self.patron_request, patron, pin)
                     checkout.action("early_return", make_request)
-                raise CannotLoan("This book is not available in a supported format.")
+
+                # If this was a hold, we remove the hold record from the database before
+                # we raise the exception, since the hold has been converted to a checkout.
+                if existing_hold:
+                    self._db.delete(existing_hold)
+
+                # TODO: Should we suggest that the patron can use Libby to read the book?
+                raise CannotLoan(
+                    "This book is not available in a format supported by the Palace app. "
+                    "We apologize for the inconvenience."
+                )
 
         # Create the loan info.
         return LoanInfo.from_license_pool(
