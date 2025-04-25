@@ -953,6 +953,7 @@ class OverdriveAPI(
                 already_checked_out = True
             except NoActiveLoan:
                 # Reraise the original exception.
+                self.log.info(f"No active loan found. Raising {e.__class__.__name__}.")
                 raise e from None
 
         # At this point we know all available formats for this book.
