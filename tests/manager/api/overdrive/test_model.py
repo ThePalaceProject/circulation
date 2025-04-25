@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from functools import partial
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -28,7 +29,10 @@ from palace.manager.api.overdrive.model import (
     Checkouts,
     ErrorResponse,
     Format,
+    Hold,
+    Holds,
     LinkTemplate,
+    PatronInformation,
 )
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.files import OverdriveFilesFixture
@@ -531,3 +535,57 @@ class TestCheckouts:
         assert checkouts.total_items == 2
         assert checkouts.total_checkouts == 2
         assert len(checkouts.checkouts) == 2
+
+
+class TestHold:
+    def test_hold(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        hold = Hold.model_validate_json(
+            overdrive_files_fixture.sample_data("successful_hold.json")
+        )
+
+        assert hold.reserve_id == "97C2836C-0C2D-4CE4-A1D7-BE3FF15E4E50"
+        assert hold.email_address == "leonardrichardson@nypl.org"
+        assert hold.hold_list_position == 1
+        assert hold.number_of_holds == 1
+        assert hold.hold_placed_date == datetime.fromisoformat(
+            "2015-03-26T11:30:29+00:00"
+        )
+        assert "metadata" in hold.links
+        assert "removeHold" in hold.actions
+
+
+class TestHolds:
+    def test_holds(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        no_holds = Holds.model_validate_json(
+            overdrive_files_fixture.sample_data("no_holds.json")
+        )
+        assert no_holds.total_items == 0
+        assert len(no_holds.holds) == 0
+
+        holds = Holds.model_validate_json(
+            overdrive_files_fixture.sample_data("holds.json")
+        )
+
+        assert holds.total_items == 4
+        assert [h.reserve_id for h in holds.holds] == [
+            "3BED96C0-36C0-4160-9A23-50B26FAC99B0",
+            "539554C4-A01D-4F59-B8E8-602F32AE785B",
+            "C823AD40-5B19-4516-93C1-88B5EA1A3E27",
+            "97C2836C-0C2D-4CE4-A1D7-BE3FF15E4E50",
+        ]
+
+
+class TestPatronInformation:
+    def test_patron_information(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        patron_information = PatronInformation.model_validate_json(
+            overdrive_files_fixture.sample_data("patron_info.json")
+        )
+
+        assert patron_information.patron_id == 1810
+        assert patron_information.website_id == 37
+        assert patron_information.last_hold_email == "foo@bar.com"
+
+        assert "checkouts" in patron_information.links
+        assert "search" in patron_information.link_templates
