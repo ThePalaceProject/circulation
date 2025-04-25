@@ -779,7 +779,9 @@ class TestAxis360API:
             licenses_available=7,
         )
 
-        bibliographic = copy.deepcopy(axis360.BIBLIOGRAPHIC_DATA)
+        # deepcopy would be preferable here, but I was running into low level errors.
+        # A shallow copy should be sufficient here.
+        bibliographic = copy.copy(axis360.BIBLIOGRAPHIC_DATA)
         bibliographic.circulation = new_circulation
 
         e2, e_new, lp2, lp_new = api.update_book(
