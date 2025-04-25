@@ -23,11 +23,11 @@ class TestAxisCollectionImportScript:
 
             assert list_import.apply_async.call_args[1] == {
                 "kwargs": {"collection_id": collection.id, "import_all": True},
-                "link": import_identifiers.s(collection_id=1),
+                "link": import_identifiers.s(collection_id=collection.id),
             }
 
     def test_axis_import_collection_not_found(self, db: DatabaseTransactionFixture):
         collection_name = "test_collection"
         with pytest.raises(ValueError) as e:
             ImportCollection(db.session).do_run(["--collection-name", collection_name])
-            assert f'No collection found named "{collection_name}".' in e.value
+            assert f'No collection found named "{collection_name}".' in str(e.value)
