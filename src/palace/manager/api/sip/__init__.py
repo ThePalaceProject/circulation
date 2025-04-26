@@ -114,17 +114,13 @@ class SIP2Settings(BasicAuthProviderSettings):
     ils: Sip2Dialect = FormField(
         Sip2Dialect.GENERIC_ILS,
         form=ConfigurationFormItem(
-            label="ILS",
+            label="ILS Dialect",
             description=(
                 "Some ILS require specific SIP2 settings. If the ILS you are using "
-                "is in the list please pick it otherwise select 'Generic ILS'."
+                f"is in the list, please pick it. Otherwise, select '{Sip2Dialect.preferred()}'."
             ),
             type=ConfigurationFormItemType.SELECT,
-            options={
-                Sip2Dialect.GENERIC_ILS: "Generic ILS",
-                Sip2Dialect.AG_VERSO: "Auto-Graphics VERSO",
-                Sip2Dialect.FOLIO: "Folio",
-            },
+            options=Sip2Dialect.form_options(),  # type: ignore[arg-type]
             required=True,
         ),
     )
@@ -312,6 +308,7 @@ class SIP2AuthenticationProvider(
             sip = self.client
             sip.connect()
             sip.login()
+            sip.sc_status()
             info = sip.patron_information(username, password)
             sip.end_session(username, password)
             sip.disconnect()
@@ -368,6 +365,14 @@ class SIP2AuthenticationProvider(
             sip.login,
         )
         yield login
+
+        def raw_sc_status_information():
+            info = sip.sc_status()
+            return json.dumps(info, indent=2)
+
+        yield self.run_test(
+            "ILS SIP Service Info (SC Status)", raw_sc_status_information
+        )
 
         # Log in was successful so test patron's test credentials
         if login.success:

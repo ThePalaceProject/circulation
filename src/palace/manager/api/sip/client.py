@@ -90,6 +90,21 @@ fixed._add("unavailable_holds_count", 4)
 fixed._add("login_ok", 1)
 fixed._add("end_session", 1)
 
+# ACS Status fixed fields.
+# These next fields have values "Y" or "N".
+fixed._add("online_status", 1)
+fixed._add("checkin_ok", 1)
+fixed._add("checkout_ok", 1)
+fixed._add("acs_renewal_policy", 1)
+fixed._add("status_update_ok", 1)
+fixed._add("offline_ok", 1)
+
+# Other ACS Status fixed fields.
+fixed._add("timeout_period", 3)
+fixed._add("retries_allowed", 3)
+fixed._add("datetime_sync", 18)
+fixed._add("protocol_version", 4)
+
 
 class named:
     """A variable-length field in a SIP2 response."""
@@ -202,6 +217,16 @@ named._add("polaris_patron_birthdate", "BC")
 named._add("polaris_postal_code", "PZ")
 named._add("polaris_patron_expiration", "PX")
 named._add("polaris_patron_expired", "PY")
+
+# Some fields first seen in an OCLC Wise SIP2 response.
+# This first group included in the spec.
+named._add("library_name", "AM")
+named._add("supported_messages", "BX")
+named._add("terminal_location", "AN")
+# Not seen in the spec, but seen in the OCLC Wise SIP2 response.
+# See: https://help.wise.oclc.org/Staff_client/Library_self-service/SIP2_for_Wise/SIP2_suppliers#SIP2_licenses
+named._add("wise_licenses_and_extensions", "GG")
+
 
 # A potential problem: Polaris defines PA to refer to something else.
 
@@ -356,6 +381,22 @@ class SIPClient(Constants, LoggerMixin):
             self.must_log_in = False
         self.login_password = login_password
         self.dialect_config = dialect.config
+
+    def sc_status(self) -> dict[str, str] | None:
+        """Get information about the SIP server.
+
+        Per the SIP v2.0 spec, "This message will be the first message sent by
+        the SC to the ACS once a connection has been established (exception:
+        the Login Message may be sent first to login to an ACS server program)."
+        """
+        if not self.dialect_config.send_sc_status:
+            # The ACS doesn't support/require the SC Status message.
+            return None
+
+        return self.make_request(
+            self.sc_status_message,
+            self.sc_status_response_parser,
+        )
 
     def login(self):
         """Log in to the SIP server if required."""
@@ -514,6 +555,60 @@ class SIPClient(Constants, LoggerMixin):
                 )
             retries += 1
         return parsed
+
+    @staticmethod
+    def sc_status_message(
+        *,
+        code: str = "0",
+        max_print_width: int = 999,
+        protocol_version: float = 2.00,
+    ) -> str:  # sourcery skip: move-assign-in-block, use-fstring-for-concatenation
+        """Generate a message for logging in to a SIP server.
+
+        :param code: The status code ("0", "1", or "2") to send. Default is 0.
+        :param max_print_width: The maximum print width of the message.
+        :param protocol_version: The SIP2 protocol version to use.
+
+        Sample message from default arguments: `9909992.00`
+        """
+
+        if code not in ("0", "1", "2"):
+            raise ValueError("'code' must be '0', '1', or '2'")
+        # _max_print_width format is a positive, 3-digit, 0-padded number (e.g., 100)
+        if max_print_width < 0 or max_print_width > 999:
+            raise ValueError("'max_print_width' must be between 0 and 999")
+        _max_print_width = f"{max_print_width:03}"
+
+        # _protocol version is a positive floating point number that must be formated as string of n.nn
+        if protocol_version < 0.0 or protocol_version > 9.99:
+            raise ValueError("'protocol_version' must be between 0.0 and 9.99")
+        _protocol_version = f"{protocol_version:.2f}"
+
+        return "99" + code + _max_print_width + _protocol_version
+
+    def sc_status_response_parser(self, message):
+        """Parse the response from a status message."""
+        return self.parse_response(
+            message,
+            98,
+            fixed.online_status,
+            fixed.checkin_ok,
+            fixed.checkout_ok,
+            fixed.acs_renewal_policy,
+            fixed.status_update_ok,
+            fixed.offline_ok,
+            fixed.timeout_period,
+            fixed.retries_allowed,
+            fixed.datetime_sync,
+            fixed.protocol_version,
+            named.institution_id,
+            named.library_name,
+            named.supported_messages,
+            named.terminal_location,
+            named.screen_message,
+            named.print_line,
+            named.wise_licenses_and_extensions,
+        )
 
     def login_message(
         self,
@@ -907,7 +1002,7 @@ class SIPClient(Constants, LoggerMixin):
         start_time = time.time()
         self.connection.sendall(data)
         time_taken = time.time() - start_time
-        self.log.info("Sent %s bytes in %.2f seconds", len(data), time_taken)
+        self.log.info("Sent %s bytes in %.2f seconds: %r", len(data), time_taken, data)
 
     def read_message(self, max_size=1024 * 1024):
         """Read a SIP2 message from the socket connection.
@@ -929,7 +1024,9 @@ class SIPClient(Constants, LoggerMixin):
             if len(data) > max_size:
                 raise OSError("SIP2 response too large.")
         time_taken = time.time() - start_time
-        self.log.info("Received %s bytes in %.2f seconds", len(data), time_taken)
+        self.log.info(
+            "Received %s bytes in %.2f seconds: %r", len(data), time_taken, data
+        )
         return data
 
     def append_checksum(self, text, include_sequence_number=True):

@@ -702,6 +702,9 @@ class TestSIP2AuthenticationProvider:
                 if not self.login_user_id and not self.login_password:
                     raise OSError("Error logging in")
 
+            def sc_status(self):
+                return {"_status": "98", "online_status": "Y"}
+
             def patron_information(self, username, password):
                 return self.patron_information_parser(
                     TestSIP2AuthenticationProvider.sierra_valid_login
@@ -720,7 +723,7 @@ class TestSIP2AuthenticationProvider:
         provider = create_provider(settings=settings, client=MockSIPLogin)
         results = [x for x in provider._run_self_tests(db.session)]
 
-        assert len(results) == 2
+        assert len(results) == 3
         assert results[0].name == "Test Connection"
         assert results[0].success == True
 
@@ -728,6 +731,12 @@ class TestSIP2AuthenticationProvider:
         assert results[1].success == False
         assert isinstance(results[1].exception, IOError)
         assert results[1].exception.args == ("Error logging in",)
+
+        assert results[2].name == "ILS SIP Service Info (SC Status)"
+        assert results[2].success == True
+        assert results[2].result == json.dumps(
+            {"_status": "98", "online_status": "Y"}, indent=2
+        )
 
         # Set the log in username and password
         settings = create_settings(
@@ -739,7 +748,7 @@ class TestSIP2AuthenticationProvider:
         provider = create_provider(settings=settings, client=MockSIPLogin)
         results = [x for x in provider._run_self_tests(db.session)]
 
-        assert len(results) == 3
+        assert len(results) == 4
         assert results[0].name == "Test Connection"
         assert results[0].success == True
 
@@ -748,10 +757,16 @@ class TestSIP2AuthenticationProvider:
         )
         assert results[1].success == True
 
-        assert results[2].name == "Authenticating test patron"
-        assert results[2].success == False
-        assert isinstance(results[2].exception, CannotLoadConfiguration)
-        assert results[2].exception.args == (
+        assert results[2].name == "ILS SIP Service Info (SC Status)"
+        assert results[2].success == True
+        assert results[2].result == json.dumps(
+            {"_status": "98", "online_status": "Y"}, indent=2
+        )
+
+        assert results[3].name == "Authenticating test patron"
+        assert results[3].success == False
+        assert isinstance(results[3].exception, CannotLoadConfiguration)
+        assert results[3].exception.args == (
             "No test patron identifier is configured.",
         )
 
@@ -772,7 +787,7 @@ class TestSIP2AuthenticationProvider:
         client = cast(MockSIPClient, provider.client)
         results = [x for x in provider._run_self_tests(db.session)]
 
-        assert len(results) == 6
+        assert len(results) == 7
         assert results[0].name == "Test Connection"
         assert results[0].success == True
 
@@ -781,25 +796,31 @@ class TestSIP2AuthenticationProvider:
         )
         assert results[1].success == True
 
-        assert results[2].name == "Patron information request"
+        assert results[2].name == "ILS SIP Service Info (SC Status)"
         assert results[2].success == True
-        assert results[2].result == provider.client.patron_information_request(
+        assert results[2].result == json.dumps(
+            {"_status": "98", "online_status": "Y"}, indent=2
+        )
+
+        assert results[3].name == "Patron information request"
+        assert results[3].success == True
+        assert results[3].result == provider.client.patron_information_request(
             "usertest1", "userpassword1"
         )
 
-        assert results[3].name == "Raw test patron information"
-        assert results[3].success == True
-        assert results[3].result == json.dumps(
+        assert results[4].name == "Raw test patron information"
+        assert results[4].success == True
+        assert results[4].result == json.dumps(
             client.patron_information_parser(
                 TestSIP2AuthenticationProvider.sierra_valid_login
             ),
             indent=1,
         )
 
-        assert results[4].name == "Authenticating test patron"
-        assert results[4].success == True
+        assert results[5].name == "Authenticating test patron"
+        assert results[5].success == True
 
         # Since test patron authentication is true, we can now see self
         # test results for syncing metadata and the raw data from `patron_information`
-        assert results[5].name == "Syncing patron metadata"
-        assert results[5].success == True
+        assert results[6].name == "Syncing patron metadata"
+        assert results[6].success == True

@@ -23,6 +23,9 @@ class MockSIPClient(SIPClient):
             response = response.encode(Constants.DEFAULT_ENCODING)
         self.responses.append(response)
 
+    def dequeue_response(self):
+        return self.responses.pop(0)
+
     def connect(self):
         # Since there is no socket, do nothing but reset the local
         # connection-specific variables.

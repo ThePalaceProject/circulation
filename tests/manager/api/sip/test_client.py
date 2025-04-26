@@ -5,6 +5,7 @@ import ssl
 import tempfile
 from collections.abc import Callable
 from functools import partial
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -377,6 +378,64 @@ class TestBasicProtocol:
         message = sip.login_message("user_id", "password")
         assert "9300CNuser_id|COpassword" == message
 
+    @pytest.mark.parametrize(
+        "call_kwargs, expected_message",
+        (
+            pytest.param({}, "9909992.00", id="default"),
+            pytest.param({"code": "1"}, "9919992.00", id="override-code"),
+            pytest.param(
+                {"max_print_width": 5}, "9900052.00", id="override-max-print-width"
+            ),
+            pytest.param(
+                {"protocol_version": 4.9}, "9909994.90", id="override-protocol-version"
+            ),
+            pytest.param(
+                {"code": "1", "max_print_width": 234, "protocol_version": 5.67},
+                "9912345.67",
+                id="override-all",
+            ),
+        ),
+    )
+    def test_sc_status_message(
+        self,
+        sip_client_factory: Callable[..., MockSIPClient],
+        call_kwargs: dict[str, Any],
+        expected_message: str,
+    ):
+        """Test the SIP SC Status (99) message."""
+        sip = sip_client_factory()
+        message = sip.sc_status_message(**call_kwargs)
+        assert expected_message == message
+
+    @pytest.mark.parametrize(
+        "call_kwargs, expected_match",
+        (
+            pytest.param(
+                {"code": "3"}, "'code' must be '0', '1', or '2'", id="override-code"
+            ),
+            pytest.param(
+                {"max_print_width": 1000},
+                "'max_print_width' must be between 0 and 999",
+                id="override-max-print-width",
+            ),
+            pytest.param(
+                {"protocol_version": 10},
+                "'protocol_version' must be between 0.0 and 9.99",
+                id="override-protocol-version",
+            ),
+        ),
+    )
+    def test_sc_status_message_errors(
+        self,
+        sip_client_factory: Callable[..., MockSIPClient],
+        call_kwargs: dict[str, Any],
+        expected_match: str,
+    ):
+        """Test the SIP SC Status (99) message with errors."""
+        sip = sip_client_factory()
+        with pytest.raises(ValueError, match=expected_match):
+            sip.sc_status_message(**call_kwargs)
+
     def test_append_checksum(self, sip_client_factory: Callable[..., MockSIPClient]):
         sip = sip_client_factory()
         sip.sequence_number = 7
@@ -534,6 +593,44 @@ class TestLogin:
 
         # We ended up with the right data.
         assert "12345" == response["patron_identifier"]
+
+
+class TestScStatus:
+    STATUS_RESPONSE = "98YNYYNY30000320250425    1710522.00AOMyInstID|BXYYYYYYNYYYYYNYYY|AMExample Library|AFWelcome, Client!"
+
+    def test_status_when_sent(self, sip_client_factory: Callable[..., MockSIPClient]):
+        # Here, we need to use a dialect that sends the SC Status message.
+        sip = sip_client_factory(dialect=Dialect.SIP_V2)
+        sip.queue_response(self.STATUS_RESPONSE)
+        response = sip.sc_status()
+        assert sip.dialect_config.send_sc_status is True
+        assert response == {
+            "_status": "98",
+            "online_status": "Y",
+            "checkin_ok": "N",
+            "checkout_ok": "Y",
+            "acs_renewal_policy": "Y",
+            "status_update_ok": "N",
+            "offline_ok": "Y",
+            "timeout_period": "300",
+            "retries_allowed": "003",
+            "datetime_sync": "20250425    171052",
+            "protocol_version": "2.00",
+            "institution_id": "MyInstID",
+            "library_name": "Example Library",
+            "supported_messages": "YYYYYYNYYYYYNYYY",
+            "screen_message": ["Welcome, Client!"],
+        }
+
+    def test_status_when_not_sent(
+        self, sip_client_factory: Callable[..., MockSIPClient]
+    ):
+        # Here, we need to use a dialect that does NOT send the SC Status message.
+        sip = sip_client_factory(dialect=Dialect.AG_VERSO)
+        sip.queue_response(self.STATUS_RESPONSE)
+        response = sip.sc_status()
+        assert sip.dialect_config.send_sc_status is False
+        assert response is None
 
 
 class TestPatronResponse:
@@ -738,6 +835,9 @@ class TestClientDialects:
             # AG VERSO ILS shouldn't end_session message
             (Dialect.AG_VERSO, 0, 0, False),
             (Dialect.FOLIO, 1, 1, True),
+            # The more 2.00 spec-compliant version sends both SC status (99)
+            # and end patron session (35) messages, and receives their responses.
+            (Dialect.SIP_V2, 2, 2, True),
         ],
     )
     def test_dialect(
@@ -749,8 +849,17 @@ class TestClientDialects:
         expected_tz_spaces,
     ):
         sip = sip_client_factory(dialect=dialect)
+        # We need to queue a SC Status response, in case the dialect supports
+        # it. If we get None back, we know that the message wasn't sent, so
+        # need to dequeue the response, so we don't break the res of the test.
+        sip.queue_response(TestScStatus.STATUS_RESPONSE)
+        if sip.sc_status() is None:
+            sip.dequeue_response()
+            assert sip.dialect_config.send_sc_status is False
+
         sip.queue_response("36Y201610210000142637AO3|AA25891000331441|AF|AG")
         sip.end_session("username", "password")
+
         assert sip.dialect_config == dialect.config
         assert sip.read_count == expected_read_count
         assert sip.write_count == expected_write_count
