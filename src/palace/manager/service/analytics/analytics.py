@@ -9,13 +9,13 @@ from palace.manager.service.analytics.eventdata import AnalyticsEventData
 from palace.manager.service.analytics.local import LocalAnalyticsProvider
 from palace.manager.service.analytics.provider import AnalyticsProvider
 from palace.manager.service.analytics.s3 import S3AnalyticsProvider
-from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.log import LoggerMixin
 
 if TYPE_CHECKING:
     from palace.manager.service.storage.s3 import S3Service
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.licensing import LicensePool
+    from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class Analytics(LoggerMixin, AnalyticsProvider):

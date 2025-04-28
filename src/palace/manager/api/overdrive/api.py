@@ -998,7 +998,7 @@ class OverdriveAPI(
                 # If this was a hold, we remove the hold record from the database before
                 # we raise the exception, since the hold has been converted to a checkout.
                 if existing_hold:
-                    self._db.delete(existing_hold)
+                    existing_hold.collect_event_and_delete()
 
                 msg = (
                     "This book is not available in a format supported by the Palace app. "
@@ -1006,7 +1006,7 @@ class OverdriveAPI(
                 )
 
                 if not do_early_return:
-                    msg += " You may be able to read this book by logging into the Overdrive website."
+                    msg += " You may be able to read this book by logging into the OverDrive website."
 
                 raise CannotLoan(msg)
 

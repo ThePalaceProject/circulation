@@ -94,6 +94,7 @@ def wire_container(container: Services) -> None:
             "palace.manager.sqlalchemy.model.lane",
             "palace.manager.core.metadata_layer",
             "palace.manager.sqlalchemy.model.collection",
+            "palace.manager.sqlalchemy.model.patron",
             "palace.manager.sqlalchemy.model.work",
         ]
     )

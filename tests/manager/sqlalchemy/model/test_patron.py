@@ -24,6 +24,7 @@ from palace.manager.sqlalchemy.util import (
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestAnnotation:
@@ -267,6 +268,32 @@ class TestHold:
         # vendor-provided value.
         hold.end = None
         assert_calculated_value_used()
+
+    def test_collect_event_and_delete(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ) -> None:
+        patron = db.patron()
+        work = db.work(with_license_pool=True)
+        pool = work.active_license_pool()
+        hold, _ = pool.on_hold_to(patron)
+
+        # If we provide None as an analytics service, the hold is just deleted.
+        hold.collect_event_and_delete(None)
+        assert db.session.query(Hold).count() == 0
+
+        # If we provide an analytics service, it is used to collect the event and the hold is deleted.
+        hold, _ = pool.on_hold_to(patron)
+        mock_analytics = MagicMock()
+        hold.collect_event_and_delete(mock_analytics)
+        assert db.session.query(Hold).count() == 0
+        mock_analytics.collect_event.assert_called_once()
+
+        # If analytics is not provided we use the one provided via dependency injection.
+        hold, _ = pool.on_hold_to(patron)
+        with services_fixture.wired():
+            hold.collect_event_and_delete()
+        assert db.session.query(Hold).count() == 0
+        services_fixture.analytics_fixture.analytics_mock.collect_event.assert_called_once()
 
 
 class TestLoans:

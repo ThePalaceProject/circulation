@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import cached_property
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import flask
 from pydantic import AwareDatetime, BaseModel, ConfigDict, computed_field
 from typing_extensions import Self
 
-from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin
+
+if TYPE_CHECKING:
+    from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.licensing import LicensePool
+    from palace.manager.sqlalchemy.model.patron import Patron
 
 
 class AnalyticsEventData(BaseModel, LoggerMixin):

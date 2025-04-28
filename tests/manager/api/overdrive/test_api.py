@@ -33,6 +33,7 @@ from palace.manager.api.overdrive.representation import OverdriveRepresentationE
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
 from palace.manager.sqlalchemy.constants import MediaTypes
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -49,6 +50,7 @@ from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
+from tests.fixtures.services import ServicesFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.mocks.mock import MockRequestsResponse
 
@@ -864,6 +866,7 @@ class TestOverdriveAPI:
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
+        services_fixture_wired: ServicesFixture,
         response_file: str,
     ):
         # Verify the process of checking out a book.
@@ -968,6 +971,12 @@ class TestOverdriveAPI:
             match="This book is not available in a format supported by the Palace app",
         ):
             api.checkout(patron, pin, pool, None)
+        services_fixture_wired.analytics_fixture.analytics_mock.collect_event.assert_called_once_with(
+            db.default_library(),
+            pool,
+            CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN,
+            patron=patron,
+        )
 
         assert db.session.query(Hold).count() == 0
 

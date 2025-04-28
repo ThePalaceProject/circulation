@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from dependency_injector.wiring import Provide, inject
 from psycopg2.extras import NumericRange
 from sqlalchemy import (
     Boolean,
@@ -30,12 +31,14 @@ from palace.manager.service.redis.key import RedisKeyMixin
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
+from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import NumericRangeTuple, numericrange_to_tuple
 from palace.manager.util.datetime_helpers import utc_now
 
 if TYPE_CHECKING:
+    from palace.manager.service.analytics.analytics import Analytics
     from palace.manager.sqlalchemy.model.devicetokens import DeviceToken
     from palace.manager.sqlalchemy.model.identifier import Identifier
     from palace.manager.sqlalchemy.model.lane import Lane
@@ -692,6 +695,27 @@ class Hold(Base, LoanAndHoldMixin):
             self.end = end
         if position is not None:
             self.position = position
+
+    @inject
+    def collect_event_and_delete(
+        self, analytics: Analytics | None = Provide["analytics.analytics"]
+    ) -> None:
+        """
+        When a hold is converted to a loan, we log the event and delete
+        the hold record.
+        """
+        session = Session.object_session(self)
+
+        # Log the event
+        if analytics is not None:
+            analytics.collect_event(
+                self.patron.library,
+                self.license_pool,
+                CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN,
+                patron=self.patron,
+            )
+
+        session.delete(self)
 
     __table_args__ = (UniqueConstraint("patron_id", "license_pool_id"),)
 
