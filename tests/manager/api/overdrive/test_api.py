@@ -971,7 +971,10 @@ class TestOverdriveAPI:
             match="This book is not available in a format supported by the Palace app",
         ):
             api.checkout(patron, pin, pool, None)
-        services_fixture_wired.analytics_fixture.analytics_mock.collect_event.assert_called_once_with(
+        mock_collect = (
+            services_fixture_wired.analytics_fixture.analytics_mock.collect_event
+        )
+        mock_collect.assert_called_once_with(
             db.default_library(),
             pool,
             CirculationEvent.CM_HOLD_CONVERTED_TO_LOAN,
