@@ -84,7 +84,7 @@ class TestOverdriveRepresentationExtractor:
         assert 10 == circulationdata.patrons_in_hold_queue
 
         # Related IDs.
-        identifier = circulationdata.primary_identifier(session)
+        identifier = circulationdata.primary_identifier_db(session)
         assert (Identifier.OVERDRIVE_ID, "2a005d55-a417-4053-b90d-7a38ca6d2065") == (
             identifier.type,
             identifier.identifier,
@@ -163,7 +163,7 @@ class TestOverdriveRepresentationExtractor:
         identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         info["id"] = identifier.identifier
         data = m(info)
-        assert identifier == data.primary_identifier(transaction.session)
+        assert identifier == data.primary_identifier_db(transaction.session)
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
@@ -196,7 +196,7 @@ class TestOverdriveRepresentationExtractor:
         [author] = metadata.contributors
         assert "Rüping, Andreas" == author.sort_name
         assert "Andreas Rüping" == author.display_name
-        assert [Contributor.Role.AUTHOR] == author.roles
+        assert (Contributor.Role.AUTHOR,) == author.roles
 
         subjects = sorted(metadata.subjects, key=lambda x: x.identifier)
 

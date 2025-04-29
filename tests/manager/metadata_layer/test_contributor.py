@@ -1,3 +1,5 @@
+from functools import partial
+
 from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -6,14 +8,13 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestContributorData:
     def test__init__(self):
         # Roles defaults to AUTHOR
-        assert ContributorData().roles == [Contributor.Role.AUTHOR]
+        assert ContributorData().roles == (Contributor.Role.AUTHOR,)
 
-        # If roles is a string, it is converted into a list
-        assert ContributorData(roles="foo").roles == ["foo"]
+        # If sort_name is given then it is used as the cached value
+        assert ContributorData(sort_name="foo")._cached_sort_name == "foo"
 
-        # if roles is a sequence (tuple, list, etc), it is copied to a list
-        assert ContributorData(roles=("x", "y")).roles == ["x", "y"]
-        assert ContributorData(roles=["x", "y"]).roles == ["x", "y"]
+        # Test that ContributorData is hashable
+        hash(ContributorData())
 
     def test_from_contribution(self, db: DatabaseTransactionFixture):
         # Makes sure ContributorData.from_contribution copies all the fields over.
@@ -31,131 +32,127 @@ class TestContributorData:
         contributor.family_name = "TestAuttie"
         contributor.wikipedia_name = "TestWikiAuth"
         contributor.biography = "He was born on Main Street."
+        contributor.extra[Contributor.BIRTH_DATE] = "2001-01-01"
 
         contributor_data = ContributorData.from_contribution(contribution)
 
         # make sure contributor fields are still what I expect
         assert contributor_data.lc == contributor.lc
         assert contributor_data.viaf == contributor.viaf
-        assert contributor_data.aliases == contributor.aliases
+        assert contributor_data.aliases == tuple(contributor.aliases)
         assert contributor_data.display_name == contributor.display_name
         assert contributor_data.family_name == contributor.family_name
         assert contributor_data.wikipedia_name == contributor.wikipedia_name
         assert contributor_data.biography == contributor.biography
+        assert contributor_data.extra == contributor.extra
 
     def test_lookup(self, db: DatabaseTransactionFixture):
         # Test the method that uses the database to gather as much
         # self-consistent information as possible about a person.
-        def m(*args, **kwargs):
-            return ContributorData.lookup(db.session, *args, **kwargs)
+        lookup = partial(ContributorData.lookup, db.session)
 
         # We know very little about this person.
-        l1, ignore = db.contributor(
+        db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
         )
+        al = ContributorData(
+            display_name="Ann Leckie", sort_name="Leckie, Ann", roles=[]
+        )
 
         # We know a lot about this person.
-        pkd, ignore = db.contributor(
+        db.contributor(
             sort_name="Dick, Phillip K.",
             display_name="Phillip K. Dick",
             viaf="27063583",
             lc="n79018147",
         )
-
-        def _match(expect, actual):
-            # Verify that two ContributorData objects have the
-            # same db.
-            #
-            # If a value is None in one ContributorData, it must be None
-            # in the other.
-            assert isinstance(actual, ContributorData)
-            assert expect.sort_name == actual.sort_name
-            assert expect.display_name == actual.display_name
-            assert expect.lc == actual.lc
-            assert expect.viaf == actual.viaf
+        pkd = ContributorData(
+            sort_name="Dick, Phillip K.",
+            display_name="Phillip K. Dick",
+            viaf="27063583",
+            lc="n79018147",
+            roles=[],
+        )
 
         # If there's no Contributor that matches the request, the method
         # returns None.
-        assert None == m(sort_name="Marenghi, Garth")
+        assert lookup(sort_name="Marenghi, Garth") is None
 
         # If one and only one Contributor matches the request, the method
         # returns a ContributorData with all necessary information.
-        _match(pkd, m(display_name="Phillip K. Dick"))
-        _match(pkd, m(sort_name="Dick, Phillip K."))
-        _match(pkd, m(viaf="27063583"))
-        _match(pkd, m(lc="n79018147"))
+        assert lookup(display_name="Phillip K. Dick") == pkd
+        assert lookup(sort_name="Dick, Phillip K.") == pkd
+        assert lookup(viaf="27063583") == pkd
+        assert lookup(lc="n79018147") == pkd
 
         # If we're able to identify a Contributor from part of the
         # input, then any contradictory input is ignored in favor of
         # what we know from the database.
-        _match(
-            pkd,
-            m(
+        assert (
+            lookup(
                 display_name="Phillip K. Dick",
                 sort_name="Marenghi, Garth",
                 viaf="1234",
                 lc="abcd",
-            ),
+            )
+            == pkd
         )
 
         # If we're able to identify a Contributor, but we don't know some
         # of the information, those fields are left blank.
-        expect = ContributorData(display_name="Ann Leckie", sort_name="Leckie, Ann")
-        _match(expect, m(display_name="Ann Leckie"))
+        assert lookup(display_name="Ann Leckie") == al
 
         # Now let's test cases where the database lookup finds
         # multiple Contributors.
 
         # An exact duplicate of an existing Contributor changes
         # nothing.
-        duplicate, ignore = db.contributor(
+        db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
         )
-        _match(expect, m(display_name="Ann Leckie"))
+        assert lookup(display_name="Ann Leckie") == al
 
         # If there's a duplicate that adds more information, multiple
         # records are consolidated, creating a synthetic
         # ContributorData that doesn't correspond to any one
         # Contributor.
-        with_viaf, ignore = db.contributor(
+        db.contributor(
             display_name="Ann Leckie",
+            sort_name="Leckie, Ann",
             viaf="73520345",
         )
-        # _contributor() set sort_name to a random value; remove it.
-        with_viaf.sort_name = None
 
         expect = ContributorData(
-            display_name="Ann Leckie", sort_name="Leckie, Ann", viaf="73520345"
+            display_name="Ann Leckie",
+            sort_name="Leckie, Ann",
+            viaf="73520345",
+            roles=[],
         )
-        _match(expect, m(display_name="Ann Leckie"))
+        assert lookup(display_name="Ann Leckie") == expect
 
         # Again, this works even if some of the incoming arguments
         # turn out not to be supported by the database db.
-        _match(
-            expect, m(display_name="Ann Leckie", sort_name="Ann Leckie", viaf="abcd")
+        assert (
+            lookup(display_name="Ann Leckie", sort_name="Ann Leckie", viaf="abcd")
+            == expect
         )
 
         # If there's a duplicate that provides conflicting information,
         # the corresponding field is left blank -- we don't know which
         # value is correct.
-        with_incorrect_viaf, ignore = db.contributor(
-            display_name="Ann Leckie",
-            viaf="abcd",
-        )
-        with_incorrect_viaf.sort_name = None
-        expect = ContributorData(
+        db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
+            viaf="abcd",
         )
-        _match(expect, m(display_name="Ann Leckie"))
+        assert lookup(display_name="Ann Leckie") == al
 
         # If there's conflicting information in the database for a
         # field, but the input included a value for that field, then
         # the input value is used.
-        expect.viaf = "73520345"
-        _match(expect, m(display_name="Ann Leckie", viaf="73520345"))
+        assert lookup(display_name="Ann Leckie", viaf="73520345") == expect
 
     def test_apply(self, db: DatabaseTransactionFixture):
         # Makes sure ContributorData.apply copies all the fields over when there's changes to be made.
@@ -221,36 +218,28 @@ class TestContributorData:
         )
 
     def test_find_sort_name(self, db: DatabaseTransactionFixture):
-        existing_contributor, ignore = db.contributor(
-            sort_name="Author, E.", display_name="Existing Author"
-        )
-        contributor_data = ContributorData()
+        db.contributor(sort_name="Author, E.", display_name="Existing Author")
 
         # If there's already a sort name, keep it.
-        contributor_data.sort_name = "Sort Name"
-        assert True == contributor_data.find_sort_name(db.session)
-        assert "Sort Name" == contributor_data.sort_name
+        contributor_data = ContributorData(sort_name="Sort Name")
+        assert contributor_data.find_sort_name(db.session) == "Sort Name"
 
-        contributor_data.sort_name = "Sort Name"
-        contributor_data.display_name = "Existing Author"
-        assert True == contributor_data.find_sort_name(db.session)
-        assert "Sort Name" == contributor_data.sort_name
+        contributor_data = ContributorData(
+            sort_name="Sort Name", display_name="Existing Author"
+        )
+        assert contributor_data.find_sort_name(db.session) == "Sort Name"
 
-        contributor_data.sort_name = "Sort Name"
-        contributor_data.display_name = "Metadata Client Author"
-        assert True == contributor_data.find_sort_name(db.session)
-        assert "Sort Name" == contributor_data.sort_name
+        contributor_data = ContributorData(
+            sort_name="Sort Name", display_name="Metadata Client Author"
+        )
+        assert contributor_data.find_sort_name(db.session) == "Sort Name"
 
         # If there's no sort name but there's already an author with the same display name,
         # use that author's sort name.
-        contributor_data.sort_name = None
-        contributor_data.display_name = "Existing Author"
-        assert True == contributor_data.find_sort_name(db.session)
-        assert "Author, E." == contributor_data.sort_name
+        contributor_data = ContributorData(display_name="Existing Author")
+        assert contributor_data.find_sort_name(db.session) == "Author, E."
 
         # If there's no sort name, no existing author, and nothing from the metadata
         # wrangler, guess the sort name based on the display name.
-        contributor_data.sort_name = None
-        contributor_data.display_name = "New Author"
-        assert True == contributor_data.find_sort_name(db.session)
-        assert "Author, New" == contributor_data.sort_name
+        contributor_data = ContributorData(display_name="New Author")
+        assert contributor_data.find_sort_name(db.session) == "Author, New"

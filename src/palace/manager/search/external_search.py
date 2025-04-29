@@ -44,7 +44,6 @@ from palace.manager.search.service import (
 )
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Pagination
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.work import Work
@@ -2273,9 +2272,7 @@ class Filter(SearchBase):
         into IdentifierData.
         """
         for i in identifiers:
-            if isinstance(i, Identifier):
-                i = IdentifierData(i.type, i.identifier)
-            yield i
+            yield IdentifierData.from_identifier(i)
 
     @classmethod
     def _chain_filters(cls, existing, new):

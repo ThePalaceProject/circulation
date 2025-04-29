@@ -198,7 +198,7 @@ class TestEdition:
             edition.equivalent_identifiers(policy=policy)
         )
 
-        policy.equivalent_identifier_threshold = 0.7
+        policy = PresentationCalculationPolicy(equivalent_identifier_threshold=0.7)
         assert {edition.primary_identifier} == set(
             edition.equivalent_identifiers(policy=policy)
         )

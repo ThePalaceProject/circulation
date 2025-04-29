@@ -482,7 +482,7 @@ class TestWorkController:
 
         # Prep an empty recommendation.
         source = DataSource.lookup(work_fixture.db.session, self.datasource)
-        metadata = Metadata(source)
+        metadata = Metadata(data_source=source)
         mock_api = create_autospec(NoveListAPI)
 
         args = [self.identifier.type, self.identifier.identifier]
@@ -658,7 +658,7 @@ class TestWorkController:
         # index is also mocked, so within this test will return the
         # same book it always does -- same_author_and_series.
         overdrive = DataSource.lookup(work_fixture.db.session, DataSource.OVERDRIVE)
-        metadata = Metadata(overdrive)
+        metadata = Metadata(data_source=overdrive)
         recommended_identifier = work_fixture.db.identifier()
         metadata.recommendations = [recommended_identifier]
         mock_api.lookup.return_value = metadata

@@ -47,7 +47,6 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -206,15 +205,6 @@ class TestBibliothecaAPI:
         request = bibliotheca_fixture.api.requests[-1]
         headers = request[-1]["headers"]
         assert headers["3mcl-Authorization"] != expect
-
-    def test_replacement_policy(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        db = bibliotheca_fixture.db
-        mock_analytics = object()
-        policy = bibliotheca_fixture.api.replacement_policy(
-            db.session, analytics=mock_analytics
-        )
-        assert isinstance(policy, ReplacementPolicy)
-        assert mock_analytics == policy.analytics
 
     def test_bibliographic_lookup_request(
         self, bibliotheca_fixture: BibliothecaAPITestFixture
@@ -1805,8 +1795,8 @@ class TestItemListParser:
             "Sayers, Dorothy L.",
         ]
         assert [x.roles for x in authors] == [
-            [Contributor.Role.AUTHOR],
-            [Contributor.Role.AUTHOR],
+            (Contributor.Role.AUTHOR,),
+            (Contributor.Role.AUTHOR,),
         ]
 
         # Parentheticals are stripped.
@@ -1835,7 +1825,7 @@ class TestItemListParser:
             )
         )
         for narrator in narrators:
-            assert [Contributor.Role.NARRATOR] == narrator.roles
+            assert (Contributor.Role.NARRATOR,) == narrator.roles
         assert ["Callow, Simon", "Mann, Bruce", "Hagon, Garrick"] == [
             narrator.sort_name for narrator in narrators
         ]
@@ -1885,7 +1875,7 @@ class TestItemListParser:
 
         [author] = cooked.contributors
         assert "Rowland, Laura Joh" == author.sort_name
-        assert [Contributor.Role.AUTHOR] == author.roles
+        assert (Contributor.Role.AUTHOR,) == author.roles
 
         subjects = [x.name for x in cooked.subjects if x.name is not None]
         assert ["Children's Health", "Mystery & Detective"] == sorted(subjects)

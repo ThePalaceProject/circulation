@@ -455,7 +455,7 @@ class TestOPDSImporter:
 
         [contributor] = book["contributors"]
         assert "Thoreau, Henry David" == contributor.sort_name
-        assert [Contributor.Role.AUTHOR] == contributor.roles
+        assert (Contributor.Role.AUTHOR,) == contributor.roles
 
         subjects = book["subjects"]
         assert ["LCSH", "LCSH", "LCSH", "LCC"] == [x.type for x in subjects]
@@ -1203,6 +1203,7 @@ class TestOPDSImporter:
         t1, i1, t2, i2 = links
         links = OPDSImporter.consolidate_links(links)
         assert [Hyperlink.IMAGE, Hyperlink.IMAGE] == [x.rel for x in links]
+        i1, i2 = links
         assert t1 == i1.thumbnail
         assert t2 == i2.thumbnail
 
@@ -1213,6 +1214,7 @@ class TestOPDSImporter:
         t1, i1, i2 = links
         links = OPDSImporter.consolidate_links(links)
         assert [Hyperlink.IMAGE, Hyperlink.IMAGE] == [x.rel for x in links]
+        i1, i2 = links
         assert t1 == i1.thumbnail
         assert None == i2.thumbnail
 

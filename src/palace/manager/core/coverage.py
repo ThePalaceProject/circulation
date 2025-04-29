@@ -1338,7 +1338,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
         error = None
         if circulationdata:
             try:
-                primary_identifier = circulationdata.primary_identifier(self._db)
+                primary_identifier = circulationdata.primary_identifier_db(self._db)
             except ValueError:
                 primary_identifier = None
             if identifier != primary_identifier:

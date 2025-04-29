@@ -8,19 +8,21 @@ class TestLinkData:
 
         # Sometimes we have no idea what media type is at the other
         # end of a link.
-        unknown = LinkData(rel, href="http://foo/bar.unknown")
+        unknown = LinkData(rel=rel, href="http://foo/bar.unknown")
         assert None == unknown.guessed_media_type
 
         # Sometimes we can guess based on the file extension.
-        jpeg = LinkData(rel, href="http://foo/bar.jpeg")
+        jpeg = LinkData(rel=rel, href="http://foo/bar.jpeg")
         assert Representation.JPEG_MEDIA_TYPE == jpeg.guessed_media_type
 
         # An explicitly known media type takes precedence over
         # something we guess from the file extension.
         png = LinkData(
-            rel, href="http://foo/bar.jpeg", media_type=Representation.PNG_MEDIA_TYPE
+            rel=rel,
+            href="http://foo/bar.jpeg",
+            media_type=Representation.PNG_MEDIA_TYPE,
         )
         assert Representation.PNG_MEDIA_TYPE == png.guessed_media_type
 
-        description = LinkData(Hyperlink.DESCRIPTION, content="Some content")
+        description = LinkData(rel=Hyperlink.DESCRIPTION, content="Some content")
         assert None == description.guessed_media_type

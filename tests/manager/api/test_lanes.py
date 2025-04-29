@@ -561,7 +561,8 @@ class TestRelatedBooksLane:
         # a RecommendationLane will be included.
         mock_api = create_autospec(NoveListAPI)
         response = Metadata(
-            related_books_fixture.edition.data_source, recommendations=[db.identifier()]
+            data_source=related_books_fixture.edition.data_source,
+            recommendations=[db.identifier()],
         )
         mock_api.lookup.return_value = response
         result = RelatedBooksLane(
@@ -690,7 +691,7 @@ class TestRecommendationLane:
         """Prep an empty NoveList result."""
         source = DataSource.lookup(lane_fixture.db.session, DataSource.OVERDRIVE)
         source_name = source.name if source else DataSource.OVERDRIVE
-        metadata = Metadata(source_name)
+        metadata = Metadata(data_source=source_name)
 
         mock_api = create_autospec(NoveListAPI)
         mock_api.lookup.return_value = metadata

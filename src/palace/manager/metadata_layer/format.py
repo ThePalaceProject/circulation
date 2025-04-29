@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from pydantic import field_validator
+from pydantic_core.core_schema import FieldValidationInfo
 from sqlalchemy.orm import Session
 
+from palace.manager.metadata_layer.frozen_data import BaseFrozenData
 from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -16,8 +17,7 @@ from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.util.log import LoggerMixin
 
 
-@dataclass(frozen=True, kw_only=True)
-class FormatData(LoggerMixin):
+class FormatData(BaseFrozenData, LoggerMixin):
     content_type: str | None
     drm_scheme: str | None
     link: LinkData | None = None
@@ -27,19 +27,25 @@ class FormatData(LoggerMixin):
     # creating a new one, this can be overridden by setting this flag to True.
     update_available: bool = False
 
-    def __post_init__(self) -> None:
-        if self.link and not isinstance(self.link, LinkData):
-            raise TypeError("Expected LinkData object, got %s" % type(self.link))
+    @field_validator("rights_uri")
+    @classmethod
+    def _check_link_rights_uri(
+        cls, v: str | None, info: FieldValidationInfo
+    ) -> str | None:
+        if v is None and (link := info.data.get("link")) is not None:
+            # If the link has a rights_uri, use that.
+            v = link.rights_uri
+        return v
 
-        # We can't use direct assignment because of the frozen=True flag, so
-        # we have to use object.__setattr__.
-        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
-        if self.link:
-            if not self.rights_uri and self.link.rights_uri:
-                object.__setattr__(self, "rights_uri", self.link.rights_uri)
-
-            if not self.content_type and self.link.media_type:
-                object.__setattr__(self, "content_type", self.link.media_type)
+    @field_validator("content_type")
+    @classmethod
+    def _check_link_media_type(
+        cls, v: str | None, info: FieldValidationInfo
+    ) -> str | None:
+        if v is None and (link := info.data.get("link")) is not None:
+            # If the link has a media_type, use that.
+            v = link.media_type
+        return v
 
     def apply(
         self,

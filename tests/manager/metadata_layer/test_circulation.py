@@ -29,14 +29,16 @@ class TestCirculationData:
         object, it might or might not be possible to call apply()
         without providing a Collection.
         """
-        identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
+        identifier = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="1")
         format = FormatData(
             content_type=Representation.EPUB_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.NO_DRM,
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circdata = CirculationData(
-            DataSource.OVERDRIVE, primary_identifier=identifier, formats=[format]
+            data_source=DataSource.OVERDRIVE,
+            primary_identifier=identifier,
+            formats=[format],
         )
         circdata.apply(db.session, collection=None)
 
@@ -66,10 +68,10 @@ class TestCirculationData:
         # Check that we didn't put something in the CirculationData that
         # will prevent it from being copied. (e.g., self.log)
 
-        subject = SubjectData(Subject.TAG, "subject")
+        subject = SubjectData(type=Subject.TAG, identifier="subject")
         contributor = ContributorData()
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
-        link = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
+        link = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         format = FormatData(
             content_type=Representation.EPUB_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.NO_DRM,
@@ -77,7 +79,7 @@ class TestCirculationData:
         rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
 
         circulation_data = CirculationData(
-            DataSource.GUTENBERG,
+            data_source=DataSource.GUTENBERG,
             primary_identifier=identifier,
             links=[link],
             licenses_owned=5,
@@ -95,7 +97,7 @@ class TestCirculationData:
 
     def test_links_filtered(self):
         # Tests that passed-in links filter down to only the relevant ones.
-        link1 = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
+        link1 = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         link2 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         link3 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
         link4 = LinkData(
@@ -111,9 +113,9 @@ class TestCirculationData:
         )
         links = [link1, link2, link3, link4, link5]
 
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
         circulation_data = CirculationData(
-            DataSource.GUTENBERG,
+            data_source=DataSource.GUTENBERG,
             primary_identifier=identifier,
             links=links,
         )
@@ -135,8 +137,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             formats=[drm_format],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
         circulation_data.apply(db.session, pool.collection)
 
@@ -185,8 +189,10 @@ class TestCirculationData:
         )
         circulation_data = CirculationData(
             formats=[format],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData with formats false in the policy,
@@ -242,8 +248,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData, we'll add the new license,
@@ -283,8 +291,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         circulation_data.apply(db.session, pool.collection)
@@ -314,8 +324,10 @@ class TestCirculationData:
         # instead uses the licenses to calculate availability.
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             licenses_owned=999,
             licenses_available=999,
             licenses_reserved=999,
@@ -339,8 +351,10 @@ class TestCirculationData:
         # also giving it licenses it uses the availability information
         # to set values on the LicensePool.
         circulation_data = CirculationData(
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             licenses_owned=999,
             licenses_available=999,
             licenses_reserved=999,
@@ -365,8 +379,10 @@ class TestCirculationData:
         # We have new circulation data for this pool.
         circulation_data = CirculationData(
             formats=[],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source=edition.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData the work gets both a
@@ -392,7 +408,7 @@ class TestCirculationData:
         actually licensed, but a LicensePool can be created anyway,
         so we can store format information.
         """
-        identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
+        identifier = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="1")
         drm_format = FormatData(
             content_type=Representation.PDF_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.ADOBE_DRM,
@@ -434,7 +450,9 @@ class TestCirculationData:
         )
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
-            primary_identifier=edition.primary_identifier,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             links=[link],
         )
 
@@ -451,7 +469,9 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             data_source=DataSource.GUTENBERG,
-            primary_identifier=edition.primary_identifier,
+            primary_identifier=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             links=[],
         )
         replace = ReplacementPolicy(
@@ -467,8 +487,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
@@ -500,8 +520,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
@@ -541,8 +561,8 @@ class TestCirculationData:
         self, db
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
 
         # Here's a CirculationData that will create an open-access
@@ -584,8 +604,8 @@ class TestCirculationData:
         # open-access link we will give it a RightsStatus of
         # IN_COPYRIGHT.
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
@@ -614,8 +634,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
@@ -645,8 +665,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
@@ -702,8 +722,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=pool.data_source,
-            primary_identifier=pool.identifier,
+            data_source=pool.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(pool.identifier),
             links=[link],
         )
 
@@ -718,8 +738,8 @@ class TestCirculationData:
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circulation_data = CirculationData(
-            data_source=pool.data_source,
-            primary_identifier=pool.identifier,
+            data_source=pool.data_source.name,
+            primary_identifier=IdentifierData.from_identifier(pool.identifier),
             formats=[format],
         )
         circulation_data.apply(db.session, pool.collection, replace=replace_formats)

@@ -696,9 +696,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         last_opds_update = publication.metadata.modified
 
         identifier = self._extract_identifier(publication)
-        identifier_data = IdentifierData(
-            type=identifier.type, identifier=identifier.identifier
-        )
+        identifier_data = IdentifierData.from_identifier(identifier)
 
         # FIXME: There are no measurements in OPDS 2.0
         measurements: list[Any] = []

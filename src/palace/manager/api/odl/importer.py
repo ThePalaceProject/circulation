@@ -346,7 +346,11 @@ class OPDS2WithODLImporter(OPDS2Importer):
                 f"info document ({parsed_license.expires}) setting license status "
                 f"to unavailable."
             )
-            parsed_license.status = LicenseStatus.unavailable
+            parsed_license = parsed_license.model_copy(
+                update={
+                    "status": LicenseStatus.unavailable,
+                }
+            )
 
         if parsed_license.terms_concurrency != feed_concurrency:
             cls.logger().error(
@@ -356,7 +360,11 @@ class OPDS2WithODLImporter(OPDS2Importer):
                 f"{parsed_license.terms_concurrency}) setting license status "
                 f"to unavailable."
             )
-            parsed_license.status = LicenseStatus.unavailable
+            parsed_license = parsed_license.model_copy(
+                update={
+                    "status": LicenseStatus.unavailable,
+                }
+            )
 
         return parsed_license
 

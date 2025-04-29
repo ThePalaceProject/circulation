@@ -751,7 +751,9 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                     id_type, id_identifier = Identifier.type_and_identifier_for_urn(_id)
                     id_weight = 1
                     new_identifiers.append(
-                        IdentifierData(id_type, id_identifier, id_weight)
+                        IdentifierData(
+                            type=id_type, identifier=id_identifier, weight=id_weight
+                        )
                     )
                     xml_data_dict["identifiers"] = new_identifiers
 
@@ -762,9 +764,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
             if external_identifier.urn in list(identified_failures.keys()):
                 continue
 
-            identifier_obj = IdentifierData(
-                type=external_identifier.type, identifier=external_identifier.identifier
-            )
+            identifier_obj = IdentifierData.from_identifier(external_identifier)
 
             # form the Metadata object
             combined_meta = self.combine(m_data_dict, xml_data_dict)
@@ -1398,7 +1398,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
             type, identifier = Identifier.type_and_identifier_for_urn(
                 identifier_tag.text.lower()
             )
-            return IdentifierData(type, identifier)
+            return IdentifierData(type=type, identifier=identifier)
         except ValueError:
             return None
 
@@ -1450,7 +1450,6 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 display_name=display_name,
                 family_name=family_name,
                 wikipedia_name=wikipedia_name,
-                roles=None,
             )
 
         logging.info(
@@ -1548,66 +1547,55 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
     @classmethod
     def consolidate_links(cls, links: Sequence[LinkData | None]) -> list[LinkData]:
-        """Try to match up links with their thumbnails.
+        """Match up image links with their corresponding thumbnails.
 
-        If link n is an image and link n+1 is a thumbnail, then the
-        thumbnail is assumed to be the thumbnail of the image.
+        Scans through a list of links to find image and thumbnail pairs:
+        - If an image link is followed by a thumbnail link, they are paired
+        - If a thumbnail link is followed by an image link, they are paired
 
-        Similarly, if link n is a thumbnail and link n+1 is an image.
+        When a pair is found, the thumbnail is associated with the image, and
+        the consolidated link is added to the result.
         """
-        # Strip out any links that didn't get turned into LinkData objects
-        # due to missing `href` or whatever.
-        new_links = [x for x in links if x]
+        valid_links = [link for link in links if link is not None]
+        result = []
+        i = 0
 
-        # Make a new list of links from that list, to iterate over --
-        # we'll be modifying new_links in place so we can't iterate
-        # over it.
-        _links = list(new_links)
+        while i < len(valid_links):
+            current_link = valid_links[i]
 
-        next_link_already_handled = False
-        for i, link in enumerate(_links):
-            if link.rel not in (Hyperlink.THUMBNAIL_IMAGE, Hyperlink.IMAGE):
-                # This is not any kind of image. Ignore it.
+            # If not an image or thumbnail, add as-is and continue
+            if current_link.rel not in (Hyperlink.THUMBNAIL_IMAGE, Hyperlink.IMAGE):
+                result.append(current_link)
+                i += 1
                 continue
 
-            if next_link_already_handled:
-                # This link and the previous link were part of an
-                # image-thumbnail pair.
-                next_link_already_handled = False
-                continue
+            # Check if we have a next link to potentially form a pair
+            if i + 1 < len(valid_links):
+                next_link = valid_links[i + 1]
 
-            if i == len(_links) - 1:
-                # This is the last link. Since there is no next link
-                # there's nothing to do here.
-                continue
+                # Case 1: Current is thumbnail, next is image
+                if (
+                    current_link.rel == Hyperlink.THUMBNAIL_IMAGE
+                    and next_link.rel == Hyperlink.IMAGE
+                ):
+                    result.append(next_link.set_thumbnail(current_link))
+                    i += 2  # Skip both links as they're now handled
+                    continue
 
-            # Peek at the next link.
-            next_link = _links[i + 1]
+                # Case 2: Current is image, next is thumbnail
+                if (
+                    current_link.rel == Hyperlink.IMAGE
+                    and next_link.rel == Hyperlink.THUMBNAIL_IMAGE
+                ):
+                    result.append(current_link.set_thumbnail(next_link))
+                    i += 2  # Skip both links as they're now handled
+                    continue
 
-            if (
-                link.rel == Hyperlink.THUMBNAIL_IMAGE
-                and next_link.rel == Hyperlink.IMAGE
-            ):
-                # This link is a thumbnail and the next link is
-                # (presumably) the corresponding image.
-                thumbnail_link = link
-                image_link = next_link
-            elif (
-                link.rel == Hyperlink.IMAGE
-                and next_link.rel == Hyperlink.THUMBNAIL_IMAGE
-            ):
-                thumbnail_link = next_link
-                image_link = link
-            else:
-                # This link and the next link do not form an
-                # image-thumbnail pair. Do nothing.
-                continue
+            # If we're here, this link doesn't form a pair with the next link
+            result.append(current_link)
+            i += 1
 
-            image_link.thumbnail = thumbnail_link
-            new_links.remove(thumbnail_link)
-            next_link_already_handled = True
-
-        return new_links
+        return result
 
     @classmethod
     def extract_measurement(cls, rating_tag: Element) -> MeasurementData | None:

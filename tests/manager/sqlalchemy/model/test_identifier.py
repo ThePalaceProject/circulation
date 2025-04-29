@@ -436,7 +436,11 @@ class TestIdentifier:
         assert 3 == len(equivs[identifier.id])
 
         # Increase the cutoff, and we get more identifiers.
-        with_cutoff.equivalent_identifier_cutoff = 5
+        with_cutoff = PresentationCalculationPolicy(
+            equivalent_identifier_levels=5,
+            equivalent_identifier_threshold=0.1,
+            equivalent_identifier_cutoff=5,
+        )
         equivs = Identifier.recursively_equivalent_identifier_ids(
             db.session, [identifier.id], policy=with_cutoff
         )

@@ -7,7 +7,7 @@ import random
 import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from functools import total_ordering
 from typing import TYPE_CHECKING, Literal, overload
 from urllib.parse import quote, unquote
@@ -803,7 +803,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         rights_status_uri: str | None = None,
         rights_explanation: str | None = None,
         original_resource: Resource | None = None,
-        transformation_settings: dict[str, str] | None = None,
+        transformation_settings: Mapping[str, str] | None = None,
         db: Session | None = None,
     ) -> tuple[Hyperlink, bool]:
         """Create a link between this Identifier and a (potentially new)
