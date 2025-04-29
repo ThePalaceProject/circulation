@@ -1,33 +1,30 @@
 from __future__ import annotations
 
-from palace.manager.api.metadata.nyt import NYTBestSellerAPI
-from palace.manager.scripts.timestamp import TimestampScript
-from palace.manager.sqlalchemy.model.datasource import DataSource
+import argparse
+
+from palace.manager.celery.tasks.nyt import update_nyt_best_sellers_lists
+from palace.manager.scripts.base import Script
 
 
-class NYTBestSellerListsScript(TimestampScript):
-    name = "Update New York Times best-seller lists"
+class NYTBestSellerListsScript(Script):
+    name = "Update New York Times best-seller lists by kicking off an asynchronous task"
 
     def __init__(self, include_history=False):
         super().__init__()
         self.include_history = include_history
 
+    @classmethod
+    def arg_parser(cls) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(
+            description="Rebuild the search index from scratch."
+        )
+        parser.add_argument(
+            "-i",
+            "--include-history",
+            action="store_true",
+            help="Include the history",
+        )
+        return parser
+
     def do_run(self):
-        self.api = NYTBestSellerAPI.from_config(self._db)
-        self.data_source = DataSource.lookup(self._db, DataSource.NYT)
-        # For every best-seller list...
-        names = self.api.list_of_lists()
-        for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
-            name = l["list_name_encoded"]
-            self.log.info("Handling list %s" % name)
-            best = self.api.best_seller_list(l)
-
-            if self.include_history:
-                self.api.fill_in_history(best)
-            else:
-                self.api.update(best)
-
-            # Mirror the list to the database.
-            customlist = best.to_customlist(self._db)
-            self.log.info("Now %s entries in the list.", len(customlist.entries))
-            self._db.commit()
+        update_nyt_best_sellers_lists.delay(include_history=self.include_history)

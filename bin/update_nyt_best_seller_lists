@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""Bring in the entire history of all NYT best-seller lists."""
+"""Bring in the entire history of all NYT best-seller lists.
+This script kicks off the task and returns immediately."""
 import sys
 
 from palace.manager.scripts.nyt import NYTBestSellerListsScript
