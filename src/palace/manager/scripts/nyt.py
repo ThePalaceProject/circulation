@@ -9,10 +9,6 @@ from palace.manager.scripts.base import Script
 class NYTBestSellerListsScript(Script):
     name = "Update New York Times best-seller lists by kicking off an asynchronous task"
 
-    def __init__(self, include_history=False):
-        super().__init__()
-        self.include_history = include_history
-
     @classmethod
     def arg_parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -26,5 +22,6 @@ class NYTBestSellerListsScript(Script):
         )
         return parser
 
-    def do_run(self):
-        update_nyt_best_sellers_lists.delay(include_history=self.include_history)
+    def do_run(self, *args, **kwargs):
+        parsed = self.parse_command_line(self._db, *args, **kwargs)
+        update_nyt_best_sellers_lists.delay(include_history=parsed.include_history)
