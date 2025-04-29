@@ -2,11 +2,11 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 from _pytest.logging import LogCaptureFixture
-from fixtures.celery import CeleryFixture
-from fixtures.database import DatabaseTransactionFixture
 
 from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NYTBestSellerList
 from palace.manager.celery.tasks.nyt import update_nyt_best_sellers_lists
+from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 @pytest.mark.parametrize(
