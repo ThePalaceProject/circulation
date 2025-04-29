@@ -1,7 +1,6 @@
 from unittest.mock import create_autospec, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
 
 from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NYTBestSellerList
 from palace.manager.celery.tasks.nyt import update_nyt_best_sellers_lists
@@ -23,7 +22,6 @@ from tests.fixtures.database import DatabaseTransactionFixture
 def test_update_nyt_best_sellers_lists(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    caplog: LogCaptureFixture,
     include_history: bool,
 ) -> None:
     with patch("palace.manager.celery.tasks.nyt.NYTBestSellerAPI") as nyt_api:
