@@ -449,12 +449,13 @@ class Hold(BaseOverdriveModel):
     hold_list_position: NonNegativeInt | None = Field(None, alias="holdListPosition")
     number_of_holds: NonNegativeInt | None = Field(None, alias="numberOfHolds")
     hold_placed_date: AwareDatetime = Field(..., alias="holdPlacedDate")
-    # XXX: This is not referenced in the API documentation but our old parser
-    # used to look for this field in the hold data, so I included it here. We
-    # should validate if this is actually provided by the API response.
-    hold_expires: AwareDatetime | None = Field(None, alias="holdExpires")
     links: dict[str, Link] = Field(default_factory=dict)
     actions: dict[str, Action] = Field(default_factory=dict)
+
+    # This field isn't referenced in the API docs, but it is present when a
+    # hold is available, and gives the date when the hold will expire if
+    # it is not checked out.
+    hold_expires: AwareDatetime | None = Field(None, alias="holdExpires")
 
 
 class Holds(BaseOverdriveModel):
