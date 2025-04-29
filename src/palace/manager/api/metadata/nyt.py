@@ -218,7 +218,6 @@ class NYTBestSellerAPI(
         """Update the given list with current and historical data."""
         for date in list.all_dates:
             self.update(list, date, self.HISTORICAL_LIST_MAX_AGE)
-            self._db.commit()
 
 
 class NYTBestSellerList(list["NYTBestSellerListTitle"], LoggerMixin):
