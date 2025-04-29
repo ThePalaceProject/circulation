@@ -25,3 +25,7 @@ class NYTBestSellerListsScript(Script):
     def do_run(self, *args, **kwargs):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         update_nyt_best_sellers_lists.delay(include_history=parsed.include_history)
+        self.log.info(
+            f"Successfully queued update_nyt_best_sellers_lists task "
+            f"(include_history={str(parsed.include_history)}"
+        )
