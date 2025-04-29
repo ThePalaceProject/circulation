@@ -5,7 +5,14 @@ from functools import cached_property
 from typing import Protocol, overload
 from urllib.parse import quote_plus
 
-from pydantic import AliasChoices, AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+)
 from pydantic.alias_generators import to_camel
 from requests import Response
 from typing_extensions import Self
@@ -194,6 +201,34 @@ class PatronRequestCallable(Protocol, typing.Generic[T]):
     ) -> T: ...
 
 
+def _overdrive_field_request(
+    make_request: PatronRequestCallable[T],
+    url: str,
+    fields: typing.Mapping[str, str | bool | int],
+    *,
+    method: str | None = None,
+) -> T:
+    if fields:
+        data = json.dumps(
+            {
+                "fields": [
+                    {"name": name, "value": value} for name, value in fields.items()
+                ]
+            }
+        )
+    else:
+        data = None
+
+    headers = {"Content-Type": "application/json"}
+
+    return make_request(
+        method=method,
+        url=url,
+        data=data,
+        extra_headers=headers,
+    )
+
+
 class Action(BaseOverdriveModel):
     href: str
     method: str
@@ -262,21 +297,11 @@ class Action(BaseOverdriveModel):
         if camel_kwargs:
             raise ExtraFieldsError(camel_kwargs.keys())
 
-        if field_data:
-            data = json.dumps(
-                {
-                    "fields": [
-                        {"name": name, "value": value}
-                        for name, value in field_data.items()
-                    ]
-                }
-            )
-        else:
-            data = None
-
-        headers = {"Content-Type": "application/json"}
-        return make_request(
-            method=self.method.upper(), url=self.href, data=data, extra_headers=headers
+        return _overdrive_field_request(
+            make_request,
+            method=self.method.upper(),
+            url=self.href,
+            fields=field_data,
         )
 
 
@@ -411,3 +436,61 @@ class Checkouts(BaseOverdriveModel):
     total_checkouts: int = Field(..., alias="totalCheckouts")
     links: dict[str, Link] = Field(default_factory=dict)
     checkouts: list[Checkout] = Field(default_factory=list)
+
+
+class Hold(BaseOverdriveModel):
+    """
+    See: https://developer.overdrive.com/apis/holds
+    """
+
+    reserve_id: str = Field(..., alias="reserveId")
+    cross_ref_id: int | None = Field(None, alias="crossRefId")
+    email_address: str | None = Field(None, alias="emailAddress")
+    hold_list_position: NonNegativeInt | None = Field(None, alias="holdListPosition")
+    number_of_holds: NonNegativeInt | None = Field(None, alias="numberOfHolds")
+    hold_placed_date: AwareDatetime = Field(..., alias="holdPlacedDate")
+    links: dict[str, Link] = Field(default_factory=dict)
+    actions: dict[str, Action] = Field(default_factory=dict)
+
+    # This field isn't referenced in the API docs, but it is present when a
+    # hold is available, and gives the date when the hold will expire if
+    # it is not checked out.
+    hold_expires: AwareDatetime | None = Field(None, alias="holdExpires")
+
+
+class Holds(BaseOverdriveModel):
+    """
+    See: https://developer.overdrive.com/apis/holds
+    """
+
+    total_items: int = Field(..., alias="totalItems")
+    links: dict[str, Link] = Field(default_factory=dict)
+    holds: list[Hold] = Field(default_factory=list)
+
+
+class LendingPeriod(BaseOverdriveModel):
+    """Model for a lending period for a format type."""
+
+    format_type: str = Field(..., alias="formatType")
+    lending_period: NonNegativeInt = Field(..., alias="lendingPeriod")
+    units: str
+
+
+class PatronInformation(BaseOverdriveModel):
+    """
+    See: https://developer.overdrive.com/apis/patron-auth
+    """
+
+    patron_id: int = Field(..., alias="patronId")
+    website_id: int = Field(..., alias="websiteId")
+    existing_patron: bool = Field(..., alias="existingPatron")
+    collection_token: str = Field(..., alias="collectionToken")
+    hold_limit: NonNegativeInt = Field(..., alias="holdLimit")
+    last_hold_email: str | None = Field(None, alias="lastHoldEmail")
+    checkout_limit: NonNegativeInt = Field(..., alias="checkoutLimit")
+    lending_periods: list[LendingPeriod] = Field(..., alias="lendingPeriods")
+    links: dict[str, Link] = Field(default_factory=dict)
+    link_templates: dict[str, LinkTemplate] = Field(
+        default_factory=dict, alias="linkTemplates"
+    )
+    actions: list[dict[str, Action]] = Field(default_factory=list)

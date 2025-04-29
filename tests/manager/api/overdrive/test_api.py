@@ -8,6 +8,7 @@ import pytest
 
 from palace.manager.api.circulation import (
     FetchFulfillment,
+    HoldInfo,
     LoanInfo,
     RedirectFulfillment,
 )
@@ -991,86 +992,107 @@ class TestOverdriveAPI:
         #
         # The request will include different form fields depending on
         # whether default_notification_email_address returns something.
-        http = overdrive_api_fixture.mock_http
+        patron = db.patron()
+        pin = "1234"
         api = overdrive_api_fixture.api
+        http = overdrive_api_fixture.mock_http
+        pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
 
         # First, test the case where no notification email address is
         # provided and there is no default.
-        patron = MagicMock()
-        pin = MagicMock()
-        pool = db.licensepool(edition=None, collection=overdrive_api_fixture.collection)
-
-        # Mock out some functions
-        # TODO: Replace this test with one that doesn't rely so heavily on mocking.
-        mock_fill_out_form = create_autospec(
-            api.fill_out_form, return_value=("headers", "filled-out form")
-        )
-        api.fill_out_form = mock_fill_out_form
-
         mock_default_notification_email_address = create_autospec(
             api.default_notification_email_address, return_value=None
         )
         api.default_notification_email_address = mock_default_notification_email_address
 
-        mock_patron_request = create_autospec(api.patron_request)
-        api.patron_request = mock_patron_request
-
-        mock_extract_data_from_hold_response = create_autospec(
-            api.extract_data_from_hold_response, return_value=("position", "date")
+        overdrive_api_fixture.queue_access_token_response()
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data("successful_hold.json"),
         )
-        api.extract_data_from_hold_response = mock_extract_data_from_hold_response
 
-        # Make call
         response = api.place_hold(patron, pin, pool, None)
-
-        # Now we can trace the path of the input through the method calls.
+        assert isinstance(response, HoldInfo)
+        assert response.identifier_type == pool.identifier.type
+        assert response.identifier == pool.identifier.identifier
 
         # The patron and PIN were passed into
         # default_notification_email_address.
         mock_default_notification_email_address.assert_called_once_with(patron, pin)
 
         # The return value was None, and so 'ignoreHoldEmail' was
-        # added to the form to be filled out, rather than
-        # 'emailAddress' being added.
-        mock_fill_out_form.assert_called_once_with(
-            ignoreHoldEmail=True, reserveId=str(pool.identifier.identifier)
-        )
+        # sent in the request data.
 
-        # patron_request was called with the filled-out form and other
-        # information necessary to authenticate the request.
-        mock_patron_request.assert_called_once_with(
-            patron, pin, api.HOLDS_ENDPOINT, "headers", "filled-out form"
-        )
+        [hold_request_method] = http.requests_methods[1:]
+        [hold_request_url] = http.requests[1:]
+        [hold_request_args] = http.requests_args[1:]
 
-        # Finally, extract_data_from_hold_response was called on
-        # the return value of patron_request
-        mock_extract_data_from_hold_response.assert_called_once_with(
-            mock_patron_request.return_value.json.return_value
+        assert hold_request_method == "post"
+        assert hold_request_url.endswith("/me/holds")
+        assert hold_request_args["data"] == json.dumps(
+            {
+                "fields": [
+                    {"name": "reserveId", "value": pool.identifier.identifier},
+                    {"name": "ignoreHoldEmail", "value": True},
+                ]
+            }
         )
 
         # Now we need to test two more cases.
         #
         # First, the patron has a holds notification address
         # registered with Overdrive.
-        mock_default_notification_email_address.reset_mock()
-        mock_fill_out_form.reset_mock()
+        http.reset_mock()
         email = "holds@patr.on"
         mock_default_notification_email_address.return_value = email
+
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data("successful_hold.json"),
+        )
+
         api.place_hold(patron, pin, pool, None)
 
-        # Different variables were passed in to fill_out_form.
-        mock_fill_out_form.assert_called_once_with(
-            emailAddress=email, reserveId=str(pool.identifier.identifier)
+        [hold_request_method] = http.requests_methods
+        [hold_request_url] = http.requests
+        [hold_request_args] = http.requests_args
+
+        assert hold_request_method == "post"
+        assert hold_request_url.endswith("/me/holds")
+        assert hold_request_args["data"] == json.dumps(
+            {
+                "fields": [
+                    {"name": "reserveId", "value": pool.identifier.identifier},
+                    {"name": "emailAddress", "value": email},
+                ]
+            }
         )
 
         # Finally, test that when a specific address is passed in, it
         # takes precedence over the patron's holds notification address.
-        mock_default_notification_email_address.reset_mock()
-        mock_fill_out_form.reset_mock()
+        http.reset_mock()
         mock_default_notification_email_address.return_value = email
+
+        http.queue_response(
+            201,
+            content=overdrive_api_fixture.data.sample_data("successful_hold.json"),
+        )
+
         api.place_hold(patron, pin, pool, "another@addre.ss")
-        mock_fill_out_form.assert_called_once_with(
-            emailAddress="another@addre.ss", reserveId=str(pool.identifier.identifier)
+
+        [hold_request_method] = http.requests_methods
+        [hold_request_url] = http.requests
+        [hold_request_args] = http.requests_args
+
+        assert hold_request_method == "post"
+        assert hold_request_url.endswith("/me/holds")
+        assert hold_request_args["data"] == json.dumps(
+            {
+                "fields": [
+                    {"name": "reserveId", "value": pool.identifier.identifier},
+                    {"name": "emailAddress", "value": "another@addre.ss"},
+                ]
+            }
         )
 
     def test_checkin(

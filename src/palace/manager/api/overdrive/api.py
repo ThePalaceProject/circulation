@@ -67,7 +67,11 @@ from palace.manager.api.overdrive.model import (
     Checkouts,
     ErrorResponse,
     Format,
+    Hold as HoldResponse,
+    Holds as HoldsResponse,
+    PatronInformation,
     PatronRequestCallable,
+    _overdrive_field_request,
 )
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.settings import (
@@ -98,7 +102,7 @@ from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
-from palace.manager.util.datetime_helpers import strptime_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP, BadResponseException, RequestKwargs
 
 
@@ -921,19 +925,14 @@ class OverdriveAPI(
 
         identifier = licensepool.identifier
         overdrive_id = identifier.identifier
-        headers = {"Content-Type": "application/json"}
-        payload_dict = dict(fields=[dict(name="reserveId", value=overdrive_id)])
-        payload = json.dumps(payload_dict)
 
         already_checked_out = False
         try:
-            checkout = self.patron_request(
-                patron,
-                pin,
-                self.CHECKOUTS_ENDPOINT,
-                extra_headers=headers,
-                data=payload,
-                response_type=Checkout,
+            make_request: PatronRequestCallable[Checkout] = partial(
+                self.patron_request, patron, pin, response_type=Checkout
+            )
+            checkout = _overdrive_field_request(
+                make_request, self.CHECKOUTS_ENDPOINT, {"reserveId": overdrive_id}
             )
         except OverdriveResponseException as e:
             code = e.error_message
@@ -1057,13 +1056,6 @@ class OverdriveAPI(
             )
         except OverdriveResponseException as e:
             raise CannotReturn(e.error_message) from e
-
-    def fill_out_form(self, **values: str) -> tuple[dict[str, str], str]:
-        fields = []
-        for k, v in list(values.items()):
-            fields.append(dict(name=k, value=v))
-        headers = {"Content-Type": "application/json; charset=utf-8"}
-        return headers, json.dumps(dict(fields=fields))
 
     def get_loan(self, patron: Patron, pin: str | None, overdrive_id: str) -> Checkout:
         """Get patron's loan information for the identified item.
@@ -1208,28 +1200,6 @@ class OverdriveAPI(
             raise CannotFulfill(f"Could not lock in format {format_type}") from e
         return format_data
 
-    @classmethod
-    def extract_data_from_hold_response(
-        cls, hold_response_json: dict[str, Any]
-    ) -> tuple[int, datetime.datetime | None]:
-        position = hold_response_json["holdListPosition"]
-        placed = cls._extract_date(hold_response_json, "holdPlacedDate")
-        return position, placed
-
-    @classmethod
-    def _extract_date(
-        cls, data: dict[str, Any] | Any, field_name: str
-    ) -> datetime.datetime | None:
-        if not isinstance(data, dict):
-            return None
-        if not field_name in data:
-            return None
-        try:
-            return strptime_utc(data[field_name], cls.TIME_FORMAT)
-        except ValueError as e:
-            # Wrong format
-            return None
-
     def get_patron_checkouts(self, patron: Patron, pin: str | None) -> Checkouts:
         """Get information for the given patron's loans.
 
@@ -1244,19 +1214,10 @@ class OverdriveAPI(
             response_type=Checkouts,
         )
 
-    def get_patron_holds(self, patron: Patron, pin: str | None) -> dict[str, Any]:
-        return self.patron_request(patron, pin, self.HOLDS_ENDPOINT).json()  # type: ignore[no-any-return]
-
-    @classmethod
-    def _pd(cls, d: str | None) -> datetime.datetime | None:
-        """Stupid method to parse a date.
-
-        TIME_FORMAT mentions "Z" for Zulu time, which is the same as
-        UTC.
-        """
-        if not d:
-            return None
-        return strptime_utc(d, cls.TIME_FORMAT)
+    def get_patron_holds(self, patron: Patron, pin: str | None) -> HoldsResponse:
+        return self.patron_request(
+            patron, pin, self.HOLDS_ENDPOINT, response_type=HoldsResponse
+        )
 
     def patron_activity(
         self, patron: Patron, pin: str | None
@@ -1269,7 +1230,7 @@ class OverdriveAPI(
 
         try:
             checkouts = self.get_patron_checkouts(patron, pin).checkouts
-            holds = self.get_patron_holds(patron, pin)
+            holds = self.get_patron_holds(patron, pin).holds
         except PatronAuthorizationFailedException as e:
             # This frequently happens because Overdrive performs
             # checks for blocked or expired accounts upon initial
@@ -1283,21 +1244,19 @@ class OverdriveAPI(
                 "Overdrive authentication failed, assuming no loans.", exc_info=e
             )
             checkouts = []
-            holds = {}
+            holds = []
 
         for checkout in checkouts:
             loan_info = self.process_checkout_data(checkout, collection.id)
             if loan_info is not None:
                 yield loan_info
 
-        for hold in holds.get("holds", []):
-            overdrive_identifier = hold["reserveId"].lower()
-            start = self._pd(hold.get("holdPlacedDate"))
-            end = self._pd(hold.get("holdExpires"))
-            position = hold.get("holdListPosition")
-            if position is not None:
-                position = int(position)
-            if "checkout" in hold.get("actions", {}):
+        for hold in holds:
+            overdrive_identifier = hold.reserve_id.lower()
+            start = hold.hold_placed_date
+            end = hold.hold_expires
+            position = hold.hold_list_position
+            if "checkout" in hold.actions:
                 # This patron needs to decide whether to check the
                 # book out. By our reckoning, the patron's position is
                 # 0, not whatever position Overdrive had for them.
@@ -1425,10 +1384,13 @@ class OverdriveAPI(
         # preferred email address for notifications.
         address = None
         try:
-            data = self.patron_request(
-                patron, pin, self.PATRON_INFORMATION_ENDPOINT
-            ).json()
-            address = data.get("lastHoldEmail")
+            patron_information = self.patron_request(
+                patron,
+                pin,
+                self.PATRON_INFORMATION_ENDPOINT,
+                response_type=PatronInformation,
+            )
+            address = patron_information.last_hold_email
 
             # Great! Except, it's possible that this address is the
             # 'trash everything' address, because we _used_ to send
@@ -1468,18 +1430,21 @@ class OverdriveAPI(
         else:
             form_fields["ignoreHoldEmail"] = True
 
-        headers, document = self.fill_out_form(**form_fields)
         try:
-            data = self.patron_request(
-                patron, pin, self.HOLDS_ENDPOINT, headers, document
-            ).json()
+            make_request: PatronRequestCallable[HoldResponse] = partial(
+                self.patron_request, patron, pin, response_type=HoldResponse
+            )
+            hold = _overdrive_field_request(
+                make_request,
+                self.HOLDS_ENDPOINT,
+                form_fields,
+            )
         except OverdriveResponseException as e:
             raise CannotHold(e.error_code) from e
-        position, date = self.extract_data_from_hold_response(data)
         return HoldInfo.from_license_pool(
             licensepool,
-            start_date=date,
-            hold_position=position,
+            start_date=hold.hold_placed_date,
+            hold_position=hold.hold_list_position,
         )
 
     def release_hold(
