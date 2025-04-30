@@ -197,6 +197,12 @@ def beat_schedule() -> dict[str, Any]:
                 hour="3",
             ),  # Every morning at 3:30 am.
         },
+        "update_novelists_for_all_libraries": {
+            "task": "novelist.update_novelists_for_all_libraries",
+            "schedule": crontab(
+                minute="0", hour="0", day_of_week="0"
+            ),  # Every Sundary at midnight
+        },
     }
 
 
