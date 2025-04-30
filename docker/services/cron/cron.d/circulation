@@ -29,9 +29,6 @@ HOME=/var/www/circulation
 # those works.
 30 22 * * * root bin/run work_classify_unchecked_subjects >> /var/log/cron.log 2>&1
 
-# Sync a library's collection with NoveList
-0 0 * * 0 root bin/run -d 60 novelist_update >> /var/log/cron.log 2>&1
-
 # The remaining scripts keep the circulation manager in sync with
 # specific types of collections.
 
