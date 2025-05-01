@@ -26,7 +26,9 @@ from palace.manager.api.enki import (
     EnkiSettings,
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.core.metadata_layer import CirculationData, Metadata, TimestampData
+from palace.manager.core.monitor import TimestampData
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

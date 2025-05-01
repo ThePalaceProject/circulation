@@ -5,7 +5,11 @@ from sqlalchemy.orm import Load
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
-from palace.manager.core.metadata_layer import ReplacementPolicy, TimestampData
+from palace.manager.core.monitor import TimestampData
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
 from palace.manager.sqlalchemy.model.coverage import (
@@ -20,7 +24,6 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import utc_now
 

@@ -46,7 +46,8 @@ from palace.manager.api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest
-from palace.manager.core.metadata_layer import ReplacementPolicy, TimestampData
+from palace.manager.core.monitor import TimestampData
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent

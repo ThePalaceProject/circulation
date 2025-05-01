@@ -15,10 +15,12 @@ from sqlalchemy.orm.session import Session
 from palace.manager.api.config import CannotLoadConfiguration, IntegrationException
 from palace.manager.api.metadata.base import MetadataService, MetadataServiceSettings
 from palace.manager.core.external_list import TitleFromExternalList
-from palace.manager.core.metadata_layer import ContributorData, IdentifierData, Metadata
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import ConfigurationFormItem, FormField
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition

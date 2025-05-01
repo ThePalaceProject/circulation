@@ -83,8 +83,9 @@ from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
-from palace.manager.core.metadata_layer import FormatData, ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential

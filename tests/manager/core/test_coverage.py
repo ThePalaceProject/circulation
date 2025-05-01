@@ -13,17 +13,18 @@ from palace.manager.core.coverage import (
     WorkClassificationCoverageProvider,
     WorkPresentationEditionCoverageProvider,
 )
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    Metadata,
-    ReplacementPolicy,
-    SubjectData,
-)
 from palace.manager.core.opds_import import OPDSAPI
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import CollectionMissing
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -41,7 +42,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import (

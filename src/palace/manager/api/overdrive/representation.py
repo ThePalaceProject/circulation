@@ -9,16 +9,14 @@ import isbnlib
 from palace.manager.api.overdrive.constants import OVERDRIVE_MAIN_ACCOUNT_ID
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    MeasurementData,
-    Metadata,
-    SubjectData,
-)
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.measurement import MeasurementData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

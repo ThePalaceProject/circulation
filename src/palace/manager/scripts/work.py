@@ -4,6 +4,9 @@ from collections.abc import Generator
 from sqlalchemy import tuple_
 from sqlalchemy.orm import Query, defer
 
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.scripts.timestamp import TimestampScript
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -11,7 +14,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 
 
 class WorkProcessingScript(IdentifierInputScript):

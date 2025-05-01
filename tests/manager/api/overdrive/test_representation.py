@@ -9,7 +9,8 @@ import pytest
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.core.metadata_layer import FormatData, LinkData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor

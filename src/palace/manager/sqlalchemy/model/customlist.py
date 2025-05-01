@@ -417,7 +417,7 @@ class CustomListEntry(Base):
 
         new_work = None
         if not metadata:
-            from palace.manager.core.metadata_layer import Metadata
+            from palace.manager.metadata_layer.metadata import Metadata
 
             metadata = Metadata.from_edition(edition)
 

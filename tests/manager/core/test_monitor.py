@@ -2,12 +2,12 @@ import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.core.monitor import (
     CollectionMonitor,
     CoverageProvidersFailed,
@@ -23,6 +23,7 @@ from palace.manager.core.monitor import (
     SubjectSweepMonitor,
     SweepMonitor,
     TimelineMonitor,
+    TimestampData,
     WorkSweepMonitor,
 )
 from palace.manager.core.opds_import import OPDSAPI
@@ -35,6 +36,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
+from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.time import Time
 from tests.mocks.mock import (
@@ -1018,3 +1020,187 @@ class TestCustomListEntryWorkUpdateMonitor:
         monitor = CustomListEntryWorkUpdateMonitor(db.session)
         monitor.process_item(entry)
         assert old_work == entry.work
+
+
+class TestTimestampData:
+    def test_constructor(self):
+        # By default, all fields are set to None
+        d = TimestampData()
+        for i in (
+            d.service,
+            d.service_type,
+            d.collection_id,
+            d.start,
+            d.finish,
+            d.achievements,
+            d.counter,
+            d.exception,
+        ):
+            assert i == None
+
+        # Some, but not all, of the fields can be set to real values.
+        d = TimestampData(
+            start="a", finish="b", achievements="c", counter="d", exception="e"
+        )
+        assert "a" == d.start
+        assert "b" == d.finish
+        assert "c" == d.achievements
+        assert "d" == d.counter
+        assert "e" == d.exception
+
+    def test_is_failure(self):
+        # A TimestampData represents failure if its exception is set to
+        # any value other than None or SentinelType.ClearValue.
+        d = TimestampData()
+        assert False == d.is_failure
+
+        d.exception = "oops"
+        assert True == d.is_failure
+
+        d.exception = None
+        assert False == d.is_failure
+
+        d.exception = SentinelType.ClearValue
+        assert False == d.is_failure
+
+    def test_is_complete(self):
+        # A TimestampData is complete if it represents a failure
+        # (see above) or if its .finish is set to any value other
+        # than None or SentinelType.ClearValue
+
+        d = TimestampData()
+        assert False == d.is_complete
+
+        d.finish = "done!"
+        assert True == d.is_complete
+
+        d.finish = None
+        assert False == d.is_complete
+
+        d.finish = SentinelType.ClearValue
+        assert False == d.is_complete
+
+        d.exception = "oops"
+        assert True == d.is_complete
+
+    @freeze_time()
+    def test_finalize_minimal(self, db: DatabaseTransactionFixture):
+        # Calling finalize() with only the minimal arguments sets the
+        # timestamp values to sensible defaults and leaves everything
+        # else alone.
+
+        # This TimestampData starts out with everything set to None.
+        d = TimestampData()
+        d.finalize("service", "service_type", db.default_collection())
+
+        # finalize() requires values for these arguments, and sets them.
+        assert "service" == d.service
+        assert "service_type" == d.service_type
+        assert db.default_collection().id == d.collection_id
+
+        # The timestamp values are set to sensible defaults.
+        assert d.start == d.finish == utc_now()
+
+        # Other fields are still at None.
+        for i in d.achievements, d.counter, d.exception:
+            assert i is None
+
+    def test_finalize_full(self, db: DatabaseTransactionFixture):
+        # You can call finalize() with a complete set of arguments.
+        d = TimestampData()
+        start = utc_now() - datetime.timedelta(days=1)
+        finish = utc_now() - datetime.timedelta(hours=1)
+        counter = 100
+        d.finalize(
+            "service",
+            "service_type",
+            db.default_collection(),
+            start=start,
+            finish=finish,
+            counter=counter,
+            exception="exception",
+        )
+        assert start == d.start
+        assert finish == d.finish
+        assert counter == d.counter
+        assert "exception" == d.exception
+
+        # If the TimestampData fields are already set to values other
+        # than SentinelType.ClearValue, the required fields will be overwritten but
+        # the optional fields will be left alone.
+        new_collection = db.collection()
+        d.finalize(
+            "service2",
+            "service_type2",
+            new_collection,
+            start=utc_now(),
+            finish=utc_now(),
+            counter=15555,
+            exception="exception2",
+        )
+        # These have changed.
+        assert "service2" == d.service
+        assert "service_type2" == d.service_type
+        assert new_collection.id == d.collection_id
+
+        # These have not.
+        assert start == d.start
+        assert finish == d.finish
+        assert counter == d.counter
+        assert "exception" == d.exception
+
+    def test_collection(self, db: DatabaseTransactionFixture):
+        session = db.session
+
+        d = TimestampData()
+        d.finalize("service", "service_type", db.default_collection())
+        assert db.default_collection() == d.collection(session)
+
+    @freeze_time()
+    def test_apply(self, db: DatabaseTransactionFixture):
+        session = db.session
+
+        # You can't apply a TimestampData that hasn't been finalized.
+        d = TimestampData()
+        with pytest.raises(ValueError) as excinfo:
+            d.apply(session)
+        assert "Not enough information to write TimestampData to the database." in str(
+            excinfo.value
+        )
+
+        # Set the basic timestamp information. Optional fields will stay
+        # at None.
+        collection = db.default_collection()
+        d.finalize("service", Timestamp.SCRIPT_TYPE, collection)
+        d.apply(session)
+
+        timestamp = Timestamp.lookup(
+            session, "service", Timestamp.SCRIPT_TYPE, collection
+        )
+        assert timestamp.start == timestamp.finish == utc_now()
+
+        # Now set the optional fields as well.
+        d.counter = 100
+        d.achievements = "yay"
+        d.exception = "oops"
+        d.apply(session)
+
+        assert 100 == timestamp.counter
+        assert "yay" == timestamp.achievements
+        assert "oops" == timestamp.exception
+
+        # We can also use apply() to clear out the values for all
+        # fields other than the ones that uniquely identify the
+        # Timestamp.
+        d.start = SentinelType.ClearValue
+        d.finish = SentinelType.ClearValue
+        d.counter = SentinelType.ClearValue
+        d.achievements = SentinelType.ClearValue
+        d.exception = SentinelType.ClearValue
+        d.apply(session)
+
+        assert None == timestamp.start
+        assert None == timestamp.finish
+        assert None == timestamp.counter
+        assert None == timestamp.achievements
+        assert None == timestamp.exception

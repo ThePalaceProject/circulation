@@ -6,6 +6,9 @@ import pytest
 from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -17,7 +20,6 @@ from palace.manager.sqlalchemy.model.identifier import (
     isbn_for_identifier,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import create
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.manager.sqlalchemy.model.test_coverage import (

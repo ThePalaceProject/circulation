@@ -37,6 +37,9 @@ from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.core.problem_details import INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.admin import AdminAnnotator
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,
@@ -52,7 +55,6 @@ from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import strptime_utc, utc_now
 from palace.manager.util.languages import LanguageCodes

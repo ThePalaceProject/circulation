@@ -34,8 +34,8 @@ from palace.manager.core.classifier.age import AgeClassifier, GradeLevelClassifi
 from palace.manager.core.classifier.keyword import KeywordBasedClassifier
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.facets import FacetConstants
-from palace.manager.core.metadata_layer import IdentifierData
 from palace.manager.core.problem_details import INVALID_INPUT
+from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.service import (
     SearchDocument,

@@ -32,7 +32,7 @@ from palace.manager.api.circulation_exceptions import (
     PatronHoldLimitReached,
     PatronLoanLimitReached,
 )
-from palace.manager.core.metadata_layer import FormatData
+from palace.manager.metadata_layer.format import FormatData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource

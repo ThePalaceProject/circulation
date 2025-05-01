@@ -22,7 +22,9 @@ from palace.manager.celery.tasks.axis import (
     timestamp,
 )
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.core.metadata_layer import CirculationData, IdentifierData, Metadata
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now

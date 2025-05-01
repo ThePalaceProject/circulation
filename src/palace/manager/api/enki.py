@@ -30,21 +30,11 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import ConfigurationAttributeValue
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    Metadata,
-    ReplacementPolicy,
-    SubjectData,
-    TimestampData,
-)
 from palace.manager.core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor,
     TimelineMonitor,
+    TimestampData,
 )
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -52,6 +42,14 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
