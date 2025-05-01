@@ -1,4 +1,3 @@
-import csv
 import datetime
 import logging
 from copy import deepcopy
@@ -10,7 +9,6 @@ from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.core.metadata_layer import (
     CirculationData,
     ContributorData,
-    CSVMetadataImporter,
     FormatData,
     IdentifierData,
     LinkData,
@@ -37,7 +35,6 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.sentinel import SentinelType
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import FilesFixture
 from tests.mocks.mock import LogCaptureHandler
 
 
@@ -47,355 +44,6 @@ class TestIdentifierData:
         assert Identifier.ISBN == data.type
         assert "foo" == data.identifier
         assert 0.5 == data.weight
-
-
-class CSVFilesFixture(FilesFixture):
-    """A fixture providing access to CSV files."""
-
-    def __init__(self):
-        super().__init__("csv")
-
-
-@pytest.fixture()
-def csv_files_fixture() -> CSVFilesFixture:
-    """A fixture providing access to CSV files."""
-    return CSVFilesFixture()
-
-
-class TestMetadataImporter:
-    def test_parse(self, csv_files_fixture: CSVFilesFixture):
-        path = csv_files_fixture.sample_path("staff_picks_small.csv")
-        reader = csv.DictReader(open(path))
-        importer = CSVMetadataImporter(
-            DataSource.LIBRARY_STAFF,
-        )
-        generator = importer.to_metadata(reader)
-        m1, m2, m3 = list(generator)
-
-        assert "Horrorst\xf6r" == m1.title
-        assert "Grady Hendrix" == m1.contributors[0].display_name
-        assert "Martin Jensen" == m2.contributors[0].display_name
-
-        # Let's check out the identifiers we found.
-
-        # The first book has an Overdrive ID
-        [overdrive] = m1.identifiers
-        assert Identifier.OVERDRIVE_ID == overdrive.type
-        assert "504BA8F6-FF4E-4B57-896E-F1A50CFFCA0C" == overdrive.identifier
-        assert 0.75 == overdrive.weight
-
-        # The second book has no ID at all.
-        assert [] == m2.identifiers
-
-        # The third book has both a 3M ID and an Overdrive ID.
-        overdrive, threem = sorted(m3.identifiers, key=lambda x: x.identifier)
-
-        assert Identifier.OVERDRIVE_ID == overdrive.type
-        assert "eae60d41-e0b8-4f9d-90b5-cbc43d433c2f" == overdrive.identifier
-        assert 0.75 == overdrive.weight
-
-        assert Identifier.THREEM_ID == threem.type
-        assert "eswhyz9" == threem.identifier
-        assert 0.75 == threem.weight
-
-        # Now let's check out subjects.
-        assert [
-            ("schema:typicalAgeRange", "Adult", 100),
-            ("tag", "Character Driven", 100),
-            ("tag", "Historical", 100),
-            ("tag", "Nail-Biters", 100),
-            ("tag", "Setting Driven", 100),
-        ] == [
-            (x.type, x.identifier, x.weight)
-            for x in sorted(m2.subjects, key=lambda x: x.identifier or "")
-        ]
-
-    def test_classifications_from_another_source_not_updated(
-        self, db: DatabaseTransactionFixture
-    ):
-        # Set up an edition whose primary identifier has two
-        # classifications.
-        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
-        source2 = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
-        edition = db.edition()
-        identifier = edition.primary_identifier
-        c1 = identifier.classify(source1, Subject.TAG, "i will persist")
-        c2 = identifier.classify(source2, Subject.TAG, "i will perish")
-
-        # Now we get some new metadata from source #2.
-        subjects = [SubjectData(type=Subject.TAG, identifier="i will conquer")]
-        metadata = Metadata(subjects=subjects, data_source=source2)
-        replace = ReplacementPolicy(subjects=True)
-        metadata.apply(edition, None, replace=replace)
-
-        # The old classification from source #2 has been destroyed.
-        # The old classification from source #1 is still there.
-        assert ["i will conquer", "i will persist"] == sorted(
-            x.subject.identifier for x in identifier.classifications
-        )
-
-    def test_classifications_with_missing_subject_name_and_ident(
-        self, db: DatabaseTransactionFixture
-    ):
-        # A subject with no name or identifier should result in an
-        # error message and no new classification.
-        subjects = [SubjectData(type=Subject.TAG, name=None, identifier=None)]
-
-        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
-        edition = db.edition()
-        identifier = edition.primary_identifier
-        metadata = Metadata(subjects=subjects, data_source=source1)
-        replace = ReplacementPolicy(subjects=True)
-        with LogCaptureHandler(logging.root) as logs:
-            metadata.apply(edition, None, replace=replace)
-            assert len(logs.error) == 1
-            assert str(logs.error[0]).startswith("Error classifying subject:")
-            assert str(logs.error[0]).endswith(
-                "Cannot look up Subject when neither identifier nor name is provided."
-            )
-        assert len(identifier.classifications) == 0
-
-    def test_links(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        l1 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
-        l2 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
-        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
-        metadata.apply(edition, None)
-        [image, description] = sorted(
-            edition.primary_identifier.links, key=lambda x: x.rel
-        )
-        assert Hyperlink.IMAGE == image.rel
-        assert "http://example.com/" == image.resource.url
-
-        assert Hyperlink.DESCRIPTION == description.rel
-        assert b"foo" == description.resource.representation.content
-
-    def test_image_with_original_and_rights(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
-        original = LinkData(
-            rel=Hyperlink.IMAGE,
-            href="http://example.com/",
-            media_type=Representation.PNG_MEDIA_TYPE,
-            rights_uri=RightsStatus.PUBLIC_DOMAIN_USA,
-            rights_explanation="This image is from 1922",
-        )
-        image_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
-        derivative = LinkData(
-            rel=Hyperlink.IMAGE,
-            href="generic uri",
-            content=image_data,
-            media_type=Representation.PNG_MEDIA_TYPE,
-            rights_uri=RightsStatus.PUBLIC_DOMAIN_USA,
-            rights_explanation="This image is from 1922",
-            original=original,
-            transformation_settings=dict(position="top"),
-        )
-
-        metadata = Metadata(links=[derivative], data_source=data_source)
-        metadata.apply(edition, None)
-        [image] = edition.primary_identifier.links
-        assert Hyperlink.IMAGE == image.rel
-        assert "generic uri" == image.resource.url
-        assert image_data == image.resource.representation.content
-        assert RightsStatus.PUBLIC_DOMAIN_USA == image.resource.rights_status.uri
-        assert "This image is from 1922" == image.resource.rights_explanation
-
-        assert [] == image.resource.transformations
-        transformation = image.resource.derived_through
-        assert image.resource == transformation.derivative
-
-        assert "http://example.com/" == transformation.original.url
-        assert (
-            RightsStatus.PUBLIC_DOMAIN_USA == transformation.original.rights_status.uri
-        )
-        assert "This image is from 1922" == transformation.original.rights_explanation
-        assert "top" == transformation.settings.get("position")
-
-    def test_image_and_thumbnail(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        l2 = LinkData(
-            rel=Hyperlink.THUMBNAIL_IMAGE,
-            href="http://thumbnail.com/",
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )
-        l1 = LinkData(
-            rel=Hyperlink.IMAGE,
-            href="http://example.com/",
-            thumbnail=l2,
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )
-
-        # Even though we're only passing in the primary image link...
-        metadata = Metadata(links=[l1], data_source=edition.data_source)
-        metadata.apply(edition, None)
-
-        # ...a Hyperlink is also created for the thumbnail.
-        [image, thumbnail] = sorted(
-            edition.primary_identifier.links, key=lambda x: x.rel
-        )
-        assert Hyperlink.IMAGE == image.rel
-        assert [
-            thumbnail.resource.representation
-        ] == image.resource.representation.thumbnails
-
-    def test_thumbnail_isnt_a_thumbnail(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        not_a_thumbnail = LinkData(
-            rel=Hyperlink.DESCRIPTION,
-            content="A great book",
-            media_type=Representation.TEXT_PLAIN,
-        )
-        image = LinkData(
-            rel=Hyperlink.IMAGE,
-            href="http://example.com/",
-            thumbnail=not_a_thumbnail,
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )
-
-        metadata = Metadata(links=[image], data_source=edition.data_source)
-        metadata.apply(edition, None)
-
-        # Only one Hyperlink was created for the image, because
-        # the alleged 'thumbnail' wasn't actually a thumbnail.
-        [image_obj] = edition.primary_identifier.links
-        assert Hyperlink.IMAGE == image_obj.rel
-        assert [] == image_obj.resource.representation.thumbnails
-
-        # If we pass in the 'thumbnail' separately, a Hyperlink is
-        # created for it, but it's still not a thumbnail of anything.
-        metadata = Metadata(
-            links=[image, not_a_thumbnail], data_source=edition.data_source
-        )
-        metadata.apply(edition, None)
-        [hyperlink_image, description] = sorted(
-            edition.primary_identifier.links, key=lambda x: x.rel
-        )
-        assert Hyperlink.DESCRIPTION == description.rel
-        assert b"A great book" == description.resource.representation.content
-        assert [] == hyperlink_image.resource.representation.thumbnails
-        assert None == description.resource.representation.thumbnail_of
-
-    def test_image_and_thumbnail_are_the_same(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        url = "http://tinyimage.com/image.jpg"
-        l2 = LinkData(
-            rel=Hyperlink.THUMBNAIL_IMAGE,
-            href=url,
-        )
-        l1 = LinkData(
-            rel=Hyperlink.IMAGE,
-            href=url,
-            thumbnail=l2,
-        )
-        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
-        metadata.apply(edition, None)
-        [image, thumbnail] = sorted(
-            edition.primary_identifier.links, key=lambda x: x.rel
-        )
-
-        # The image and its thumbnail point to the same resource.
-        assert image.resource == thumbnail.resource
-
-        assert Hyperlink.IMAGE == image.rel
-        assert Hyperlink.THUMBNAIL_IMAGE == thumbnail.rel
-
-        # The thumbnail is marked as a thumbnail of the main image.
-        assert [
-            thumbnail.resource.representation
-        ] == image.resource.representation.thumbnails
-        assert url == edition.cover_full_url
-        assert url == edition.cover_thumbnail_url
-
-    def test_image_becomes_representation_but_thumbnail_does_not(
-        self, db: DatabaseTransactionFixture
-    ):
-        edition = db.edition()
-
-        # The thumbnail link has no media type, and none can be
-        # derived from the URL.
-        l2 = LinkData(
-            rel=Hyperlink.THUMBNAIL_IMAGE,
-            href="http://tinyimage.com/",
-        )
-
-        # The full-sized image link does not have this problem.
-        l1 = LinkData(
-            rel=Hyperlink.IMAGE,
-            href="http://largeimage.com/",
-            thumbnail=l2,
-            media_type=Representation.JPEG_MEDIA_TYPE,
-        )
-        metadata = Metadata(links=[l1], data_source=edition.data_source)
-        metadata.apply(edition, None)
-
-        # Both LinkData objects have been imported as Hyperlinks.
-        [image, thumbnail] = sorted(
-            edition.primary_identifier.links, key=lambda x: x.rel
-        )
-
-        # However, since no Representation was created for the thumbnail,
-        # the relationship between the main image and the thumbnail could
-        # not be imported.
-        assert None == thumbnail.resource.representation
-        assert [] == image.resource.representation.thumbnails
-
-        # The edition ends up with a full-sized image but no
-        # thumbnail. This could potentially be improved, since we know
-        # the two Resources are associated with the same Identifier.
-        # But we lose track of the fact that the two Resources are
-        # _the same image_ at different resolutions.
-        assert "http://largeimage.com/" == edition.cover_full_url
-        assert None == edition.cover_thumbnail_url
-
-    def test_measurements(self, db: DatabaseTransactionFixture):
-        edition = db.edition()
-        measurement = MeasurementData(
-            quantity_measured=Measurement.POPULARITY, value=100
-        )
-        metadata = Metadata(measurements=[measurement], data_source=edition.data_source)
-        metadata.apply(edition, None)
-        [m] = edition.primary_identifier.measurements
-        assert Measurement.POPULARITY == m.quantity_measured
-        assert 100 == m.value
-
-    def test_coverage_record(self, db: DatabaseTransactionFixture):
-        edition, pool = db.edition(with_license_pool=True)
-        data_source = edition.data_source
-
-        # No preexisting coverage record
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert coverage == None
-
-        last_update = datetime_utc(2015, 1, 1)
-
-        m = Metadata(
-            data_source=data_source,
-            title="New title",
-            data_source_last_updated=last_update,
-        )
-        m.apply(edition, None)
-
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert last_update == coverage.timestamp
-        assert "New title" == edition.title
-
-        older_last_update = datetime_utc(2014, 1, 1)
-        m = Metadata(
-            data_source=data_source,
-            title="Another new title",
-            data_source_last_updated=older_last_update,
-        )
-        m.apply(edition, None)
-        assert "New title" == edition.title
-
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert last_update == coverage.timestamp
-
-        m.apply(edition, None, force=True)
-        assert "Another new title" == edition.title
-        coverage = CoverageRecord.lookup(edition, data_source)
-        assert older_last_update == coverage.timestamp
 
 
 class TestContributorData:
@@ -718,6 +366,293 @@ class TestFormatData:
 
 
 class TestMetadata:
+    def test_classifications_from_another_source_not_updated(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Set up an edition whose primary identifier has two
+        # classifications.
+        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
+        source2 = DataSource.lookup(db.session, DataSource.METADATA_WRANGLER)
+        edition = db.edition()
+        identifier = edition.primary_identifier
+        c1 = identifier.classify(source1, Subject.TAG, "i will persist")
+        c2 = identifier.classify(source2, Subject.TAG, "i will perish")
+
+        # Now we get some new metadata from source #2.
+        subjects = [SubjectData(type=Subject.TAG, identifier="i will conquer")]
+        metadata = Metadata(subjects=subjects, data_source=source2)
+        replace = ReplacementPolicy(subjects=True)
+        metadata.apply(edition, None, replace=replace)
+
+        # The old classification from source #2 has been destroyed.
+        # The old classification from source #1 is still there.
+        assert ["i will conquer", "i will persist"] == sorted(
+            x.subject.identifier for x in identifier.classifications
+        )
+
+    def test_classifications_with_missing_subject_name_and_ident(
+        self, db: DatabaseTransactionFixture
+    ):
+        # A subject with no name or identifier should result in an
+        # error message and no new classification.
+        subjects = [SubjectData(type=Subject.TAG, name=None, identifier=None)]
+
+        source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
+        edition = db.edition()
+        identifier = edition.primary_identifier
+        metadata = Metadata(subjects=subjects, data_source=source1)
+        replace = ReplacementPolicy(subjects=True)
+        with LogCaptureHandler(logging.root) as logs:
+            metadata.apply(edition, None, replace=replace)
+            assert len(logs.error) == 1
+            assert str(logs.error[0]).startswith("Error classifying subject:")
+            assert str(logs.error[0]).endswith(
+                "Cannot look up Subject when neither identifier nor name is provided."
+            )
+        assert len(identifier.classifications) == 0
+
+    def test_links(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        l1 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
+        l2 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
+        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
+        metadata.apply(edition, None)
+        [image, description] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+        assert Hyperlink.IMAGE == image.rel
+        assert "http://example.com/" == image.resource.url
+
+        assert Hyperlink.DESCRIPTION == description.rel
+        assert b"foo" == description.resource.representation.content
+
+    def test_image_with_original_and_rights(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        data_source = DataSource.lookup(db.session, DataSource.LIBRARY_STAFF)
+        original = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/",
+            media_type=Representation.PNG_MEDIA_TYPE,
+            rights_uri=RightsStatus.PUBLIC_DOMAIN_USA,
+            rights_explanation="This image is from 1922",
+        )
+        image_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x01\x03\x00\x00\x00%\xdbV\xca\x00\x00\x00\x06PLTE\xffM\x00\x01\x01\x01\x8e\x1e\xe5\x1b\x00\x00\x00\x01tRNS\xcc\xd24V\xfd\x00\x00\x00\nIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
+        derivative = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="generic uri",
+            content=image_data,
+            media_type=Representation.PNG_MEDIA_TYPE,
+            rights_uri=RightsStatus.PUBLIC_DOMAIN_USA,
+            rights_explanation="This image is from 1922",
+            original=original,
+            transformation_settings=dict(position="top"),
+        )
+
+        metadata = Metadata(links=[derivative], data_source=data_source)
+        metadata.apply(edition, None)
+        [image] = edition.primary_identifier.links
+        assert Hyperlink.IMAGE == image.rel
+        assert "generic uri" == image.resource.url
+        assert image_data == image.resource.representation.content
+        assert RightsStatus.PUBLIC_DOMAIN_USA == image.resource.rights_status.uri
+        assert "This image is from 1922" == image.resource.rights_explanation
+
+        assert [] == image.resource.transformations
+        transformation = image.resource.derived_through
+        assert image.resource == transformation.derivative
+
+        assert "http://example.com/" == transformation.original.url
+        assert (
+            RightsStatus.PUBLIC_DOMAIN_USA == transformation.original.rights_status.uri
+        )
+        assert "This image is from 1922" == transformation.original.rights_explanation
+        assert "top" == transformation.settings.get("position")
+
+    def test_image_and_thumbnail(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        l2 = LinkData(
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href="http://thumbnail.com/",
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/",
+            thumbnail=l2,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        # Even though we're only passing in the primary image link...
+        metadata = Metadata(links=[l1], data_source=edition.data_source)
+        metadata.apply(edition, None)
+
+        # ...a Hyperlink is also created for the thumbnail.
+        [image, thumbnail] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+        assert Hyperlink.IMAGE == image.rel
+        assert [
+            thumbnail.resource.representation
+        ] == image.resource.representation.thumbnails
+
+    def test_thumbnail_isnt_a_thumbnail(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        not_a_thumbnail = LinkData(
+            rel=Hyperlink.DESCRIPTION,
+            content="A great book",
+            media_type=Representation.TEXT_PLAIN,
+        )
+        image = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://example.com/",
+            thumbnail=not_a_thumbnail,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+
+        metadata = Metadata(links=[image], data_source=edition.data_source)
+        metadata.apply(edition, None)
+
+        # Only one Hyperlink was created for the image, because
+        # the alleged 'thumbnail' wasn't actually a thumbnail.
+        [image_obj] = edition.primary_identifier.links
+        assert Hyperlink.IMAGE == image_obj.rel
+        assert [] == image_obj.resource.representation.thumbnails
+
+        # If we pass in the 'thumbnail' separately, a Hyperlink is
+        # created for it, but it's still not a thumbnail of anything.
+        metadata = Metadata(
+            links=[image, not_a_thumbnail], data_source=edition.data_source
+        )
+        metadata.apply(edition, None)
+        [hyperlink_image, description] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+        assert Hyperlink.DESCRIPTION == description.rel
+        assert b"A great book" == description.resource.representation.content
+        assert [] == hyperlink_image.resource.representation.thumbnails
+        assert None == description.resource.representation.thumbnail_of
+
+    def test_image_and_thumbnail_are_the_same(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        url = "http://tinyimage.com/image.jpg"
+        l2 = LinkData(
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href=url,
+        )
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href=url,
+            thumbnail=l2,
+        )
+        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
+        metadata.apply(edition, None)
+        [image, thumbnail] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+
+        # The image and its thumbnail point to the same resource.
+        assert image.resource == thumbnail.resource
+
+        assert Hyperlink.IMAGE == image.rel
+        assert Hyperlink.THUMBNAIL_IMAGE == thumbnail.rel
+
+        # The thumbnail is marked as a thumbnail of the main image.
+        assert [
+            thumbnail.resource.representation
+        ] == image.resource.representation.thumbnails
+        assert url == edition.cover_full_url
+        assert url == edition.cover_thumbnail_url
+
+    def test_image_becomes_representation_but_thumbnail_does_not(
+        self, db: DatabaseTransactionFixture
+    ):
+        edition = db.edition()
+
+        # The thumbnail link has no media type, and none can be
+        # derived from the URL.
+        l2 = LinkData(
+            rel=Hyperlink.THUMBNAIL_IMAGE,
+            href="http://tinyimage.com/",
+        )
+
+        # The full-sized image link does not have this problem.
+        l1 = LinkData(
+            rel=Hyperlink.IMAGE,
+            href="http://largeimage.com/",
+            thumbnail=l2,
+            media_type=Representation.JPEG_MEDIA_TYPE,
+        )
+        metadata = Metadata(links=[l1], data_source=edition.data_source)
+        metadata.apply(edition, None)
+
+        # Both LinkData objects have been imported as Hyperlinks.
+        [image, thumbnail] = sorted(
+            edition.primary_identifier.links, key=lambda x: x.rel
+        )
+
+        # However, since no Representation was created for the thumbnail,
+        # the relationship between the main image and the thumbnail could
+        # not be imported.
+        assert None == thumbnail.resource.representation
+        assert [] == image.resource.representation.thumbnails
+
+        # The edition ends up with a full-sized image but no
+        # thumbnail. This could potentially be improved, since we know
+        # the two Resources are associated with the same Identifier.
+        # But we lose track of the fact that the two Resources are
+        # _the same image_ at different resolutions.
+        assert "http://largeimage.com/" == edition.cover_full_url
+        assert None == edition.cover_thumbnail_url
+
+    def test_measurements(self, db: DatabaseTransactionFixture):
+        edition = db.edition()
+        measurement = MeasurementData(
+            quantity_measured=Measurement.POPULARITY, value=100
+        )
+        metadata = Metadata(measurements=[measurement], data_source=edition.data_source)
+        metadata.apply(edition, None)
+        [m] = edition.primary_identifier.measurements
+        assert Measurement.POPULARITY == m.quantity_measured
+        assert 100 == m.value
+
+    def test_coverage_record(self, db: DatabaseTransactionFixture):
+        edition, pool = db.edition(with_license_pool=True)
+        data_source = edition.data_source
+
+        # No preexisting coverage record
+        coverage = CoverageRecord.lookup(edition, data_source)
+        assert coverage == None
+
+        last_update = datetime_utc(2015, 1, 1)
+
+        m = Metadata(
+            data_source=data_source,
+            title="New title",
+            data_source_last_updated=last_update,
+        )
+        m.apply(edition, None)
+
+        coverage = CoverageRecord.lookup(edition, data_source)
+        assert last_update == coverage.timestamp
+        assert "New title" == edition.title
+
+        older_last_update = datetime_utc(2014, 1, 1)
+        m = Metadata(
+            data_source=data_source,
+            title="Another new title",
+            data_source_last_updated=older_last_update,
+        )
+        m.apply(edition, None)
+        assert "New title" == edition.title
+
+        coverage = CoverageRecord.lookup(edition, data_source)
+        assert last_update == coverage.timestamp
+
+        m.apply(edition, None, force=True)
+        assert "Another new title" == edition.title
+        coverage = CoverageRecord.lookup(edition, data_source)
+        assert older_last_update == coverage.timestamp
+
     def test_defaults(self):
         # Verify that a Metadata object doesn't make any assumptions
         # about an item's medium.
