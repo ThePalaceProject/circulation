@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing_extensions import Self
+
 
 class PresentationCalculationPolicy:
     """Which parts of the Work or Edition's presentation
@@ -13,18 +15,18 @@ class PresentationCalculationPolicy:
     def __init__(
         self,
         *,
-        choose_edition=True,
-        set_edition_metadata=True,
-        classify=True,
-        choose_summary=True,
-        calculate_quality=True,
-        choose_cover=True,
-        update_search_index=False,
-        verbose=True,
-        equivalent_identifier_levels=DEFAULT_LEVELS,
-        equivalent_identifier_threshold=DEFAULT_THRESHOLD,
-        equivalent_identifier_cutoff=DEFAULT_CUTOFF,
-    ):
+        choose_edition: bool = True,
+        set_edition_metadata: bool = True,
+        classify: bool = True,
+        choose_summary: bool = True,
+        calculate_quality: bool = True,
+        choose_cover: bool = True,
+        update_search_index: bool = False,
+        verbose: bool = True,
+        equivalent_identifier_levels: int = DEFAULT_LEVELS,
+        equivalent_identifier_threshold: float = DEFAULT_THRESHOLD,
+        equivalent_identifier_cutoff: int = DEFAULT_CUTOFF,
+    ) -> None:
         """Constructor.
 
         :param choose_edition: Should a new presentation edition be
@@ -81,16 +83,16 @@ class PresentationCalculationPolicy:
         self.equivalent_identifier_cutoff = equivalent_identifier_cutoff
 
     @classmethod
-    def recalculate_everything(cls):
+    def recalculate_everything(cls) -> Self:
         """A PresentationCalculationPolicy that always recalculates
         everything, even when it doesn't seem necessary.
         """
-        return PresentationCalculationPolicy(
+        return cls(
             update_search_index=True,
         )
 
     @classmethod
-    def reset_cover(cls):
+    def reset_cover(cls) -> Self:
         """A PresentationCalculationPolicy that only resets covers
         (including updating cached entries, if necessary) without
         impacting any other metadata.
