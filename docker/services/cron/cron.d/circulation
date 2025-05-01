@@ -18,7 +18,6 @@ HOME=/var/www/circulation
 # These scripts improve the bibliographic information associated with
 # the collections.
 #
-30 3 * * * root bin/run update_nyt_best_seller_lists >> /var/log/cron.log 2>&1
 
 # If any works are missing presentation editions, add them.
 0 */3 * * * root bin/run work_presentation_editions >> /var/log/cron.log 2>&1

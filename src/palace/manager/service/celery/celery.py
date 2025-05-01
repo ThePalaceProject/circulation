@@ -190,6 +190,13 @@ def beat_schedule() -> dict[str, Any]:
                 hour="8,20",
             ),  # Every 12 hours, but spaced after hour 8 to reduce job cluttering
         },
+        "update_nyt_best_sellers_lists": {
+            "task": "nyt.update_nyt_best_sellers_lists",
+            "schedule": crontab(
+                minute="30",
+                hour="3",
+            ),  # Every morning at 3:30 am.
+        },
     }
 
 
