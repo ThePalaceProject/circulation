@@ -264,11 +264,11 @@ def import_identifiers(
             log_run_end_message()
             return
 
-        api = create_api(session=session, collection=collection)
-        bearer_token = api.bearer_token()
-        identifier_batch = identifiers[:batch_size]
-
         try:
+            api = create_api(session=session, collection=collection)
+            bearer_token = api.bearer_token()
+            identifier_batch = identifiers[:batch_size]
+
             circ_data = [
                 (metadata, circulation)
                 for metadata, circulation in api.availability_by_title_ids(
