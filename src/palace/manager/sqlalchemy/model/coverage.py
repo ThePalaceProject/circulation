@@ -306,7 +306,7 @@ class Timestamp(Base):
 
     def to_data(self):
         """Convert this Timestamp to an unfinalized TimestampData."""
-        from palace.manager.core.metadata_layer import TimestampData
+        from palace.manager.core.monitor import TimestampData
 
         return TimestampData(
             start=self.start,

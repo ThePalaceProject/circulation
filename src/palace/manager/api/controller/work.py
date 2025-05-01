@@ -20,8 +20,8 @@ from palace.manager.api.problem_details import NO_SUCH_LANE, NOT_FOUND_ON_REMOTE
 from palace.manager.api.util.flask import get_request_library, get_request_patron
 from palace.manager.core.app_server import load_pagination_from_request
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.metadata_layer import ContributorData
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.search.external_search import SortKeyPagination
 from palace.manager.sqlalchemy.model.lane import FeaturedFacets, Pagination
 from palace.manager.util.flask_util import OPDSEntryResponse

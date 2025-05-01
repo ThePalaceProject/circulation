@@ -37,6 +37,9 @@ from sqlalchemy.sql.functions import func
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.search.service import SearchDocument
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import DataSourceConstants
@@ -55,7 +58,6 @@ from palace.manager.sqlalchemy.model.identifier import (
     RecursiveEquivalencyCache,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import (
     flush,
     get_one_or_create,

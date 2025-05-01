@@ -1,9 +1,11 @@
 import sys
 
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.scripts.input import IdentifierInputScript
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 
 
 class AddClassificationScript(IdentifierInputScript):

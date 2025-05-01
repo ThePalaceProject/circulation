@@ -20,7 +20,7 @@ from palace.manager.api.circulation_exceptions import (
     LibraryAuthorizationFailedException,
 )
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.core.metadata_layer import FormatData, TimestampData
+from palace.manager.core.monitor import TimestampData
 from palace.manager.core.opds_import import (
     OPDSImporter,
     OPDSImporterSettings,
@@ -31,6 +31,7 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     FormField,
 )
+from palace.manager.metadata_layer.format import FormatData
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -52,8 +53,8 @@ if TYPE_CHECKING:
 
     from palace.manager.api.circulation import HoldInfo
     from palace.manager.core.coverage import CoverageFailure
-    from palace.manager.core.metadata_layer import CirculationData
     from palace.manager.core.selftest import SelfTestResult
+    from palace.manager.metadata_layer.circulation import CirculationData
     from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.work import Work
 

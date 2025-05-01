@@ -32,6 +32,9 @@ from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.sql.expression import and_, or_
 
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.sqlalchemy.constants import IdentifierConstants, LinkRelations
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -43,7 +46,6 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.log import LoggerMixin

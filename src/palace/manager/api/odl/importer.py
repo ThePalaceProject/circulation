@@ -14,8 +14,10 @@ from palace.manager.api.odl.api import OPDS2WithODLApi
 from palace.manager.api.odl.auth import OdlAuthenticatedRequest
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
-from palace.manager.core.metadata_layer import FormatData, LicenseData, Metadata
 from palace.manager.core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.license import LicenseData
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl import odl

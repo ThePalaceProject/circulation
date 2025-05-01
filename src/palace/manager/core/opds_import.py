@@ -36,18 +36,7 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    IdentifierData,
-    LinkData,
-    MeasurementData,
-    Metadata,
-    ReplacementPolicy,
-    SubjectData,
-    TimestampData,
-)
-from palace.manager.core.monitor import CollectionMonitor
+from palace.manager.core.monitor import CollectionMonitor, TimestampData
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.configuration.connection import ConnectionSetting
 from palace.manager.integration.configuration.formats import FormatPrioritiesSettings
@@ -62,6 +51,14 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.measurement import MeasurementData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord

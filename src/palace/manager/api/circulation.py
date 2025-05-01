@@ -39,7 +39,6 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.api.util.patron import PatronUtility
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.core.metadata_layer import FormatData
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -47,6 +46,7 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.metadata_layer.format import FormatData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection

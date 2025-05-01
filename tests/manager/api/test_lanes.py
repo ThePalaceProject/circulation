@@ -31,8 +31,9 @@ from palace.manager.api.metadata.nyt import NYTBestSellerAPI, NytBestSellerApiSe
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
-from palace.manager.core.metadata_layer import ContributorData, Metadata
 from palace.manager.integration.goals import Goals
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.search.external_search import Filter
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource

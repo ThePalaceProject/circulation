@@ -16,7 +16,7 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.core.metadata_layer import Metadata
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis

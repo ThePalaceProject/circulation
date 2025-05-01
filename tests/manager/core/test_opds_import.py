@@ -25,7 +25,6 @@ from palace.manager.api.saml.metadata.model import (
     SAMLSubject,
 )
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.core.metadata_layer import LinkData
 from palace.manager.core.opds_import import (
     OPDSAPI,
     IdentifierSource,
@@ -36,6 +35,7 @@ from palace.manager.core.opds_import import (
 from palace.manager.integration.configuration.wayfless import (
     SAMLWAYFlessFulfillmentError,
 )
+from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
