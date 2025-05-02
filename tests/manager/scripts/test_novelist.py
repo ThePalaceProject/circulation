@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
+from palace.manager.integration.goals import Goals
 from palace.manager.scripts.novelist import NovelistSnapshotScript
 from palace.manager.service.logging.configuration import LogLevel
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -23,7 +25,14 @@ class TestNovelistSnapshotScript:
         """Test that NovelistSnapshotScript.do_run() queues the update_novelists_by_library task."""
         caplog.set_level(LogLevel.info)
         l1 = db.library()
-        cmd_args = [l1.name]
+        l2 = db.library()
+        db.integration_configuration(
+            name="test novelist integration",
+            protocol=NoveListAPI,
+            goal=Goals.METADATA_GOAL,
+            libraries=[l1],
+            settings=NoveListApiSettings(username="test", password="test"),
+        )
 
         with patch(
             "palace.manager.scripts.novelist.update_novelists_by_library"
@@ -31,9 +40,13 @@ class TestNovelistSnapshotScript:
             script = NovelistSnapshotScript(
                 db.session,
             )
-            script.do_run(cmd_args=cmd_args)
+            script.do_run()
             update.delay.assert_called_once_with(library_id=l1.id)
             assert (
                 f'Queued novelist_update task for library: name="{l1.name}", id={l1.id}'
                 in caplog.text
             )
+            assert (
+                f'The library name "{l2.name}" is not associated with Novelist API integration and '
+                f"therefore will not be queued."
+            ) in caplog.text

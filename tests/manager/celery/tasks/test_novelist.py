@@ -2,11 +2,12 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
-from palace.manager.api.metadata.novelist import NoveListAPI
+from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
 from palace.manager.celery.tasks.novelist import (
     update_novelists_by_library,
     update_novelists_for_all_libraries,
 )
+from palace.manager.integration.goals import Goals
 from palace.manager.service.logging.configuration import LogLevel
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -21,6 +22,17 @@ def test_update_novelists_for_all_libraries(
 
     lib1 = db.library(name="lib1", short_name="lib1")
     lib2 = db.library(name="lib2", short_name="lib2")
+    lib3 = db.library(name="lib3", short_name="lib3")
+
+    # configure only two of the three libraries to ensure that libraries not associated with the integration are
+    # not called.
+    db.integration_configuration(
+        name="test novelist integration",
+        protocol=NoveListAPI,
+        goal=Goals.METADATA_GOAL,
+        libraries=[lib1, lib2],
+        settings=NoveListApiSettings(username="test", password="test"),
+    )
 
     with patch(
         "palace.manager.celery.tasks.novelist.update_novelists_by_library"
@@ -37,6 +49,7 @@ def test_update_novelists_for_all_libraries(
         assert (
             f"Queued update task for library('{lib.name}' (id={lib.id})" in caplog.text
         )
+    assert lib3.name and lib3.name not in caplog.text
 
     assert "task completed successfully" in caplog.text
 
