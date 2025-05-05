@@ -15,7 +15,7 @@ from palace.manager.api.overdrive.monitor import (
     OverdriveFormatSweep,
     RecentOverdriveCollectionMonitor,
 )
-from palace.manager.core.metadata_layer import TimestampData
+from palace.manager.core.monitor import TimestampData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture

@@ -1,7 +1,9 @@
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from tests.fixtures.database import DatabaseTransactionFixture
 
 

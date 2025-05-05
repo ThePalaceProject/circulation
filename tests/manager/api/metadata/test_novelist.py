@@ -8,8 +8,8 @@ from pytest import MonkeyPatch
 
 from palace.manager.api.config import CannotLoadConfiguration
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
-from palace.manager.core.metadata_layer import Metadata
 from palace.manager.integration.goals import Goals
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.resource import HttpResponseTuple

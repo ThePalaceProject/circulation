@@ -43,14 +43,12 @@ from palace.manager.api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    IdentifierData,
-    Metadata,
-    SubjectData,
-)
 from palace.manager.integration.base import integration_settings_update
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject

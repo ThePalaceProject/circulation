@@ -1,4 +1,4 @@
-from palace.manager.core.metadata_layer import TimestampData
+from palace.manager.core.monitor import TimestampData
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 

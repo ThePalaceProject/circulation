@@ -17,11 +17,11 @@ from tenacity import (
 )
 
 from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.core.metadata_layer import TimestampData
 from palace.manager.core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor,
     TimelineMonitor,
+    TimestampData,
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services

@@ -625,11 +625,9 @@ class LicensePool(Base):
 
         # Note: We can do a cleaner solution, if we refactor to not use metadata's
         # methods to update editions.  For now, we're choosing to go with the below approach.
-        from palace.manager.core.metadata_layer import (
-            IdentifierData,
-            Metadata,
-            ReplacementPolicy,
-        )
+        from palace.manager.metadata_layer.identifier import IdentifierData
+        from palace.manager.metadata_layer.metadata import Metadata
+        from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 
         if len(all_editions) == 1:
             # There's only one edition associated with this

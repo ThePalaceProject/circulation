@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 import traceback
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
@@ -16,7 +16,9 @@ from tenacity import (
 )
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.core.metadata_layer import TimestampData
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -28,13 +30,12 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Query
+    from sqlalchemy.orm import Query, Session
 
 
 class CollectionMonitorLogger(logging.LoggerAdapter):
@@ -810,3 +811,118 @@ class CustomListEntryWorkUpdateMonitor(CustomListEntrySweepMonitor):
 
     def process_item(self, item):
         item.set_work()
+
+
+class TimestampData:
+    def __init__(
+        self,
+        start: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        finish: datetime.datetime | None | Literal[SentinelType.ClearValue] = None,
+        achievements: str | None | Literal[SentinelType.ClearValue] = None,
+        counter: int | None | Literal[SentinelType.ClearValue] = None,
+        exception: str | None | Literal[SentinelType.ClearValue] = None,
+    ) -> None:
+        """A constructor intended to be used by a service to customize its
+        eventual Timestamp.
+
+        service, service_type, and collection cannot be set through
+        this constructor, because they are generally not under the
+        control of the code that runs the service. They are set
+        afterwards, in finalize().
+
+        :param start: The time that the service should be considered to
+           have started running.
+        :param finish: The time that the service should be considered
+           to have stopped running.
+        :param achievements: A string describing what was achieved by the
+           service.
+        :param counter: A single integer item of state representing the point
+           at which the service left off.
+        :param exception: A traceback representing an exception that stopped
+           the progress of the service.
+        """
+
+        # These are set by finalize().
+        self.service: str | None = None
+        self.service_type: str | None = None
+        self.collection_id: int | None = None
+
+        self.start = start
+        self.finish = finish
+        self.achievements = achievements
+        self.counter = counter
+        self.exception = exception
+
+    @property
+    def is_failure(self) -> bool:
+        """Does this TimestampData represent an unrecoverable failure?"""
+        return self.exception not in (None, SentinelType.ClearValue)
+
+    @property
+    def is_complete(self) -> bool:
+        """Does this TimestampData represent an operation that has
+        completed?
+
+        An operation is completed if it has failed, or if the time of its
+        completion is known.
+        """
+        return self.is_failure or self.finish not in (None, SentinelType.ClearValue)
+
+    def finalize(
+        self,
+        service: str,
+        service_type: str,
+        collection: Collection | None,
+        start: datetime.datetime | None = None,
+        finish: datetime.datetime | None = None,
+        counter: int | None = None,
+        exception: str | None = None,
+    ) -> None:
+        """Finalize any values that were not set during the constructor.
+
+        This is intended to be run by the code that originally ran the
+        service.
+
+        The given values for `start`, `finish`,
+        `counter`, and `exception` will be used only if the service
+        did not specify its own values for those fields.
+        """
+        self.service = service
+        self.service_type = service_type
+        if collection is None:
+            self.collection_id = None
+        else:
+            self.collection_id = collection.id
+        if self.start is None:
+            self.start = start
+        if self.finish is None:
+            if finish is None:
+                finish = utc_now()
+            self.finish = finish
+        if self.start is None:
+            self.start = self.finish
+        if self.counter is None:
+            self.counter = counter
+        if self.exception is None:
+            self.exception = exception
+
+    def collection(self, _db: Session) -> Collection | None:
+        return get_one(_db, Collection, id=self.collection_id)
+
+    def apply(self, _db: Session) -> Timestamp:
+        if self.service is None or self.service_type is None:
+            raise ValueError(
+                "Not enough information to write TimestampData to the database."
+            )
+
+        return Timestamp.stamp(
+            _db,
+            self.service,
+            self.service_type,
+            self.collection(_db),
+            self.start,
+            self.finish,
+            self.achievements,
+            self.counter,
+            self.exception,
+        )

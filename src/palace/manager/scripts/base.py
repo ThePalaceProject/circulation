@@ -3,7 +3,7 @@ import traceback
 
 from sqlalchemy.orm import Session
 
-from palace.manager.core.metadata_layer import TimestampData
+from palace.manager.core.monitor import TimestampData
 from palace.manager.service.container import Services, container_instance
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.session import production_session

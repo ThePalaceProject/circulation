@@ -3,7 +3,7 @@ import datetime
 import pytest
 from freezegun import freeze_time
 
-from palace.manager.core.metadata_layer import TimestampData
+from palace.manager.core.monitor import TimestampData
 from palace.manager.sqlalchemy.model.coverage import (
     BaseCoverageRecord,
     CoverageRecord,

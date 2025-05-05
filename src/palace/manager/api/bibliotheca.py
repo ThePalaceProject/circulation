@@ -53,17 +53,6 @@ from palace.manager.core.config import (
     ConfigurationAttributeValue,
 )
 from palace.manager.core.coverage import BibliographicCoverageProvider
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    MeasurementData,
-    Metadata,
-    ReplacementPolicy,
-    SubjectData,
-)
 from palace.manager.core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor,
@@ -74,6 +63,15 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.measurement import MeasurementData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.service.container import Services

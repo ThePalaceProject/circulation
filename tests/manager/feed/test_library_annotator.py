@@ -32,6 +32,9 @@ from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.integration.goals import Goals
+from palace.manager.metadata_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -44,7 +47,6 @@ from palace.manager.sqlalchemy.model.lane import (
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.flask_util import OPDSFeedResponse
 from palace.manager.util.opds_writer import OPDSFeed

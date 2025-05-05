@@ -15,15 +15,6 @@ from uritemplate import URITemplate
 from palace.manager.api.circulation import RedirectFulfillment
 from palace.manager.api.circulation_exceptions import CannotFulfill
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.core.metadata_layer import (
-    CirculationData,
-    ContributorData,
-    FormatData,
-    IdentifierData,
-    LinkData,
-    Metadata,
-    SubjectData,
-)
 from palace.manager.core.opds_import import (
     BaseOPDSAPI,
     BaseOPDSImporter,
@@ -36,6 +27,13 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
+from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.metadata_layer.format import FormatData
+from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.metadata_layer.link import LinkData
+from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.opds2 import AcquisitionObject
 from palace.manager.opds.types.link import CompactCollection

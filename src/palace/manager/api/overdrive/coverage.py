@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from palace.manager.api.overdrive.constants import OVERDRIVE_LABEL
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
-from palace.manager.core.metadata_layer import Metadata
+from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
