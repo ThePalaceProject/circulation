@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from functools import cached_property
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
@@ -740,18 +741,15 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
-        self._is_novelist_configured: bool | None = None
 
-    @property
+    @cached_property
     def is_novelist_configured(self) -> bool:
         """Lazy load and cache NoveList's `is_configured` flag.
 
         This is an optimization to avoid a SQL query to check this
-        flag for every book in the feed.
+        flag for every entry in the feed.
         """
-        if self._is_novelist_configured is None:
-            self._is_novelist_configured = NoveListAPI.is_configured(self.library)
-        return self._is_novelist_configured
+        return NoveListAPI.is_configured(self.library)
 
     def top_level_title(self) -> str:
         return self._top_level_title
