@@ -740,6 +740,18 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self._top_level_title = top_level_title
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
+        self._is_novelist_configured: bool | None = None
+
+    @property
+    def is_novelist_configured(self) -> bool:
+        """Lazy load and cache NoveList's `is_configured` flag.
+
+        This is an optimization to avoid a SQL query to check this
+        flag for every book in the feed.
+        """
+        if self._is_novelist_configured is None:
+            self._is_novelist_configured = NoveListAPI.is_configured(self.library)
+        return self._is_novelist_configured
 
     def top_level_title(self) -> str:
         return self._top_level_title
@@ -896,7 +908,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if work.series:
             self.add_series_link(entry)
 
-        if NoveListAPI.is_configured(self.library):
+        if self.is_novelist_configured:
             # If NoveList Select is configured, there might be
             # recommendations, too.
             entry.computed.other_links.append(
