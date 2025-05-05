@@ -43,7 +43,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.util import (
-    MutableDictFrozenDict,
+    MutableDict,
     get_one,
     get_one_or_create,
 )
@@ -403,7 +403,7 @@ class ResourceTransformation(Base):
 
     # The settings used for the transformation.
     settings: Mapped[dict[str, str]] = Column(
-        MutableDictFrozenDict.as_mutable(JSON), default={}, nullable=False
+        MutableDict.as_mutable(JSON), default={}, nullable=False
     )
 
 

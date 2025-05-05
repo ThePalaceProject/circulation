@@ -10,7 +10,7 @@ from psycopg2._range import NumericRange
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
-from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.ext import mutable
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
@@ -195,7 +195,7 @@ def tuple_to_numericrange(t: NumericRangeTuple | None) -> NumericRange | None:
     return NumericRange(t[0], t[1], "[]")
 
 
-class MutableDictFrozenDict(MutableDict):
+class MutableDict(mutable.MutableDict):
     """
     A MutableDict that will accept a frozen dictionary as a value coercing
     it to a regular dictionary.
