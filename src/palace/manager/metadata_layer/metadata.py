@@ -104,7 +104,7 @@ class Metadata(LoggerMixin):
 
         if isinstance(primary_identifier, Identifier):
             primary_identifier = IdentifierData(
-                primary_identifier.type, primary_identifier.identifier
+                type=primary_identifier.type, identifier=primary_identifier.identifier
             )
         self.primary_identifier = primary_identifier
         self.identifiers = identifiers or []
@@ -177,13 +177,11 @@ class Metadata(LoggerMixin):
                 )
 
         i = edition.primary_identifier
-        primary_identifier = IdentifierData(
-            type=i.type, identifier=i.identifier, weight=1
-        )
+        primary_identifier = IdentifierData.from_identifier(i)
 
         links: list[LinkData] = []
         for link in i.links:
-            link_data = LinkData(link.rel, link.resource.url)
+            link_data = LinkData(rel=link.rel, href=link.resource.url)
             links.append(link_data)
 
         return Metadata(
@@ -331,15 +329,13 @@ class Metadata(LoggerMixin):
                 for x in (Contributor.Role.AUTHOR, Contributor.Role.PRIMARY_AUTHOR)
             ):
                 continue
-            contributor.find_sort_name(_db)
-            confidence = 0
+            contributor_sort_name = contributor.find_sort_name(_db)
 
             base = (
                 _db.query(Edition)
                 .filter(Edition.title.ilike(self.title))
                 .filter(Edition.medium == Edition.BOOK_MEDIUM)
             )
-            success = False
 
             # A match based on work ID is the most reliable.
             pwid = self.calculate_permanent_work_id(_db)
@@ -351,8 +347,8 @@ class Metadata(LoggerMixin):
                 LicensePool, clause
             )
             success = self._run_query(qu, potentials, 0.95)
-            if not success and contributor.sort_name:
-                qu = base.filter(Edition.sort_author == contributor.sort_name)
+            if not success and contributor_sort_name:
+                qu = base.filter(Edition.sort_author == contributor_sort_name)
                 success = self._run_query(qu, potentials, 0.9)
             if not success and contributor.display_name:
                 qu = base.filter(Edition.author == contributor.display_name)
@@ -510,9 +506,7 @@ class Metadata(LoggerMixin):
                     data_source, new_identifier, identifier_data.weight
                 )
 
-        new_subjects = {}
-        if self.subjects:
-            new_subjects = {subject.key: subject for subject in self.subjects}
+        new_subjects = set(self.subjects if self.subjects else [])
         if replace.subjects:
             # Remove any old Subjects from this data source, unless they
             # are also in the list of new subjects.
@@ -520,9 +514,14 @@ class Metadata(LoggerMixin):
 
             def _key(
                 classification: Classification,
-            ) -> tuple[str, str | None, str | None, int]:
+            ) -> SubjectData:
                 s = classification.subject
-                return s.type, s.identifier, s.name, classification.weight
+                return SubjectData(
+                    type=s.type,
+                    identifier=s.identifier,
+                    name=s.name,
+                    weight=classification.weight,
+                )
 
             for classification in identifier.classifications:
                 if classification.data_source == data_source:
@@ -536,7 +535,7 @@ class Metadata(LoggerMixin):
                         # The data source maintains that this
                         # classification is a good idea. We don't have
                         # to do anything.
-                        del new_subjects[key]
+                        new_subjects.remove(key)
                         surviving_classifications.append(classification)
                 else:
                     # This classification comes from some other data
@@ -545,7 +544,7 @@ class Metadata(LoggerMixin):
             identifier.classifications = surviving_classifications
 
         # Apply all new subjects to the identifier.
-        for subject in list(new_subjects.values()):
+        for subject in new_subjects:
             try:
                 identifier.classify(
                     data_source,
@@ -617,31 +616,24 @@ class Metadata(LoggerMixin):
 
             link_objects[link] = link_obj
             if link.thumbnail:
-                if link.thumbnail.rel == Hyperlink.THUMBNAIL_IMAGE:
-                    thumbnail = link.thumbnail
-                    thumbnail_obj, ignore = identifier.add_link(
-                        rel=thumbnail.rel,
-                        href=thumbnail.href,
-                        data_source=data_source,
-                        media_type=thumbnail.guessed_media_type,
-                        content=thumbnail.content,
+                thumbnail = link.thumbnail
+                thumbnail_obj, ignore = identifier.add_link(
+                    rel=thumbnail.rel,
+                    href=thumbnail.href,
+                    data_source=data_source,
+                    media_type=thumbnail.guessed_media_type,
+                    content=thumbnail.content,
+                )
+                work_requires_new_presentation_edition = True
+                if thumbnail_obj.resource and thumbnail_obj.resource.representation:
+                    thumbnail_obj.resource.representation.thumbnail_of = (
+                        link_obj.resource.representation
                     )
-                    work_requires_new_presentation_edition = True
-                    if thumbnail_obj.resource and thumbnail_obj.resource.representation:
-                        thumbnail_obj.resource.representation.thumbnail_of = (
-                            link_obj.resource.representation
-                        )
-                    else:
-                        self.log.error(
-                            "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
-                            % (link.thumbnail, link)
-                        )
                 else:
                     self.log.error(
-                        "Thumbnail link %r does not have the thumbnail link relation! Not acceptable as a thumbnail of %r."
+                        "Thumbnail link %r cannot be marked as a thumbnail of %r because it has no Representation, probably due to a missing media type."
                         % (link.thumbnail, link)
                     )
-                    link.thumbnail = None
 
         # Apply all measurements to the primary identifier
         for measurement in self.measurements:
@@ -786,14 +778,10 @@ class Metadata(LoggerMixin):
             edition.contributions = []
 
         for contributor_data in self.contributors:
-            contributor_data.find_sort_name(_db)
-            if (
-                contributor_data.sort_name
-                or contributor_data.lc
-                or contributor_data.viaf
-            ):
+            contributor_sort_name = contributor_data.find_sort_name(_db)
+            if contributor_sort_name or contributor_data.lc or contributor_data.viaf:
                 contributor = edition.add_contributor(
-                    name=contributor_data.sort_name,
+                    name=contributor_sort_name,
                     roles=contributor_data.roles,
                     lc=contributor_data.lc,
                     viaf=contributor_data.viaf,

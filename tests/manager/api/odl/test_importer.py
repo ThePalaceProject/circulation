@@ -971,7 +971,7 @@ class TestOPDS2WithODLImporter:
         parsed = OPDS2WithODLImporter.parse_license_info(
             json.dumps(license_dict), info_link, checkout_link
         )
-        assert parsed.content_types == ["single format"]
+        assert parsed.content_types == ("single format",)
 
         # Format list
         license_dict = license_info_dict()
@@ -979,7 +979,7 @@ class TestOPDS2WithODLImporter:
         parsed = OPDS2WithODLImporter.parse_license_info(
             json.dumps(license_dict), info_link, checkout_link
         )
-        assert parsed.content_types == ["format1", "format2"]
+        assert parsed.content_types == ("format1", "format2")
 
     def test_fetch_license_info(self):
         """Ensure that OPDS2WithODLImporter correctly retrieves license data from an OPDS2 feed."""

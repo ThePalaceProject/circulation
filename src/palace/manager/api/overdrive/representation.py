@@ -236,7 +236,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             self.log.error("Book has no ID: %r", book)
             raise PalaceValueError("Book must have an id to be processed")
         overdrive_id = book["id"]
-        primary_identifier = IdentifierData(Identifier.OVERDRIVE_ID, overdrive_id)
+        primary_identifier = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=overdrive_id
+        )
         # TODO: We might be able to use this information to avoid the
         # need for explicit configuration of Advantage collections, or
         # at least to keep Advantage collections more up-to-date than
@@ -321,7 +323,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         return list(filtered_result)
 
     @classmethod
-    def image_link_to_linkdata(cls, link: dict[str, str], rel: str) -> LinkData | None:
+    def image_link_to_linkdata(
+        cls, link: dict[str, str], rel: str, thumbnail: LinkData | None = None
+    ) -> LinkData | None:
         if not link or not "href" in link:
             return None
         href = link["href"]
@@ -332,7 +336,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             return None
         href = _make_link_safe(href)
         media_type = link.get("type", None)
-        return LinkData(rel=rel, href=href, media_type=media_type)
+        return LinkData(rel=rel, href=href, media_type=media_type, thumbnail=thumbnail)
 
     _SERIES_POSITION_REGEX = re.compile(r"^.*?(\d+)")
 
@@ -377,7 +381,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         if not "id" in book:
             return None
         overdrive_id = book["id"]
-        primary_identifier = IdentifierData(Identifier.OVERDRIVE_ID, overdrive_id)
+        primary_identifier = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=overdrive_id
+        )
 
         # If we trust classification data, we'll give it this weight.
         # Otherwise we'll probably give it a fraction of this weight.
@@ -476,7 +482,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 extra["awards"] = book.get("awards", [])
                 num_awards = len(extra["awards"])
                 measurements.append(
-                    MeasurementData(Measurement.AWARDS, str(num_awards))
+                    MeasurementData(
+                        quantity_measured=Measurement.AWARDS, value=str(num_awards)
+                    )
                 )
 
             for name, subject_type in (
@@ -546,7 +554,9 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     elif t == "PublisherCatalogNumber":
                         continue
                     if type_key and v:
-                        identifiers.append(IdentifierData(type_key, v, 1))
+                        identifiers.append(
+                            IdentifierData(type=type_key, identifier=v, weight=1)
+                        )
 
                 # Samples become links.
                 if "samples" in format:
@@ -584,9 +594,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             # A cover and its thumbnail become a single LinkData.
             if "images" in book:
                 images = book["images"]
-                image_data = cls.image_link_to_linkdata(
-                    images.get("cover"), Hyperlink.IMAGE
-                )
                 for name in ["cover300Wide", "cover150Wide", "thumbnail"]:
                     # Try to get a thumbnail that's as close as possible
                     # to the size we use.
@@ -594,14 +601,19 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     thumbnail_data = cls.image_link_to_linkdata(
                         image, Hyperlink.THUMBNAIL_IMAGE
                     )
-                    if not image_data:
-                        image_data = cls.image_link_to_linkdata(image, Hyperlink.IMAGE)
                     if thumbnail_data:
                         break
 
+                image_data = cls.image_link_to_linkdata(
+                    images.get("cover"), Hyperlink.IMAGE, thumbnail_data
+                )
+
+                if not image_data:
+                    image_data = cls.image_link_to_linkdata(
+                        image, Hyperlink.IMAGE, thumbnail_data
+                    )
+
                 if image_data:
-                    if thumbnail_data:
-                        image_data.thumbnail = thumbnail_data
                     links.append(image_data)
 
             # Descriptions become links.

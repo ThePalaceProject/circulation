@@ -314,7 +314,7 @@ class TestMetadata:
         coverage = CoverageRecord.lookup(edition, data_source)
         assert older_last_update == coverage.timestamp
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         # Verify that a Metadata object doesn't make any assumptions
         # about an item's medium.
         m = Metadata(data_source=DataSource.OCLC)
@@ -327,7 +327,7 @@ class TestMetadata:
 
         edition, pool = db.edition(with_license_pool=True)
         edition.series = "Harry Otter and the Mollusk of Infamy"
-        edition.series_position = "14"
+        edition.series_position = 14
         edition.primary_identifier.add_link(
             Hyperlink.IMAGE, "image", edition.data_source
         )
@@ -486,7 +486,7 @@ class TestMetadata:
         # We then learn about a subject under which the work
         # is classified.
         metadata.title = None
-        metadata.subjects = [SubjectData(Subject.TAG, "subject")]
+        metadata.subjects = [SubjectData(type=Subject.TAG, identifier="subject")]
         metadata.apply(edition, None)
 
         # The work is now slated to have its presentation completely
@@ -649,7 +649,9 @@ class TestMetadata:
     def test_filter_recommendations(self, db: DatabaseTransactionFixture):
         metadata = Metadata(DataSource.OVERDRIVE)
         known_identifier = db.identifier()
-        unknown_identifier = IdentifierData(Identifier.ISBN, "hey there")
+        unknown_identifier = IdentifierData(
+            type=Identifier.ISBN, identifier="hey there"
+        )
 
         # Unknown identifiers are filtered out of the recommendations.
         metadata.recommendations += [known_identifier, unknown_identifier]
@@ -658,7 +660,7 @@ class TestMetadata:
 
         # It works with IdentifierData as well.
         known_identifier_data = IdentifierData(
-            known_identifier.type, known_identifier.identifier
+            type=known_identifier.type, identifier=known_identifier.identifier
         )
         metadata.recommendations = [known_identifier_data, unknown_identifier]
         metadata.filter_recommendations(db.session)
@@ -683,11 +685,11 @@ class TestMetadata:
         # Check that we didn't put something in the metadata that
         # will prevent it from being copied. (e.g., self.log)
 
-        subject = SubjectData(Subject.TAG, "subject")
+        subject = SubjectData(type=Subject.TAG, identifier="subject")
         contributor = ContributorData()
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
-        link = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
-        measurement = MeasurementData(Measurement.RATING, 5)
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
+        link = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
+        measurement = MeasurementData(quantity_measured=Measurement.RATING, value=5)
         circulation = CirculationData(
             data_source=DataSource.GUTENBERG,
             primary_identifier=identifier,
@@ -731,7 +733,7 @@ class TestMetadata:
 
     def test_links_filtered(self):
         # test that filter links to only metadata-relevant ones
-        link1 = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
+        link1 = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         link2 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         link3 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
         link4 = LinkData(
@@ -747,7 +749,7 @@ class TestMetadata:
         )
         links = [link1, link2, link3, link4, link5]
 
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
         metadata = Metadata(
             data_source=DataSource.GUTENBERG,
             primary_identifier=identifier,
@@ -776,9 +778,7 @@ class TestMetadata:
         # Here's an Metadata object for a second print book with the
         # same PWID.
         identifier = db.identifier()
-        identifierdata = IdentifierData(
-            type=identifier.type, identifier=identifier.identifier
-        )
+        identifierdata = IdentifierData.from_identifier(identifier)
         metadata = Metadata(
             DataSource.GUTENBERG,
             primary_identifier=identifierdata,

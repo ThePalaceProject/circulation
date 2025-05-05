@@ -5,11 +5,14 @@ from collections.abc import Generator, Mapping
 from typing import Any, Literal, TypeVar
 
 from contextlib2 import contextmanager
+from frozendict import frozendict
 from psycopg2._range import NumericRange
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 
 # This is the lock ID used to ensure that only one circulation manager
 # initializes or migrates the database at a time.
@@ -190,3 +193,18 @@ def tuple_to_numericrange(t: NumericRangeTuple | None) -> NumericRange | None:
     if not t:
         return None
     return NumericRange(t[0], t[1], "[]")
+
+
+class MutableDictFrozenDict(MutableDict):
+    """
+    A MutableDict that will accept a frozen dictionary as a value coercing
+    it to a regular dictionary.
+    """
+
+    @classmethod
+    def coerce(cls, key: str, value: Any) -> Self:
+        """Convert frozendict to a dict and pass to super class."""
+        if isinstance(value, frozendict):
+            value = dict(value)
+
+        return super().coerce(key, value)  # type: ignore[no-any-return]

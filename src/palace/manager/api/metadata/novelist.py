@@ -398,13 +398,15 @@ class NoveListAPI(
         audience_level = book_info.get("audience_level")
         if audience_level:
             metadata.subjects.append(
-                SubjectData(Subject.FREEFORM_AUDIENCE, audience_level)
+                SubjectData(type=Subject.FREEFORM_AUDIENCE, identifier=audience_level)
             )
 
         novelist_rating = book_info.get("rating")
         if novelist_rating:
             metadata.measurements.append(
-                MeasurementData(Measurement.RATING, novelist_rating)
+                MeasurementData(
+                    quantity_measured=Measurement.RATING, value=novelist_rating
+                )
             )
 
         # Extract feature content if it is available.
@@ -439,7 +441,7 @@ class NoveListAPI(
                 if genres:
                     for genre in genres:
                         metadata.subjects.append(
-                            SubjectData(Subject.TAG, genre["Name"])
+                            SubjectData(type=Subject.TAG, identifier=genre["Name"])
                         )
                         extracted_genres = True
                 if extracted_genres:
@@ -447,12 +449,15 @@ class NoveListAPI(
 
         if lexile_info:
             metadata.subjects.append(
-                SubjectData(Subject.LEXILE_SCORE, lexile_info["Lexile"])
+                SubjectData(type=Subject.LEXILE_SCORE, identifier=lexile_info["Lexile"])
             )
 
         if goodreads_info:
             metadata.measurements.append(
-                MeasurementData(Measurement.RATING, goodreads_info["average_rating"])
+                MeasurementData(
+                    quantity_measured=Measurement.RATING,
+                    value=goodreads_info["average_rating"],
+                )
             )
 
         metadata = self.get_recommendations(metadata, recommendations_info)
@@ -520,7 +525,7 @@ class NoveListAPI(
         for synonymous_id in synonymous_ids:
             isbn = synonymous_id.get("ISBN")
             if isbn:
-                isbn_data = IdentifierData(Identifier.ISBN, isbn)
+                isbn_data = IdentifierData(type=Identifier.ISBN, identifier=isbn)
                 isbns.append(isbn_data)
 
         return isbns

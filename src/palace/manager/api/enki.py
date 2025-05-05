@@ -307,7 +307,9 @@ class EnkiAPI(
         data = json.loads(response.content)
         parser = BibliographicParser()
         for element in data["result"]["recentactivity"]:
-            identifier = IdentifierData(Identifier.ENKI_ID, element["id"])
+            identifier = IdentifierData(
+                type=Identifier.ENKI_ID, identifier=element["id"]
+            )
             data = parser.extract_circulation(
                 identifier,
                 element["availability"],
@@ -635,19 +637,23 @@ class BibliographicParser(LoggerMixin):
         #  dateSaved
         #  length
         #  publishDate
-        primary_identifier = IdentifierData(EnkiAPI.ENKI_ID, element["id"])
+        primary_identifier = IdentifierData(
+            type=EnkiAPI.ENKI_ID, identifier=element["id"]
+        )
 
         identifiers = []
-        identifiers.append(IdentifierData(Identifier.ISBN, element["isbn"]))
+        identifiers.append(
+            IdentifierData(type=Identifier.ISBN, identifier=element["isbn"])
+        )
 
         contributors = []
         sort_name = element.get("author", None) or Edition.UNKNOWN_AUTHOR
         contributors.append(ContributorData(sort_name=sort_name))
 
-        links = []
+        links = set()
         description = element.get("description")
         if description:
-            links.append(
+            links.add(
                 LinkData(
                     rel=Hyperlink.DESCRIPTION,
                     content=description,
@@ -680,16 +686,16 @@ class BibliographicParser(LoggerMixin):
             else:
                 if rel == Hyperlink.IMAGE:
                     full_image = link
-                links.append(link)
+                links.add(link)
 
         if thumbnail_image:
             if full_image:
                 # Set the thumbnail as the thumbnail _of_ the full image.
-                full_image.thumbnail = thumbnail_image
+                links.remove(full_image)
+                links.add(full_image.set_thumbnail(thumbnail_image))
             else:
                 # Treat the thumbnail as the full image.
-                thumbnail_image.rel = Hyperlink.IMAGE
-                links.append(thumbnail_image)
+                links.add(thumbnail_image.model_copy(update={"rel": Hyperlink.IMAGE}))
 
         # We treat 'subject', 'topic', and 'genre' as interchangeable
         # sets of tags. This data is based on BISAC but it's not reliably
@@ -702,8 +708,8 @@ class BibliographicParser(LoggerMixin):
                     continue
                 subjects.append(
                     SubjectData(
-                        Subject.TAG,
-                        topic,
+                        type=Subject.TAG,
+                        identifier=topic,
                         weight=Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
                     )
                 )
@@ -721,7 +727,7 @@ class BibliographicParser(LoggerMixin):
             primary_identifier=primary_identifier,
             identifiers=identifiers,
             contributors=contributors,
-            links=links,
+            links=list(links),
             subjects=subjects,
         )
         circulationdata = self.extract_circulation(
@@ -982,7 +988,7 @@ class EnkiCollectionReaper(IdentifierSweepMonitor):
         now = utc_now()
         circulationdata = CirculationData(
             data_source=DataSource.ENKI,
-            primary_identifier=IdentifierData(identifier.type, identifier.identifier),
+            primary_identifier=IdentifierData.from_identifier(identifier),
             licenses_owned=0,
             licenses_available=0,
             patrons_in_hold_queue=0,

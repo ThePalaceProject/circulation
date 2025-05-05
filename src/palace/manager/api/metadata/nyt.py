@@ -368,11 +368,17 @@ class NYTBestSellerListTitle(TitleFromExternalList):
             for isbn in d.get("isbns", []):
                 isbn13 = isbn.get("isbn13", None)
                 if isbn13:
-                    other_isbns.append(IdentifierData(Identifier.ISBN, isbn13, 0.50))
+                    other_isbns.append(
+                        IdentifierData(
+                            type=Identifier.ISBN, identifier=isbn13, weight=0.50
+                        )
+                    )
 
         primary_isbn = primary_isbn13 or primary_isbn10
         if primary_isbn:
-            primary_isbn = IdentifierData(Identifier.ISBN, primary_isbn, 0.90)
+            primary_isbn = IdentifierData(
+                type=Identifier.ISBN, identifier=primary_isbn, weight=0.90
+            )
 
         contributors = []
         if display_author:

@@ -1,79 +1,64 @@
 from __future__ import annotations
 
-import logging
-from collections.abc import Sequence
+from itertools import chain
+from typing import Any, Literal
 
+from frozendict import frozendict
 from sqlalchemy import Boolean, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 from typing_extensions import Self
 
+from palace.manager.metadata_layer.frozen_data import BaseFrozenData
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.personal_names import display_name_to_sort_name
+from palace.manager.util.pydantic import FrozenDict
+from palace.manager.util.sentinel import SentinelType
 
 
-class ContributorData(LoggerMixin):
-    def __init__(
-        self,
-        sort_name: str | None = None,
-        display_name: str | None = None,
-        family_name: str | None = None,
-        wikipedia_name: str | None = None,
-        roles: str | Sequence[str] | None = None,
-        lc: str | None = None,
-        viaf: str | None = None,
-        biography: str | None = None,
-        aliases: Sequence[str] | None = None,
-        extra: dict[str, str] | None = None,
-    ) -> None:
-        self.sort_name = sort_name
-        self.display_name = display_name
-        self.family_name = family_name
-        self.wikipedia_name = wikipedia_name
-        if roles is None:
-            roles = [Contributor.Role.AUTHOR]
-        if isinstance(roles, str):
-            roles = [roles]
-        self.roles = list(roles)
-        self.lc = lc
-        self.viaf = viaf
-        self.biography = biography
-        self.aliases = list(aliases) if aliases is not None else []
-        # extra is a dictionary of stuff like birthdates
-        self.extra = extra or dict()
-        # TODO:  consider if it's time for ContributorData to connect back to Contributions
+class ContributorData(BaseFrozenData, LoggerMixin):
+    sort_name: str | None = None
+    display_name: str | None = None
+    family_name: str | None = None
+    wikipedia_name: str | None = None
+    roles: tuple[str, ...] = (Contributor.Role.AUTHOR,)
+    lc: str | None = None
+    viaf: str | None = None
+    biography: str | None = None
+    aliases: tuple[str, ...] = tuple()
+    extra: FrozenDict[str, str] = frozendict()
+    # TODO:  consider if it's time for ContributorData to connect back to Contributions
 
-    def __repr__(self) -> str:
-        return (
-            '<ContributorData sort="%s" display="%s" family="%s" wiki="%s" roles=%r lc=%s viaf=%s>'
-            % (
-                self.sort_name,
-                self.display_name,
-                self.family_name,
-                self.wikipedia_name,
-                self.roles,
-                self.lc,
-                self.viaf,
-            )
-        )
+    _cached_sort_name: str | None | Literal[SentinelType.NotGiven] = (
+        SentinelType.NotGiven
+    )
+    """
+    A cached version of the sort name. This is set in model_post_init if sort_name is given,
+    otherwise it is set in find_sort_name.
+    """
+
+    def model_post_init(self, context: Any) -> None:
+        if self.sort_name is not None:
+            self._cached_sort_name = self.sort_name
 
     @classmethod
     def from_contribution(cls, contribution: Contribution) -> Self:
         """Create a ContributorData object from a data-model Contribution
         object.
         """
-        c = contribution.contributor
+        contributor = contribution.contributor
         return cls(
-            sort_name=c.sort_name,
-            display_name=c.display_name,
-            family_name=c.family_name,
-            wikipedia_name=c.wikipedia_name,
-            lc=c.lc,
-            viaf=c.viaf,
-            biography=c.biography,
-            aliases=c.aliases,
+            sort_name=contributor.sort_name,
+            display_name=contributor.display_name,
+            family_name=contributor.family_name,
+            wikipedia_name=contributor.wikipedia_name,
+            lc=contributor.lc,
+            viaf=contributor.viaf,
+            biography=contributor.biography,
+            aliases=contributor.aliases,
             roles=[contribution.role],
+            extra=contributor.extra,
         )
 
     @classmethod
@@ -172,19 +157,23 @@ class ContributorData(LoggerMixin):
             destination.sort_name = self.sort_name
             made_changes = True
 
-        existing_aliases = set(destination.aliases or [])
-        new_aliases = list(destination.aliases or [])
-        for name in [self.sort_name] + self.aliases:
-            if name != destination.sort_name and name not in existing_aliases:
+        existing_aliases = set(destination.aliases)
+        new_aliases = list(destination.aliases)
+        for name in chain([self.sort_name], self.aliases):
+            if (
+                name is not None
+                and name != destination.sort_name
+                and name not in existing_aliases
+            ):
                 new_aliases.append(name)
                 made_changes = True
         if new_aliases != destination.aliases:
             destination.aliases = new_aliases
             made_changes = True
 
-        for k, v in list(self.extra.items()):
-            if not k in destination.extra:
-                destination.extra[k] = v
+        if destination.extra != self.extra:
+            destination.extra.update(self.extra)
+            made_changes = True
 
         if self.lc and self.lc != destination.lc:
             destination.lc = self.lc
@@ -212,10 +201,10 @@ class ContributorData(LoggerMixin):
 
         return destination, made_changes
 
-    def find_sort_name(self, _db: Session) -> bool:
+    def find_sort_name(self, _db: Session) -> str | None:
         """Try as hard as possible to find this person's sort name."""
-        if self.sort_name:
-            return True
+        if self._cached_sort_name is not SentinelType.NotGiven:
+            return self._cached_sort_name
 
         if not self.display_name:
             raise ValueError(
@@ -228,19 +217,18 @@ class ContributorData(LoggerMixin):
         sort_name = self.display_name_to_sort_name_from_existing_contributor(
             _db, self.display_name
         )
-        if sort_name:
-            self.sort_name = sort_name
-            return True
 
-        # If there's still no sort name, take our best guess based
-        # on the display name.
-        self.sort_name = display_name_to_sort_name(self.display_name)
+        if not sort_name:
+            # If there's still no sort name, take our best guess based
+            # on the display name.
+            sort_name = display_name_to_sort_name(self.display_name)
 
-        return self.sort_name is not None
+        self._cached_sort_name = sort_name
+        return sort_name
 
     @classmethod
     def display_name_to_sort_name_from_existing_contributor(
-        self, _db: Session, display_name: str
+        cls, _db: Session, display_name: str
     ) -> str | None:
         """Find the sort name for this book's author, assuming it's easy.
 
@@ -258,8 +246,7 @@ class ContributorData(LoggerMixin):
             .all()
         )
         if contributors:
-            log = logging.getLogger("Abstract metadata layer")
-            log.debug(
+            cls.logger().debug(
                 "Determined that sort name of %s is %s based on previously existing contributor",
                 display_name,
                 contributors[0].sort_name,

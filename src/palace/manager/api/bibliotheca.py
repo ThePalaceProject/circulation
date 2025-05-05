@@ -246,13 +246,6 @@ class BibliothecaAPI(
             path = f"/cirrus/library/{self.library_id}{path}"
         return path
 
-    @classmethod
-    def replacement_policy(cls, _db, analytics=None):
-        policy = ReplacementPolicy.from_license_source(_db)
-        if analytics:
-            policy.analytics = analytics
-        return policy
-
     def request(self, path, body=None, method="GET", identifier=None, max_age=None):
         path = self.full_path(path)
         url = self.full_url(path)
@@ -712,9 +705,9 @@ class ItemListParser(XMLProcessor[Metadata]):
             )
             genres.append(
                 SubjectData(
-                    Subject.BISAC,
-                    None,
-                    i,
+                    type=Subject.BISAC,
+                    identifier=None,
+                    name=i,
                     weight=Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
                 )
             )
@@ -727,13 +720,15 @@ class ItemListParser(XMLProcessor[Metadata]):
         def value(bibliotheca_key):
             return self.text_of_optional_subtag(tag, bibliotheca_key)
 
-        primary_identifier = IdentifierData(Identifier.BIBLIOTHECA_ID, value("ItemId"))
+        primary_identifier = IdentifierData(
+            type=Identifier.BIBLIOTHECA_ID, identifier=value("ItemId")
+        )
 
         identifiers = []
         for key in ("ISBN13", "PhysicalISBN"):
             v = value(key)
             if v:
-                identifiers.append(IdentifierData(Identifier.ISBN, v))
+                identifiers.append(IdentifierData(type=Identifier.ISBN, identifier=v))
 
         subjects = self.parse_genre_string(value("Genre"))
 
@@ -769,9 +764,6 @@ class ItemListParser(XMLProcessor[Metadata]):
         # Presume all images from Bibliotheca are JPEG.
         media_type = Representation.JPEG_MEDIA_TYPE
         cover_url = value("CoverLinkURL").replace("&amp;", "&")
-        cover_link = LinkData(
-            rel=Hyperlink.IMAGE, href=cover_url, media_type=media_type
-        )
 
         # Unless the URL format has drastically changed, we should be
         # able to generate a thumbnail URL based on the full-size
@@ -784,7 +776,14 @@ class ItemListParser(XMLProcessor[Metadata]):
             thumbnail = LinkData(
                 rel=Hyperlink.THUMBNAIL_IMAGE, href=thumbnail_url, media_type=media_type
             )
-            cover_link.thumbnail = thumbnail
+        else:
+            thumbnail = None
+        cover_link = LinkData(
+            rel=Hyperlink.IMAGE,
+            href=cover_url,
+            media_type=media_type,
+            thumbnail=thumbnail,
+        )
         links.append(cover_link)
 
         alternate_url = value("BookLinkURL").replace("&amp;", "&")
@@ -1219,8 +1218,8 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
             self.api = api_class
         else:
             self.api = api_class(_db, collection)
-        self.replacement_policy = BibliothecaAPI.replacement_policy(_db)
-        self.analytics = self.replacement_policy.analytics
+        self.replacement_policy = ReplacementPolicy.from_license_source(_db)
+        self.analytics = self.services.analytics.analytics()
 
     def process_items(self, identifiers):
         identifiers_by_bibliotheca_id = dict()
@@ -1316,7 +1315,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
             self.api = api_class
         else:
             self.api = api_class(_db, collection)
-        self.replacement_policy = BibliothecaAPI.replacement_policy(_db, self.analytics)
+        self.replacement_policy = ReplacementPolicy.from_license_source(_db)
         self.bibliographic_coverage_provider = BibliothecaBibliographicCoverageProvider(
             collection, self.api, replacement_policy=self.replacement_policy
         )

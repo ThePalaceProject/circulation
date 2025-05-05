@@ -65,7 +65,6 @@ class LicenseFunctions:
     checkouts_left: int | None
     checkouts_available: int | None
     terms_concurrency: int | None
-    content_types: list[str] | None
 
     @property
     def is_perpetual(self) -> bool:
@@ -635,9 +634,7 @@ class LicensePool(Base):
             # than creating an identical composite.
             self.presentation_edition = all_editions[0]
         else:
-            edition_identifier = IdentifierData(
-                self.identifier.type, self.identifier.identifier
-            )
+            edition_identifier = IdentifierData.from_identifier(self.identifier)
             metadata = Metadata(
                 data_source=DataSourceConstants.PRESENTATION_EDITION,
                 primary_identifier=edition_identifier,
