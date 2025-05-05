@@ -29,6 +29,7 @@ class GoogleDriveService(LoggerMixin):
                 q=query,
                 pageSize=10,
                 fields="nextPageToken, files(*)",
+                supportsAllDrives=True,
             )
             .execute()
         )
@@ -62,7 +63,9 @@ class GoogleDriveService(LoggerMixin):
         file_metadata: File = {"name": file_name, "parents": parents}
         file = (
             self.api_client.files()
-            .create(body=file_metadata, media_body=media, fields="*")
+            .create(
+                body=file_metadata, media_body=media, fields="*", supportsAllDrives=True
+            )
             .execute()
         )
 
@@ -89,7 +92,11 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = self.api_client.files().create(body=body).execute()
+                folder = (
+                    self.api_client.files()
+                    .create(body=body, supportsAllDrives=True)
+                    .execute()
+                )
 
             results.append(folder)
             parent_id = folder["id"]
