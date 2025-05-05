@@ -1,6 +1,6 @@
 import datetime
 from collections import defaultdict
-from unittest.mock import create_autospec, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import dateutil
 import feedparser
@@ -886,6 +886,35 @@ class TestLibraryAnnotator:
             link_type=OPDSFeed.ACQUISITION_FEED_TYPE,
             partials_by_rel=expected_rel_and_partial,
         )
+
+    @patch.object(NoveListAPI, "is_configured", return_value=False)
+    def test_annotator_lazy_cache_novelist_is_configured(
+        self,
+        mock_is_configured: MagicMock,
+        annotator_fixture: LibraryAnnotatorFixture,
+    ):
+        """Ensure that we call NoveList.is_configured only once per annotator instance."""
+        works = [
+            annotator_fixture.db.work(with_open_access_download=True) for _ in range(3)
+        ]
+
+        annotator_fixture.db.integration_configuration(
+            protocol=NoveListAPI,
+            goal=Goals.METADATA_GOAL,
+            libraries=[annotator_fixture.db.default_library()],
+            settings=NoveListApiSettings(username="library", password="sure"),
+        )
+
+        # Feed with one entry.
+        feed = self.get_parsed_feed(annotator_fixture, [works[0]])
+        assert len(feed.entries) == 1
+        assert mock_is_configured.call_count == 1
+        mock_is_configured.reset_mock()
+
+        # Feed with three entries.
+        feed = self.get_parsed_feed(annotator_fixture, works)
+        assert len(feed.entries) == 3
+        assert mock_is_configured.call_count == 1
 
     def test_work_entry_includes_annotations_link(
         self, annotator_fixture: LibraryAnnotatorFixture
