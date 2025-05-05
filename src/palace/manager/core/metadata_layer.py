@@ -18,15 +18,13 @@ model. Doing a third-party integration should be as simple as putting
 the information into this format.
 """
 
-import csv
 import datetime
 import logging
 from collections import defaultdict
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from dateutil.parser import parse
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -36,7 +34,7 @@ from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations
-from palace.manager.sqlalchemy.model.classification import Classification, Subject
+from palace.manager.sqlalchemy.model.classification import Classification
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord, Timestamp
@@ -54,7 +52,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.presentation import PresentationCalculationPolicy
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
-from palace.manager.util.datetime_helpers import to_utc, utc_now
+from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.median import median
@@ -2035,216 +2033,3 @@ class Metadata(LoggerMixin):
                 recommendations.remove(primary_identifier_obj)
 
         self.recommendations = list(recommendations)
-
-
-class CSVFormatError(csv.Error):
-    pass
-
-
-class CSVMetadataImporter(LoggerMixin):
-    """Turn a CSV file into a list of Metadata objects."""
-
-    IDENTIFIER_PRECEDENCE = [
-        Identifier.AXIS_360_ID,
-        Identifier.OVERDRIVE_ID,
-        Identifier.THREEM_ID,
-        Identifier.ISBN,
-    ]
-
-    DEFAULT_IDENTIFIER_FIELD_NAMES = {
-        Identifier.OVERDRIVE_ID: ("overdrive id", 0.75),
-        Identifier.THREEM_ID: ("3m id", 0.75),
-        Identifier.AXIS_360_ID: ("axis 360 id", 0.75),
-        Identifier.ISBN: ("isbn", 0.75),
-    }
-
-    # When classifications are imported from a CSV file, we treat
-    # them as though they came from a trusted distributor.
-    DEFAULT_SUBJECT_FIELD_NAMES = {
-        "tags": (Subject.TAG, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
-        "age": (Subject.AGE_RANGE, Classification.TRUSTED_DISTRIBUTOR_WEIGHT),
-        "audience": (
-            Subject.FREEFORM_AUDIENCE,
-            Classification.TRUSTED_DISTRIBUTOR_WEIGHT,
-        ),
-    }
-
-    def __init__(
-        self,
-        data_source_name: str,
-        title_field: str = "title",
-        language_field: str = "language",
-        default_language: str = "eng",
-        medium_field: str = "medium",
-        default_medium: str = Edition.BOOK_MEDIUM,
-        series_field: str = "series",
-        publisher_field: str = "publisher",
-        imprint_field: str = "imprint",
-        issued_field: str = "issued",
-        published_field: Sequence[str] | str = ["published", "publication year"],
-        identifier_fields: Mapping[
-            str, tuple[str, float]
-        ] = DEFAULT_IDENTIFIER_FIELD_NAMES,
-        subject_fields: Mapping[str, tuple[str, int]] = DEFAULT_SUBJECT_FIELD_NAMES,
-        sort_author_field: str = "file author as",
-        display_author_field: Sequence[str] | str = ["author", "display author as"],
-    ) -> None:
-        self.data_source_name = data_source_name
-        self.title_field = title_field
-        self.language_field = language_field
-        self.default_language = default_language
-        self.medium_field = medium_field
-        self.default_medium = default_medium
-        self.series_field = series_field
-        self.publisher_field = publisher_field
-        self.imprint_field = imprint_field
-        self.issued_field = issued_field
-        self.published_field = published_field
-        self.identifier_fields = identifier_fields
-        self.subject_fields = subject_fields
-        self.sort_author_field = sort_author_field
-        self.display_author_field = display_author_field
-
-    def to_metadata(self, dictreader: csv.DictReader[str]) -> Generator[Metadata]:
-        """Turn the CSV file in `dictreader` into a sequence of Metadata.
-
-        :yield: A sequence of Metadata objects.
-        """
-        fields = dictreader.fieldnames
-        if fields is None:
-            # fields is none if the CSV file is empty, so we just return
-            return
-
-        # Make sure this CSV file has some way of identifying books.
-        found_identifier_field = False
-        possibilities = []
-        for field_name, weight in self.identifier_fields.values():
-            possibilities.append(field_name)
-            if field_name in fields:
-                found_identifier_field = True
-                break
-        if not found_identifier_field:
-            raise CSVFormatError(
-                "Could not find a primary identifier field. Possibilities: %r. Actualities: %r."
-                % (possibilities, fields)
-            )
-
-        for row in dictreader:
-            yield self.row_to_metadata(row)
-
-    def row_to_metadata(self, row: dict[str, str]) -> Metadata:
-        title = self._field(row, self.title_field)
-        language = self._field(row, self.language_field, self.default_language)
-        medium = self._field(row, self.medium_field, self.default_medium)
-        if medium not in Edition.medium_to_additional_type.keys():
-            self.log.warning("Ignored unrecognized medium %s" % medium)
-            medium = Edition.BOOK_MEDIUM
-        series = self._field(row, self.series_field)
-        publisher = self._field(row, self.publisher_field)
-        imprint = self._field(row, self.imprint_field)
-        issued = self._date_field(row, self.issued_field)
-        published = self._date_field(row, self.published_field)
-
-        primary_identifier = None
-        identifiers = []
-        # TODO: This is annoying and could use some work.
-        for identifier_type in self.IDENTIFIER_PRECEDENCE:
-            correct_type = False
-            for target_type, (field_name, weight) in self.identifier_fields.items():
-                if target_type == identifier_type:
-                    correct_type = True
-                    break
-            if not correct_type:
-                continue
-
-            if field_name in row:
-                value = self._field(row, field_name)
-                if value:
-                    identifier = IdentifierData(identifier_type, value, weight=weight)
-                    identifiers.append(identifier)
-                    if not primary_identifier:
-                        primary_identifier = identifier
-
-        subjects = []
-        for field_name, (subject_type, weight) in list(self.subject_fields.items()):
-            values = self.list_field(row, field_name)
-            for value in values:
-                subjects.append(
-                    SubjectData(type=subject_type, identifier=value, weight=weight)
-                )
-
-        contributors = []
-        sort_author = self._field(row, self.sort_author_field)
-        display_author = self._field(row, self.display_author_field)
-        if sort_author or display_author:
-            contributors.append(
-                ContributorData(
-                    sort_name=sort_author,
-                    display_name=display_author,
-                    roles=[Contributor.Role.AUTHOR],
-                )
-            )
-
-        metadata = Metadata(
-            data_source=self.data_source_name,
-            title=title,
-            language=language,
-            medium=medium,
-            series=series,
-            publisher=publisher,
-            imprint=imprint,
-            issued=issued,
-            published=published,
-            primary_identifier=primary_identifier,
-            identifiers=identifiers,
-            subjects=subjects,
-            contributors=contributors,
-        )
-        return metadata
-
-    def list_field(self, row: dict[str, str], names: str | Sequence[str]) -> list[str]:
-        """Parse a string into a list by splitting on commas."""
-        value = self._field(row, names)
-        if not value:
-            return []
-        return [item.strip() for item in value.split(",")]
-
-    def _field(
-        self,
-        row: dict[str, str],
-        names: str | Sequence[str],
-        default: str | None = None,
-    ) -> str | None:
-        """Get a value from one of the given fields and ensure it comes in as
-        Unicode.
-        """
-        if isinstance(names, (bytes, str)):
-            return self.__field(row, names, default)
-        for name in names:
-            v = self.__field(row, name)
-            if v:
-                return v
-        return default
-
-    def __field(
-        self, row: dict[str, str], name: str, default: str | None = None
-    ) -> str | None:
-        """Get a value from the given field and ensure it comes in as
-        Unicode.
-        """
-        value = row.get(name, default)
-        if isinstance(value, bytes):
-            value = value.decode("utf8")  # type: ignore[unreachable]
-        return value
-
-    def _date_field(
-        self, row: dict[str, str], field_name: str | Sequence[str]
-    ) -> datetime.datetime | None:
-        """Attempt to parse a field as a date."""
-        value = self._field(row, field_name)
-        if value:
-            try:
-                return to_utc(parse(value))
-            except ValueError:
-                self.log.warning('Could not parse date "%s"' % value)
-        return None
