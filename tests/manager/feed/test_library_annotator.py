@@ -887,7 +887,7 @@ class TestLibraryAnnotator:
             partials_by_rel=expected_rel_and_partial,
         )
 
-    @patch.object(NoveListAPI, "is_configured", return_value=False)
+    @patch.object(NoveListAPI, "is_configured_db_check", return_value=False)
     def test_annotator_lazy_cache_novelist_is_configured(
         self,
         mock_is_configured: MagicMock,
