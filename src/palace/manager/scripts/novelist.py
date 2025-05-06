@@ -13,7 +13,13 @@ class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
             try:
-                api = NoveListAPI.from_config(library)
+                if not NoveListAPI.is_configured_db_check(library):
+                    self.log.info(
+                        f'The library name "{library.name}" is not associated with Novelist API integration'
+                    )
+                    continue
+                else:
+                    api = NoveListAPI.from_config(library)
             except CannotLoadConfiguration as e:
                 self.log.info(str(e))
                 continue
