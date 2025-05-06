@@ -1,5 +1,6 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar, get_args
 
+from frozendict import frozendict
 from pydantic import (
     AfterValidator,
     BeforeValidator,
@@ -60,3 +61,42 @@ PostgresDsnCustom = Annotated[
 PostgresDsn = Annotated[
     str, AfterValidator(strip_slash), BeforeValidator(str), Chain([PostgresDsnCustom])
 ]
+
+
+# This was taken from this pydantic discussion:
+# https://github.com/pydantic/pydantic/discussions/8721
+class _PydanticFrozenDictAnnotation:
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        def validate_from_dict(d: dict | frozendict) -> frozendict:
+            return frozendict(d)
+
+        args = get_args(source_type)
+        if args:
+            # replace the type and rely on Pydantic to generate the right schema for `dict`
+            dict_schema = handler.generate_schema(dict[args[0], args[1]])  # type: ignore[valid-type]
+        else:
+            dict_schema = handler.generate_schema(dict)
+
+        frozendict_schema = core_schema.chain_schema(
+            [
+                dict_schema,
+                core_schema.no_info_plain_validator_function(validate_from_dict),
+                core_schema.is_instance_schema(frozendict),
+            ]
+        )
+        return core_schema.json_or_python_schema(
+            json_schema=frozendict_schema,
+            python_schema=frozendict_schema,
+            serialization=core_schema.plain_serializer_function_ser_schema(dict),
+        )
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+FrozenDict = Annotated[frozendict[K, V], _PydanticFrozenDictAnnotation]
+"""
+A type annotation for a frozendict that Pydantic can validate and serialize.
+"""

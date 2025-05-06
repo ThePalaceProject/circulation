@@ -91,7 +91,6 @@ def wire_container(container: Services) -> None:
             "palace.manager.api.overdrive",
             "palace.manager.feed.annotator.circulation",
             "palace.manager.feed.acquisition",
-            "palace.manager.metadata_layer.policy.replacement",
             "palace.manager.sqlalchemy.model.lane",
             "palace.manager.sqlalchemy.model.collection",
             "palace.manager.sqlalchemy.model.patron",

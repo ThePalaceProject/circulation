@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import datetime
 from collections.abc import Sequence
 from typing import Any
@@ -70,7 +69,7 @@ class CirculationData(LoggerMixin):
         if isinstance(primary_identifier, Identifier):
             self.primary_identifier_obj: Identifier | None = primary_identifier
             self._primary_identifier: IdentifierData | None = IdentifierData(
-                primary_identifier.type, primary_identifier.identifier
+                type=primary_identifier.type, identifier=primary_identifier.identifier
             )
         else:
             self.primary_identifier_obj = None
@@ -161,7 +160,7 @@ class CirculationData(LoggerMixin):
                     if format_found and format and not format.rights_uri:
                         self.formats.remove(format)
                         self.formats.append(
-                            dataclasses.replace(format, rights_uri=rights_uri)
+                            format.model_copy(update={"rights_uri": rights_uri})
                         )
                     if not format_found:
                         self.formats.append(

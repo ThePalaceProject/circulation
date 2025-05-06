@@ -41,7 +41,7 @@ class Contributor(Base):
     # This is the name by which this person is known in the original
     # catalog. It is sortable, e.g. "Twain, Mark".
     _sort_name = Column("sort_name", Unicode, index=True)
-    aliases = Column(ARRAY(Unicode), default=[])
+    aliases: Mapped[list[str]] = Column(ARRAY(Unicode), default=[], nullable=False)
 
     # This is the name we will display publicly. Ideally it will be
     # the name most familiar to readers.

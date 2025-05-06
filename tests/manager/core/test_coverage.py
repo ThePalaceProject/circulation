@@ -1,4 +1,5 @@
 import datetime
+from typing import cast
 
 import pytest
 
@@ -1587,7 +1588,7 @@ class TestCollectionCoverageProvider:
         edition, pool = db.edition(with_license_pool=True)
         identifier = edition.primary_identifier
 
-        class Tripwire(PresentationCalculationPolicy):
+        class Tripwire:
             # This class sets a variable if one of its properties is
             # accessed.
             def __init__(self, *args, **kwargs):
@@ -1602,8 +1603,10 @@ class TestCollectionCoverageProvider:
                 return True
 
         presentation_calculation_policy = Tripwire()
-        replacement_policy = ReplacementPolicy(
-            presentation_calculation_policy=presentation_calculation_policy,
+        replacement_policy = ReplacementPolicy.model_construct(
+            presentation_calculation_policy=cast(
+                PresentationCalculationPolicy, presentation_calculation_policy
+            ),
         )
 
         provider = AlwaysSuccessfulCollectionCoverageProvider(

@@ -29,7 +29,7 @@ class TestCirculationData:
         object, it might or might not be possible to call apply()
         without providing a Collection.
         """
-        identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
+        identifier = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="1")
         format = FormatData(
             content_type=Representation.EPUB_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.NO_DRM,
@@ -66,10 +66,10 @@ class TestCirculationData:
         # Check that we didn't put something in the CirculationData that
         # will prevent it from being copied. (e.g., self.log)
 
-        subject = SubjectData(Subject.TAG, "subject")
+        subject = SubjectData(type=Subject.TAG, identifier="subject")
         contributor = ContributorData()
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
-        link = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
+        link = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         format = FormatData(
             content_type=Representation.EPUB_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.NO_DRM,
@@ -95,7 +95,7 @@ class TestCirculationData:
 
     def test_links_filtered(self):
         # Tests that passed-in links filter down to only the relevant ones.
-        link1 = LinkData(Hyperlink.OPEN_ACCESS_DOWNLOAD, "example.epub")
+        link1 = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         link2 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         link3 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
         link4 = LinkData(
@@ -111,7 +111,7 @@ class TestCirculationData:
         )
         links = [link1, link2, link3, link4, link5]
 
-        identifier = IdentifierData(Identifier.GUTENBERG_ID, "1")
+        identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
         circulation_data = CirculationData(
             DataSource.GUTENBERG,
             primary_identifier=identifier,
@@ -392,7 +392,7 @@ class TestCirculationData:
         actually licensed, but a LicensePool can be created anyway,
         so we can store format information.
         """
-        identifier = IdentifierData(Identifier.OVERDRIVE_ID, "1")
+        identifier = IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="1")
         drm_format = FormatData(
             content_type=Representation.PDF_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.ADOBE_DRM,
@@ -467,8 +467,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
@@ -500,8 +500,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,
@@ -541,8 +541,8 @@ class TestCirculationData:
         self, db
     ):
         identifier = IdentifierData(
-            Identifier.GUTENBERG_ID,
-            "abcd",
+            type=Identifier.GUTENBERG_ID,
+            identifier="abcd",
         )
 
         # Here's a CirculationData that will create an open-access
@@ -584,8 +584,8 @@ class TestCirculationData:
         # open-access link we will give it a RightsStatus of
         # IN_COPYRIGHT.
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
@@ -614,8 +614,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.OPEN_ACCESS_DOWNLOAD,
@@ -645,8 +645,8 @@ class TestCirculationData:
         self, db: DatabaseTransactionFixture
     ):
         identifier = IdentifierData(
-            Identifier.OVERDRIVE_ID,
-            "abcd",
+            type=Identifier.OVERDRIVE_ID,
+            identifier="abcd",
         )
         link = LinkData(
             rel=Hyperlink.DRM_ENCRYPTED_DOWNLOAD,

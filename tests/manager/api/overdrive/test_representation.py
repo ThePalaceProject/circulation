@@ -196,7 +196,7 @@ class TestOverdriveRepresentationExtractor:
         [author] = metadata.contributors
         assert "Rüping, Andreas" == author.sort_name
         assert "Andreas Rüping" == author.display_name
-        assert [Contributor.Role.AUTHOR] == author.roles
+        assert (Contributor.Role.AUTHOR,) == author.roles
 
         subjects = sorted(metadata.subjects, key=lambda x: x.identifier)
 

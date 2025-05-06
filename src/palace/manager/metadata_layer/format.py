@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from pydantic import model_validator
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 
+from palace.manager.metadata_layer.frozen_data import BaseFrozenData
 from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -16,8 +17,7 @@ from palace.manager.sqlalchemy.model.resource import Resource
 from palace.manager.util.log import LoggerMixin
 
 
-@dataclass(frozen=True, kw_only=True)
-class FormatData(LoggerMixin):
+class FormatData(BaseFrozenData, LoggerMixin):
     content_type: str | None
     drm_scheme: str | None
     link: LinkData | None = None
@@ -27,19 +27,17 @@ class FormatData(LoggerMixin):
     # creating a new one, this can be overridden by setting this flag to True.
     update_available: bool = False
 
-    def __post_init__(self) -> None:
-        if self.link and not isinstance(self.link, LinkData):
-            raise TypeError("Expected LinkData object, got %s" % type(self.link))
-
-        # We can't use direct assignment because of the frozen=True flag, so
-        # we have to use object.__setattr__.
-        # https://stackoverflow.com/questions/53756788/how-to-set-the-value-of-dataclass-field-in-post-init-when-frozen-true
+    @model_validator(mode="after")
+    def _link_rights_uri_and_content_type(self) -> Self:
         if self.link:
-            if not self.rights_uri and self.link.rights_uri:
-                object.__setattr__(self, "rights_uri", self.link.rights_uri)
+            # We update self.__dict__ directly here because the class
+            # is "frozen" by the time the validator runs.
+            if self.rights_uri is None and self.link.rights_uri:
+                self.__dict__["rights_uri"] = self.link.rights_uri
+            if self.content_type is None and self.link.media_type:
+                self.__dict__["content_type"] = self.link.media_type
 
-            if not self.content_type and self.link.media_type:
-                object.__setattr__(self, "content_type", self.link.media_type)
+        return self
 
     def apply(
         self,

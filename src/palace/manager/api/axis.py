@@ -656,7 +656,6 @@ class Axis360API(
             contributions=True,
             formats=True,
             links=True,
-            analytics=analytics,
         )
 
         bibliographic.apply(edition, self.collection, replace=policy, db=self._db)
@@ -859,7 +858,9 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         ns: dict[str, str] | None,
     ) -> CirculationData:
         identifier = self.text_of_subtag(element, "axis:titleId", ns)
-        primary_identifier = IdentifierData(Identifier.AXIS_360_ID, identifier)
+        primary_identifier = IdentifierData(
+            type=Identifier.AXIS_360_ID, identifier=identifier
+        )
         if not circulation_data:
             circulation_data = CirculationData(
                 data_source=DataSource.AXIS_360,
@@ -1052,10 +1053,12 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
 
         # We don't use this for anything.
         # file_size = self.int_of_optional_subtag(element, 'axis:fileSize', ns)
-        primary_identifier = IdentifierData(Identifier.AXIS_360_ID, identifier)
+        primary_identifier = IdentifierData(
+            type=Identifier.AXIS_360_ID, identifier=identifier
+        )
         identifiers = []
         if isbn:
-            identifiers.append(IdentifierData(Identifier.ISBN, isbn))
+            identifiers.append(IdentifierData(type=Identifier.ISBN, identifier=isbn))
 
         formats = []
         seen_formats = []

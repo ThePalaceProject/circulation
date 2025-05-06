@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
-from dependency_injector.wiring import Provide, inject
+from pydantic import Field
 from sqlalchemy.orm import Session
 from typing_extensions import Self, TypedDict, Unpack
 
+from palace.manager.metadata_layer.frozen_data import BaseFrozenData
 from palace.manager.metadata_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
-from palace.manager.service.analytics.analytics import Analytics
 
 
 class _ReplacementPolicyKwargs(TypedDict, total=False):
@@ -18,8 +16,7 @@ class _ReplacementPolicyKwargs(TypedDict, total=False):
     presentation_calculation_policy: PresentationCalculationPolicy
 
 
-@dataclass(kw_only=True)
-class ReplacementPolicy:
+class ReplacementPolicy(BaseFrozenData):
     """How serious should we be about overwriting old metadata with
     this new metadata?
     """
@@ -31,18 +28,15 @@ class ReplacementPolicy:
     formats: bool = False
     rights: bool = False
     link_content: bool = False
-    analytics: Analytics | None = None
     even_if_not_apparently_updated: bool = False
-    presentation_calculation_policy: PresentationCalculationPolicy = field(
+    presentation_calculation_policy: PresentationCalculationPolicy = Field(
         default_factory=PresentationCalculationPolicy
     )
 
     @classmethod
-    @inject
     def from_license_source(
         cls,
         _db: Session,
-        analytics: Analytics = Provide["analytics.analytics"],
         **kwargs: Unpack[_ReplacementPolicyKwargs],
     ) -> Self:
         """When gathering data from the license source, overwrite all old data
@@ -58,7 +52,6 @@ class ReplacementPolicy:
             links=True,
             rights=True,
             formats=True,
-            analytics=analytics,
             **kwargs,
         )
 

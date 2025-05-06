@@ -27,7 +27,6 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
@@ -43,7 +42,11 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolDeliveryMechanism,
     RightsStatus,
 )
-from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.sqlalchemy.util import (
+    MutableDict,
+    get_one,
+    get_one_or_create,
+)
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import HTTP
 
