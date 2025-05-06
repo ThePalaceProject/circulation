@@ -135,7 +135,7 @@ class Writer(Protocol):
     def writerow(self, row: Iterable[Any]) -> Any: ...
 
 
-REPORT_DATE_FORMAT = "%Y-%m-%d"
+REPORT_DATE_FORMAT = "%m-%d-%Y"
 
 
 @shared_task(queue=QueueNames.default, bind=True)
