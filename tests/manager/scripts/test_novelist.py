@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from palace.manager.api.metadata.novelist import NoveListAPI
 from palace.manager.scripts.novelist import NovelistSnapshotScript
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -17,8 +19,11 @@ class TestNovelistSnapshotScript:
 
         oldNovelistConfig = NoveListAPI.from_config
         NoveListAPI.from_config = self.mockNoveListAPI
+        NoveListAPI.is_configured_db_check = MagicMock()
+        NoveListAPI.is_configured_db_check.return_value = True
 
         l1 = db.library()
+
         cmd_args = [l1.name]
         script = MockNovelistSnapshotScript(db.session)
         script.do_run(cmd_args=cmd_args)
