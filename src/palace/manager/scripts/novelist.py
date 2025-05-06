@@ -12,7 +12,7 @@ class NovelistSnapshotScript(TimestampScript, LibraryInputScript):
     def do_run(self, output=sys.stdout, *args, **kwargs):
         parsed = self.parse_command_line(self._db, *args, **kwargs)
         for library in parsed.libraries:
-            if not NoveListAPI.integration(library):
+            if not NoveListAPI.is_configured_db_check(library):
                 self.log.info(
                     f'The library name "{library.name}" is not associated with Novelist API integration and '
                     f"therefore will not be queued."

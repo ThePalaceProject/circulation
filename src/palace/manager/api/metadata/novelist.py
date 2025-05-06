@@ -136,7 +136,16 @@ class NoveListAPI(
         return cls.settings_load(integration)
 
     @classmethod
-    def is_configured(cls, library: Library) -> bool:
+    def is_configured_db_check(cls, library: Library) -> bool:
+        """Checks if a NoveList integration exists and is configured for the given library.
+
+        Note: This method performs a database query to find the relevant
+        integration. It should not be called repeatedly in performance-sensitive
+        code without considering caching strategies as appropriate.
+
+        :param library: The Library to check for a NoveList configuration.
+        :return: True if a NoveList integration is configured, False otherwise.
+        """
         integration = cls.integration(library)
         return integration is not None
 

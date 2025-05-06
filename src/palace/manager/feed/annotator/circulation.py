@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from functools import cached_property
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
@@ -741,6 +742,15 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         self.identifies_patrons = library_identifies_patrons
         self.facets = facets or None
 
+    @cached_property
+    def is_novelist_configured(self) -> bool:
+        """Lazy load and cache NoveList's `is_configured` flag.
+
+        This is an optimization to avoid a SQL query to check this
+        flag for every entry in the feed.
+        """
+        return NoveListAPI.is_configured_db_check(self.library)
+
     def top_level_title(self) -> str:
         return self._top_level_title
 
@@ -896,7 +906,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
         if work.series:
             self.add_series_link(entry)
 
-        if NoveListAPI.is_configured(self.library):
+        if self.is_novelist_configured:
             # If NoveList Select is configured, there might be
             # recommendations, too.
             entry.computed.other_links.append(
@@ -915,7 +925,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             )
 
         # Add a link for related books if available.
-        if self.related_books_available(work, self.library):
+        if self.may_have_related_works(work):
             entry.computed.other_links.append(
                 Link(
                     rel="related",
@@ -982,12 +992,14 @@ class LibraryAnnotator(CirculationManagerAnnotator):
             )
         return super().active_licensepool_for(work=work, library=self.library)
 
-    @classmethod
-    def related_books_available(cls, work: Work, library: Library) -> bool:
-        """:return: bool asserting whether related books might exist for a particular Work"""
-        contributions = work.sort_author and work.sort_author != Edition.UNKNOWN_AUTHOR
+    def may_have_related_works(self, work: Work) -> bool:
+        """Could there be related works?
 
-        return bool(contributions or work.series or NoveListAPI.is_configured(library))
+        :param work: The Work to check.
+        :return: True if related works might exist for the Work. False otherwise.
+        """
+        contributions = work.sort_author and work.sort_author != Edition.UNKNOWN_AUTHOR
+        return bool(contributions or work.series or self.is_novelist_configured)
 
     def language_and_audience_key_from_work(
         self, work: Work

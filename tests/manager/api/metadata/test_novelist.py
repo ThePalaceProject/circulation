@@ -81,11 +81,14 @@ class TestNoveListAPI:
 
     def test_is_configured(self, novelist_fixture: NoveListFixture):
         # If a IntegrationLibraryConfiguration exists, the API is_configured
-        assert NoveListAPI.is_configured(novelist_fixture.db.default_library()) is True
+        assert (
+            NoveListAPI.is_configured_db_check(novelist_fixture.db.default_library())
+            is True
+        )
 
         # If an integration doesn't exist for the library, it is not.
         library = novelist_fixture.db.library()
-        assert NoveListAPI.is_configured(library) is False
+        assert NoveListAPI.is_configured_db_check(library) is False
 
     def test_review_response(self, novelist_fixture: NoveListFixture):
         invalid_credential_response: HttpResponseTuple = (
