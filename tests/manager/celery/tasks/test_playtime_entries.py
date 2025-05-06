@@ -852,7 +852,7 @@ class TestGeneratePlaytimeReport:
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_a",
-                "Usage Report",
+                "Usage Reports",
                 "test cm",
                 "2025",
             ],
@@ -861,7 +861,7 @@ class TestGeneratePlaytimeReport:
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_b",
-                "Usage Report",
+                "Usage Reports",
                 "test cm",
                 "2025",
             ],

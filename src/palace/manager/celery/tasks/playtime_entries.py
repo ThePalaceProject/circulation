@@ -214,7 +214,7 @@ def generate_playtime_report(
 
                 nested_folders = [
                     data_source_name,
-                    "Usage Report",
+                    "Usage Reports",
                     reporting_name,
                     str(start.year),
                 ]
