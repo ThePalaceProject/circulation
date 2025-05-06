@@ -43,11 +43,11 @@ class ContributorData(BaseFrozenData, LoggerMixin):
             self._cached_sort_name = self.sort_name
 
     @classmethod
-    def from_contribution(cls, contribution: Contribution) -> Self:
-        """Create a ContributorData object from a data-model Contribution
-        object.
-        """
-        contributor = contribution.contributor
+    def from_contributor(
+        cls, contributor: Contributor, *, roles: list[str] | None = None
+    ) -> Self:
+        if roles is None:
+            roles = []
         return cls(
             sort_name=contributor.sort_name,
             display_name=contributor.display_name,
@@ -57,8 +57,18 @@ class ContributorData(BaseFrozenData, LoggerMixin):
             viaf=contributor.viaf,
             biography=contributor.biography,
             aliases=contributor.aliases,
-            roles=[contribution.role],
+            roles=roles,
             extra=contributor.extra,
+        )
+
+    @classmethod
+    def from_contribution(cls, contribution: Contribution) -> Self:
+        """Create a ContributorData object from a data-model Contribution
+        object.
+        """
+        return cls.from_contributor(
+            contribution.contributor,
+            roles=[contribution.role],
         )
 
     @classmethod

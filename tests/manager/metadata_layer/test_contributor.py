@@ -52,28 +52,20 @@ class TestContributorData:
         lookup = partial(ContributorData.lookup, db.session)
 
         # We know very little about this person.
-        db.contributor(
+        db_al, _ = db.contributor(
             display_name="Ann Leckie",
             sort_name="Leckie, Ann",
         )
-        al = ContributorData(
-            display_name="Ann Leckie", sort_name="Leckie, Ann", roles=[]
-        )
+        al = ContributorData.from_contributor(db_al)
 
         # We know a lot about this person.
-        db.contributor(
+        db_pkd, _ = db.contributor(
             sort_name="Dick, Phillip K.",
             display_name="Phillip K. Dick",
             viaf="27063583",
             lc="n79018147",
         )
-        pkd = ContributorData(
-            sort_name="Dick, Phillip K.",
-            display_name="Phillip K. Dick",
-            viaf="27063583",
-            lc="n79018147",
-            roles=[],
-        )
+        pkd = ContributorData.from_contributor(db_pkd)
 
         # If there's no Contributor that matches the request, the method
         # returns None.
