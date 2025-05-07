@@ -1000,13 +1000,10 @@ class OverdriveAPI(
                 if existing_hold:
                     existing_hold.collect_event_and_delete()
 
-                msg = (
-                    "This book is not available in a format supported by the Palace app. "
-                    "We apologize for the inconvenience."
-                )
+                msg = "The format of this book is not supported by the Palace app."
 
                 if not do_early_return:
-                    msg += " You may be able to read this book by logging into the OverDrive website."
+                    msg += " The book can only be accessed in your OverDrive/Libby app account."
 
                 raise CannotLoan(msg)
 
