@@ -83,12 +83,7 @@ class Services(DeclarativeContainer):
 def wire_container(container: Services) -> None:
     container.wire(
         modules=[
-            "palace.manager.api.axis",
-            "palace.manager.api.bibliotheca",
             "palace.manager.api.circulation_manager",
-            "palace.manager.api.enki",
-            "palace.manager.api.odl.api",
-            "palace.manager.api.overdrive",
             "palace.manager.feed.annotator.circulation",
             "palace.manager.feed.acquisition",
             "palace.manager.sqlalchemy.model.lane",

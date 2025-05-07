@@ -15,7 +15,6 @@ from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
 from urllib.parse import urlparse
 
 import certifi
-from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from lxml.etree import _Element, _ElementTree
@@ -70,8 +69,6 @@ from palace.manager.metadata_layer.link import LinkData
 from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.metadata_layer.subject import SubjectData
-from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -629,11 +626,9 @@ class Axis360API(
         for removed_identifier in remainder:
             self._reap(removed_identifier)
 
-    @inject
     def update_book(
         self,
         bibliographic: Metadata,
-        analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.

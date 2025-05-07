@@ -32,7 +32,6 @@ from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.mocks.analytics_provider import MockAnalyticsProvider
 
 
 class TestDeliveryMechanismFixture:
@@ -1076,20 +1075,13 @@ class TestLicensePool:
 
         add = CirculationEvent.DISTRIBUTOR_LICENSE_ADD
         checkout = CirculationEvent.DISTRIBUTOR_CHECKOUT
-        analytics = MockAnalyticsProvider()
-        assert 0 == analytics.count
 
         # This observation has no timestamp, but the pool has no
         # history, so we process it.
-        pool.update_availability_from_delta(add, CirculationEvent.NO_DATE, 1, analytics)
+        pool.update_availability_from_delta(add, CirculationEvent.NO_DATE, 1)
         assert None == pool.last_checked
         assert 2 == pool.licenses_owned
         assert 2 == pool.licenses_available
-
-        # Processing triggered two analytics events -- one for creating
-        # the license pool and one for making it available.
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
         # Now the pool has a history, and we can't fit an undated
         # observation into that history, so undated observations
@@ -1097,45 +1089,30 @@ class TestLicensePool:
         now = utc_now()
         yesterday = now - datetime.timedelta(days=1)
         pool.last_checked = yesterday
-        pool.update_availability_from_delta(add, CirculationEvent.NO_DATE, 1, analytics)
+        pool.update_availability_from_delta(add, CirculationEvent.NO_DATE, 1)
         assert 2 == pool.licenses_owned
         assert yesterday == pool.last_checked
-
-        # However, outdated events are passed on to analytics so that
-        # we record the fact that they happened... at some point.
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
         # This observation is more recent than the last time the pool
         # was checked, so it's processed and the last check time is
         # updated.
-        pool.update_availability_from_delta(checkout, now, 1, analytics)
+        pool.update_availability_from_delta(checkout, now, 1)
         assert 2 == pool.licenses_owned
         assert 1 == pool.licenses_available
         assert now == pool.last_checked
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
         # This event is less recent than the last time the pool was
         # checked, so it's ignored. Processing it is likely to do more
         # harm than good.
-        pool.update_availability_from_delta(add, yesterday, 1, analytics)
+        pool.update_availability_from_delta(add, yesterday, 1)
         assert 2 == pool.licenses_owned
         assert now == pool.last_checked
-
-        # It's still logged to analytics, though.
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
         # This event is new but does not actually cause the
         # circulation to change at all.
-        pool.update_availability_from_delta(add, now, 0, analytics)
+        pool.update_availability_from_delta(add, now, 0)
         assert 2 == pool.licenses_owned
         assert now == pool.last_checked
-
-        # We still send the analytics event.
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
     def test_calculate_change_from_one_event(self, db: DatabaseTransactionFixture):
         """Test the internal method called by update_availability_from_delta."""

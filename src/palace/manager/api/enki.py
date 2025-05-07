@@ -6,7 +6,6 @@ import time
 from collections.abc import Callable, Generator, Mapping
 from typing import Any, cast
 
-from dependency_injector.wiring import Provide
 from flask_babel import lazy_gettext as _
 from requests import Response as RequestsResponse
 from sqlalchemy.orm import Session
@@ -50,8 +49,6 @@ from palace.manager.metadata_layer.link import LinkData
 from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.metadata_layer.subject import SubjectData
-from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -796,7 +793,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
         _db: Session,
         collection: Collection,
         api_class: EnkiAPI | Callable[..., EnkiAPI] = EnkiAPI,
-        analytics: Analytics = Provide[Services.analytics.analytics],
     ):
         """Constructor."""
         super().__init__(_db, collection)
@@ -807,7 +803,6 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             api = api_class
         self.api = api
         self.collection_id = collection.id
-        self.analytics = analytics
 
     @property
     def collection(self) -> Collection | None:
