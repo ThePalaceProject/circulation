@@ -29,7 +29,6 @@ from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.monitor import TimestampData
 from palace.manager.metadata_layer.circulation import CirculationData
 from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -1021,16 +1020,11 @@ class TestEnkiImport:
         api.queue_response(200, content=json.dumps(circ_data))
         api.queue_response(200, content=json.dumps(bib_data))
 
-        from tests.mocks.analytics_provider import MockAnalyticsProvider
-
-        analytics = MockAnalyticsProvider()
         monitor = EnkiImport(
             db.session,
             enki_test_fixture.collection,
             api_class=api,
-            analytics=cast(Analytics, analytics),
         )
-        end = utc_now()
 
         # Ask for circulation events from one hour in 1970.
         start = datetime_utc(1970, 1, 1, 0, 0, 0)
@@ -1072,10 +1066,6 @@ class TestEnkiImport:
         assert "A book" == work.title
         assert 1 == licensepool.licenses_owned
         assert 0 == licensepool.licenses_available
-
-        # An analytics event was sent out for the newly discovered book.
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
         # Now let's see what update_circulation does when the work
         # already exists.

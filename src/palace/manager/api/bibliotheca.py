@@ -16,7 +16,6 @@ from io import BytesIO
 from typing import Optional, TypeVar
 
 import dateutil.parser
-from dependency_injector.wiring import Provide, inject
 from flask_babel import lazy_gettext as _
 from lxml.etree import Error, _Element
 from pymarc import parse_xml_to_array
@@ -73,8 +72,6 @@ from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
-from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -1288,13 +1285,11 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
     PROTOCOL = BibliothecaAPI.label()
     LOG_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
-    @inject
     def __init__(
         self,
         _db,
         collection,
         api_class=BibliothecaAPI,
-        analytics: Analytics = Provide[Services.analytics.analytics],
     ):
         """Initializer.
 
@@ -1304,11 +1299,7 @@ class BibliothecaTimelineMonitor(CollectionMonitor, TimelineMonitor):
 
         :param api_class: API class or an instance thereof for this monitor.
         :type api_class: Union[Type[BibliothecaAPI], BibliothecaAPI]
-
-        :param analytics: An optional Analytics object.
-        :type analytics: Optional[Analytics]
         """
-        self.analytics = analytics
         super().__init__(_db, collection)
         if isinstance(api_class, BibliothecaAPI):
             # We were given an actual API object. Just use it.
@@ -1346,7 +1337,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         api_class=BibliothecaAPI,
         default_start=None,
         override_timestamp=False,
-        analytics=None,
     ):
         """Initializer.
 
@@ -1363,17 +1353,12 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             intrinsic default will be used.
         :type default_start: Optional[Union[datetime, basestring]]
 
-        :param analytics: An optional Analytics object.
-        :type analytics: Optional[Analytics]
-
         :param override_timestamp: Boolean indicating whether
             `default_start` should take precedence over the timestamp
             for an already initialized monitor.
         :type override_timestamp: bool
         """
-        super().__init__(
-            _db=_db, collection=collection, api_class=api_class, analytics=analytics
-        )
+        super().__init__(_db=_db, collection=collection, api_class=api_class)
 
         # We should only force the use of `default_start` as the actual
         # start time if it was passed in.
@@ -1701,9 +1686,7 @@ class BibliothecaEventMonitor(BibliothecaTimelineMonitor):
         # analytics events. This is not 100% reliable, but it
         # should be mostly accurate, and the BibliothecaCirculationSweep
         # will periodically correct the errors.
-        license_pool.update_availability_from_delta(
-            internal_event_type, start_time, 1, self.analytics
-        )
+        license_pool.update_availability_from_delta(internal_event_type, start_time, 1)
 
         title = edition.title or "[no title]"
         self.log.info(

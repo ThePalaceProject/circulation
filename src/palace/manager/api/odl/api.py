@@ -7,7 +7,6 @@ import uuid
 from collections.abc import Callable
 from functools import cached_property, partial
 
-from dependency_injector.wiring import Provide, inject
 from flask import url_for
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -53,8 +52,6 @@ from palace.manager.core.lcp.credential import LCPCredentialFactory
 from palace.manager.opds.lcp.license import LicenseDocument
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.types.link import BaseLink
-from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (
@@ -100,12 +97,10 @@ class OPDS2WithODLApi(
     def description(cls) -> str:
         return "Import books from a distributor that uses OPDS2 + ODL (Open Distribution to Libraries)."
 
-    @inject
     def __init__(
         self,
         _db: Session,
         collection: Collection,
-        analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
         super().__init__(_db, collection)
 
@@ -119,7 +114,6 @@ class OPDS2WithODLApi(
         self.data_source_name = settings.data_source
         # Create the data source if it doesn't exist yet.
         DataSource.lookup(_db, self.data_source_name, autocreate=True)
-        self.analytics = analytics
 
         self._hasher_factory = HasherFactory()
         self._credential_factory = LCPCredentialFactory()

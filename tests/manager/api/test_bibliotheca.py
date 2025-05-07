@@ -4,7 +4,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
@@ -48,7 +48,6 @@ from palace.manager.api.circulation_exceptions import (
 from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
-from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -67,7 +66,6 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from palace.manager.util.web_publication_manifest import AudiobookManifest
-from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
@@ -366,14 +364,6 @@ class TestBibliothecaAPI:
         assert 1 == pool.licenses_available
         assert 0 == pool.patrons_in_hold_queue
 
-        circulation_events = (
-            db.session.query(CirculationEvent)
-            .join(LicensePool)
-            .filter(LicensePool.id == pool.id)
-        )
-        # No more Distributor events
-        assert 0 == circulation_events.count()
-
         old_last_checked = pool.last_checked
         assert old_last_checked is not None
 
@@ -399,14 +389,6 @@ class TestBibliothecaAPI:
         assert 0 == pool.patrons_in_hold_queue
 
         assert pool.last_checked is not old_last_checked
-
-        circulation_events = (
-            db.session.query(CirculationEvent)
-            .join(LicensePool)
-            .filter(LicensePool.id == pool.id)
-        )
-        # No more DISTRIBUTOR events
-        assert 0 == circulation_events.count()
 
     def test_marc_request(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         # A request for MARC records between two dates makes an API
@@ -738,18 +720,6 @@ class TestBibliothecaCirculationSweep:
         assert bibliotheca_fixture.collection == pool.collection
         assert False == pool.open_access
 
-        # Three circulation events were created for this license pool,
-        # marking the creation of the license pool, the addition of
-        # licenses owned, and the making of those licenses available.
-        circulation_events = (
-            db.session.query(CirculationEvent)
-            .join(LicensePool)
-            .filter(LicensePool.id == pool.id)
-        )
-
-        # DISTRIBUTOR EVENTS have been removed entirely
-        assert 0 == circulation_events.count()
-
 
 # Tests of the various parser classes.
 #
@@ -1068,7 +1038,6 @@ class TestBibliothecaPurchaseMonitor:
             bibliotheca_fixture.db.session,
             bibliotheca_fixture.collection,
             api_class=MockBibliothecaAPI,
-            analytics=MockAnalyticsProvider(),
         )
 
     @pytest.fixture()
@@ -1443,8 +1412,6 @@ class TestBibliothecaPurchaseMonitor:
         # added" analytics event, based on the identifier found in a
         # MARC record.
         purchase_time = utc_now()
-        analytics = MockAnalyticsProvider()
-        default_monitor.analytics = cast(Analytics, analytics)
         ensure_coverage = MagicMock()
         default_monitor.bibliographic_coverage_provider.ensure_coverage = (
             ensure_coverage
@@ -1486,11 +1453,6 @@ class TestBibliothecaPurchaseMonitor:
         assert bibliotheca_fixture.collection == pool.collection
         ensure_coverage.assert_called_once_with(pool.identifier, force=True)
 
-        # An analytics event is issued to mark the time at which the
-        # book was first purchased.
-        # No more DISTRIBUTOR events
-        assert analytics.count == 0
-
         # If the book is already in this collection, ensure_coverage
         # is not called.
         pool, ignore = LicensePool.for_foreign_id(
@@ -1503,10 +1465,6 @@ class TestBibliothecaPurchaseMonitor:
         pool2 = default_monitor.process_record(oock89, purchase_time)
         assert pool == pool2
         assert ensure_coverage.call_count == 1  # i.e. was not called again.
-
-        # But an analytics event is still issued to mark the purchase.
-        # No more DISTRIBUTOR events
-        assert analytics.count == 0
 
     def test_end_to_end(
         self,
@@ -1527,10 +1485,10 @@ class TestBibliothecaPurchaseMonitor:
         # book, and one to the metadata endpoint for information about
         # that book.
         api = default_monitor.api
-        api.queue_response(  # type: ignore [attr-defined]
+        api.queue_response(
             200, content=bibliotheca_fixture.files.sample_data("marc_records_one.xml")
         )
-        api.queue_response(  # type: ignore [attr-defined]
+        api.queue_response(
             200,
             content=bibliotheca_fixture.files.sample_data("item_metadata_single.xml"),
         )
@@ -1551,11 +1509,6 @@ class TestBibliothecaPurchaseMonitor:
         assert default_monitor.collection == lp.collection
         assert lp.licenses_owned == 1
         assert lp.licenses_available == 1
-
-        # An analytics event was issued to commemorate the addition of
-        # the book to the collection.
-        # No more DISTRIBUTOR events
-        assert default_monitor.analytics.count == 0  # type: ignore [attr-defined]
 
         # The timestamp has been updated; the next time the monitor
         # runs it will ask for purchases that haven't happened yet.
@@ -1699,12 +1652,10 @@ class TestBibliothecaEventMonitor:
             200,
             content=bibliotheca_fixture.files.sample_data("item_metadata_single.xml"),
         )
-        analytics = MockAnalyticsProvider()
         monitor = BibliothecaEventMonitor(
             db.session,
             bibliotheca_fixture.collection,
             api_class=api,
-            analytics=cast(Analytics, analytics),
         )
 
         now = utc_now()
@@ -1733,19 +1684,6 @@ class TestBibliothecaEventMonitor:
         # available.
         assert 1 == pool.licenses_owned
         assert 1 == pool.licenses_available
-
-        # Three analytics events were collected: one for the license
-        # add event itself, one for the 'checkin' that made the new
-        # license available, and a redundant 'license add' event which
-        # was registered with analytics but which did not affect the
-        # counts.
-        #
-        # In earlier versions a fourth analytics event would have been
-        # issued, for the creation of a new LicensePool, but that is now
-        # solely the job of the BibliothecaPurchasMonitor.
-        #
-        # No more DISTRIBUTOR events anymore
-        assert 0 == analytics.count
 
 
 class TestBibliothecaPurchaseMonitorWhenMultipleCollections:

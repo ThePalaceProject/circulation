@@ -894,9 +894,7 @@ class LicensePool(Base):
                 new_value=new_value,
             )
 
-    def update_availability_from_delta(
-        self, event_type, event_date, delta, analytics=None
-    ):
+    def update_availability_from_delta(self, event_type, event_date, delta):
         """Call update_availability based on a single change seen in the
         distributor data, rather than a complete snapshot of
         distributor information as of a certain time.

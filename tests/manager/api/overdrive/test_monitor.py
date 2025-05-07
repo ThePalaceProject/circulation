@@ -16,7 +16,6 @@ from palace.manager.api.overdrive.monitor import (
     RecentOverdriveCollectionMonitor,
 )
 from palace.manager.core.monitor import TimestampData
-from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
@@ -74,9 +73,6 @@ class TestOverdriveCirculationMonitor:
         # It mirrors those changes locally by calling
         # update_licensepool().
         #
-        # If this is our first time encountering a book, a
-        # DISTRIBUTOR_TITLE_ADD analytics event is sent out.
-        #
         # The method stops when should_stop() -- called on every book
         # -- returns True.
         class MockAPI:
@@ -88,13 +84,6 @@ class TestOverdriveCirculationMonitor:
                 pool, is_new, is_changed = self.licensepools.pop(0)
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
-
-        class MockAnalytics(Analytics):
-            def __init__(self):
-                self.events = []
-
-            def collect_event(self, *args):
-                self.events.append(args)
 
         class MockMonitor(OverdriveCirculationMonitor):
             recently_changed_ids_called_with = None
@@ -117,13 +106,8 @@ class TestOverdriveCirculationMonitor:
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,  # type: ignore[arg-type]
-            analytics=MockAnalytics(),
         )
         api = cast(MockAPI, monitor.api)
-
-        # A MockAnalytics object was created and is ready to receive analytics
-        # events.
-        assert isinstance(monitor.analytics, MockAnalytics)
 
         # The 'Overdrive API' is ready to tell us about four books,
         # but only one of them (the first) represents a change from what
@@ -171,12 +155,6 @@ class TestOverdriveCirculationMonitor:
         # because we never asked for it.
         assert [lp4] == api.licensepools
 
-        # A single analytics event was sent out, for the first LicensePool,
-        # the one that update_licensepool said was new.
-        #
-        # No more DISTRIBUTOR events
-        assert len(monitor.analytics.events) == 0
-
         # The incoming TimestampData object was updated with
         # a summary of what happened.
         #
@@ -214,24 +192,12 @@ class TestOverdriveCirculationMonitor:
                 self.update_licensepool_calls.append((book_id, pool))
                 return pool, is_new, is_changed
 
-        class MockAnalytics(Analytics):
-            def __init__(self):
-                self.events = []
-
-            def collect_event(self, *args):
-                self.events.append(args)
-
         monitor = OverdriveCirculationMonitor(
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,  # type: ignore[arg-type]
-            analytics=MockAnalytics(),
         )
         api = cast(MockAPI, monitor.api)
-
-        # A MockAnalytics object was created and is ready to receive analytics
-        # events.
-        assert isinstance(monitor.analytics, MockAnalytics)
 
         lp1 = db.licensepool(None)
         lp1.last_checked = utc_now()
@@ -273,25 +239,13 @@ class TestOverdriveCirculationMonitor:
                 self.tries[str(book_id)] = current_count
                 raise Exception("Generic exception that will cause bypass retries")
 
-        class MockAnalytics(Analytics):
-            def __init__(self):
-                self.events = []
-
-            def collect_event(self, *args):
-                self.events.append(args)
-
         monitor = OverdriveCirculationMonitor(
             db.session,
             overdrive_api_fixture.collection,
             api_class=MockAPI,  # type: ignore[arg-type]
-            analytics=MockAnalytics(),
         )
 
         api = cast(MockAPI, monitor.api)
-
-        # A MockAnalytics object was created and is ready to receive analytics
-        # events.
-        assert isinstance(monitor.analytics, MockAnalytics)
 
         lp1 = db.licensepool(None)
         lp1.last_checked = utc_now()

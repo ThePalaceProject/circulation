@@ -6,7 +6,6 @@ from collections.abc import Generator
 from typing import Any
 
 import dateutil
-from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 from tenacity import (
@@ -23,8 +22,6 @@ from palace.manager.core.monitor import (
     TimelineMonitor,
     TimestampData,
 )
-from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.container import Services
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -40,18 +37,15 @@ class OverdriveCirculationMonitor(CollectionMonitor, TimelineMonitor):
     PROTOCOL = OverdriveAPI.label()
     OVERLAP = datetime.timedelta(minutes=1)
 
-    @inject
     def __init__(
         self,
         _db: Session,
         collection: Collection,
         api_class: type[OverdriveAPI] = OverdriveAPI,
-        analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
         """Constructor."""
         super().__init__(_db, collection)
         self.api = api_class(_db, collection)
-        self.analytics = analytics
 
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None

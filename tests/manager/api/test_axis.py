@@ -8,7 +8,7 @@ import ssl
 import urllib
 from contextlib import contextmanager
 from functools import partial
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
@@ -49,7 +49,6 @@ from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.metadata_layer.subject import SubjectData
-from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -68,7 +67,6 @@ from palace.manager.util.problem_detail import (
 )
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.library import LibraryFixture
-from tests.mocks.analytics_provider import MockAnalyticsProvider
 from tests.mocks.axis import MockAxis360API
 
 if TYPE_CHECKING:
@@ -736,11 +734,9 @@ class TestAxis360API:
         # CirculationData object, and creates appropriate data model
         # objects.
 
-        analytics = MockAnalyticsProvider()
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(
             axis360.BIBLIOGRAPHIC_DATA,
-            analytics=cast(Analytics, analytics),
         )
         # A new LicensePool and Edition were created.
         assert True == lp_new
@@ -757,16 +753,6 @@ class TestAxis360API:
         # The Edition reflects what it said in BIBLIOGRAPHIC_DATA
         assert "Faith of My Fathers : A Family Memoir" == e.title
 
-        # Three analytics events were sent out.
-        #
-        # It's not super important to test which ones, but they are:
-        # 1. The creation of the LicensePool
-        # 2. The setting of licenses_owned to 9
-        # 3. The setting of licenses_available to 8
-        #
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
-
         # Now change a bit of the data and call the method again.
         new_circulation = CirculationData(
             data_source=DataSource.AXIS_360,
@@ -782,7 +768,6 @@ class TestAxis360API:
 
         e2, e_new, lp2, lp_new = api.update_book(
             bibliographic=bibliographic,
-            analytics=cast(Analytics, analytics),
         )
 
         # The same LicensePool and Edition are returned -- no new ones
@@ -796,13 +781,6 @@ class TestAxis360API:
         # CirculationData
         assert 8 == lp.licenses_owned
         assert 7 == lp.licenses_available
-
-        # Two more circulation events have been sent out -- one for
-        # the licenses_owned change and one for the licenses_available
-        # change.
-        #
-        # No more DISTRIBUTOR events
-        assert 0 == analytics.count
 
     @pytest.mark.parametrize(
         ("setting", "setting_value", "attribute", "attribute_value"),
