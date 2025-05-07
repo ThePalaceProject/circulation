@@ -893,7 +893,7 @@ class TestOverdriveAPI:
         http.queue_response(200, content="")
         with pytest.raises(
             CannotLoan,
-            match="This book is not available in a format supported by the Palace app",
+            match="format of this book is not supported",
         ):
             api.checkout(patron, pin, pool, None)
 
@@ -938,7 +938,7 @@ class TestOverdriveAPI:
         )
         with pytest.raises(
             CannotLoan,
-            match="This book is not available in a format supported by the Palace app",
+            match="format of this book is not supported",
         ):
             api.checkout(patron, pin, pool, None)
 
@@ -969,7 +969,7 @@ class TestOverdriveAPI:
         )
         with pytest.raises(
             CannotLoan,
-            match="This book is not available in a format supported by the Palace app",
+            match="format of this book is not supported",
         ):
             api.checkout(patron, pin, pool, None)
         mock_collect = (
