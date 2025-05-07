@@ -517,6 +517,22 @@ class BaseCirculationApiSettings(BaseSettings):
         ),
     )
 
+    lane_priority_level: int = FormField(
+        default=5,
+        form=ConfigurationFormItem(
+            label=_("Lane Priority Level"),
+            type=ConfigurationFormItemType.SELECT,
+            options={index + 1: value for index, value in enumerate(range(1, 11))},
+            description=(
+                "An integer between 1 (lowest priority) and 10 (highest) inclusive indicating "
+                "the priority of collection's contents in lanes.  In other words, a lower number relative to "
+                "other collections will push the contents of this collection to the bottom of any lane in which this "
+                "collection's contents appear. By default the priority is set right in the middle at 5."
+            ),
+            required=False,
+        ),
+    )
+
 
 SettingsType = TypeVar("SettingsType", bound=BaseCirculationApiSettings, covariant=True)
 LibrarySettingsType = TypeVar("LibrarySettingsType", bound=BaseSettings, covariant=True)
