@@ -646,41 +646,6 @@ class TestMetadata:
         assert "123" == contributor.lc
         assert "Robert_Jordan" == contributor.wikipedia_name
 
-    def test_filter_recommendations(self, db: DatabaseTransactionFixture):
-        metadata = Metadata(DataSource.OVERDRIVE)
-        known_identifier = db.identifier()
-        unknown_identifier = IdentifierData(
-            type=Identifier.ISBN, identifier="hey there"
-        )
-
-        # Unknown identifiers are filtered out of the recommendations.
-        metadata.recommendations += [known_identifier, unknown_identifier]
-        metadata.filter_recommendations(db.session)
-        assert [known_identifier] == metadata.recommendations
-
-        # It works with IdentifierData as well.
-        known_identifier_data = IdentifierData(
-            type=known_identifier.type, identifier=known_identifier.identifier
-        )
-        metadata.recommendations = [known_identifier_data, unknown_identifier]
-        metadata.filter_recommendations(db.session)
-        [result] = metadata.recommendations
-        # The IdentifierData has been replaced by a bonafide Identifier.
-        assert isinstance(result, Identifier)
-        # The genuine article.
-        assert known_identifier == result
-
-        # Recommendations are filtered to make sure the primary identifier is not recommended.
-        primary_identifier = db.identifier()
-        metadata = Metadata(DataSource.OVERDRIVE, primary_identifier=primary_identifier)
-        metadata.recommendations = [
-            known_identifier_data,
-            unknown_identifier,
-            primary_identifier,
-        ]
-        metadata.filter_recommendations(db.session)
-        assert [known_identifier] == metadata.recommendations
-
     def test_metadata_can_be_deepcopied(self):
         # Check that we didn't put something in the metadata that
         # will prevent it from being copied. (e.g., self.log)

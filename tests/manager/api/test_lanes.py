@@ -33,11 +33,12 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.core.entrypoint import AudiobooksEntryPoint
 from palace.manager.integration.goals import Goals
 from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.search.external_search import Filter
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
     DefaultSortOrderFacets,
     Facets,
@@ -560,10 +561,9 @@ class TestRelatedBooksLane:
         # When NoveList is configured and recommendations are available,
         # a RecommendationLane will be included.
         mock_api = create_autospec(NoveListAPI)
-        response = Metadata(
-            related_books_fixture.edition.data_source, recommendations=[db.identifier()]
-        )
-        mock_api.lookup.return_value = response
+        mock_api.lookup_recommendations.return_value = [
+            IdentifierData.from_identifier(db.identifier())
+        ]
         result = RelatedBooksLane(
             db.default_library(), related_books_fixture.work, "", novelist_api=mock_api
         )
@@ -679,6 +679,12 @@ class LaneFixture:
 
         return works
 
+    def generate_mock_novelist_api(self):
+        """Prep an empty NoveList result."""
+        mock_api = create_autospec(NoveListAPI)
+        mock_api.lookup_recommendations.return_value = []
+        return mock_api
+
 
 @pytest.fixture(scope="function")
 def lane_fixture(db: DatabaseTransactionFixture) -> LaneFixture:
@@ -686,19 +692,9 @@ def lane_fixture(db: DatabaseTransactionFixture) -> LaneFixture:
 
 
 class TestRecommendationLane:
-    def generate_mock_api(self, lane_fixture: LaneFixture):
-        """Prep an empty NoveList result."""
-        source = DataSource.lookup(lane_fixture.db.session, DataSource.OVERDRIVE)
-        source_name = source.name if source else DataSource.OVERDRIVE
-        metadata = Metadata(source_name)
-
-        mock_api = create_autospec(NoveListAPI)
-        mock_api.lookup.return_value = metadata
-        return mock_api
-
     def test_modify_search_filter_hook(self, lane_fixture: LaneFixture):
         # Prep an empty result.
-        mock_api = self.generate_mock_api(lane_fixture)
+        mock_api = lane_fixture.generate_mock_novelist_api()
 
         # With an empty recommendation result, the Filter is set up
         # to return nothing.
@@ -734,7 +730,7 @@ class TestRecommendationLane:
             lane_fixture.db.default_library(),
             lane_fixture.work,
             "",
-            novelist_api=self.generate_mock_api(lane_fixture),
+            novelist_api=lane_fixture.generate_mock_novelist_api(),
         )
         overview = lane.overview_facets(lane_fixture.db.session, featured)
         assert isinstance(overview, Facets)
@@ -743,6 +739,35 @@ class TestRecommendationLane:
 
         # Entry point was preserved.
         assert AudiobooksEntryPoint == overview.entrypoint
+
+    def test_fetch_recommendations(
+        self, db: DatabaseTransactionFixture, lane_fixture: LaneFixture
+    ):
+        known_identifier = db.identifier()
+        known_identifier_data = IdentifierData.from_identifier(known_identifier)
+        unknown_identifier_data = IdentifierData(
+            type=Identifier.ISBN, identifier="hey there"
+        )
+
+        mock_novelist_api = lane_fixture.generate_mock_novelist_api()
+        lane = RecommendationLane(
+            lane_fixture.db.default_library(),
+            lane_fixture.work,
+            "",
+            novelist_api=mock_novelist_api,
+        )
+
+        # Unknown identifiers are filtered out of the recommendations
+        mock_novelist_api.lookup_recommendations.return_value = [
+            known_identifier_data,
+            unknown_identifier_data,
+        ]
+        result = lane.fetch_recommendations(db.session)
+        assert result == [known_identifier]
+
+        # The results are Identifiers, not IdentifierData.
+        [result_identifier] = result
+        assert isinstance(result_identifier, Identifier)
 
 
 class TestHasSeriesFacets:

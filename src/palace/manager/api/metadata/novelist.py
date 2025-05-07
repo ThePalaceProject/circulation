@@ -23,13 +23,7 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     FormField,
 )
-from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.subject import SubjectData
-from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -37,13 +31,10 @@ from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import (
     HttpResponseTuple,
-    Hyperlink,
     Representation,
 )
-from palace.manager.util import TitleProcessor
 from palace.manager.util.http import HTTP
 from palace.manager.util.log import LoggerMixin
 
@@ -178,10 +169,12 @@ class NoveListAPI(
     def source(self) -> DataSource:
         return DataSource.lookup(self._db, DataSource.NOVELIST, autocreate=True)
 
-    def lookup_equivalent_isbns(self, identifier: Identifier) -> Metadata | None:
-        """Finds NoveList data for all ISBNs equivalent to an identifier.
+    def _lookup_recommendations_equivalent_isbns(
+        self, identifier: Identifier
+    ) -> list[IdentifierData]:
+        """Finds NoveList recommendations for all ISBNs equivalent to an identifier.
 
-        :return: Metadata object or None
+        :return: List of IdentifierData objects for the recommended books.
         """
         license_sources = DataSource.license_sources_for(self._db, identifier)
 
@@ -206,16 +199,18 @@ class NoveListAPI(
                 ),
                 identifier,
             )
-            return None
+            return []
 
-        # Look up metadata for all equivalent ISBNs.
-        lookup_metadata = list()
+        # Look up recommendations for all equivalent ISBNs.
+        lookups = list()
         for isbn in isbns:
-            metadata = self.lookup(isbn)
-            if metadata:
-                lookup_metadata.append(metadata)
+            novelist_id, recs = self._lookup_recommendations_isbn(
+                isbn.identifier, isbn.urn
+            )
+            if novelist_id:
+                lookups.append((novelist_id, recs))
 
-        if not lookup_metadata:
+        if not lookups:
             self.log.warning(
                 (
                     "No NoveList metadata found for Identifiers without an ISBN"
@@ -223,51 +218,48 @@ class NoveListAPI(
                 ),
                 identifier,
             )
-            return None
+            return []
 
-        best_metadata, confidence = self.choose_best_metadata(
-            lookup_metadata, identifier
+        best_recommendations, confidence = self._choose_best_recommendations(
+            lookups, identifier
         )
-        if best_metadata is None or confidence is None:
-            return None
-
         if round(confidence, 2) < 0.5:
             self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
-            return None
+            return []
 
-        return best_metadata
+        return best_recommendations
 
     @classmethod
-    def _confirm_same_identifier(self, metadata_objects: list[Metadata]) -> bool:
-        """Ensures that all metadata objects have the same NoveList ID"""
+    def _confirm_same_identifier(
+        cls, recommendation_lookups: list[tuple[IdentifierData, list[IdentifierData]]]
+    ) -> bool:
+        """Ensures that all recommendation_lookups have the same NoveList ID"""
 
-        novelist_ids = {
-            metadata.primary_identifier.identifier
-            for metadata in metadata_objects
-            if metadata.primary_identifier
-        }
+        novelist_ids = {novelist_id for novelist_id, _ in recommendation_lookups}
         return len(novelist_ids) == 1
 
-    def choose_best_metadata(
-        self, metadata_objects: list[Metadata], identifier: Identifier
-    ) -> tuple[Metadata, float] | tuple[None, None]:
-        """Chooses the most likely book metadata from a list of Metadata objects
-
-        Given several Metadata objects with different NoveList IDs, this
-        method returns the metadata of the ID with the highest representation
-        and a float representing confidence in the result.
+    def _choose_best_recommendations(
+        self,
+        recommendation_lookups: list[tuple[IdentifierData, list[IdentifierData]]],
+        identifier: Identifier,
+    ) -> tuple[list[IdentifierData], float]:
         """
-        confidence = 1.0
-        if self._confirm_same_identifier(metadata_objects):
+        Chooses the most reliable set of book recommendations when multiple NoveList IDs are found.
+
+        When an ISBN has multiple equivalent identifiers that map to different NoveList IDs,
+        this method determines which set of recommendations to use by selecting the most
+        frequently occurring NoveList ID. It returns both the chosen recommendations and
+        a confidence score based on how dominant that ID is in the results.
+        """
+        if self._confirm_same_identifier(recommendation_lookups):
             # Metadata with the same NoveList ID will be identical. Take one.
-            return metadata_objects[0], confidence
+            return recommendation_lookups[0][1], 1.0
 
         # One or more of the equivalents did not return the same NoveList work
         self.log.warning("%r has inaccurate ISBN equivalents", identifier)
         counter: Counter[IdentifierData] = Counter()
-        for metadata in metadata_objects:
-            if metadata.primary_identifier is not None:
-                counter[metadata.primary_identifier] += 1
+        for novelist_id, _ in recommendation_lookups:
+            counter[novelist_id] += 1
 
         [(target_identifier, most_amount), (ignore, secondmost)] = counter.most_common(
             2
@@ -275,25 +267,32 @@ class NoveListAPI(
         if most_amount == secondmost:
             # The counts are the same, and neither can be trusted.
             self.log.warning(self.NO_ISBN_EQUIVALENCY, identifier)
-            return None, None
-        confidence = most_amount / float(len(metadata_objects))
-        target_metadata = [
-            m for m in metadata_objects if m.primary_identifier == target_identifier
+            return [], 0
+        confidence = most_amount / float(len(recommendation_lookups))
+        target = [
+            recs
+            for novelist_id, recs in recommendation_lookups
+            if novelist_id == target_identifier
         ]
-        return target_metadata[0], confidence
+        return target[0], confidence
 
-    def lookup(self, identifier: Identifier, **kwargs: Any) -> Metadata | None:
-        """Requests NoveList metadata for a particular identifier
+    def lookup_recommendations(self, identifier: Identifier) -> list[IdentifierData]:
+        """Requests NoveList recommendations for a given identifier.
 
-        :param kwargs: Keyword arguments passed into Representation.post().
-
-        :return: Metadata object or None
+        :return: List of IdentifierData objects for the recommended books.
         """
-        client_identifier = identifier.urn
         if identifier.type != Identifier.ISBN:
-            return self.lookup_equivalent_isbns(identifier)
+            return self._lookup_recommendations_equivalent_isbns(identifier)
 
-        isbn = identifier.identifier
+        novelist_identifier, recs = self._lookup_recommendations_isbn(
+            identifier.identifier, identifier.urn
+        )
+
+        return recs
+
+    def _lookup_recommendations_isbn(
+        self, isbn: str, client_identifier: str
+    ) -> tuple[IdentifierData | None, list[IdentifierData]]:
         params = dict(
             ClientIdentifier=client_identifier,
             ISBN=isbn,
@@ -319,7 +318,6 @@ class NoveListAPI(
             max_age=self.MAX_REPRESENTATION_AGE,
             response_reviewer=self.review_response,
             url_normalizer=normalized_url,
-            **kwargs,
         )
 
         # Commit to the database immediately to reduce the chance
@@ -327,7 +325,7 @@ class NoveListAPI(
         # duplicate Representation and crash.
         self._db.commit()
 
-        return self.lookup_info_to_metadata(representation)
+        return self._lookup_info_representation_to_recommendations(representation)
 
     @classmethod
     def review_response(cls, response: HttpResponseTuple) -> None:
@@ -344,15 +342,6 @@ class NoveListAPI(
         return cls.build_query_url(params, include_auth=False)
 
     @classmethod
-    def _scrub_subtitle(cls, subtitle: str | None) -> str | None:
-        """Removes common NoveList subtitle annoyances"""
-        if subtitle:
-            subtitle = subtitle.replace("[electronic resource]", "")
-            # Then get rid of any leading whitespace or punctuation.
-            subtitle = TitleProcessor.extract_subtitle("", subtitle)
-        return subtitle
-
-    @classmethod
     def build_query_url(
         cls, params: Mapping[str, str], include_auth: bool = True
     ) -> str:
@@ -366,191 +355,68 @@ class NoveListAPI(
             urlencoded_params[name] = urllib.parse.quote(value)
         return url % urlencoded_params
 
-    def lookup_info_to_metadata(
-        self, lookup_representation: Response
-    ) -> Metadata | None:
-        """Transforms a NoveList JSON representation into a Metadata object"""
+    def _lookup_info_representation_to_recommendations(
+        self, lookup_representation: Representation
+    ) -> tuple[IdentifierData | None, list[IdentifierData]]:
+        """Transforms a NoveList JSON representation into a tuple containing
+        the NoveList ID and a list of recommended ISBNs."""
 
         if not lookup_representation.content:
-            return None
+            return None, []
 
         lookup_info = json.loads(lookup_representation.content)
-        book_info = lookup_info["TitleInfo"]
-        if book_info:
-            novelist_identifier = book_info.get("ui")
+        book_info = lookup_info.get("TitleInfo")
+        novelist_identifier = book_info.get("ui") if book_info else None
         if not book_info or not novelist_identifier:
             # NoveList didn't know the ISBN.
-            return None
+            return None, []
 
-        primary_identifier, ignore = Identifier.for_foreign_id(
-            self._db, Identifier.NOVELIST_ID, novelist_identifier
+        novelist_identifier_data = IdentifierData(
+            type=Identifier.NOVELIST_ID, identifier=novelist_identifier
         )
-        metadata = Metadata(self.source, primary_identifier=primary_identifier)
 
         # Get the equivalent ISBN identifiers.
-        metadata.identifiers += self._extract_isbns(book_info)
+        book_identifiers = set(self._extract_isbns(book_info))
 
-        author = book_info.get("author")
-        if author:
-            metadata.contributors.append(ContributorData(sort_name=author))
+        # Extract similar content if it is available.
+        similar_titles = lookup_info.get("FeatureContent", {}).get("SimilarTitles", {})
 
-        description = book_info.get("description")
-        if description:
-            metadata.links.append(
-                LinkData(
-                    rel=Hyperlink.DESCRIPTION,
-                    content=description,
-                    media_type=Representation.TEXT_PLAIN,
-                )
-            )
+        recommendations = self._get_recommendations(similar_titles, book_identifiers)
 
-        audience_level = book_info.get("audience_level")
-        if audience_level:
-            metadata.subjects.append(
-                SubjectData(type=Subject.FREEFORM_AUDIENCE, identifier=audience_level)
-            )
+        return novelist_identifier_data, recommendations
 
-        novelist_rating = book_info.get("rating")
-        if novelist_rating:
-            metadata.measurements.append(
-                MeasurementData(
-                    quantity_measured=Measurement.RATING, value=novelist_rating
-                )
-            )
-
-        # Extract feature content if it is available.
-        series_info = None
-        appeals_info = None
-        lexile_info = None
-        goodreads_info = None
-        recommendations_info = None
-        feature_content = lookup_info.get("FeatureContent")
-        if feature_content:
-            series_info = feature_content.get("SeriesInfo")
-            appeals_info = feature_content.get("Appeals")
-            lexile_info = feature_content.get("LexileInfo")
-            goodreads_info = feature_content.get("GoodReads")
-            recommendations_info = feature_content.get("SimilarTitles")
-
-        metadata, title_key = self.get_series_information(
-            metadata, series_info, book_info
-        )
-        metadata.title = book_info.get(title_key)
-        subtitle = TitleProcessor.extract_subtitle(
-            metadata.title, book_info.get("full_title")
-        )
-        metadata.subtitle = self._scrub_subtitle(subtitle)
-
-        # TODO: How well do we trust this data? We could conceivably bump up
-        # the weight here.
-        if appeals_info:
-            extracted_genres = False
-            for appeal in appeals_info:
-                genres = appeal.get("genres")
-                if genres:
-                    for genre in genres:
-                        metadata.subjects.append(
-                            SubjectData(type=Subject.TAG, identifier=genre["Name"])
-                        )
-                        extracted_genres = True
-                if extracted_genres:
-                    break
-
-        if lexile_info:
-            metadata.subjects.append(
-                SubjectData(type=Subject.LEXILE_SCORE, identifier=lexile_info["Lexile"])
-            )
-
-        if goodreads_info:
-            metadata.measurements.append(
-                MeasurementData(
-                    quantity_measured=Measurement.RATING,
-                    value=goodreads_info["average_rating"],
-                )
-            )
-
-        metadata = self.get_recommendations(metadata, recommendations_info)
-
-        # If nothing interesting comes from the API, ignore it.
-        if not (
-            metadata.measurements
-            or metadata.series_position
-            or metadata.series
-            or metadata.subjects
-            or metadata.links
-            or metadata.subtitle
-            or metadata.recommendations
-        ):
-            return None
-        return metadata
-
-    def get_series_information(
-        self,
-        metadata: Metadata,
-        series_info: Mapping[str, Any] | None,
-        book_info: Mapping[str, Any],
-    ) -> tuple[Metadata, str]:
-        """Returns metadata object with series info and optimal title key"""
-
-        title_key = "main_title"
-        if series_info:
-            metadata.series = series_info["full_title"]
-            series_titles = series_info.get("series_titles")
-            if series_titles:
-                matching_series_volume = [
-                    volume
-                    for volume in series_titles
-                    if volume.get("full_title") == book_info.get("full_title")
-                ]
-                if not matching_series_volume:
-                    # If there's no full_title match, try the main_title.
-                    matching_series_volume = [
-                        volume
-                        for volume in series_titles
-                        if volume.get("main_title") == book_info.get("main_title")
-                    ]
-                if len(matching_series_volume) > 1:
-                    # This probably won't happen, but if it does, it will be
-                    # difficult to debug without an error.
-                    raise ValueError("Multiple matching volumes found.")
-                series_position = matching_series_volume[0].get("volume")
-                if series_position:
-                    if series_position.endswith("."):
-                        series_position = series_position[:-1]
-                    metadata.series_position = int(series_position)
-
-                # Sometimes all of the volumes in a series have the same
-                # main_title so using the full_title is preferred.
-                main_titles = [volume.get(title_key) for volume in series_titles]
-                if len(main_titles) > 1 and len(set(main_titles)) == 1:
-                    title_key = "full_title"
-
-        return metadata, title_key
-
-    def _extract_isbns(self, book_info: Mapping[str, Any]) -> list[IdentifierData]:
+    @staticmethod
+    def _extract_isbns(
+        book_info: Mapping[str, Any], *, filter: set[IdentifierData] | None = None
+    ) -> list[IdentifierData]:
+        if filter is None:
+            filter = set()
         isbns = []
-
         synonymous_ids = book_info.get("manifestations", [])
         for synonymous_id in synonymous_ids:
             isbn = synonymous_id.get("ISBN")
             if isbn:
                 isbn_data = IdentifierData(type=Identifier.ISBN, identifier=isbn)
-                isbns.append(isbn_data)
+                if isbn_data not in filter:
+                    isbns.append(isbn_data)
 
         return isbns
 
-    def get_recommendations(
-        self, metadata: Metadata, recommendations_info: Mapping[str, Any] | None
-    ) -> Metadata:
-        if not recommendations_info:
-            return metadata
-
+    def _get_recommendations(
+        self,
+        recommendations_info: Mapping[str, Any],
+        book_identifiers: set[IdentifierData],
+    ) -> list[IdentifierData]:
+        recommendations = []
         related_books = recommendations_info.get("titles", [])
         related_books = [b for b in related_books if b.get("is_held_locally")]
         if related_books:
             for book_info in related_books:
-                metadata.recommendations += self._extract_isbns(book_info)
-        return metadata
+                recommendations += self._extract_isbns(
+                    book_info, filter=book_identifiers
+                )
+
+        return recommendations
 
     def get_items_from_query(self, library: Library) -> list[dict[str, str]]:
         """Gets identifiers and its related title, medium, and authors from the

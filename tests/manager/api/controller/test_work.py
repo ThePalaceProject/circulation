@@ -27,9 +27,8 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.types import WorkEntry
 from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.search.external_search import SortKeyPagination
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import Facets, FeaturedFacets
 from palace.manager.sqlalchemy.model.licensing import LicensePool
@@ -481,9 +480,12 @@ class TestWorkController:
         self.identifier = self.lp.identifier
 
         # Prep an empty recommendation.
-        source = DataSource.lookup(work_fixture.db.session, self.datasource)
-        metadata = Metadata(source)
         mock_api = create_autospec(NoveListAPI)
+        mock_api.lookup_recommendations.return_value = [
+            IdentifierData.from_identifier(
+                work_fixture.english_1.presentation_edition.primary_identifier
+            )
+        ]
 
         args = [self.identifier.type, self.identifier.identifier]
         kwargs: dict[str, Any] = dict(novelist_api=mock_api)
@@ -657,11 +659,10 @@ class TestWorkController:
         # us a matching work instead of hiding it. But the search
         # index is also mocked, so within this test will return the
         # same book it always does -- same_author_and_series.
-        overdrive = DataSource.lookup(work_fixture.db.session, DataSource.OVERDRIVE)
-        metadata = Metadata(overdrive)
         recommended_identifier = work_fixture.db.identifier()
-        metadata.recommendations = [recommended_identifier]
-        mock_api.lookup.return_value = metadata
+        mock_api.lookup_recommendations.return_value = [
+            IdentifierData.from_identifier(recommended_identifier)
+        ]
 
         # Now, ask for works related to work_fixture.english_1.
         with work_fixture.request_context_with_library("/?entrypoint=Book"):
