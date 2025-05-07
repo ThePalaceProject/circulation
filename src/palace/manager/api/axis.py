@@ -653,7 +653,7 @@ class Axis360API(
             links=True,
         )
 
-        bibliographic.apply(edition, self.collection, replace=policy, db=self._db)
+        bibliographic.apply(self._db, edition, self.collection, replace=policy)
         return edition, new_edition, license_pool, new_license_pool
 
     def _fetch_remote_availability(
@@ -685,8 +685,8 @@ class Axis360API(
         self.log.info("Reaping %r", identifier)
 
         availability = CirculationData(
-            data_source=pool.data_source,
-            primary_identifier=identifier,
+            data_source_name=pool.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(identifier),
             licenses_owned=0,
             licenses_available=0,
             licenses_reserved=0,
@@ -858,8 +858,8 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         )
         if not circulation_data:
             circulation_data = CirculationData(
-                data_source=DataSource.AXIS_360,
-                primary_identifier=primary_identifier,
+                data_source_name=DataSource.AXIS_360,
+                primary_identifier_data=primary_identifier,
             )
 
         availability = self._xpath1(element, "axis:availability", ns)
@@ -1120,7 +1120,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
             )
 
         metadata = Metadata(
-            data_source=DataSource.AXIS_360,
+            data_source_name=DataSource.AXIS_360,
             title=title,
             language=language,
             medium=medium,
@@ -1128,7 +1128,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
             publisher=publisher,
             imprint=imprint,
             published=publication_date,
-            primary_identifier=primary_identifier,
+            primary_identifier_data=primary_identifier,
             identifiers=identifiers,
             subjects=subjects,
             contributors=contributors,
@@ -1136,8 +1136,8 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
         )
 
         circulationdata = CirculationData(
-            data_source=DataSource.AXIS_360,
-            primary_identifier=primary_identifier,
+            data_source_name=DataSource.AXIS_360,
+            primary_identifier_data=primary_identifier,
             formats=formats,
         )
 

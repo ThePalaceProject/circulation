@@ -636,24 +636,19 @@ class LicensePool(Base):
         else:
             edition_identifier = IdentifierData.from_identifier(self.identifier)
             metadata = Metadata(
-                data_source=DataSourceConstants.PRESENTATION_EDITION,
-                primary_identifier=edition_identifier,
+                data_source_name=DataSourceConstants.PRESENTATION_EDITION,
+                primary_identifier_data=edition_identifier,
             )
 
             for edition in all_editions:
                 if edition.data_source.name != DataSourceConstants.PRESENTATION_EDITION:
                     metadata.update(Metadata.from_edition(edition))
 
-            # Note: Since this is a presentation edition it does not have a
-            # license data source, even if one of the editions it was
-            # created from does have a license data source.
-            metadata._license_data_source = None
-            metadata.license_data_source_obj = None
             edition, is_new = metadata.edition(_db)
 
             policy = ReplacementPolicy.from_metadata_source()
             self.presentation_edition, edition_core_changed = metadata.apply(
-                edition, collection=self.collection, replace=policy
+                _db, edition, collection=self.collection, replace=policy
             )
             changed = changed or edition_core_changed
 

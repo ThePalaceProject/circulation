@@ -96,13 +96,13 @@ class Axis360Fixture:
     # without having to parse it from an XML file.
 
     BIBLIOGRAPHIC_DATA = Metadata(
-        DataSource.AXIS_360,
+        data_source_name=DataSource.AXIS_360,
         publisher="Random House Inc",
         language="eng",
         title="Faith of My Fathers : A Family Memoir",
         imprint="Random House Inc2",
         published=datetime_utc(2000, 3, 7, 0, 0),
-        primary_identifier=primary_identifier,
+        primary_identifier_data=primary_identifier,
         identifiers=[IdentifierData(type=Identifier.ISBN, identifier="9780375504587")],
         contributors=[
             ContributorData(
@@ -117,8 +117,8 @@ class Axis360Fixture:
             SubjectData(type=Subject.FREEFORM_AUDIENCE, identifier="Adult"),
         ],
         circulation=CirculationData(
-            data_source=DataSource.AXIS_360,
-            primary_identifier=primary_identifier,
+            data_source_name=DataSource.AXIS_360,
+            primary_identifier_data=primary_identifier,
             licenses_owned=9,
             licenses_available=8,
             licenses_reserved=0,
@@ -567,12 +567,12 @@ class TestAxis360API:
                     # available.
                     identifier_data = IdentifierData.from_identifier(identifier)
                     metadata = Metadata(
-                        data_source=DataSource.AXIS_360,
-                        primary_identifier=identifier_data,
+                        data_source_name=DataSource.AXIS_360,
+                        primary_identifier_data=identifier_data,
                     )
                     availability = CirculationData(
-                        data_source=DataSource.AXIS_360,
-                        primary_identifier=identifier_data,
+                        data_source_name=DataSource.AXIS_360,
+                        primary_identifier_data=identifier_data,
                         licenses_owned=7,
                         licenses_available=6,
                     )
@@ -625,7 +625,7 @@ class TestAxis360API:
 
         # We got information on only one.
         [(metadata, circulation)] = results
-        assert (id1, False) == metadata.primary_identifier.load(axis360.db.session)
+        assert id1 == metadata.load_primary_identifier(axis360.db.session)
         assert (
             "El caso de la gracia : Un periodista explora las evidencias de unas vidas transformadas"
             == metadata.title
@@ -755,8 +755,8 @@ class TestAxis360API:
 
         # Now change a bit of the data and call the method again.
         new_circulation = CirculationData(
-            data_source=DataSource.AXIS_360,
-            primary_identifier=axis360.BIBLIOGRAPHIC_DATA.primary_identifier,
+            data_source_name=DataSource.AXIS_360,
+            primary_identifier_data=axis360.BIBLIOGRAPHIC_DATA.primary_identifier_data,
             licenses_owned=8,
             licenses_available=7,
         )
@@ -915,7 +915,7 @@ class TestParsers:
 
         assert "Faith of My Fathers : A Family Memoir" == bib1.title
         assert "eng" == bib1.language
-        assert datetime_utc(2000, 3, 7, 0, 0) == bib1.published
+        assert datetime.date(2000, 3, 7) == bib1.published
 
         assert "Simon & Schuster" == bib2.publisher
         assert "Pocket Books" == bib2.imprint
@@ -1143,7 +1143,9 @@ class TestParsers:
         assert av1 is not None
         assert av2 is not None
 
-        assert "0003642860" == av1.primary_identifier(axis360.db.session).identifier
+        assert (
+            "0003642860" == av1.load_primary_identifier(axis360.db.session).identifier
+        )
         assert 9 == av1.licenses_owned
         assert 9 == av1.licenses_available
         assert 0 == av1.patrons_in_hold_queue

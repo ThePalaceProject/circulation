@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import datetime
-from collections.abc import Sequence
-from typing import Any
 
+from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
+from typing_extensions import Self
 
+from palace.manager.metadata_layer.container import BaseDataContainer
 from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.metadata_layer.license import LicenseData
 from palace.manager.metadata_layer.link import LinkData
 from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.datasource import DataSource
-from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -22,10 +20,9 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
-from palace.manager.util.log import LoggerMixin
 
 
-class CirculationData(LoggerMixin):
+class CirculationData(BaseDataContainer):
     """Information about actual copies of a book that can be delivered to
     patrons.
 
@@ -36,178 +33,88 @@ class CirculationData(LoggerMixin):
         Metadata : Edition :: CirculationData : Licensepool
     """
 
-    def __init__(
-        self,
-        data_source: str | DataSource,
-        primary_identifier: Identifier | IdentifierData | None,
-        licenses_owned: int | None = None,
-        licenses_available: int | None = None,
-        licenses_reserved: int | None = None,
-        patrons_in_hold_queue: int | None = None,
-        formats: list[FormatData] | None = None,
-        default_rights_uri: str | None = None,
-        links: list[LinkData] | None = None,
-        licenses: list[LicenseData] | None = None,
-        last_checked: datetime.datetime | None = None,
-        should_track_playtime: bool = False,
-    ) -> None:
-        """Constructor.
+    licenses_owned: int | None = None
+    licenses_available: int | None = None
+    licenses_reserved: int | None = None
+    patrons_in_hold_queue: int | None = None
+    default_rights_uri: str | None = None
+    links: list[LinkData] = []
+    formats: list[FormatData] = []
+    licenses: list[LicenseData] | None = None
+    last_checked: datetime.datetime = Field(default_factory=utc_now)
+    should_track_playtime: bool = False
 
-        :param data_source: The authority providing the lending licenses.
-            This may be a DataSource object or the name of the data source.
-        :param primary_identifier: An Identifier or IdentifierData representing
-            how the lending authority distinguishes this book from others.
-        """
-        self._data_source = data_source
-        if isinstance(self._data_source, DataSource):
-            self.data_source_obj: DataSource | None = self._data_source
-            self.data_source_name = self.data_source_obj.name
-        else:
-            self.data_source_obj = None
-            self.data_source_name = self._data_source
-
-        if isinstance(primary_identifier, Identifier):
-            self.primary_identifier_obj: Identifier | None = primary_identifier
-            self._primary_identifier: IdentifierData | None = IdentifierData(
-                type=primary_identifier.type, identifier=primary_identifier.identifier
+    @model_validator(mode="after")
+    def _filter_and_set_defaults(self) -> Self:
+        # We didn't get rights passed in, so use the default rights for the data source if any.
+        default_rights_uri = self.default_rights_uri
+        if not default_rights_uri and self.data_source_name is not None:
+            default_rights_uri = RightsStatus.DATA_SOURCE_DEFAULT_RIGHTS_STATUS.get(
+                self.data_source_name, None
             )
-        else:
-            self.primary_identifier_obj = None
-            self._primary_identifier = primary_identifier
-        self.licenses_owned = licenses_owned
-        self.licenses_available = licenses_available
-        self.licenses_reserved = licenses_reserved
-        self.patrons_in_hold_queue = patrons_in_hold_queue
 
-        # If no 'last checked' data was provided, assume the data was
-        # just gathered.
-        self.last_checked: datetime.datetime = last_checked or utc_now()
+        # We still haven't determined rights, so it's unknown.
+        if not default_rights_uri:
+            default_rights_uri = RightsStatus.UNKNOWN
 
-        # format contains pdf/epub, drm, link
-        self.formats: list[FormatData] = formats or []
+        # If got passed all links, indiscriminately, filter out to only those relevant to
+        # pools (the rights-related links).
 
-        self.default_rights_uri: str | None = None
-        self.set_default_rights_uri(
-            data_source_name=self.data_source_name,
-            default_rights_uri=default_rights_uri,
-        )
+        # TODO:  what about Hyperlink.SAMPLE?
+        # only accept the types of links relevant to pools
+        links = [l for l in self.links if l.rel in Hyperlink.CIRCULATION_ALLOWED]
+        formats = self.formats
 
-        self.__links: list[LinkData] | None = None
-        # The type ignore here is necessary because mypy does not like when a property setter and
-        # getter have different types. A PR just went in to fix this in mypy, so this should be able
-        # to be removed once mypy 1.16 is released.
-        # See: https://github.com/python/mypy/pull/18510
-        self.links = links  # type: ignore[assignment]
+        for link in links:
+            # An open-access link or open-access rights implies a FormatData object.
+            open_access_link = link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD and link.href
+            # try to deduce if the link is open-access, even if it doesn't explicitly say it is
+            rights_uri = link.rights_uri or default_rights_uri
+            open_access_rights_link = (
+                link.media_type in Representation.BOOK_MEDIA_TYPES
+                and link.href
+                and rights_uri in RightsStatus.OPEN_ACCESS
+            )
 
-        # Information about individual terms for each license in a pool. If we are
-        # given licenses then they are used to calculate values for the LicensePool
-        # instead of directly using the values that are given to CirculationData.
-        self.licenses: list[LicenseData] | None = licenses
+            if open_access_link or open_access_rights_link:
+                if (
+                    open_access_link
+                    and rights_uri != RightsStatus.IN_COPYRIGHT
+                    and not rights_uri in RightsStatus.OPEN_ACCESS
+                ):
+                    # We don't know exactly what's going on here but
+                    # the link said it was an open-access book
+                    # and the rights URI doesn't contradict it,
+                    # so treat it as a generic open-access book.
+                    rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
 
-        # Whether the license should contain a playtime tracking link
-        self.should_track_playtime: bool = should_track_playtime
-
-    @property
-    def links(self) -> Sequence[LinkData]:
-        return self.__links or []
-
-    @links.setter
-    def links(self, arg_links: list[LinkData] | None) -> None:
-        """If got passed all links, indiscriminately, filter out to only those relevant to
-        pools (the rights-related links).
-        """
-        # start by deleting any old links
-        self.__links = []
-
-        if not arg_links:
-            return
-
-        for link in arg_links:
-            if link.rel in Hyperlink.CIRCULATION_ALLOWED:
-                # TODO:  what about Hyperlink.SAMPLE?
-                # only accept the types of links relevant to pools
-                self.__links.append(link)
-
-                # An open-access link or open-access rights implies a FormatData object.
-                open_access_link = (
-                    link.rel == Hyperlink.OPEN_ACCESS_DOWNLOAD and link.href
+                format = next(
+                    (fmt for fmt in formats if fmt.link and fmt.link.href == link.href),
+                    None,
                 )
-                # try to deduce if the link is open-access, even if it doesn't explicitly say it is
-                rights_uri = link.rights_uri or self.default_rights_uri
-                open_access_rights_link = (
-                    link.media_type in Representation.BOOK_MEDIA_TYPES
-                    and link.href
-                    and rights_uri in RightsStatus.OPEN_ACCESS
-                )
-
-                if open_access_link or open_access_rights_link:
-                    if (
-                        open_access_link
-                        and rights_uri != RightsStatus.IN_COPYRIGHT
-                        and not rights_uri in RightsStatus.OPEN_ACCESS
-                    ):
-                        # We don't know exactly what's going on here but
-                        # the link said it was an open-access book
-                        # and the rights URI doesn't contradict it,
-                        # so treat it as a generic open-access book.
-                        rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
-                    format_found = False
-                    format = None
-                    for format in self.formats:
-                        if format and format.link and format.link.href == link.href:
-                            format_found = True
-                            break
-                    if format_found and format and not format.rights_uri:
-                        self.formats.remove(format)
-                        self.formats.append(
-                            format.model_copy(update={"rights_uri": rights_uri})
+                if format is not None and not format.rights_uri:
+                    formats.remove(format)
+                    formats.append(format.model_copy(update={"rights_uri": rights_uri}))
+                if format is None:
+                    formats.append(
+                        FormatData(
+                            content_type=link.media_type,
+                            drm_scheme=DeliveryMechanism.NO_DRM,
+                            link=link,
+                            rights_uri=rights_uri,
                         )
-                    if not format_found:
-                        self.formats.append(
-                            FormatData(
-                                content_type=link.media_type,
-                                drm_scheme=DeliveryMechanism.NO_DRM,
-                                link=link,
-                                rights_uri=rights_uri,
-                            )
-                        )
+                    )
 
-    def __repr__(self) -> str:
-        description_string = "<CirculationData primary_identifier=%(primary_identifier)r| licenses_owned=%(licenses_owned)s|"
-        description_string += " licenses_available=%(licenses_available)s| default_rights_uri=%(default_rights_uri)s|"
-        description_string += (
-            " links=%(links)r| formats=%(formats)r| data_source=%(data_source)s|>"
-        )
+        # We do this to work around a recursion error, where setting these properties, triggers
+        # validation again. Causing an infinite loop.
+        # See:
+        #  - https://github.com/pydantic/pydantic/issues/6597
+        #  - https://github.com/pydantic/pydantic/issues/8185
+        self.__dict__["links"] = links
+        self.__dict__["formats"] = formats
+        self.__dict__["default_rights_uri"] = default_rights_uri
 
-        description_data: dict[str, Any] = {"licenses_owned": self.licenses_owned}
-        if self._primary_identifier:
-            description_data["primary_identifier"] = self._primary_identifier
-        else:
-            description_data["primary_identifier"] = self.primary_identifier_obj
-        description_data["licenses_available"] = self.licenses_available
-        description_data["default_rights_uri"] = self.default_rights_uri
-        description_data["links"] = self.links
-        description_data["formats"] = self.formats
-        description_data["data_source"] = self.data_source_name
-
-        return description_string % description_data
-
-    def data_source(self, _db: Session) -> DataSource:
-        """Find the DataSource associated with this circulation information."""
-        if not self.data_source_obj:
-            obj = DataSource.lookup(_db, self.data_source_name, autocreate=True)
-            self.data_source_obj = obj
-        return self.data_source_obj
-
-    def primary_identifier(self, _db: Session) -> Identifier:
-        """Find the Identifier associated with this circulation information."""
-        if not self.primary_identifier_obj:
-            if self._primary_identifier:
-                obj, ignore = self._primary_identifier.load(_db)
-            else:
-                raise ValueError("No primary identifier provided!")
-            self.primary_identifier_obj = obj
-        return self.primary_identifier_obj
+        return self
 
     def license_pool(
         self, _db: Session, collection: Collection | None
@@ -219,13 +126,9 @@ class CirculationData(LoggerMixin):
         """
         if not collection:
             raise ValueError("Cannot find license pool: no collection provided.")
-        identifier = self.primary_identifier(_db)
-        if not identifier:
-            raise ValueError(
-                "Cannot find license pool: CirculationData has no primary identifier."
-            )
+        identifier = self.load_primary_identifier(_db)
 
-        data_source_obj = self.data_source(_db)
+        data_source_obj = self.load_data_source(_db)
         license_pool, is_new = LicensePool.for_foreign_id(
             _db,
             data_source=data_source_obj,
@@ -254,24 +157,6 @@ class CirculationData(LoggerMixin):
                 and x.rights_uri != RightsStatus.IN_COPYRIGHT
             ]
         )
-
-    def set_default_rights_uri(
-        self, data_source_name: str | None, default_rights_uri: str | None = None
-    ) -> None:
-        if default_rights_uri:
-            self.default_rights_uri = default_rights_uri
-
-        elif data_source_name:
-            # We didn't get rights passed in, so use the default rights for the data source if any.
-            default = RightsStatus.DATA_SOURCE_DEFAULT_RIGHTS_STATUS.get(
-                data_source_name, None
-            )
-            if default:
-                self.default_rights_uri = default
-
-        if not self.default_rights_uri:
-            # We still haven't determined rights, so it's unknown.
-            self.default_rights_uri = RightsStatus.UNKNOWN
 
     def apply(
         self,
@@ -311,8 +196,8 @@ class CirculationData(LoggerMixin):
         if collection:
             pool, ignore = self.license_pool(_db, collection)
 
-        data_source = self.data_source(_db)
-        identifier = self.primary_identifier(_db)
+        data_source = self.load_data_source(_db)
+        identifier = self.load_primary_identifier(_db)
         # First, make sure all links in self.links are associated with the book's identifier.
 
         # TODO: be able to handle the case where the URL to a link changes or

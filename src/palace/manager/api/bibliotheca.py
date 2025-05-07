@@ -799,14 +799,14 @@ class ItemListParser(XMLProcessor[Metadata]):
         )
 
         metadata = Metadata(
-            data_source=DataSource.BIBLIOTHECA,
+            data_source_name=DataSource.BIBLIOTHECA,
             title=title,
             subtitle=subtitle,
             language=language,
             medium=medium,
             publisher=publisher,
             published=published_date,
-            primary_identifier=primary_identifier,
+            primary_identifier_data=primary_identifier,
             identifiers=identifiers,
             subjects=subjects,
             contributors=authors + narrators,
@@ -844,8 +844,8 @@ class ItemListParser(XMLProcessor[Metadata]):
         licenses_reserved = 0
 
         circulation = CirculationData(
-            data_source=DataSource.BIBLIOTHECA,
-            primary_identifier=primary_identifier,
+            data_source_name=DataSource.BIBLIOTHECA,
+            primary_identifier_data=primary_identifier,
             licenses_owned=licenses_owned,
             licenses_available=licenses_available,
             licenses_reserved=licenses_reserved,
@@ -1262,7 +1262,7 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
         """Process a single Metadata object (containing CirculationData)
         retrieved from Bibliotheca.
         """
-        bibliotheca_id = metadata.primary_identifier.identifier
+        bibliotheca_id = metadata.primary_identifier_data.identifier
         identifier = identifiers_by_bibliotheca_id[bibliotheca_id]
         if identifier in identifiers_not_mentioned_by_bibliotheca:
             # Bibliotheca mentioned this identifier. Remove it from
@@ -1272,10 +1272,10 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
         edition, _ = metadata.edition(self._db)
 
         metadata.apply(
+            self._db,
             edition,
             collection=self.collection,
             replace=self.replacement_policy,
-            db=self._db,
         )
 
 

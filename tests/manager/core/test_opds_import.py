@@ -206,10 +206,10 @@ class TestOPDSImporter:
         assert "The Green Mouse" == m1.title
         assert "A Tale of Mousy Terror" == m1.subtitle
 
-        assert data_source_name == m1._data_source
-        assert data_source_name == m2._data_source
-        assert data_source_name == c1._data_source
-        assert data_source_name == c2._data_source
+        assert data_source_name == m1.data_source_name
+        assert data_source_name == m2.data_source_name
+        assert data_source_name == c1.data_source_name
+        assert data_source_name == c2.data_source_name
 
         assert m1.circulation.should_track_playtime == True
         assert m2.circulation.should_track_playtime == False
@@ -371,7 +371,7 @@ class TestOPDSImporter:
         assert "Project Gutenberg" == metadata["publisher"]
 
         circulation = metadata["circulation"]
-        assert DataSource.GUTENBERG == circulation["data_source"]
+        assert DataSource.GUTENBERG == circulation["data_source_name"]
 
         # The <simplified:message> tag did not become a
         # CoverageFailure -- that's handled by

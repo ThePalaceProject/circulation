@@ -280,8 +280,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 patrons_in_hold_queue += book["numberOfHolds"]
 
         return CirculationData(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=primary_identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=primary_identifier,
             licenses_owned=licenses_owned,
             licenses_available=licenses_available,
             licenses_reserved=licenses_reserved,
@@ -654,7 +654,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 )
 
             metadata = Metadata(
-                data_source=DataSource.OVERDRIVE,
+                data_source_name=DataSource.OVERDRIVE,
                 title=title,
                 subtitle=subtitle,
                 sort_title=sort_title,
@@ -665,7 +665,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 publisher=publisher,
                 imprint=imprint,
                 published=published,
-                primary_identifier=primary_identifier,
+                primary_identifier_data=primary_identifier,
                 identifiers=identifiers,
                 subjects=subjects,
                 contributors=contributors,
@@ -675,8 +675,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
             )
         else:
             metadata = Metadata(
-                data_source=DataSource.OVERDRIVE,
-                primary_identifier=primary_identifier,
+                data_source_name=DataSource.OVERDRIVE,
+                primary_identifier_data=primary_identifier,
             )
 
         if include_formats:
@@ -695,8 +695,8 @@ class OverdriveRepresentationExtractor(LoggerMixin):
 
             # Also make a CirculationData so we can write the formats,
             circulationdata = CirculationData(
-                data_source=DataSource.OVERDRIVE,
-                primary_identifier=primary_identifier,
+                data_source_name=DataSource.OVERDRIVE,
+                primary_identifier_data=primary_identifier,
                 formats=formats,
             )
 

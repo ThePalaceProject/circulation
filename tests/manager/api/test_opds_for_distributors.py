@@ -18,6 +18,7 @@ from palace.manager.api.opds_for_distributors import (
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.metadata_layer.circulation import CirculationData
+from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -637,7 +638,12 @@ class TestOPDSForDistributorsImporter:
         # Create a CirculationData object with a number of links.
         # Only the third of these links will become a FormatData
         # object.
-        circulation = CirculationData("data source", MagicMock())
+        circulation = CirculationData(
+            data_source_name="data source",
+            primary_identifier_data=IdentifierData(
+                type="ISBN", identifier="1234567890"
+            ),
+        )
         good_rel = Hyperlink.GENERIC_OPDS_ACQUISITION
         circulation.links = [
             LinkData(

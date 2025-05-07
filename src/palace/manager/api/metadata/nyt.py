@@ -385,14 +385,14 @@ class NYTBestSellerListTitle(TitleFromExternalList):
             contributors.append(ContributorData(display_name=display_author))
 
         metadata = Metadata(
-            data_source=DataSource.NYT,
+            data_source_name=DataSource.NYT,
             title=title,
             medium=medium,
             language="eng",
             published=published_date,
             publisher=publisher,
             contributors=contributors,
-            primary_identifier=primary_isbn,
+            primary_identifier_data=primary_isbn,
             identifiers=other_isbns,
         )
 

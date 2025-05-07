@@ -36,7 +36,9 @@ class TestCirculationData:
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circdata = CirculationData(
-            DataSource.OVERDRIVE, primary_identifier=identifier, formats=[format]
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=identifier,
+            formats=[format],
         )
         circdata.apply(db.session, collection=None)
 
@@ -77,8 +79,8 @@ class TestCirculationData:
         rights_uri = RightsStatus.GENERIC_OPEN_ACCESS
 
         circulation_data = CirculationData(
-            DataSource.GUTENBERG,
-            primary_identifier=identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifier,
             links=[link],
             licenses_owned=5,
             licenses_available=5,
@@ -113,8 +115,8 @@ class TestCirculationData:
 
         identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
         circulation_data = CirculationData(
-            DataSource.GUTENBERG,
-            primary_identifier=identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifier,
             links=links,
         )
 
@@ -135,8 +137,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             formats=[drm_format],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
         circulation_data.apply(db.session, pool.collection)
 
@@ -185,8 +189,10 @@ class TestCirculationData:
         )
         circulation_data = CirculationData(
             formats=[format],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData with formats false in the policy,
@@ -242,8 +248,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData, we'll add the new license,
@@ -283,8 +291,10 @@ class TestCirculationData:
 
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         circulation_data.apply(db.session, pool.collection)
@@ -314,8 +324,10 @@ class TestCirculationData:
         # instead uses the licenses to calculate availability.
         circulation_data = CirculationData(
             licenses=[license_data],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             licenses_owned=999,
             licenses_available=999,
             licenses_reserved=999,
@@ -339,8 +351,10 @@ class TestCirculationData:
         # also giving it licenses it uses the availability information
         # to set values on the LicensePool.
         circulation_data = CirculationData(
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             licenses_owned=999,
             licenses_available=999,
             licenses_reserved=999,
@@ -365,8 +379,10 @@ class TestCirculationData:
         # We have new circulation data for this pool.
         circulation_data = CirculationData(
             formats=[],
-            data_source=edition.data_source,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
         )
 
         # If we apply the new CirculationData the work gets both a
@@ -398,8 +414,8 @@ class TestCirculationData:
             drm_scheme=DeliveryMechanism.ADOBE_DRM,
         )
         circulation = CirculationData(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=identifier,
             formats=[drm_format],
         )
         collection = db.default_collection()
@@ -433,8 +449,10 @@ class TestCirculationData:
             href=db.fresh_url(),
         )
         circulation_data = CirculationData(
-            data_source=DataSource.GUTENBERG,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             links=[link],
         )
 
@@ -450,8 +468,10 @@ class TestCirculationData:
         assert DeliveryMechanism.NO_DRM == pdf.delivery_mechanism.drm_scheme
 
         circulation_data = CirculationData(
-            data_source=DataSource.GUTENBERG,
-            primary_identifier=edition.primary_identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
             links=[],
         )
         replace = ReplacementPolicy(
@@ -477,8 +497,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=DataSource.OA_CONTENT_SERVER,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OA_CONTENT_SERVER,
+            primary_identifier_data=identifier,
             default_rights_uri=RightsStatus.CC_BY,
             links=[link],
         )
@@ -510,8 +530,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=DataSource.OA_CONTENT_SERVER,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OA_CONTENT_SERVER,
+            primary_identifier_data=identifier,
             links=[link],
         )
 
@@ -553,8 +573,8 @@ class TestCirculationData:
             href=db.fresh_url(),
         )
         circulation_data = CirculationData(
-            data_source=DataSource.GUTENBERG,
-            primary_identifier=identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifier,
             links=[link],
         )
         replace_formats = ReplacementPolicy(
@@ -594,8 +614,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=identifier,
             links=[link],
         )
 
@@ -625,8 +645,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=identifier,
             links=[link],
         )
         replace = ReplacementPolicy(
@@ -662,8 +682,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=identifier,
             links=[link],
             formats=[format],
         )
@@ -702,8 +722,8 @@ class TestCirculationData:
         )
 
         circulation_data = CirculationData(
-            data_source=pool.data_source,
-            primary_identifier=pool.identifier,
+            data_source_name=pool.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(pool.identifier),
             links=[link],
         )
 
@@ -718,8 +738,8 @@ class TestCirculationData:
             rights_uri=RightsStatus.IN_COPYRIGHT,
         )
         circulation_data = CirculationData(
-            data_source=pool.data_source,
-            primary_identifier=pool.identifier,
+            data_source_name=pool.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(pool.identifier),
             formats=[format],
         )
         circulation_data.apply(db.session, pool.collection, replace=replace_formats)

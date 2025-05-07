@@ -467,6 +467,7 @@ class BaseOPDSImporter(
             even_if_not_apparently_updated=True,
         )
         metadata.apply(
+            self._db,
             edition=edition,
             collection=self.collection,
             replace=policy,
@@ -562,7 +563,7 @@ class BaseOPDSImporter(
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
                 data_source = self.data_source
-                primary_id = metadata.primary_identifier
+                primary_id = metadata.primary_identifier_data
                 if primary_id is None:
                     # This should never happen, but we'll handle it gracefully
                     self.log.error(
@@ -768,10 +769,10 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
             # form the Metadata object
             combined_meta = self.combine(m_data_dict, xml_data_dict)
-            if combined_meta.get("data_source") is None:
-                combined_meta["data_source"] = self.data_source_name
+            if combined_meta.get("data_source_name") is None:
+                combined_meta["data_source_name"] = self.data_source_name
 
-            combined_meta["primary_identifier"] = identifier_obj
+            combined_meta["primary_identifier_data"] = identifier_obj
 
             metadata[external_identifier.urn] = Metadata(**combined_meta)
 
@@ -798,7 +799,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 if combined_circ.get("data_source") is None:
                     combined_circ["data_source"] = self.data_source_name
 
-                combined_circ["primary_identifier"] = identifier_obj
+                combined_circ["primary_identifier_data"] = identifier_obj
 
                 if (
                     combined_circ["should_track_playtime"]
@@ -1136,7 +1137,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         # be used if the OPDSImporter has a Collection to hold the
         # LicensePool that will result from importing it.
         kwargs_circ = dict(
-            data_source=circulation_data_source.name,
+            data_source_name=circulation_data_source.name,
             links=list(links),
             default_rights_uri=rights_uri,
         )

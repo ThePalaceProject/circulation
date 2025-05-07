@@ -106,6 +106,7 @@ class TitleFromExternalList:
         else:
             policy = ReplacementPolicy.append_only(even_if_not_apparently_updated=True)
         self.metadata.apply(
+            _db,
             edition=edition,
             collection=None,
             replace=policy,

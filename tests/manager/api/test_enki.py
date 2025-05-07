@@ -710,7 +710,7 @@ class TestBibliographicParser:
         enki, isbn = sorted(m.identifiers, key=lambda x: x.type)
         assert Identifier.ENKI_ID == enki.type
         assert "21135" == enki.identifier
-        assert enki == m.primary_identifier
+        assert enki == m.primary_identifier_data
 
         assert Identifier.ISBN == isbn.type
         assert "9780988432727" == isbn.identifier
