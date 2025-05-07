@@ -732,7 +732,7 @@ class TestGeneratePlaytimeReport:
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
-        column1 = f"{cutoff} - {until}"
+        column1 = f"{cutoff.strftime(REPORT_DATE_FORMAT)} - {until.strftime(REPORT_DATE_FORMAT)}"
         headers = [
             "date",
             "urn",
@@ -850,7 +850,7 @@ class TestGeneratePlaytimeReport:
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_a",
-                "Usage Report",
+                "Usage Reports",
                 "test cm",
                 "2025",
             ],
@@ -859,7 +859,7 @@ class TestGeneratePlaytimeReport:
             "parent_folder_id": parent_folder_id,
             "folders": [
                 "ds_b",
-                "Usage Report",
+                "Usage Reports",
                 "test cm",
                 "2025",
             ],
