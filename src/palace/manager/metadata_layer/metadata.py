@@ -66,7 +66,6 @@ class Metadata(LoggerMixin):
         published: datetime.date | None = None,
         primary_identifier: IdentifierData | Identifier | None = None,
         identifiers: list[IdentifierData] | None = None,
-        recommendations: list[IdentifierData | Identifier] | None = None,
         subjects: list[SubjectData] | None = None,
         contributors: list[ContributorData] | None = None,
         measurements: list[MeasurementData] | None = None,
@@ -111,7 +110,6 @@ class Metadata(LoggerMixin):
         self.permanent_work_id: str | None = None
         if self.primary_identifier and self.primary_identifier not in self.identifiers:
             self.identifiers.append(self.primary_identifier)
-        self.recommendations = recommendations or []
         self.subjects = subjects or []
         self.contributors = contributors or []
         self.measurements = measurements or []
@@ -809,28 +807,3 @@ class Metadata(LoggerMixin):
             contributors_changed = True
 
         return contributors_changed
-
-    def filter_recommendations(self, _db: Session) -> None:
-        """Filters out recommended identifiers that don't exist in the db.
-        Any IdentifierData objects will be replaced with Identifiers.
-        """
-
-        by_type: defaultdict[str, list[str]] = defaultdict(list)
-        for identifier in self.recommendations:
-            by_type[identifier.type].append(identifier.identifier)
-
-        recommendations = set()
-        for type, identifiers in list(by_type.items()):
-            existing_identifiers = (
-                _db.query(Identifier)
-                .filter(Identifier.type == type)
-                .filter(Identifier.identifier.in_(identifiers))
-            )
-            recommendations.update(existing_identifiers.all())
-
-        if self.primary_identifier:
-            primary_identifier_obj, _ = self.primary_identifier.load(_db)
-            if primary_identifier_obj in recommendations:
-                recommendations.remove(primary_identifier_obj)
-
-        self.recommendations = list(recommendations)

@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import json
+from collections.abc import Generator
+from functools import partial
 from unittest.mock import MagicMock, create_autospec
 
 import dateutil.parser
@@ -9,20 +13,20 @@ from pytest import MonkeyPatch
 from palace.manager.api.config import CannotLoadConfiguration
 from palace.manager.api.metadata.novelist import NoveListAPI, NoveListApiSettings
 from palace.manager.integration.goals import Goals
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.resource import HttpResponseTuple
+from palace.manager.sqlalchemy.model.resource import HttpResponseTuple, Representation
 from palace.manager.util.http import HTTP
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.mocks.mock import MockRepresentationHTTPClient, MockRequestsResponse
+from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 
 class NoveListFilesFixture(FilesFixture):
     """A fixture providing access to NoveList files."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("novelist")
 
 
@@ -33,7 +37,9 @@ def novelist_files_fixture() -> NoveListFilesFixture:
 
 
 class NoveListFixture:
-    def __init__(self, db: DatabaseTransactionFixture, files: NoveListFilesFixture):
+    def __init__(
+        self, db: DatabaseTransactionFixture, files: NoveListFilesFixture
+    ) -> None:
         self.db = db
         self.files = files
         self.settings = NoveListApiSettings(username="library", password="yep")
@@ -45,10 +51,10 @@ class NoveListFixture:
         )
         self.novelist = NoveListAPI.from_config(db.default_library())
 
-    def sample_data(self, filename):
+    def sample_data(self, filename: str) -> bytes:
         return self.files.sample_data(filename)
 
-    def sample_representation(self, filename):
+    def sample_representation(self, filename: str) -> Representation:
         content = self.sample_data(filename)
         return self.db.representation(media_type="application/json", content=content)[0]
 
@@ -56,7 +62,7 @@ class NoveListFixture:
 @pytest.fixture(scope="function")
 def novelist_fixture(
     db: DatabaseTransactionFixture, novelist_files_fixture: NoveListFilesFixture
-):
+) -> Generator[NoveListFixture]:
     fixture = NoveListFixture(db, novelist_files_fixture)
     yield fixture
 
@@ -116,112 +122,53 @@ class TestNoveListAPI:
         response: HttpResponseTuple = (200, {}, b"Here's the goods!")
         novelist_fixture.novelist.review_response(response)
 
-    def test_lookup_info_to_metadata(self, novelist_fixture: NoveListFixture):
-        # Basic book information is returned
-        identifier, ignore = Identifier.for_foreign_id(
-            novelist_fixture.db.session, Identifier.ISBN, "9780804171335"
-        )
+    def test__extract_isbns(self) -> None:
+        book_identifier = IdentifierData(type=Identifier.ISBN, identifier="12345")
+        other_identifier = IdentifierData(type=Identifier.ISBN, identifier="67890")
+
+        novelist_data = {
+            "manifestations": [
+                {"ISBN": book_identifier.identifier},
+                {"ISBN": other_identifier.identifier},
+            ]
+        }
+
+        # Without a filter all the ISBNs are returned
+        result = NoveListAPI._extract_isbns(novelist_data)
+        assert result == [book_identifier, other_identifier]
+
+        # With a filter, only the ISBNs that don't match the filter are returned
+        result = NoveListAPI._extract_isbns(novelist_data, filter={book_identifier})
+        assert result == [other_identifier]
+
+    def test__lookup_info_representation_to_recommendations(
+        self, novelist_fixture: NoveListFixture
+    ):
         bad_character = novelist_fixture.sample_representation("a_bad_character.json")
-        metadata = novelist_fixture.novelist.lookup_info_to_metadata(bad_character)
+        novelist_id, recommendations = (
+            novelist_fixture.novelist._lookup_info_representation_to_recommendations(
+                bad_character
+            )
+        )
 
-        assert isinstance(metadata, Metadata)
-        assert metadata.primary_identifier.type == Identifier.NOVELIST_ID
-        assert metadata.primary_identifier.identifier == "10392078"
-        assert metadata.title == "A bad character"
-        assert metadata.subtitle is None
-        assert len(metadata.contributors) == 1
-        [contributor] = metadata.contributors
-        assert contributor.sort_name == "Kapoor, Deepti"
-        assert len(metadata.identifiers) == 4
-        assert len(metadata.subjects) == 4
-        assert len(metadata.measurements) == 2
-        ratings = sorted(metadata.measurements, key=lambda m: m.value)
-        assert ratings[0].value == 2
-        assert ratings[1].value == 3.27
-        assert len(metadata.recommendations) == 625
+        assert novelist_id.type == Identifier.NOVELIST_ID
+        assert novelist_id.identifier == "10392078"
+        assert len(recommendations) == 625
 
-        # Confirm that Lexile and series data is extracted with a
-        # different sample.
         vampire = novelist_fixture.sample_representation("vampire_kisses.json")
-        metadata = novelist_fixture.novelist.lookup_info_to_metadata(vampire)
-        assert isinstance(metadata, Metadata)
-        [lexile] = [s for s in metadata.subjects if s.type == "Lexile"]
-        assert lexile.identifier == "630"
-        assert metadata.series == "Vampire kisses manga"
-        # The full title should be selected, since every volume
-        # has the same main title: 'Vampire kisses'
-        assert metadata.title == "Vampire kisses: blood relatives. Volume 1"
-        assert metadata.series_position == 1
-        assert len(metadata.recommendations) == 5
-
-    def test_get_series_information(self, novelist_fixture: NoveListFixture):
-        metadata = Metadata(data_source=DataSource.NOVELIST)
-        vampire = json.loads(novelist_fixture.sample_data("vampire_kisses.json"))
-        book_info = vampire["TitleInfo"]
-        series_info = vampire["FeatureContent"]["SeriesInfo"]
-
-        (metadata, ideal_title_key) = novelist_fixture.novelist.get_series_information(
-            metadata, series_info, book_info
+        novelist_id, recommendations = (
+            novelist_fixture.novelist._lookup_info_representation_to_recommendations(
+                vampire
+            )
         )
-        # Relevant series information is extracted
-        assert metadata.series == "Vampire kisses manga"
-        assert metadata.series_position == 1
-        # The 'full_title' key should be returned as ideal because
-        # all the volumes have the same 'main_title'
-        assert ideal_title_key == "full_title"
+        assert novelist_id.type == Identifier.NOVELIST_ID
+        assert novelist_id.identifier == "267510"
+        assert len(recommendations) == 5
 
-        watchman = json.loads(
-            novelist_fixture.sample_data("alternate_series_example.json")
-        )
-        book_info = watchman["TitleInfo"]
-        series_info = watchman["FeatureContent"]["SeriesInfo"]
-        # Confirms that the new example doesn't match any volume's full title
-        assert [] == [
-            v
-            for v in series_info["series_titles"]
-            if v.get("full_title") == book_info.get("full_title")
-        ]
-
-        # But it still finds its matching volume
-        (metadata, ideal_title_key) = novelist_fixture.novelist.get_series_information(
-            metadata, series_info, book_info
-        )
-        assert metadata.series == "Elvis Cole/Joe Pike novels"
-        assert metadata.series_position == 11
-        # And recommends using the main_title
-        assert ideal_title_key == "main_title"
-
-        # If the volume is found in the series more than once...
-        book_info = dict(
-            main_title="The Baby-Sitters Club",
-            full_title="The Baby-Sitters Club: Claudia and Mean Janine",
-        )
-        series_info = dict(
-            full_title="The Baby-Sitters Club series",
-            series_titles=[
-                # The volume is here twice!
-                book_info,
-                book_info,
-                dict(
-                    full_title="The Baby-Sitters Club",
-                    main_title="The Baby-Sitters Club: Claudia and Mean Janine",
-                    series_position="3.",
-                ),
-            ],
-        )
-        # An error is raised.
-        pytest.raises(
-            ValueError,
-            novelist_fixture.novelist.get_series_information,
-            metadata,
-            series_info,
-            book_info,
-        )
-
-    def test_lookup(self, novelist_fixture: NoveListFixture):
-        # Test the lookup() method.
-        h = MockRepresentationHTTPClient()
-        h.queue_response(200, "text/html", content="yay")
+    def test_lookup_recommendations(self, novelist_fixture: NoveListFixture):
+        # Test the lookup_recommendations() method.
+        http = MockHTTPClient()
+        http.queue_response(200, "text/html", content="yay")
 
         novelist = novelist_fixture.novelist
 
@@ -238,15 +185,19 @@ class TestNoveListAPI:
         mock_review_response = create_autospec(novelist.review_response)
         novelist.review_response = mock_review_response
 
-        mock_lookup_info_to_metadata = create_autospec(
-            novelist.lookup_info_to_metadata, return_value="some metadata"
+        mock_lookup_info_representation_to_recommendations = create_autospec(
+            novelist._lookup_info_representation_to_recommendations,
+            return_value=(None, ["foo", "bar"]),
         )
-        novelist.lookup_info_to_metadata = mock_lookup_info_to_metadata
+        novelist._lookup_info_representation_to_recommendations = (
+            mock_lookup_info_representation_to_recommendations
+        )
 
         identifier = novelist_fixture.db.identifier(identifier_type=Identifier.ISBN)
 
         # Do the lookup.
-        result = novelist.lookup(identifier, do_get=h.do_get)
+        with http.patch():
+            result = novelist.lookup_recommendations(identifier)
 
         # A number of parameters were passed into build_query_url() to
         # get the URL of the HTTP request. The same parameters were
@@ -263,7 +214,7 @@ class TestNoveListAPI:
         )
 
         # The HTTP request went out to the query URL -- not the scrubbed URL.
-        assert ["http://query-url/"] == h.requests
+        assert ["http://query-url/"] == http.requests
 
         # The HTTP response was passed into novelist.review_response()
         mock_review_response.assert_called_once_with(
@@ -275,32 +226,39 @@ class TestNoveListAPI:
         )
 
         # Finally, the Representation was passed into
-        # lookup_info_to_metadata, which returned a hard-coded string
-        # as the final result.
-        assert "some metadata" == result
+        # lookup_info_to_metadata, which returned our mocked result
+        assert ["foo", "bar"] == result
 
         # Looking at the Representation we can see that it was stored
         # in the database under its scrubbed URL, not the URL used to
         # make the request.
-        mock_lookup_info_to_metadata.assert_called_once()
-        rep = mock_lookup_info_to_metadata.call_args.args[0]
+        mock_lookup_info_representation_to_recommendations.assert_called_once()
+        rep = mock_lookup_info_representation_to_recommendations.call_args.args[0]
         assert "http://scrubbed-url/" == rep.url
         assert b"yay" == rep.content
 
-    def test_lookup_info_to_metadata_ignores_empty_responses(
+    def test__lookup_info_representation_to_recommendations_ignores_empty_responses(
         self, novelist_fixture: NoveListFixture
     ):
         """API requests that return no data result return a None tuple"""
 
         null_response = novelist_fixture.sample_representation("null_data.json")
-        result = novelist_fixture.novelist.lookup_info_to_metadata(null_response)
-        assert result is None
+        result = (
+            novelist_fixture.novelist._lookup_info_representation_to_recommendations(
+                null_response
+            )
+        )
+        assert result == (None, [])
 
         # This also happens when NoveList indicates with an empty
         # response that it doesn't know the ISBN.
         empty_response = novelist_fixture.sample_representation("unknown_isbn.json")
-        result = novelist_fixture.novelist.lookup_info_to_metadata(empty_response)
-        assert result is None
+        result = (
+            novelist_fixture.novelist._lookup_info_representation_to_recommendations(
+                empty_response
+            )
+        )
+        assert result == (None, [])
 
     def test_build_query_url(self, novelist_fixture: NoveListFixture):
         params = dict(
@@ -336,132 +294,121 @@ class TestNoveListAPI:
         # as the NoveListAPI.build_query_url
         assert novelist_fixture.novelist.scrubbed_url(params) == scrubbed_result
 
-    def test_scrub_subtitle(self, novelist_fixture: NoveListFixture):
-        """Unnecessary title segments are removed from subtitles"""
-
-        scrub = novelist_fixture.novelist._scrub_subtitle
-        assert scrub(None) is None
-        assert scrub("[electronic resource]") is None
-        assert scrub("[electronic resource] :  ") is None
-        assert scrub("[electronic resource] :  A Biomythography") == "A Biomythography"
-
-    def test_confirm_same_identifier(self, novelist_fixture: NoveListFixture):
-        source = DataSource.lookup(novelist_fixture.db.session, DataSource.NOVELIST)
-        identifier, ignore = Identifier.for_foreign_id(
-            novelist_fixture.db.session, Identifier.NOVELIST_ID, "84752928"
+    def test_confirm_same_identifier(self, novelist_fixture: NoveListFixture) -> None:
+        identifier = IdentifierData(type=Identifier.NOVELIST_ID, identifier="84752928")
+        unmatched_identifier = IdentifierData(
+            type=Identifier.NOVELIST_ID, identifier="23781947"
         )
-        unmatched_identifier, ignore = Identifier.for_foreign_id(
-            novelist_fixture.db.session, Identifier.NOVELIST_ID, "23781947"
-        )
-        metadata = Metadata(source, primary_identifier=identifier)
-        match = Metadata(source, primary_identifier=identifier)
-        mistake = Metadata(source, primary_identifier=unmatched_identifier)
 
         assert (
-            novelist_fixture.novelist._confirm_same_identifier([metadata, mistake])
+            novelist_fixture.novelist._confirm_same_identifier(
+                [(identifier, []), (unmatched_identifier, [])]
+            )
             is False
         )
         assert (
-            novelist_fixture.novelist._confirm_same_identifier([metadata, match])
+            novelist_fixture.novelist._confirm_same_identifier(
+                [(identifier, []), (identifier, [])]
+            )
             is True
         )
 
-    def test_lookup_equivalent_isbns(self, novelist_fixture: NoveListFixture):
-        identifier = novelist_fixture.db.identifier(
-            identifier_type=Identifier.OVERDRIVE_ID
-        )
+    def test__lookup_recommendations_equivalent_isbns(
+        self, novelist_fixture: NoveListFixture, db: DatabaseTransactionFixture
+    ):
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         api = novelist_fixture.novelist
-        mock_lookup = create_autospec(api.lookup)
-        api.lookup = mock_lookup
+        mock_lookup = create_autospec(api._lookup_recommendations_isbn)
+        api._lookup_recommendations_isbn = mock_lookup
 
-        # If there are no ISBN equivalents, it returns None.
-        assert api.lookup_equivalent_isbns(identifier) is None
+        lookup_recommendations = partial(api.lookup_recommendations, identifier)
 
-        source = DataSource.lookup(novelist_fixture.db.session, DataSource.OVERDRIVE)
-        identifier.equivalent_to(source, novelist_fixture.db.identifier(), strength=1)
-        novelist_fixture.db.session.commit()
-        assert api.lookup_equivalent_isbns(identifier) is None
+        # If there are no ISBN equivalents, we get an empty list
+        assert lookup_recommendations() == []
 
-        # If there's an ISBN equivalent, but it doesn't result in metadata,
-        # it returns none.
-        isbn = novelist_fixture.db.identifier(identifier_type=Identifier.ISBN)
+        source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        identifier.equivalent_to(source, db.identifier(), strength=1)
+        db.session.commit()
+        assert lookup_recommendations() == []
+
+        # If there's an ISBN equivalent, but it doesn't result in any data, we get an empty list
+        isbn = db.identifier(identifier_type=Identifier.ISBN)
         identifier.equivalent_to(source, isbn, strength=1)
-        novelist_fixture.db.session.commit()
-        mock_lookup.return_value = None
-        assert api.lookup_equivalent_isbns(identifier) is None
+        db.session.commit()
+        mock_lookup.return_value = (None, [])
+        assert lookup_recommendations() == []
 
-        # Create an API class that can mockout NoveListAPI.choose_best_metadata,
+        # Create an API class that can mockout NoveListAPI._choose_best_recommendations,
         # and make sure lookup returns something
-        mock_choose_best_metadata = create_autospec(api.choose_best_metadata)
-        api.choose_best_metadata = mock_choose_best_metadata
-        mock_lookup.return_value = create_autospec(Metadata)
+        mock_choose_best = create_autospec(api._choose_best_recommendations)
+        api._choose_best_recommendations = mock_choose_best
 
         # Give the identifier another ISBN equivalent.
-        isbn2 = novelist_fixture.db.identifier(identifier_type=Identifier.ISBN)
+        isbn2 = db.identifier(identifier_type=Identifier.ISBN)
         identifier.equivalent_to(source, isbn2, strength=1)
-        novelist_fixture.db.session.commit()
+        db.session.commit()
 
-        # If choose_best_metadata returns None, the lookup returns None.
+        # If choose_best_metadata returns 0 confidence metadata, the
+        # lookup returns an empty list.
         mock_lookup.reset_mock()
-        mock_choose_best_metadata.return_value = (None, None)
-        assert api.lookup_equivalent_isbns(identifier) is None
+        mock_novelist_id = IdentifierData(type=Identifier.NOVELIST_ID, identifier="123")
+        mock_recommendations = [
+            IdentifierData(type=Identifier.ISBN, identifier="456"),
+            IdentifierData(type=Identifier.ISBN, identifier="789"),
+        ]
+        mock_lookup.return_value = (mock_novelist_id, mock_recommendations)
+        mock_choose_best.return_value = ([], 0.0)
+        assert lookup_recommendations() == []
 
         # Lookup was performed for both ISBNs.
         assert mock_lookup.call_count == 2
 
         # If choose_best_metadata returns a low confidence metadata, the
         # lookup returns None.
-        mock_best_metadata = MagicMock()
-        mock_choose_best_metadata.return_value = (mock_best_metadata, 0.33)
-        assert api.lookup_equivalent_isbns(identifier) is None
+        mock_choose_best.return_value = (mock_recommendations, 0.33)
+        assert lookup_recommendations() == []
 
         # If choose_best_metadata returns a high confidence metadata, the
         # lookup returns the metadata.
-        mock_choose_best_metadata.return_value = (mock_best_metadata, 0.67)
-        assert api.lookup_equivalent_isbns(identifier) is mock_best_metadata
+        mock_choose_best.return_value = (mock_recommendations, 0.67)
+        assert lookup_recommendations() is mock_recommendations
 
-    def test_choose_best_metadata(self, novelist_fixture: NoveListFixture):
-        more_identifier = novelist_fixture.db.identifier(
-            identifier_type=Identifier.NOVELIST_ID
-        )
-        less_identifier = novelist_fixture.db.identifier(
-            identifier_type=Identifier.NOVELIST_ID
-        )
-        metadatas = [Metadata(DataSource.NOVELIST, primary_identifier=more_identifier)]
+    def test__choose_best_recommendations(self, novelist_fixture: NoveListFixture):
+        more_identifier = IdentifierData(type=Identifier.NOVELIST_ID, identifier="more")
+        less_identifier = IdentifierData(type=Identifier.NOVELIST_ID, identifier="less")
+        mock_recommendations = MagicMock()
+        other_recommendations = MagicMock()
 
-        # When only one Metadata object is given, that object is returned.
-        result = novelist_fixture.novelist.choose_best_metadata(
-            metadatas, novelist_fixture.db.identifier()
+        # When only one object is given, that object is returned.
+        result, confidence = novelist_fixture.novelist._choose_best_recommendations(
+            [(more_identifier, mock_recommendations)], MagicMock()
         )
-        assert isinstance(result, tuple) is True
-        assert result[0] == metadatas[0]
+        assert result is mock_recommendations
         # A default confidence of 1.0 is returned.
-        assert result[1] == 1.0
+        assert confidence == 1.0
 
-        # When top identifiers have equal representation, the method returns none.
-        metadatas.append(
-            Metadata(DataSource.NOVELIST, primary_identifier=less_identifier)
+        # When top identifiers have equal representation, the method returns 0 confidence.
+        result, confidence = novelist_fixture.novelist._choose_best_recommendations(
+            [
+                (more_identifier, mock_recommendations),
+                (less_identifier, other_recommendations),
+            ],
+            MagicMock(),
         )
-        assert novelist_fixture.novelist.choose_best_metadata(
-            metadatas, novelist_fixture.db.identifier()
-        ) == (None, None)
+        assert result == []
+        assert confidence == 0.0
 
         # But when one pulls ahead, we get the metadata object again.
-        metadatas.append(
-            Metadata(DataSource.NOVELIST, primary_identifier=more_identifier)
+        result, confidence = novelist_fixture.novelist._choose_best_recommendations(
+            [
+                (more_identifier, mock_recommendations),
+                (more_identifier, mock_recommendations),
+                (less_identifier, other_recommendations),
+            ],
+            MagicMock(),
         )
-        result = novelist_fixture.novelist.choose_best_metadata(
-            metadatas, novelist_fixture.db.identifier()
-        )
-        assert isinstance(result, tuple)
-        metadata, confidence = result
-        assert isinstance(metadata, Metadata)
-        assert isinstance(confidence, float)
+        assert result == mock_recommendations
         assert round(confidence, 2) == 0.67
-        primary_identifier, _ = metadata.primary_identifier.load(
-            novelist_fixture.db.session
-        )
-        assert primary_identifier == more_identifier
 
     def test_get_items_from_query(self, novelist_fixture: NoveListFixture):
         items = novelist_fixture.novelist.get_items_from_query(

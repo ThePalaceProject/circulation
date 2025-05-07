@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.lane import (
     DatabaseBackedWorkList,
     DefaultSortOrderFacets,
@@ -1060,13 +1062,25 @@ class RecommendationLane(WorkBasedLane):
         _db = Session.object_session(library)
         self.recommendations = self.fetch_recommendations(_db)
 
-    def fetch_recommendations(self, _db):
+    def fetch_recommendations(self, _db: Session) -> list[Identifier]:
         """Get identifiers of recommendations for this LicensePool"""
-        metadata = self.novelist_api.lookup(self.edition.primary_identifier)
-        if metadata:
-            metadata.filter_recommendations(_db)
-            return metadata.recommendations
-        return []
+        recommendation_data = self.novelist_api.lookup_recommendations(
+            self.edition.primary_identifier
+        )
+        recommendations = []
+        by_type: defaultdict[str, list[str]] = defaultdict(list)
+        for identifier in recommendation_data:
+            by_type[identifier.type].append(identifier.identifier)
+
+        for identifier_type, identifiers in by_type.items():
+            existing_identifiers = (
+                _db.query(Identifier)
+                .filter(Identifier.type == identifier_type)
+                .filter(Identifier.identifier.in_(identifiers))
+            )
+            recommendations.extend(existing_identifiers.all())
+
+        return recommendations
 
     def overview_facets(self, _db, facets):
         """Convert a generic FeaturedFacets to some other faceting object,
