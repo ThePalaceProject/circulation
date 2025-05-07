@@ -732,9 +732,7 @@ class TestGeneratePlaytimeReport:
 
         cutoff = date1m(0).replace(day=1)
         until = utc_now().date().replace(day=1)
-        column1 = (
-            f"{REPORT_DATE_FORMAT.format(cutoff)} - {REPORT_DATE_FORMAT.format(until)}"
-        )
+        column1 = f"{cutoff.strftime(REPORT_DATE_FORMAT)} - {until.strftime(REPORT_DATE_FORMAT)}"
         headers = [
             "date",
             "urn",
