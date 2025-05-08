@@ -91,10 +91,7 @@ class TestMarcExport:
             ]
             libraries_kwarg = delta_call.kwargs["libraries"]
             assert len(libraries_kwarg) == 1
-            assert (
-                libraries_kwarg[0].get("library_id")
-                == marc_exporter_fixture.library1.id
-            )
+            assert libraries_kwarg[0].library_id == marc_exporter_fixture.library1.id
 
     def test_skip_collections(
         self,
@@ -176,8 +173,9 @@ class MarcExportCollectionFixture:
     def export_collection(self, collection: Collection, delta: bool = False) -> None:
         service = self.services_fixture.services.integration_registry.catalog_services()
         assert collection.id is not None
-        info = MarcExporter.enabled_libraries(self.db.session, service, collection.id)
-        libraries = [l.model_dump() for l in info]
+        libraries = MarcExporter.enabled_libraries(
+            self.db.session, service, collection.id
+        )
         marc.marc_export_collection.delay(
             collection.id,
             collection_name=collection.name,
