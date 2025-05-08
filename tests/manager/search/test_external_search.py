@@ -1922,7 +1922,12 @@ class TestFeaturedFacets:
         f.modify_search_filter(filter)
 
         # In most cases, there are three things that can boost a work's score.
-        [featurable, available_now, random] = f.scoring_functions(filter)
+        [
+            featurable,
+            available_now,
+            lane_priority_level,
+            random,
+        ] = f.scoring_functions(filter)
 
         # It can be high-quality enough to be featured.
         assert isinstance(featurable, ScriptScore)
@@ -1954,14 +1959,20 @@ class TestFeaturedFacets:
         # If the FeaturedFacets is set to be deterministic (which only happens
         # in tests), the RandomScore is removed.
         f.random_seed = filter.DETERMINISTIC
-        [featurable_2, available_now_2] = f.scoring_functions(filter)
+        [
+            featurable_2,
+            available_now_2,
+            lane_priority_level,
+        ] = f.scoring_functions(filter)
         assert featurable_2 == featurable
         assert available_now_2 == available_now
 
         # If custom lists are in play, it can also be featured on one
         # of its custom lists.
         filter.customlist_restriction_sets = [[1, 2], [3]]
-        [featurable_2, available_now_2, featured_on_list] = f.scoring_functions(filter)
+        [featurable_2, available_now_2, lane_priority_level, featured_on_list] = (
+            f.scoring_functions(filter)
+        )
         assert featurable_2 == featurable
         assert available_now_2 == available_now
 
