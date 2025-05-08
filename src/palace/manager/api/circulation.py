@@ -518,7 +518,7 @@ class BaseCirculationApiSettings(BaseSettings):
     )
 
     lane_priority_level: int = FormField(
-        default=5,
+        default=Collection.DEFAULT_LANE_PRIORITY_LEVEL,
         form=ConfigurationFormItem(
             label=_("Lane Priority Level"),
             type=ConfigurationFormItemType.SELECT,

@@ -1707,6 +1707,12 @@ class Work(Base, LoggerMixin):
                     lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = license_pool.id
                 lc["quality"] = doc.quality
+                collection_settings = (
+                    license_pool.collection.integration_configuration.settings_dict
+                )
+                lc["lane_priority_level"] = collection_settings.get(
+                    "lane_priority_level", 5
+                )
                 result["licensepools"].append(lc)
 
         # Extra special genre massaging
