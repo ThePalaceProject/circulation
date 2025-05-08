@@ -633,7 +633,7 @@ class Axis360API(
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.
 
-        :param bibliographic: A Metadata object containing
+        :param bibliographic: A BibliographicData object containing
             bibliographic and circulation (ie availability) data about this title
         """
         # The axis the bibliographic metadata always includes the circulation data
@@ -661,7 +661,7 @@ class Axis360API(
     ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Retrieve availability information for the specified identifiers.
 
-        :yield: A stream of (Metadata, CirculationData) 2-tuples.
+        :yield: A stream of (BibliographicData, CirculationData) 2-tuples.
         """
         identifier_strings = self.create_identifier_strings(identifiers)
         return self.availability_by_title_ids(title_ids=identifier_strings)
@@ -701,7 +701,7 @@ class Axis360API(
     ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Find books that have had recent activity.
 
-        :yield: A sequence of (Metadata, CirculationData) 2-tuples
+        :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
         """
         availability = self.availability(since=since)
         content = availability.content
@@ -712,7 +712,7 @@ class Axis360API(
         title_ids: list[str],
     ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Find title availability for a list of titles
-        :yield: A sequence of (Metadata, CirculationData) 2-tuples
+        :yield: A sequence of (BibliographicData, CirculationData) 2-tuples
         """
         availability = self.availability(title_ids=title_ids)
         content = availability.content
