@@ -98,7 +98,7 @@ class CeleryConfiguration(ServiceConfiguration):
             new_dict[key.replace(prefix, "")] = value
 
 
-# Allow Celery to accept pydantic classes via the json serializer.
+# Allow Celery (via Kombu) to accept pydantic classes via the json serializer.
 #
 # This is a custom serializer for Pydantic models. It serializes the model to a
 # dictionary containing the module and class name, and the model data. The
