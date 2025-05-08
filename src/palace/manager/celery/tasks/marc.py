@@ -237,6 +237,10 @@ def marc_export_collection(
             collection_name=collection_name,
             start_time=start_time,
             libraries=libraries,
+            # We pass context as a list of tuples instead of a dict, because the json serializer
+            # converts all dict keys to strings, so we lose the integer keys. We convert it back
+            # to a dict on the other side.
+            # See the note here: https://docs.celeryq.dev/en/stable/userguide/calling.html#serializers
             context=[
                 (library.library_id, upload.context)
                 for library, upload in uploads.items()
