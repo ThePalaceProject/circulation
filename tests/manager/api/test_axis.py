@@ -730,9 +730,8 @@ class TestAxis360API:
         assert "Findaway content ID" == kwargs["params"]["fndcontentid"]
 
     def test_update_book(self, axis360: Axis360Fixture):
-        # Verify that the update_book method takes a Metadata and a
-        # CirculationData object, and creates appropriate data model
-        # objects.
+        # Verify that the update_book method takes a BibliographicData object,
+        # and creates appropriate data model objects.
 
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(
