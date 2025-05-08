@@ -124,7 +124,7 @@ def _deserialize_pydantic(obj: dict[str, Any]) -> BaseModel:
     model_data = obj["__model__"]
     module = importlib.import_module(module_path)
     cls = getattr(module, qualname)
-    return cls.model_validate(model_data)
+    return cls.model_validate(model_data)  # type: ignore[no-any-return]
 
 
 register_type(
