@@ -127,4 +127,6 @@ def _deserialize_pydantic(obj: dict[str, Any]) -> BaseModel:
     return cls.model_validate(model_data)
 
 
-register_type(BaseModel, "pydantic", _serialize_pydantic, _deserialize_pydantic)
+register_type(
+    BaseModel, "pydantic_base_model", _serialize_pydantic, _deserialize_pydantic
+)
