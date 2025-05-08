@@ -1,10 +1,8 @@
 import datetime
 from contextlib import ExitStack
 from tempfile import TemporaryFile
-from typing import Any
 
 from celery import shared_task
-from pydantic import TypeAdapter
 
 from palace.manager.celery.task import Task
 from palace.manager.marc.exporter import LibraryInfo, MarcExporter
@@ -63,10 +61,10 @@ def marc_export(task: Task, force: bool = False) -> None:
                 collection_id=collection.id,
                 collection_name=collection.name,
                 start_time=start_time,
-                libraries=[l.model_dump() for l in libraries_info],
+                libraries=libraries_info,
             )
 
-            needs_delta = [l.model_dump() for l in libraries_info if l.last_updated]
+            needs_delta = [l for l in libraries_info if l.last_updated]
             if needs_delta:
                 min_last_updated = min(
                     [l.last_updated for l in libraries_info if l.last_updated]
@@ -107,8 +105,8 @@ def marc_export_collection(
     collection_id: int,
     collection_name: str,
     start_time: datetime.datetime,
-    libraries: list[dict[str, Any]],
-    context: dict[int, dict[str, Any]] | None = None,
+    libraries: list[LibraryInfo],
+    context: list[tuple[int, UploadContext]] | None = None,
     last_work_id: int | None = None,
     batch_size: int = 1000,
     delta: bool = False,
@@ -123,20 +121,16 @@ def marc_export_collection(
 
     base_url = task.services.config.sitewide.base_url()
     storage_service = task.services.storage.public()
-
-    # Parse data into pydantic models
-    libraries_info = TypeAdapter(list[LibraryInfo]).validate_python(libraries)
-    context_parsed = TypeAdapter(dict[int, UploadContext]).validate_python(
-        context or {}
-    )
+    if context is None:
+        context = []
+    context_dict = dict(context)
 
     with marc_export_collection_lock(
         task.services.redis.client(), collection_id, delta
     ).lock():
         with ExitStack() as stack, task.transaction() as session:
             files = {
-                library: stack.enter_context(TemporaryFile())
-                for library in libraries_info
+                library: stack.enter_context(TemporaryFile()) for library in libraries
             }
             uploads: dict[LibraryInfo, MarcUploadManager] = {
                 library: stack.enter_context(
@@ -146,14 +140,14 @@ def marc_export_collection(
                         library.library_short_name,
                         start_time,
                         library.last_updated if delta else None,
-                        context_parsed.get(library.library_id),
+                        context_dict.get(library.library_id),
                     )
                 )
-                for library in libraries_info
+                for library in libraries
             }
 
             min_last_updated = (
-                min([l.last_updated for l in libraries_info if l.last_updated])
+                min([l.last_updated for l in libraries if l.last_updated])
                 if delta
                 else None
             )
@@ -195,7 +189,7 @@ def marc_export_collection(
                 for work, pool in works_with_pools:
                     isbn_identifier = isbns.get(pool.identifier)
                     records = MarcExporter.process_work(
-                        work, pool, isbn_identifier, libraries_info, base_url, delta
+                        work, pool, isbn_identifier, libraries, base_url, delta
                     )
                     for library, record in records.items():
                         files[library].write(record)
@@ -242,10 +236,11 @@ def marc_export_collection(
             collection_id=collection_id,
             collection_name=collection_name,
             start_time=start_time,
-            libraries=[l.model_dump() for l in libraries_info],
-            context={
-                l.library_id: uploads[l].context.model_dump() for l in libraries_info
-            },
+            libraries=libraries,
+            context=[
+                (library.library_id, upload.context)
+                for library, upload in uploads.items()
+            ],
             last_work_id=last_work_id,
             batch_size=batch_size,
             delta=delta,

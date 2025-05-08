@@ -2,8 +2,11 @@ from collections.abc import Callable
 from functools import partial
 
 import pytest
+from kombu.utils.json import dumps, loads
 
+from palace.manager.opds.opds2 import Publication, PublicationFeed
 from palace.manager.service.celery.configuration import CeleryConfiguration
+from tests.fixtures.files import OPDS2FilesFixture
 
 CeleryConfFixture = Callable[..., CeleryConfiguration]
 
@@ -70,3 +73,35 @@ class TestCeleryConfiguration:
         options = result["result_backend_transport_options"]
         assert options.get("global_keyprefix") == "z"
         assert "result_backend_transport_options_global_keyprefix" not in result
+
+
+class TestPydanticSerialization:
+    def test_pydantic_object(self, opds2_files_fixture: OPDS2FilesFixture) -> None:
+        """
+        Test that we are able to round-trip pydantic models through the Kombu json serializer.
+        """
+        feed = PublicationFeed.model_validate_json(
+            opds2_files_fixture.sample_data("feed.json")
+        )
+        serialized_feed = dumps(feed)
+        deserialized_feed = loads(serialized_feed)
+
+        assert isinstance(deserialized_feed, PublicationFeed)
+        assert deserialized_feed == feed
+
+    def test_pydantic_object_nested(
+        self, opds2_files_fixture: OPDS2FilesFixture
+    ) -> None:
+        """
+        Test that we are able to round-trip pydantic models nested inside containers through
+        the Kombu json serializer.
+        """
+        feed = PublicationFeed.model_validate_json(
+            opds2_files_fixture.sample_data("feed.json")
+        )
+        serialized_publications = dumps(feed.publications)
+        deserialized_publications = loads(serialized_publications)
+
+        assert isinstance(deserialized_publications, list)
+        assert all(isinstance(pub, Publication) for pub in deserialized_publications)
+        assert deserialized_publications == feed.publications

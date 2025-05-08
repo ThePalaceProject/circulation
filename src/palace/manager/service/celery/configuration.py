@@ -1,5 +1,8 @@
+import importlib
 from typing import Any
 
+from kombu.utils.json import register_type
+from pydantic import BaseModel
 from pydantic_settings import SettingsConfigDict
 
 from palace.manager.service.configuration.service_configuration import (
@@ -93,3 +96,35 @@ class CeleryConfiguration(ServiceConfiguration):
         if key.startswith(prefix):
             value = results.pop(key)
             new_dict[key.replace(prefix, "")] = value
+
+
+# Allow Celery to accept pydantic classes via the json serializer.
+#
+# This is a custom serializer for Pydantic models. It serializes the model to a
+# dictionary containing the module and class name, and the model data. The
+# deserializer takes the dictionary and reconstructs the model.
+#
+# This allows us to pass Pydantic models as arguments to Celery tasks, and have
+# them automatically serialized and deserialized.
+#
+# See:
+# - https://github.com/celery/kombu/blob/f78c440e9a9a48696ec04aef77f15f8d1a01e158/kombu/utils/json.py#L101-L115
+# - https://docs.celeryq.dev/projects/kombu/en/stable/userguide/serialization.html#serializers
+def _serialize_pydantic(obj: BaseModel) -> dict[str, Any]:
+    return {
+        "__module__": obj.__class__.__module__,
+        "__qualname__": obj.__class__.__qualname__,
+        "__model__": obj.model_dump(mode="json"),
+    }
+
+
+def _deserialize_pydantic(obj: dict[str, Any]) -> BaseModel:
+    module_path = obj["__module__"]
+    qualname = obj["__qualname__"]
+    model_data = obj["__model__"]
+    module = importlib.import_module(module_path)
+    cls = getattr(module, qualname)
+    return cls.model_validate(model_data)
+
+
+register_type(BaseModel, "pydantic", _serialize_pydantic, _deserialize_pydantic)
