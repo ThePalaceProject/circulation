@@ -7,12 +7,11 @@ from typing import IO, BinaryIO
 from unittest.mock import MagicMock, create_autospec
 
 from pytest import LogCaptureFixture
-from sqlalchemy.orm import sessionmaker
 
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
-    GenerateInventoryAndHoldsReportsJob,
     generate_inventory_and_hold_reports,
+    generate_report,
     library_report_integrations,
 )
 from palace.manager.core.opds_import import OPDSImporterSettings
@@ -57,9 +56,8 @@ def test_only_active_collections_are_included(
     assert eligible_integrations == [collection1.integration_configuration]
 
 
-def test_job_run(
+def test_generate_report(
     db: DatabaseTransactionFixture,
-    mock_session_maker: sessionmaker,
     services_fixture: ServicesFixture,
     caplog: LogCaptureFixture,
 ):
@@ -73,14 +71,14 @@ def test_job_run(
 
     mock_s3 = MagicMock()
 
-    GenerateInventoryAndHoldsReportsJob(
-        mock_session_maker,
+    generate_report(
+        db.session,
         library_id=1,
         email_address=email,
         send_email=send_email_mock,
         registry=services_fixture.services.integration_registry.license_providers(),
         s3_service=mock_s3,
-    ).run()
+    )
     assert (
         f"Cannot generate inventory and holds report for library (id=1): library not found."
         in caplog.text
@@ -235,19 +233,7 @@ def test_job_run(
 
     # The identifier value should be different from the one we used for the hold.
     assert no_holds_identifier_value != identifier_value
-
     assert library.id
-
-    # for testing, don't delete the files associated with the attachments so we can read them after the script
-    # runs
-    job = GenerateInventoryAndHoldsReportsJob(
-        mock_session_maker,
-        library.id,
-        email_address=email,
-        send_email=send_email_mock,
-        registry=services_fixture.services.integration_registry.license_providers(),
-        s3_service=mock_s3,
-    )
 
     reports_zip = "test_zip"
 
@@ -262,7 +248,14 @@ def test_job_run(
 
     mock_s3.store_stream = store_stream_mock
 
-    job.run()
+    generate_report(
+        db.session,
+        library.id,
+        email_address=email,
+        send_email=send_email_mock,
+        registry=services_fixture.services.integration_registry.license_providers(),
+        s3_service=mock_s3,
+    )
 
     mock_s3.generate_url.assert_called_once()
     send_email_mock.assert_called_once()
