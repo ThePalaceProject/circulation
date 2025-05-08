@@ -58,7 +58,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     __tablename__ = "collections"
     id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
-
     DATA_SOURCE_NAME_SETTING = "data_source"
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
         DataSourceConstants.OVERDRIVE,
@@ -413,6 +412,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     AUDIOBOOK_LOAN_DURATION_KEY = "audio_loan_duration"
     EBOOK_LOAN_DURATION_KEY = "ebook_loan_duration"
     STANDARD_DEFAULT_LOAN_PERIOD = 21
+    DEFAULT_LANE_PRIORITY_LEVEL = 5
 
     def default_loan_period(
         self, library: Library | None, medium: str = EditionConstants.BOOK_MEDIUM
