@@ -6,7 +6,7 @@ from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
-from palace.manager.metadata_layer.container import BaseDataContainer
+from palace.manager.metadata_layer.base.mutable import BaseMutableData
 from palace.manager.metadata_layer.format import FormatData
 from palace.manager.metadata_layer.license import LicenseData
 from palace.manager.metadata_layer.link import LinkData
@@ -22,7 +22,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.util.datetime_helpers import utc_now
 
 
-class CirculationData(BaseDataContainer):
+class CirculationData(BaseMutableData):
     """Information about actual copies of a book that can be delivered to
     patrons.
 

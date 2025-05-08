@@ -563,16 +563,7 @@ class BaseOPDSImporter(
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
                 data_source = self.data_source
-                primary_id = metadata.primary_identifier_data
-                if primary_id is None:
-                    # This should never happen, but we'll handle it gracefully
-                    self.log.error(
-                        "No primary identifier found for metadata during OPDS import"
-                    )
-                    continue
-                identifier, ignore = Identifier.for_foreign_id(
-                    self._db, primary_id.type, primary_id.identifier
-                )
+                identifier = metadata.load_primary_identifier(self._db)
                 failure = CoverageFailure(
                     identifier,
                     traceback.format_exc(),

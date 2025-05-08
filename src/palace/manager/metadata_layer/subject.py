@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import StringConstraints
 
-from palace.manager.metadata_layer.frozen_data import BaseFrozenData
+from palace.manager.metadata_layer.base.frozen import BaseFrozenData
 
 
 class SubjectData(BaseFrozenData):

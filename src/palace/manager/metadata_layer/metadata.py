@@ -10,8 +10,8 @@ from sqlalchemy.orm import Query, Session
 from typing_extensions import Self
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
+from palace.manager.metadata_layer.base.mutable import BaseMutableData
 from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.container import BaseDataContainer
 from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.metadata_layer.link import LinkData
@@ -54,7 +54,7 @@ _REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
 _REL_REQUIRES_FULL_RECALCULATION: list[str] = [LinkRelations.DESCRIPTION]
 
 
-class Metadata(BaseDataContainer):
+class Metadata(BaseMutableData):
     """A (potentially partial) set of metadata for a published work."""
 
     title: str | None = None
@@ -211,7 +211,7 @@ class Metadata(BaseDataContainer):
             # to associate it with other items of the same type.
             return
 
-        primary_identifier_obj, ignore = self.primary_identifier_data.load(_db)
+        primary_identifier = self.load_primary_identifier(_db)
 
         # Try to find the primary identifiers of other Editions with
         # the same permanent work ID and the same medium, representing
@@ -232,10 +232,10 @@ class Metadata(BaseDataContainer):
                 self.log.info(
                     "Discovered that %r is equivalent to %r because of matching permanent work ID %s",
                     same_work_id,
-                    primary_identifier_obj,
+                    primary_identifier,
                     self.permanent_work_id,
                 )
-                primary_identifier_obj.equivalent_to(
+                primary_identifier.equivalent_to(
                     self.load_data_source(_db), same_work_id, 0.85
                 )
 
