@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING
 from unittest import mock
@@ -1800,9 +1800,9 @@ class TestItemListParser:
         assert Edition.BOOK_MEDIUM == cooked.medium
         assert "eng" == cooked.language
         assert "St. Martin's Press" == cooked.publisher
-        assert datetime_utc(year=2012, month=9, day=17) == cooked.published
+        assert date(year=2012, month=9, day=17) == cooked.published
 
-        primary = cooked.primary_identifier
+        primary = cooked.primary_identifier_data
         assert "ddf4gr9" == primary.identifier
         assert Identifier.THREEM_ID == primary.type
 

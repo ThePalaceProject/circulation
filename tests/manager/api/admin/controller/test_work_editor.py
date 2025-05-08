@@ -1,3 +1,4 @@
+import datetime
 import json
 from collections.abc import Generator
 from typing import Any
@@ -38,7 +39,6 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.util import create
-from palace.manager.util.datetime_helpers import datetime_utc
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
@@ -333,7 +333,7 @@ class TestWorkController:
             assert "New Publisher" == work_fixture.english_1.publisher
             assert "New Imprint" == work_fixture.english_1.presentation_edition.imprint
             assert (
-                datetime_utc(2017, 11, 5)
+                datetime.date(2017, 11, 5)
                 == work_fixture.english_1.presentation_edition.issued
             )
             assert 0.25 == work_fixture.english_1.quality

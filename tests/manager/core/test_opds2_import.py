@@ -5,7 +5,6 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
-from dateutil.tz import tzutc
 from pydantic import ValidationError
 from requests import Response
 
@@ -225,10 +224,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert data.data_source == moby_dick_edition.data_source
 
         assert "Test Publisher" == moby_dick_edition.publisher
-        assert (
-            datetime.datetime(2015, 9, 29, tzinfo=tzutc())
-            == moby_dick_edition.published
-        )
+        assert datetime.date(2015, 9, 29) == moby_dick_edition.published
 
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
         assert (
@@ -285,10 +281,7 @@ class TestOPDS2Importer(OPDS2Test):
         assert data.data_source == huckleberry_finn_edition.data_source
 
         assert "Test Publisher" == huckleberry_finn_edition.publisher
-        assert (
-            datetime.datetime(2014, 9, 28, tzinfo=tzutc())
-            == huckleberry_finn_edition.published
-        )
+        assert datetime.date(2014, 9, 28) == huckleberry_finn_edition.published
 
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
 

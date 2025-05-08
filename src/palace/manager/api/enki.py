@@ -716,12 +716,12 @@ class BibliographicParser(LoggerMixin):
         language = self.LANGUAGE_CODES.get(language_code, "eng")
 
         metadata = Metadata(
-            data_source=DataSource.ENKI,
+            data_source_name=DataSource.ENKI,
             title=element.get("title"),
             language=language,
             medium=Edition.BOOK_MEDIUM,
             publisher=element.get("publisher"),
-            primary_identifier=primary_identifier,
+            primary_identifier_data=primary_identifier,
             identifiers=identifiers,
             contributors=contributors,
             links=list(links),
@@ -765,8 +765,8 @@ class BibliographicParser(LoggerMixin):
             self.log.error("Unrecognized formattype: %s", formattype)
 
         circulationdata = CirculationData(
-            data_source=DataSource.ENKI,
-            primary_identifier=primary_identifier,
+            data_source_name=DataSource.ENKI,
+            primary_identifier_data=primary_identifier,
             formats=formats,
             licenses_owned=int(licenses_owned),
             licenses_available=int(licenses_available),
@@ -931,7 +931,7 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
             contributions=True,
             formats=True,
         )
-        bibliographic.apply(edition, self.collection, replace=policy)
+        bibliographic.apply(self._db, edition, self.collection, replace=policy)
         license_pool, ignore = availability.license_pool(self._db, self.collection)
 
         return edition, license_pool
@@ -982,8 +982,8 @@ class EnkiCollectionReaper(IdentifierSweepMonitor):
 
         now = utc_now()
         circulationdata = CirculationData(
-            data_source=DataSource.ENKI,
-            primary_identifier=IdentifierData.from_identifier(identifier),
+            data_source_name=DataSource.ENKI,
+            primary_identifier_data=IdentifierData.from_identifier(identifier),
             licenses_owned=0,
             licenses_available=0,
             patrons_in_hold_queue=0,

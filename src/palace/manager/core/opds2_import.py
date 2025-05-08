@@ -717,8 +717,8 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
         circulation_data = CirculationData(
             default_rights_uri=rights_uri,
-            data_source=data_source_name,
-            primary_identifier=identifier_data,
+            data_source_name=data_source_name,
+            primary_identifier_data=identifier_data,
             links=links,
             licenses_owned=licenses_owned,
             licenses_available=licenses_available,
@@ -734,7 +734,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         circulation_data.formats.extend(formats)
 
         metadata = Metadata(
-            data_source=data_source_name,
+            data_source_name=data_source_name,
             title=title,
             subtitle=subtitle,
             language=languages,
@@ -742,7 +742,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             publisher=publisher,
             published=published,
             imprint=imprint,
-            primary_identifier=identifier_data,
+            primary_identifier_data=identifier_data,
             subjects=subjects,
             contributors=contributors,
             measurements=measurements,
@@ -1015,9 +1015,9 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             )
 
             # Make sure we have a primary identifier before trying to use it
-            if publication_metadata.primary_identifier is not None:
+            if publication_metadata.primary_identifier_data is not None:
                 publication_metadata_dictionary[
-                    publication_metadata.primary_identifier.identifier
+                    publication_metadata.primary_identifier_data.identifier
                 ] = publication_metadata
 
         return publication_metadata_dictionary, failures

@@ -4,10 +4,13 @@ import datetime
 from collections import defaultdict
 from typing import Any
 
+from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
 from sqlalchemy.orm import Query, Session
+from typing_extensions import Self
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
+from palace.manager.metadata_layer.base.mutable import BaseMutableData
 from palace.manager.metadata_layer.circulation import CirculationData
 from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.metadata_layer.identifier import IdentifierData
@@ -27,124 +30,76 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.log import LoggerMixin
 from palace.manager.util.median import median
 
+_BASIC_EDITION_FIELDS: list[str] = [
+    "title",
+    "sort_title",
+    "subtitle",
+    "language",
+    "medium",
+    "duration",
+    "series",
+    "series_position",
+    "publisher",
+    "imprint",
+    "issued",
+    "published",
+]
 
-class Metadata(LoggerMixin):
+_REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
+    LinkRelations.IMAGE,
+    LinkRelations.THUMBNAIL_IMAGE,
+]
+_REL_REQUIRES_FULL_RECALCULATION: list[str] = [LinkRelations.DESCRIPTION]
+
+
+class Metadata(BaseMutableData):
     """A (potentially partial) set of metadata for a published work."""
 
-    BASIC_EDITION_FIELDS: list[str] = [
-        "title",
-        "sort_title",
-        "subtitle",
-        "language",
-        "medium",
-        "duration",
-        "series",
-        "series_position",
-        "publisher",
-        "imprint",
-        "issued",
-        "published",
-    ]
+    title: str | None = None
+    subtitle: str | None = None
+    sort_title: str | None = None
+    language: str | None = None
+    medium: str | None = None
+    series: str | None = None
+    series_position: int | None = None
+    publisher: str | None = None
+    imprint: str | None = None
+    issued: datetime.date | None = None
+    published: datetime.date | None = None
+    identifiers: list[IdentifierData] = Field(default_factory=list)
+    subjects: list[SubjectData] = Field(default_factory=list)
+    contributors: list[ContributorData] = Field(default_factory=list)
+    measurements: list[MeasurementData] = Field(default_factory=list)
+    links: list[LinkData] = Field(default_factory=list)
+    data_source_last_updated: datetime.datetime | None = None
+    duration: float | None = None
+    permanent_work_id: str | None = None
+    # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
+    circulation: CirculationData | None = None
 
-    def __init__(
-        self,
-        data_source: str | DataSource | None,
-        *,
-        title: str | None = None,
-        subtitle: str | None = None,
-        sort_title: str | None = None,
-        language: str | None = None,
-        medium: str | None = None,
-        series: str | None = None,
-        series_position: int | None = None,
-        publisher: str | None = None,
-        imprint: str | None = None,
-        issued: datetime.date | None = None,
-        published: datetime.date | None = None,
-        primary_identifier: IdentifierData | Identifier | None = None,
-        identifiers: list[IdentifierData] | None = None,
-        subjects: list[SubjectData] | None = None,
-        contributors: list[ContributorData] | None = None,
-        measurements: list[MeasurementData] | None = None,
-        links: list[LinkData] | None = None,
-        data_source_last_updated: datetime.datetime | None = None,
-        duration: float | None = None,
-        # Note: brought back to keep callers of bibliographic extraction process_one() methods simple.
-        circulation: CirculationData | None = None,
-    ) -> None:
-        # data_source is where the data comes from (e.g. overdrive, admin interface),
-        # and not necessarily where the associated Identifier's LicencePool's lending licenses are coming from.
-        self._data_source = data_source
-        if isinstance(self._data_source, DataSource):
-            self.data_source_obj: DataSource | None = self._data_source
-            self.data_source_name: str | None = self.data_source_obj.name
-        else:
-            self.data_source_obj = None
-            self.data_source_name = self._data_source
+    @field_validator("language")
+    @classmethod
+    def _convert_langage_alpha3(cls, value: str | None) -> str | None:
+        if value is not None:
+            value = LanguageCodes.string_to_alpha_3(value)
+        return value
 
-        self.title = title
-        self.sort_title = sort_title
-        self.subtitle = subtitle
-        if language:
-            language = LanguageCodes.string_to_alpha_3(language)
-        self.language = language
-        # medium is book/audio/video, etc.
-        self.medium = medium
-        self.series = series
-        self.series_position = series_position
-        self.publisher = publisher
-        self.imprint = imprint
-        self.issued = issued
-        self.published = published
-        self.duration = duration
+    @field_validator("links")
+    @classmethod
+    def _filter_links(cls, links: list[LinkData]) -> list[LinkData]:
+        return [link for link in links if link.rel in Hyperlink.METADATA_ALLOWED]
 
-        if isinstance(primary_identifier, Identifier):
-            primary_identifier = IdentifierData(
-                type=primary_identifier.type, identifier=primary_identifier.identifier
-            )
-        self.primary_identifier = primary_identifier
-        self.identifiers = identifiers or []
-        self.permanent_work_id: str | None = None
-        if self.primary_identifier and self.primary_identifier not in self.identifiers:
-            self.identifiers.append(self.primary_identifier)
-        self.subjects = subjects or []
-        self.contributors = contributors or []
-        self.measurements = measurements or []
+    @model_validator(mode="after")
+    def _primary_identifier_in_identifiers(self) -> Self:
+        if (
+            self.primary_identifier_data
+            and self.primary_identifier_data not in self.identifiers
+        ):
+            self.identifiers.append(self.primary_identifier_data)
 
-        self.circulation = circulation
-
-        # renamed last_update_time to data_source_last_updated
-        self.data_source_last_updated = data_source_last_updated
-
-        self.__links: list[LinkData] = []
-        # The type ignore here is necessary because mypy does not like when a property setter and
-        # getter have different types. A PR just went in to fix this in mypy, so this should be able
-        # to be removed once mypy 1.16 is released.
-        # See: https://github.com/python/mypy/pull/18510
-        self.links = links  # type: ignore[assignment]
-
-    @property
-    def links(self) -> list[LinkData]:
-        return self.__links
-
-    @links.setter
-    def links(self, arg_links: list[LinkData] | None) -> None:
-        """If got passed all links, undiscriminately, filter out to only those relevant to
-        editions (the image/cover/etc links).
-        """
-        # start by deleting any old links
-        self.__links = []
-
-        if not arg_links:
-            return
-
-        for link in arg_links:
-            if link.rel in Hyperlink.METADATA_ALLOWED:
-                # only accept the types of links relevant to editions
-                self.__links.append(link)
+        return self
 
     @classmethod
     def from_edition(cls, edition: Edition) -> Metadata:
@@ -154,7 +109,7 @@ class Metadata(LoggerMixin):
         information to run guess_license_pools.
         """
         kwargs: dict[str, Any] = dict()
-        for field in cls.BASIC_EDITION_FIELDS:
+        for field in _BASIC_EDITION_FIELDS:
             kwargs[field] = getattr(edition, field)
 
         contributors: list[ContributorData] = []
@@ -183,8 +138,8 @@ class Metadata(LoggerMixin):
             links.append(link_data)
 
         return Metadata(
-            data_source=edition.data_source,
-            primary_identifier=primary_identifier,
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=primary_identifier,
             contributors=contributors,
             links=links,
             **kwargs,
@@ -212,7 +167,7 @@ class Metadata(LoggerMixin):
         TODO: We might want to take a policy object as an argument.
         """
 
-        fields = self.BASIC_EDITION_FIELDS
+        fields = _BASIC_EDITION_FIELDS
         for field in fields:
             new_value = getattr(metadata, field)
             if new_value != None and new_value != "":
@@ -246,7 +201,7 @@ class Metadata(LoggerMixin):
         the primary identifiers of Editions in the database which share
         a permanent work ID.
         """
-        if not self.primary_identifier or not self.permanent_work_id:
+        if not self.primary_identifier_data or not self.permanent_work_id:
             # We don't have the information necessary to carry out this
             # task.
             return
@@ -256,7 +211,7 @@ class Metadata(LoggerMixin):
             # to associate it with other items of the same type.
             return
 
-        primary_identifier_obj, ignore = self.primary_identifier.load(_db)
+        primary_identifier = self.load_primary_identifier(_db)
 
         # Try to find the primary identifiers of other Editions with
         # the same permanent work ID and the same medium, representing
@@ -271,40 +226,31 @@ class Metadata(LoggerMixin):
         identifiers_same_work_id = qu.all()
         for same_work_id in identifiers_same_work_id:
             if (
-                same_work_id.type != self.primary_identifier.type
-                or same_work_id.identifier != self.primary_identifier.identifier
+                same_work_id.type != self.primary_identifier_data.type
+                or same_work_id.identifier != self.primary_identifier_data.identifier
             ):
                 self.log.info(
                     "Discovered that %r is equivalent to %r because of matching permanent work ID %s",
                     same_work_id,
-                    primary_identifier_obj,
+                    primary_identifier,
                     self.permanent_work_id,
                 )
-                primary_identifier_obj.equivalent_to(
-                    self.data_source(_db), same_work_id, 0.85
+                primary_identifier.equivalent_to(
+                    self.load_data_source(_db), same_work_id, 0.85
                 )
-
-    def data_source(self, _db: Session) -> DataSource:
-        if not self.data_source_obj:
-            if not self.data_source_name:
-                raise ValueError("No data source specified!")
-            self.data_source_obj = DataSource.lookup(_db, self.data_source_name)
-        if not self.data_source_obj:
-            raise ValueError("Data source %s not found!" % self.data_source_name)
-        return self.data_source_obj
 
     def edition(self, _db: Session) -> tuple[Edition, bool]:
         """Find or create the edition described by this Metadata object."""
-        if not self.primary_identifier:
+        if not self.primary_identifier_data:
             raise ValueError("Cannot find edition: metadata has no primary identifier.")
 
-        data_source = self.data_source(_db)
+        data_source = self.load_data_source(_db)
 
         return Edition.for_foreign_id(
             _db,
             data_source,
-            self.primary_identifier.type,
-            self.primary_identifier.identifier,
+            self.primary_identifier_data.type,
+            self.primary_identifier_data.identifier,
         )
 
     def consolidate_identifiers(self) -> None:
@@ -375,28 +321,12 @@ class Metadata(LoggerMixin):
                     success = True
         return success
 
-    REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
-        LinkRelations.IMAGE,
-        LinkRelations.THUMBNAIL_IMAGE,
-    ]
-    REL_REQUIRES_FULL_RECALCULATION: list[str] = [LinkRelations.DESCRIPTION]
-
-    # TODO: We need to change all calls to apply() to use a ReplacementPolicy
-    # instead of passing in individual `replace` arguments. Once that's done,
-    # we can get rid of the `replace` arguments.
     def apply(
         self,
+        db: Session,
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
-        replace_identifiers: bool = False,
-        replace_subjects: bool = False,
-        replace_contributions: bool = False,
-        replace_links: bool = False,
-        replace_formats: bool = False,
-        replace_rights: bool = False,
-        force: bool = False,
-        db: Session | None = None,
     ) -> tuple[Edition, bool]:
         """Apply this metadata to the given edition.
 
@@ -406,10 +336,6 @@ class Metadata(LoggerMixin):
             New: If contributors changed, this is now considered a core change,
             so work.simple_opds_feed refresh can be triggered.
         """
-        if not db:
-            _db = Session.object_session(edition)
-        else:
-            _db = db
         # If summary, subjects, or measurements change, then any Work
         # associated with this edition will need a full presentation
         # recalculation.
@@ -421,36 +347,28 @@ class Metadata(LoggerMixin):
         work_requires_new_presentation_edition = False
 
         if replace is None:
-            replace = ReplacementPolicy(
-                identifiers=replace_identifiers,
-                subjects=replace_subjects,
-                contributions=replace_contributions,
-                links=replace_links,
-                formats=replace_formats,
-                rights=replace_rights,
-                even_if_not_apparently_updated=force,
-            )
+            replace = ReplacementPolicy()
 
         # We were given an Edition, so either this metadata's
         # primary_identifier must be missing or it must match the
         # Edition's primary identifier.
-        if self.primary_identifier:
+        if self.primary_identifier_data:
             if (
-                self.primary_identifier.type != edition.primary_identifier.type
-                or self.primary_identifier.identifier
+                self.primary_identifier_data.type != edition.primary_identifier.type
+                or self.primary_identifier_data.identifier
                 != edition.primary_identifier.identifier
             ):
                 raise ValueError(
                     "Metadata's primary identifier (%s/%s) does not match edition's primary identifier (%r)"
                     % (
-                        self.primary_identifier.type,
-                        self.primary_identifier.identifier,
+                        self.primary_identifier_data.type,
+                        self.primary_identifier_data.identifier,
                         edition.primary_identifier,
                     )
                 )
 
         # Check whether we should do any work at all.
-        data_source = self.data_source(_db)
+        data_source = self.load_data_source(db)
 
         if self.data_source_last_updated and not replace.even_if_not_apparently_updated:
             coverage_record = CoverageRecord.lookup(edition, data_source)
@@ -464,7 +382,7 @@ class Metadata(LoggerMixin):
         identifier = edition.primary_identifier
 
         self.log.info("APPLYING METADATA TO EDITION: %s", self.title)
-        fields = self.BASIC_EDITION_FIELDS + ["permanent_work_id"]
+        fields = _BASIC_EDITION_FIELDS + ["permanent_work_id"]
         for field in fields:
             old_edition_value = getattr(edition, field)
             new_metadata_value = getattr(self, field)
@@ -481,7 +399,7 @@ class Metadata(LoggerMixin):
         # Create equivalencies between all given identifiers and
         # the edition's primary identifier.
         contributors_changed = self.update_contributions(
-            _db, edition, replace.contributions
+            db, edition, replace.contributions
         )
         if contributors_changed:
             work_requires_new_presentation_edition = True
@@ -498,7 +416,7 @@ class Metadata(LoggerMixin):
                     # These are the same identifier.
                     continue
                 new_identifier, ignore = Identifier.for_foreign_id(
-                    _db, identifier_data.type, identifier_data.identifier
+                    db, identifier_data.type, identifier_data.identifier
                 )
                 identifier.equivalent_to(
                     data_source, new_identifier, identifier_data.weight
@@ -527,7 +445,7 @@ class Metadata(LoggerMixin):
                     if not key in new_subjects:
                         # The data source has stopped claiming that
                         # this classification should exist.
-                        _db.delete(classification)
+                        db.delete(classification)
                         work_requires_full_recalculation = True
                     else:
                         # The data source maintains that this
@@ -563,7 +481,7 @@ class Metadata(LoggerMixin):
             dirty = False
             for hyperlink in identifier.links:
                 if hyperlink.data_source == data_source:
-                    _db.delete(hyperlink)
+                    db.delete(hyperlink)
                     dirty = True
                 else:
                     surviving_hyperlinks.append(hyperlink)
@@ -576,9 +494,9 @@ class Metadata(LoggerMixin):
             if link.rel in Hyperlink.METADATA_ALLOWED:
                 original_resource = None
                 if link.original:
-                    rights_status = RightsStatus.lookup(_db, link.original.rights_uri)
+                    rights_status = RightsStatus.lookup(db, link.original.rights_uri)
                     original_resource, ignore = get_one_or_create(
-                        _db,
+                        db,
                         Resource,
                         url=link.original.href,
                     )
@@ -605,11 +523,11 @@ class Metadata(LoggerMixin):
                     rights_explanation=link.rights_explanation,
                     original_resource=original_resource,
                     transformation_settings=link.transformation_settings,
-                    db=_db,
+                    db=db,
                 )
-                if link.rel in self.REL_REQUIRES_NEW_PRESENTATION_EDITION:
+                if link.rel in _REL_REQUIRES_NEW_PRESENTATION_EDITION:
                     work_requires_new_presentation_edition = True
-                elif link.rel in self.REL_REQUIRES_FULL_RECALCULATION:
+                elif link.rel in _REL_REQUIRES_FULL_RECALCULATION:
                     work_requires_full_recalculation = True
 
             link_objects[link] = link_obj
@@ -664,7 +582,7 @@ class Metadata(LoggerMixin):
         # that that Collection has a LicensePool for this book and that
         # its information is up-to-date.
         if self.circulation:
-            self.circulation.apply(_db, collection, replace)
+            self.circulation.apply(db, collection, replace)
 
         # obtains a presentation_edition for the title
         has_image = any([link.rel == Hyperlink.IMAGE for link in self.links])
@@ -678,7 +596,7 @@ class Metadata(LoggerMixin):
             elif link.thumbnail:
                 # We need to make sure that its thumbnail exists locally and
                 # is associated with the original image.
-                self.make_thumbnail(_db, data_source, link, link_obj)
+                self.make_thumbnail(db, data_source, link, link_obj)
 
         # Make sure the work we just did shows up.
         made_changes = edition.calculate_presentation(
@@ -704,7 +622,7 @@ class Metadata(LoggerMixin):
             # Any LicensePool will do here, since all LicensePools for
             # a given Identifier have the same Work.
             pool = get_one(
-                _db,
+                db,
                 LicensePool,
                 identifier=edition.primary_identifier,
                 on_multiple="interchangeable",

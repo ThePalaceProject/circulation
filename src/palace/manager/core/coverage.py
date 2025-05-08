@@ -994,6 +994,7 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
             # The metadata layer will not use the collection when creating
             # CoverageRecords for the metadata actions.
             metadata.apply(
+                self._db,
                 edition,
                 collection=self.collection,
                 replace=self.replacement_policy,
@@ -1338,7 +1339,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
         error = None
         if circulationdata:
             try:
-                primary_identifier = circulationdata.primary_identifier(self._db)
+                primary_identifier = circulationdata.load_primary_identifier(self._db)
             except ValueError:
                 primary_identifier = None
             if identifier != primary_identifier:

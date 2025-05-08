@@ -135,8 +135,8 @@ def list_identifiers_for_import(
                 for metadata, circulation in api.recent_activity(
                     start_time_of_last_scan
                 ):
-                    if metadata.primary_identifier is not None:
-                        title_ids.append(metadata.primary_identifier.identifier)
+                    if metadata.primary_identifier_data is not None:
+                        title_ids.append(metadata.primary_identifier_data.identifier)
                 elapsed_time = time.perf_counter() - start_seconds
 
             except IntegrationException as e:

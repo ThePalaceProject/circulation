@@ -84,7 +84,7 @@ class TestOverdriveRepresentationExtractor:
         assert 10 == circulationdata.patrons_in_hold_queue
 
         # Related IDs.
-        identifier = circulationdata.primary_identifier(session)
+        identifier = circulationdata.load_primary_identifier(session)
         assert (Identifier.OVERDRIVE_ID, "2a005d55-a417-4053-b90d-7a38ca6d2065") == (
             identifier.type,
             identifier.identifier,
@@ -163,7 +163,7 @@ class TestOverdriveRepresentationExtractor:
         identifier = transaction.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         info["id"] = identifier.identifier
         data = m(info)
-        assert identifier == data.primary_identifier(transaction.session)
+        assert identifier == data.load_primary_identifier(transaction.session)
         assert 0 == data.licenses_owned
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
@@ -208,8 +208,8 @@ class TestOverdriveRepresentationExtractor:
 
         # Related IDs.
         assert (Identifier.OVERDRIVE_ID, "3896665d-9d81-4cac-bd43-ffc5066de1f5") == (
-            metadata.primary_identifier.type,
-            metadata.primary_identifier.identifier,
+            metadata.primary_identifier_data.type,
+            metadata.primary_identifier_data.identifier,
         )
 
         ids = [(x.type, x.identifier) for x in metadata.identifiers]

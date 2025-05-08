@@ -221,8 +221,12 @@ def generate_test_metadata_and_circulation_objects(test_ids: list[str]):
         identifier = IdentifierData(type=Identifier.AXIS_360_ID, identifier=id)
         metadata_and_circulation_data_list.append(
             (
-                Metadata(data_source=data_source, primary_identifier=identifier),
-                CirculationData(data_source=data_source, primary_identifier=identifier),
+                Metadata(
+                    data_source_name=data_source, primary_identifier_data=identifier
+                ),
+                CirculationData(
+                    data_source_name=data_source, primary_identifier_data=identifier
+                ),
             )
         )
     return metadata_and_circulation_data_list

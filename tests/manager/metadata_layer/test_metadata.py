@@ -8,7 +8,7 @@ from palace.manager.metadata_layer.contributor import ContributorData
 from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.metadata_layer.link import LinkData
 from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.metadata_layer.metadata import _BASIC_EDITION_FIELDS, Metadata
 from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -41,9 +41,9 @@ class TestMetadata:
 
         # Now we get some new metadata from source #2.
         subjects = [SubjectData(type=Subject.TAG, identifier="i will conquer")]
-        metadata = Metadata(subjects=subjects, data_source=source2)
+        metadata = Metadata(subjects=subjects, data_source_name=source2.name)
         replace = ReplacementPolicy(subjects=True)
-        metadata.apply(edition, None, replace=replace)
+        metadata.apply(db.session, edition, None, replace=replace)
 
         # The old classification from source #2 has been destroyed.
         # The old classification from source #1 is still there.
@@ -61,10 +61,10 @@ class TestMetadata:
         source1 = DataSource.lookup(db.session, DataSource.AXIS_360)
         edition = db.edition()
         identifier = edition.primary_identifier
-        metadata = Metadata(subjects=subjects, data_source=source1)
+        metadata = Metadata(subjects=subjects, data_source_name=source1.name)
         replace = ReplacementPolicy(subjects=True)
         with LogCaptureHandler(logging.root) as logs:
-            metadata.apply(edition, None, replace=replace)
+            metadata.apply(db.session, edition, None, replace=replace)
             assert len(logs.error) == 1
             assert str(logs.error[0]).startswith("Error classifying subject:")
             assert str(logs.error[0]).endswith(
@@ -76,8 +76,8 @@ class TestMetadata:
         edition = db.edition()
         l1 = LinkData(rel=Hyperlink.IMAGE, href="http://example.com/")
         l2 = LinkData(rel=Hyperlink.DESCRIPTION, content="foo")
-        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[l1, l2], data_source_name=edition.data_source.name)
+        metadata.apply(db.session, edition, None)
         [image, description] = sorted(
             edition.primary_identifier.links, key=lambda x: x.rel
         )
@@ -109,8 +109,8 @@ class TestMetadata:
             transformation_settings=dict(position="top"),
         )
 
-        metadata = Metadata(links=[derivative], data_source=data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[derivative], data_source_name=data_source.name)
+        metadata.apply(db.session, edition, None)
         [image] = edition.primary_identifier.links
         assert Hyperlink.IMAGE == image.rel
         assert "generic uri" == image.resource.url
@@ -144,8 +144,8 @@ class TestMetadata:
         )
 
         # Even though we're only passing in the primary image link...
-        metadata = Metadata(links=[l1], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[l1], data_source_name=edition.data_source.name)
+        metadata.apply(db.session, edition, None)
 
         # ...a Hyperlink is also created for the thumbnail.
         [image, thumbnail] = sorted(
@@ -170,8 +170,8 @@ class TestMetadata:
             media_type=Representation.JPEG_MEDIA_TYPE,
         )
 
-        metadata = Metadata(links=[image], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[image], data_source_name=edition.data_source.name)
+        metadata.apply(db.session, edition, None)
 
         # Only one Hyperlink was created for the image, because
         # the alleged 'thumbnail' wasn't actually a thumbnail.
@@ -182,9 +182,9 @@ class TestMetadata:
         # If we pass in the 'thumbnail' separately, a Hyperlink is
         # created for it, but it's still not a thumbnail of anything.
         metadata = Metadata(
-            links=[image, not_a_thumbnail], data_source=edition.data_source
+            links=[image, not_a_thumbnail], data_source_name=edition.data_source.name
         )
-        metadata.apply(edition, None)
+        metadata.apply(db.session, edition, None)
         [hyperlink_image, description] = sorted(
             edition.primary_identifier.links, key=lambda x: x.rel
         )
@@ -205,8 +205,8 @@ class TestMetadata:
             href=url,
             thumbnail=l2,
         )
-        metadata = Metadata(links=[l1, l2], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[l1, l2], data_source_name=edition.data_source.name)
+        metadata.apply(db.session, edition, None)
         [image, thumbnail] = sorted(
             edition.primary_identifier.links, key=lambda x: x.rel
         )
@@ -243,8 +243,8 @@ class TestMetadata:
             thumbnail=l2,
             media_type=Representation.JPEG_MEDIA_TYPE,
         )
-        metadata = Metadata(links=[l1], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(links=[l1], data_source_name=edition.data_source.name)
+        metadata.apply(db.session, edition, None)
 
         # Both LinkData objects have been imported as Hyperlinks.
         [image, thumbnail] = sorted(
@@ -270,8 +270,10 @@ class TestMetadata:
         measurement = MeasurementData(
             quantity_measured=Measurement.POPULARITY, value=100
         )
-        metadata = Metadata(measurements=[measurement], data_source=edition.data_source)
-        metadata.apply(edition, None)
+        metadata = Metadata(
+            measurements=[measurement], data_source_name=edition.data_source.name
+        )
+        metadata.apply(db.session, edition, None)
         [m] = edition.primary_identifier.measurements
         assert Measurement.POPULARITY == m.quantity_measured
         assert 100 == m.value
@@ -287,11 +289,11 @@ class TestMetadata:
         last_update = datetime_utc(2015, 1, 1)
 
         m = Metadata(
-            data_source=data_source,
+            data_source_name=data_source.name,
             title="New title",
             data_source_last_updated=last_update,
         )
-        m.apply(edition, None)
+        m.apply(db.session, edition, None)
 
         coverage = CoverageRecord.lookup(edition, data_source)
         assert last_update == coverage.timestamp
@@ -299,17 +301,22 @@ class TestMetadata:
 
         older_last_update = datetime_utc(2014, 1, 1)
         m = Metadata(
-            data_source=data_source,
+            data_source_name=data_source.name,
             title="Another new title",
             data_source_last_updated=older_last_update,
         )
-        m.apply(edition, None)
+        m.apply(db.session, edition, None)
         assert "New title" == edition.title
 
         coverage = CoverageRecord.lookup(edition, data_source)
         assert last_update == coverage.timestamp
 
-        m.apply(edition, None, force=True)
+        m.apply(
+            db.session,
+            edition,
+            None,
+            replace=ReplacementPolicy(even_if_not_apparently_updated=True),
+        )
         assert "Another new title" == edition.title
         coverage = CoverageRecord.lookup(edition, data_source)
         assert older_last_update == coverage.timestamp
@@ -317,7 +324,7 @@ class TestMetadata:
     def test_defaults(self) -> None:
         # Verify that a Metadata object doesn't make any assumptions
         # about an item's medium.
-        m = Metadata(data_source=DataSource.OCLC)
+        m = Metadata(data_source_name=DataSource.OCLC)
         assert None == m.medium
 
     def test_from_edition(self, db: DatabaseTransactionFixture):
@@ -335,7 +342,7 @@ class TestMetadata:
         metadata = Metadata.from_edition(edition)
 
         # make sure the metadata and the originating edition match
-        for field in Metadata.BASIC_EDITION_FIELDS:
+        for field in _BASIC_EDITION_FIELDS:
             assert getattr(edition, field) == getattr(metadata, field)
 
         e_contribution = edition.contributions[0]
@@ -343,10 +350,10 @@ class TestMetadata:
         assert e_contribution.contributor.sort_name == m_contributor_data.sort_name
         assert e_contribution.role == m_contributor_data.roles[0]
 
-        assert edition.data_source == metadata.data_source(session)
+        assert edition.data_source == metadata.load_data_source(session)
         assert (
             edition.primary_identifier.identifier
-            == metadata.primary_identifier.identifier
+            == metadata.primary_identifier_data.identifier
         )
 
         e_link = edition.primary_identifier.links[0]
@@ -392,7 +399,7 @@ class TestMetadata:
         edition_old, pool = db.edition(with_license_pool=True)
 
         metadata = Metadata(
-            data_source=DataSource.OVERDRIVE,
+            data_source_name=DataSource.OVERDRIVE,
             title="The Harry Otter and the Seaweed of Ages",
             sort_title="Harry Otter and the Seaweed of Ages, The",
             subtitle="Kelp At It",
@@ -407,7 +414,7 @@ class TestMetadata:
             duration=10,
         )
 
-        edition_new, changed = metadata.apply(edition_old, pool.collection)
+        edition_new, changed = metadata.apply(db.session, edition_old, pool.collection)
 
         assert changed == True
         assert edition_new.title == "The Harry Otter and the Seaweed of Ages"
@@ -423,12 +430,12 @@ class TestMetadata:
         assert edition_new.issued == datetime.date(1989, 4, 5)
         assert edition_new.duration == 10
 
-        edition_new, changed = metadata.apply(edition_new, pool.collection)
+        edition_new, changed = metadata.apply(db.session, edition_new, pool.collection)
         assert changed == False
 
         # The series position can also be 0.
         metadata.series_position = 0
-        edition_new, changed = metadata.apply(edition_new, pool.collection)
+        edition_new, changed = metadata.apply(db.session, edition_new, pool.collection)
         assert changed == True
         assert edition_new.series_position == 0
 
@@ -443,12 +450,14 @@ class TestMetadata:
 
         # We learn some more information about the work's identifier.
         metadata = Metadata(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=work.presentation_edition.primary_identifier,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=IdentifierData.from_identifier(
+                work.presentation_edition.primary_identifier
+            ),
             title="The Harry Otter and the Seaweed of Ages",
         )
         edition, ignore = metadata.edition(db.session)
-        metadata.apply(edition, None)
+        metadata.apply(db.session, edition, None)
 
         # The work still has the wrong title.
         assert "The Wrong Title" == work.title
@@ -487,7 +496,7 @@ class TestMetadata:
         # is classified.
         metadata.title = None
         metadata.subjects = [SubjectData(type=Subject.TAG, identifier="subject")]
-        metadata.apply(edition, None)
+        metadata.apply(db.session, edition, None)
 
         # The work is now slated to have its presentation completely
         # recalculated.
@@ -495,7 +504,7 @@ class TestMetadata:
         # We then find a new description for the work.
         metadata.subjects = []
         metadata.links = [LinkData(rel=Hyperlink.DESCRIPTION, content="a description")]
-        metadata.apply(edition, None)
+        metadata.apply(db.session, edition, None)
 
         # We need to do a full recalculation again.
         assert_registered(full=True)
@@ -503,7 +512,7 @@ class TestMetadata:
         # We then find a new cover image for the work.
         metadata.subjects = []
         metadata.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
-        metadata.apply(edition, None)
+        metadata.apply(db.session, edition, None)
 
         # We need to choose a new presentation edition.
         assert_registered(full=False)
@@ -521,11 +530,11 @@ class TestMetadata:
         other_data = IdentifierData(type="abc", identifier="def")
 
         # Create a Metadata object that mentions the primary
-        # identifier (as an Identifier) in `primary_identifier`, but doesn't
+        # identifier in `primary_identifier`, but doesn't
         # mention it in `identifiers`.
         metadata = Metadata(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=primary,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=primary_as_data,
             identifiers=[other_data],
         )
 
@@ -537,8 +546,8 @@ class TestMetadata:
         # Test case where the primary identifier is mentioned both as
         # primary_identifier and in identifiers
         metadata2 = Metadata(
-            data_source=DataSource.OVERDRIVE,
-            primary_identifier=primary,
+            data_source_name=DataSource.OVERDRIVE,
+            primary_identifier_data=primary_as_data,
             identifiers=[primary_as_data, other_data],
         )
         assert 2 == len(metadata2.identifiers)
@@ -546,7 +555,7 @@ class TestMetadata:
         assert other_data in metadata2.identifiers
 
         # Write this state of affairs to the database.
-        metadata2.apply(edition, pool.collection)
+        metadata2.apply(db.session, edition, pool.collection)
 
         # The new identifier has been marked as equivalent to the
         # Editions' primary identifier, but the primary identifier
@@ -561,13 +570,13 @@ class TestMetadata:
         edition_old, pool = db.edition(with_license_pool=True)
 
         metadata = Metadata(
-            data_source=DataSource.PRESENTATION_EDITION,
+            data_source_name=DataSource.PRESENTATION_EDITION,
             subtitle=NO_VALUE,
             series=NO_VALUE,
             series_position=NO_NUMBER,
         )
 
-        edition_new, changed = metadata.apply(edition_old, pool.collection)
+        edition_new, changed = metadata.apply(db.session, edition_old, pool.collection)
 
         assert changed == True
         assert edition_new.title == edition_old.title
@@ -585,9 +594,9 @@ class TestMetadata:
     def test_apply_creates_coverage_records(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
 
-        metadata = Metadata(data_source=DataSource.OVERDRIVE, title=db.fresh_str())
+        metadata = Metadata(data_source_name=DataSource.OVERDRIVE, title=db.fresh_str())
 
-        edition, changed = metadata.apply(edition, pool.collection)
+        edition, changed = metadata.apply(db.session, edition, pool.collection)
 
         # One success was recorded.
         records = (
@@ -599,9 +608,9 @@ class TestMetadata:
         assert CoverageRecord.SUCCESS == records.all()[0].status
 
         # Apply metadata from a different source.
-        metadata = Metadata(data_source=DataSource.GUTENBERG, title=db.fresh_str())
+        metadata = Metadata(data_source_name=DataSource.GUTENBERG, title=db.fresh_str())
 
-        edition, changed = metadata.apply(edition, pool.collection)
+        edition, changed = metadata.apply(db.session, edition, pool.collection)
 
         # Another success record was created.
         records = (
@@ -630,7 +639,9 @@ class TestMetadata:
             roles=[Contributor.Role.PRIMARY_AUTHOR],
         )
 
-        metadata = Metadata(DataSource.OVERDRIVE, contributors=[contributor])
+        metadata = Metadata(
+            data_source_name=DataSource.OVERDRIVE, contributors=[contributor]
+        )
         metadata.update_contributions(db.session, edition, replace=True)
 
         # The old contributor has been removed and replaced with the new
@@ -656,8 +667,8 @@ class TestMetadata:
         link = LinkData(rel=Hyperlink.OPEN_ACCESS_DOWNLOAD, href="example.epub")
         measurement = MeasurementData(quantity_measured=Measurement.RATING, value=5)
         circulation = CirculationData(
-            data_source=DataSource.GUTENBERG,
-            primary_identifier=identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifier,
             licenses_owned=0,
             licenses_available=0,
             licenses_reserved=0,
@@ -669,10 +680,10 @@ class TestMetadata:
         other_data = IdentifierData(type="abc", identifier="def")
 
         m = Metadata(
-            DataSource.GUTENBERG,
+            data_source_name=DataSource.GUTENBERG,
             subjects=[subject],
             contributors=[contributor],
-            primary_identifier=identifier,
+            primary_identifier_data=identifier,
             links=[link],
             measurements=[measurement],
             circulation=circulation,
@@ -685,8 +696,8 @@ class TestMetadata:
             series_position=1,
             publisher="Hello World Publishing House",
             imprint="Follywood",
-            issued=utc_now(),
-            published=utc_now(),
+            issued=utc_now().date(),
+            published=utc_now().date(),
             identifiers=[primary_as_data, other_data],
             data_source_last_updated=utc_now(),
         )
@@ -716,8 +727,8 @@ class TestMetadata:
 
         identifier = IdentifierData(type=Identifier.GUTENBERG_ID, identifier="1")
         metadata = Metadata(
-            data_source=DataSource.GUTENBERG,
-            primary_identifier=identifier,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifier,
             links=links,
         )
 
@@ -745,8 +756,8 @@ class TestMetadata:
         identifier = db.identifier()
         identifierdata = IdentifierData.from_identifier(identifier)
         metadata = Metadata(
-            DataSource.GUTENBERG,
-            primary_identifier=identifierdata,
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=identifierdata,
             medium=Edition.BOOK_MEDIUM,
         )
         metadata.permanent_work_id = pwid

@@ -1505,7 +1505,7 @@ class OverdriveAPI(
         edition, ignore = self._edition(licensepool)
 
         replace = ReplacementPolicy.from_license_source(self._db)
-        metadata.apply(edition, self.collection, replace=replace, db=self._db)
+        metadata.apply(self._db, edition, self.collection, replace=replace)
 
     def update_licensepool(
         self, book_id: str | dict[str, Any]

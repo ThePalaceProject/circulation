@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 import dateutil
 import pytest
-from dateutil.tz import tzutc
 from freezegun import freeze_time
 from requests import Response
 
@@ -116,10 +115,7 @@ class TestOPDS2WithODLImporter:
         assert "Feedbooks" == moby_dick_edition.data_source.name
 
         assert "Test Publisher" == moby_dick_edition.publisher
-        assert (
-            datetime.datetime(2015, 9, 29, tzinfo=tzutc())
-            == moby_dick_edition.published
-        )
+        assert datetime.date(2015, 9, 29) == moby_dick_edition.published
 
         assert "http://example.org/cover.jpg" == moby_dick_edition.cover_full_url
         assert (
