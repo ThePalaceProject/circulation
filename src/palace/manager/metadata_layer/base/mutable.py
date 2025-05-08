@@ -13,6 +13,11 @@ from palace.manager.util.log import LoggerMixin
 class BaseMutableData(BaseModel, LoggerMixin):
     model_config = ConfigDict(
         frozen=False,
+        # We set validate_assignment to True to ensure that the data is validated
+        # when we are building up the model incrementally. This has performance implications
+        # and means we do a lot of validation work on every assignment.
+        # If we see performance problems, we may want to revisit this and find a better
+        # way to make sure the model is consistent.
         validate_assignment=True,
     )
 
