@@ -2104,7 +2104,19 @@ class Filter(SearchBase):
         nested = Nested(path="licensepools", query=available)
         available_now = dict(filter=nested, weight=5)
 
-        function_scores = [quality_field, available_now]
+        # Works with higher lane priority scores are more featurable
+        lane_priority_level = SF(
+            "field_value_factor",
+            field="licensepools.lane_priority_level",
+            modifier="log1p",
+            missing=1,
+        )
+
+        function_scores = [
+            quality_field,
+            available_now,
+            lane_priority_level,
+        ]
 
         # Random chance can boost a lower-quality work, but not by
         # much -- this mainly ensures we don't get the exact same
