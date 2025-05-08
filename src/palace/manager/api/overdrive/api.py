@@ -83,9 +83,9 @@ from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -1495,17 +1495,17 @@ class OverdriveAPI(
         """
         info = self.metadata_lookup(licensepool.identifier)
 
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
             info, include_bibliographic=True, include_formats=True
         )
-        if not metadata:
+        if not bibliographic:
             # No work to be done.
             return
 
         edition, ignore = self._edition(licensepool)
 
         replace = ReplacementPolicy.from_license_source(self._db)
-        metadata.apply(self._db, edition, self.collection, replace=replace)
+        bibliographic.apply(self._db, edition, self.collection, replace=replace)
 
     def update_licensepool(
         self, book_id: str | dict[str, Any]

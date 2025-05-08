@@ -26,8 +26,8 @@ from psycopg2.extras import NumericRange
 
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.search.external_search import (
     ExternalSearchIndex,
     Filter,

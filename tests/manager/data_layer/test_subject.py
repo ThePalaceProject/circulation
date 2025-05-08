@@ -1,4 +1,4 @@
-from palace.manager.metadata_layer.subject import SubjectData
+from palace.manager.data_layer.subject import SubjectData
 
 
 class TestSubjectData:

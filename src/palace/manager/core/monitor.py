@@ -16,7 +16,7 @@ from tenacity import (
 )
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.service.container import container_instance

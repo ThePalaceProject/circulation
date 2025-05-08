@@ -56,19 +56,19 @@ from palace.manager.api.selftest import HasCollectionSelfTests, SelfTestResult
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -628,7 +628,7 @@ class Axis360API(
 
     def update_book(
         self,
-        bibliographic: Metadata,
+        bibliographic: BibliographicData,
     ) -> tuple[Edition, bool, LicensePool, bool]:
         """Create or update a single book based on bibliographic
         and availability data from the Axis 360 API.
@@ -658,7 +658,7 @@ class Axis360API(
 
     def _fetch_remote_availability(
         self, identifiers: list[Identifier]
-    ) -> Generator[tuple[Metadata, CirculationData]]:
+    ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Retrieve availability information for the specified identifiers.
 
         :yield: A stream of (Metadata, CirculationData) 2-tuples.
@@ -698,7 +698,7 @@ class Axis360API(
 
     def recent_activity(
         self, since: datetime.datetime
-    ) -> Generator[tuple[Metadata, CirculationData]]:
+    ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Find books that have had recent activity.
 
         :yield: A sequence of (Metadata, CirculationData) 2-tuples
@@ -710,7 +710,7 @@ class Axis360API(
     def availability_by_title_ids(
         self,
         title_ids: list[str],
-    ) -> Generator[tuple[Metadata, CirculationData]]:
+    ) -> Generator[tuple[BibliographicData, CirculationData]]:
         """Find title availability for a list of titles
         :yield: A sequence of (Metadata, CirculationData) 2-tuples
         """
@@ -824,7 +824,9 @@ class StatusResponseParser(Axis360Parser[tuple[int, str]]):
             return None
 
 
-class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], LoggerMixin):
+class BibliographicParser(
+    Axis360Parser[tuple[BibliographicData, CirculationData]], LoggerMixin
+):
     DELIVERY_DATA_FOR_AXIS_FORMAT = {
         Axis360API.BLIO: None,  # Legacy format, handled the same way as AxisNow
         "Acoustik": (None, DeliveryMechanism.FINDAWAY_DRM),  # Audiobooks
@@ -938,8 +940,8 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
 
     def extract_bibliographic(
         self, element: _Element, ns: dict[str, str] | None
-    ) -> Metadata:
-        """Turn bibliographic metadata into a Metadata and a CirculationData objects,
+    ) -> BibliographicData:
+        """Turn bibliographic metadata into a BibliographicData and a CirculationData objects,
         and return them as a tuple."""
 
         # TODO: These are consistently empty (some are clearly for
@@ -1119,7 +1121,7 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
                 ", ".join(seen_formats),
             )
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=DataSource.AXIS_360,
             title=title,
             language=language,
@@ -1141,12 +1143,12 @@ class BibliographicParser(Axis360Parser[tuple[Metadata, CirculationData]], Logge
             formats=formats,
         )
 
-        metadata.circulation = circulationdata
-        return metadata
+        bibliographic.circulation = circulationdata
+        return bibliographic
 
     def process_one(
         self, element: _Element, ns: dict[str, str] | None
-    ) -> tuple[Metadata, CirculationData]:
+    ) -> tuple[BibliographicData, CirculationData]:
         bibliographic = self.extract_bibliographic(element, ns)
 
         passed_availability = None

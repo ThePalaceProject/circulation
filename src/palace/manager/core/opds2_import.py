@@ -22,18 +22,18 @@ from palace.manager.core.opds_import import (
     OPDSImporterSettings,
     OPDSImportMonitor,
 )
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.opds2 import AcquisitionObject
 from palace.manager.opds.types.link import CompactCollection
@@ -612,20 +612,22 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         """
         return self.parse_identifier(publication.metadata.identifier)
 
-    def _extract_publication_metadata(
+    def _extract_publication_bibliographic_data(
         self,
         publication: opds2.BasePublication,
         data_source_name: str,
         feed_self_url: str,
-    ) -> Metadata:
-        """Extract a Metadata object from opds2.Publication.
+    ) -> BibliographicData:
+        """Extract a BibliographicData object from opds2.Publication.
 
         :param publication: Feed object
         :param publication: Publication object
         :param data_source_name: Data source's name
-        :return: Publication's metadata
+        :return: Publication's BibliographicData
         """
-        self.log.debug(f"Started extracting metadata from publication {publication}")
+        self.log.debug(
+            f"Started extracting bibliographic data from publication {publication}"
+        )
 
         title = str(publication.metadata.title)
         subtitle = (
@@ -733,7 +735,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         )
         circulation_data.formats.extend(formats)
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=data_source_name,
             title=title,
             subtitle=subtitle,
@@ -755,12 +757,12 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         )
 
         self.log.debug(
-            "Finished extracting metadata from publication {}: {}".format(
-                publication, metadata
+            "Finished extracting bibliographic data from publication {}: {}".format(
+                publication, bibliographic
             )
         )
 
-        return metadata
+        return bibliographic
 
     def _find_formats_in_non_open_access_acquisition_links(
         self,
@@ -969,8 +971,8 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
 
     def extract_feed_data(
         self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
-        """Turn an OPDS 2.0 feed into lists of Metadata and CirculationData objects.
+    ) -> tuple[dict[str, BibliographicData], dict[str, list[CoverageFailure]]]:
+        """Turn an OPDS 2.0 feed into lists of BibliographicData and CirculationData objects.
         :param feed: OPDS 2.0 feed
         :param feed_url: Feed URL used to resolve relative links
         """
@@ -979,7 +981,7 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
         except ValidationError:
             return {}, {}
 
-        publication_metadata_dictionary = {}
+        publication_bibliographic_dictionary = {}
         failures: dict[str, list[CoverageFailure]] = {}
 
         if parsed_feed.links:
@@ -1010,17 +1012,17 @@ class OPDS2Importer(BaseOPDSImporter[OPDS2ImporterSettings]):
             feed_self_url = parsed_feed.links.get(
                 rel=rwpm.LinkRelations.self, raising=True
             ).href
-            publication_metadata = self._extract_publication_metadata(
+            publication_bibliographic = self._extract_publication_bibliographic_data(
                 publication, self.data_source_name, feed_self_url
             )
 
             # Make sure we have a primary identifier before trying to use it
-            if publication_metadata.primary_identifier_data is not None:
-                publication_metadata_dictionary[
-                    publication_metadata.primary_identifier_data.identifier
-                ] = publication_metadata
+            if publication_bibliographic.primary_identifier_data is not None:
+                publication_bibliographic_dictionary[
+                    publication_bibliographic.primary_identifier_data.identifier
+                ] = publication_bibliographic
 
-        return publication_metadata_dictionary, failures
+        return publication_bibliographic_dictionary, failures
 
 
 class OPDS2ImportMonitor(OPDSImportMonitor):

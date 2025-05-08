@@ -16,6 +16,7 @@ from sqlalchemy.sql import and_, join, or_, select
 
 from palace.manager.api.metadata.base import MetadataService, MetadataServiceSettings
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.base import HasLibraryIntegrationConfiguration
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import (
@@ -23,7 +24,6 @@ from palace.manager.integration.settings import (
     ConfigurationFormItem,
     FormField,
 )
-from palace.manager.metadata_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition

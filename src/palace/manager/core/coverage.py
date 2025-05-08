@@ -6,10 +6,10 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.functions import func
 
 from palace.manager.core.monitor import TimestampData
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.collection import Collection, CollectionMissing
 from palace.manager.sqlalchemy.model.coverage import (
@@ -970,9 +970,9 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         )
         return edition
 
-    def set_metadata(self, identifier, metadata):
+    def set_bibliographic(self, identifier, bibliographic):
         """Finds or creates the Edition for an Identifier, updates it
-        with the given metadata.
+        with the given bibliographic data.
 
         :return: The Identifier (if successful) or an appropriate
             CoverageFailure (if not).
@@ -981,8 +981,8 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
         if isinstance(edition, CoverageFailure):
             return edition
 
-        if not metadata:
-            e = "Did not receive metadata from input source"
+        if not bibliographic:
+            e = "Did not receive bibliographic data from input source"
             return self.failure(identifier, e, transient=True)
 
         try:
@@ -991,9 +991,9 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
             # COVERAGE_COUNTS_FOR_EVERY_COLLECTION set to False. If
             # we did happen to get some circulation information while
             # we were at it, we might as well store it properly.
-            # The metadata layer will not use the collection when creating
-            # CoverageRecords for the metadata actions.
-            metadata.apply(
+            # The data layer will not use the collection when creating
+            # CoverageRecords for the bibliographic actions.
+            bibliographic.apply(
                 self._db,
                 edition,
                 collection=self.collection,
@@ -1001,7 +1001,10 @@ class IdentifierCoverageProvider(BaseCoverageProvider):
             )
         except Exception as e:
             self.log.warning(
-                "Error applying metadata to edition %d: %s", edition.id, e, exc_info=e
+                "Error applying bibliographic data to edition %d: %s",
+                edition.id,
+                e,
+                exc_info=e,
             )
             return self.failure(identifier, repr(e), transient=True)
 
@@ -1141,7 +1144,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
 
     def _default_replacement_policy(self, _db):
         """Unless told otherwise, assume that we are getting
-        this data from a reliable source of both metadata and circulation
+        this data from a reliable source of both bibliographic and circulation
         information.
         """
         return ReplacementPolicy.from_license_source(_db)
@@ -1245,7 +1248,7 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
         LicensePool.calculate_work(). If there is an existing
         presentation-ready work, calculate_work() will not be called;
         instead, the work will be slated for recalculation when its
-        metadata changes through Metadata.apply().
+        metadata changes through BibliographicData.apply().
 
         :param calculate_work_kwargs: Keyword arguments to pass into
             calculate_work() if and when it is called.
@@ -1292,10 +1295,10 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
             return self.failure(identifier, error, transient=True)
         return work
 
-    def set_metadata_and_circulation_data(
+    def set_bibliographic_and_circulation_data(
         self,
         identifier,
-        metadata,
+        bibliographicdata,
         circulationdata,
     ):
         """Makes sure that the given Identifier has a Work, Edition (in the
@@ -1306,12 +1309,12 @@ class CollectionCoverageProvider(IdentifierCoverageProvider):
             CoverageFailure (if not).
         """
 
-        if not metadata and not circulationdata:
-            e = "Received neither metadata nor circulation data from input source"
+        if not bibliographicdata and not circulationdata:
+            e = "Received neither bibliographic data nor circulation data from input source"
             return self.failure(identifier, e, transient=True)
 
-        if metadata:
-            result = self.set_metadata(identifier, metadata)
+        if bibliographicdata:
+            result = self.set_bibliographic(identifier, bibliographicdata)
             if isinstance(result, CoverageFailure):
                 return result
 

@@ -56,21 +56,22 @@ from palace.manager.core.monitor import (
     CollectionMonitor,
     IdentifierSweepMonitor,
     TimelineMonitor,
+    TimestampData,
 )
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.scripts.monitor import RunCollectionMonitorScript
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -279,9 +280,9 @@ class BibliothecaAPI(
         results = dict()
         for edition in editions:
             identifier = edition.primary_identifier
-            metadata = self.bibliographic_lookup(identifier, max_age)
-            if metadata:
-                results[identifier] = (edition, metadata)
+            bibliographic = self.bibliographic_lookup(identifier, max_age)
+            if bibliographic:
+                results[identifier] = (edition, bibliographic)
         return results
 
     def marc_request(self, start, end, offset=1, limit=50):
@@ -337,7 +338,9 @@ class BibliothecaAPI(
             identifier_strings.append(i)
 
         data = self.bibliographic_lookup_request(identifier_strings)
-        return [metadata for metadata in self.item_list_parser.process_all(data)]
+        return [
+            bibliographic for bibliographic in self.item_list_parser.process_all(data)
+        ]
 
     def _request_with_timeout(self, method, url, *args, **kwargs):
         """This will be overridden in MockBibliothecaAPI."""
@@ -647,7 +650,7 @@ class DummyBibliothecaAPIResponse:
         self.content = content
 
 
-class ItemListParser(XMLProcessor[Metadata]):
+class ItemListParser(XMLProcessor[BibliographicData]):
     DATE_FORMAT = "%Y-%m-%d"
     YEAR_FORMAT = "%Y"
 
@@ -710,9 +713,11 @@ class ItemListParser(XMLProcessor[Metadata]):
             )
         return genres
 
-    def process_one(self, tag: _Element, namespaces: dict[str, str] | None) -> Metadata:
-        """Turn an <item> tag into a Metadata and an encompassed CirculationData
-        objects, and return the Metadata."""
+    def process_one(
+        self, tag: _Element, namespaces: dict[str, str] | None
+    ) -> BibliographicData:
+        """Turn an <item> tag into a BibliographicData and an encompassed CirculationData
+        objects, and return the BibliographicData."""
 
         def value(bibliotheca_key):
             return self.text_of_optional_subtag(tag, bibliotheca_key)
@@ -798,7 +803,7 @@ class ItemListParser(XMLProcessor[Metadata]):
             tag, namespaces, primary_identifier
         )
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=DataSource.BIBLIOTHECA,
             title=title,
             subtitle=subtitle,
@@ -814,7 +819,7 @@ class ItemListParser(XMLProcessor[Metadata]):
             links=links,
             circulation=circulation,
         )
-        return metadata
+        return bibliographic
 
     def _make_circulation_data(self, tag, namespaces, primary_identifier):
         """Parse out a CirculationData containing current circulation
@@ -1227,9 +1232,9 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
 
         identifiers_not_mentioned_by_bibliotheca = set(identifiers)
         now = utc_now()
-        for metadata in self.api.bibliographic_lookup(bibliotheca_ids):
-            self._process_metadata(
-                metadata,
+        for bibliographic in self.api.bibliographic_lookup(bibliotheca_ids):
+            self._process_bibliographic(
+                bibliographic,
                 identifiers_by_bibliotheca_id,
                 identifiers_not_mentioned_by_bibliotheca,
             )
@@ -1253,25 +1258,25 @@ class BibliothecaCirculationSweep(IdentifierSweepMonitor):
                 self.log.warn("Removing %s from circulation.", identifier.identifier)
             pool.update_availability(0, 0, 0, 0, as_of=now)
 
-    def _process_metadata(
+    def _process_bibliographic(
         self,
-        metadata,
+        bibliographic,
         identifiers_by_bibliotheca_id,
         identifiers_not_mentioned_by_bibliotheca,
     ):
-        """Process a single Metadata object (containing CirculationData)
+        """Process a single BibliographicData object (containing CirculationData)
         retrieved from Bibliotheca.
         """
-        bibliotheca_id = metadata.primary_identifier_data.identifier
+        bibliotheca_id = bibliographic.primary_identifier_data.identifier
         identifier = identifiers_by_bibliotheca_id[bibliotheca_id]
         if identifier in identifiers_not_mentioned_by_bibliotheca:
             # Bibliotheca mentioned this identifier. Remove it from
             # this list so we know the title is still in the collection.
             identifiers_not_mentioned_by_bibliotheca.remove(identifier)
 
-        edition, _ = metadata.edition(self._db)
+        edition, _ = bibliographic.edition(self._db)
 
-        metadata.apply(
+        bibliographic.apply(
             self._db,
             edition,
             collection=self.collection,
@@ -1441,7 +1446,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             timestamp.finish = None
         return timestamp
 
-    def catch_up_from(self, start, cutoff, progress):
+    def catch_up_from(self, start, cutoff, progress: TimestampData):
         """Ask the Bibliotheca API about new purchases for every
         day between `start` and `cutoff`.
 
@@ -1450,7 +1455,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         :param cutoff: The last day to ask about.
         :type cutoff: datetime.datetime
         :param progress: Object used to record progress through the timeline.
-        :type progress: core.metadata_layer.TimestampData
         """
         num_records = 0
         # Ask the Bibliotheca API for one day of data at a time.  This
@@ -1483,7 +1487,7 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
             # set a checkpoint.
             progress.achievements = achievement_template % num_records
 
-    def _checkpoint(self, progress, start, finish, achievements):
+    def _checkpoint(self, progress: TimestampData, start, finish, achievements):
         """Set the monitor's progress so that if it crashes later on it will
         start from this point, reducing duplicate work.
 
@@ -1492,7 +1496,6 @@ class BibliothecaPurchaseMonitor(BibliothecaTimelineMonitor):
         useful to make this a general feature of TimelineMonitor.
 
         :param progress: Object used to record progress through the timeline.
-        :type progress: core.metadata_layer.TimestampData
 
         :param start: New value for `progress.start`
         :type start: datetime.datetime
@@ -1773,8 +1776,8 @@ class BibliothecaBibliographicCoverageProvider(BibliographicCoverageProvider):
             self.api = api_class(_db, collection)
 
     def process_item(self, identifier):
-        metadata = self.api.bibliographic_lookup(identifier)
-        if not metadata:
+        bibliographic = self.api.bibliographic_lookup(identifier)
+        if not bibliographic:
             return self.failure(identifier, "Bibliotheca bibliographic lookup failed.")
-        [metadata] = metadata
-        return self.set_metadata(identifier, metadata)
+        [bibliographic] = bibliographic
+        return self.set_bibliographic(identifier, bibliographic)

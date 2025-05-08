@@ -3,7 +3,7 @@ from functools import partial
 import pytest
 from pydantic import ValidationError
 
-from palace.manager.metadata_layer.link import LinkData
+from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 
 

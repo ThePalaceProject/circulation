@@ -32,10 +32,10 @@ from palace.manager.core.opds_import import (
     OPDSImportMonitor,
     OPDSXMLParser,
 )
+from palace.manager.data_layer.link import LinkData
 from palace.manager.integration.configuration.wayfless import (
     SAMLWAYFlessFulfillmentError,
 )
-from palace.manager.metadata_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -63,10 +63,10 @@ from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 
 class DoomedOPDSImporter(OPDSImporter):
-    def import_edition_from_metadata(self, metadata, *args):
-        if metadata.title == "Johnny Crow's Party":
+    def import_edition_from_bibliographic(self, bibliographic, *args):
+        if bibliographic.title == "Johnny Crow's Party":
             # This import succeeds.
-            return super().import_edition_from_metadata(metadata, *args)
+            return super().import_edition_from_bibliographic(bibliographic, *args)
         else:
             # Any other import fails.
             raise Exception("Utter failure!")
@@ -187,7 +187,7 @@ class TestOPDSImporter:
         # No updated dates!
         assert [] == last_update_dates
 
-    def test_extract_metadata(self, opds_importer_fixture: OPDSImporterFixture):
+    def test_extract_bibliographic(self, opds_importer_fixture: OPDSImporterFixture):
         data, db, session = (
             opds_importer_fixture,
             opds_importer_fixture.db,
@@ -196,12 +196,14 @@ class TestOPDSImporter:
 
         data_source_name = "Data source name " + db.fresh_str()
         importer = opds_importer_fixture.importer(data_source_name=data_source_name)
-        metadata, failures = importer.extract_feed_data(data.content_server_mini_feed)
+        bibliographic, failures = importer.extract_feed_data(
+            data.content_server_mini_feed
+        )
 
-        m1 = metadata["http://www.gutenberg.org/ebooks/10441"]
-        m2 = metadata["http://www.gutenberg.org/ebooks/10557"]
-        c1 = metadata["http://www.gutenberg.org/ebooks/10441"]
-        c2 = metadata["http://www.gutenberg.org/ebooks/10557"]
+        m1 = bibliographic["http://www.gutenberg.org/ebooks/10441"]
+        m2 = bibliographic["http://www.gutenberg.org/ebooks/10557"]
+        c1 = bibliographic["http://www.gutenberg.org/ebooks/10441"]
+        c2 = bibliographic["http://www.gutenberg.org/ebooks/10557"]
 
         assert "The Green Mouse" == m1.title
         assert "A Tale of Mousy Terror" == m1.subtitle
@@ -238,15 +240,15 @@ class TestOPDSImporter:
         )
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
-        metadata, failures = importer.extract_feed_data(
+        bibliographic, failures = importer.extract_feed_data(
             data.feed_with_id_and_dcterms_identifier
         )
 
         # First book doesn't have <dcterms:identifier>, so <id> must be used as identifier
-        book_1 = metadata.get("https://root.uri/1")
+        book_1 = bibliographic.get("https://root.uri/1")
         assert book_1 is not None
         # Second book have <id> and <dcterms:identifier>, so <dcters:identifier> must be used as id
-        book_2 = metadata.get("urn:isbn:9781468316438")
+        book_2 = bibliographic.get("urn:isbn:9781468316438")
         assert book_2 is not None
         # Verify if id was add in the end of identifier
         book_2_identifiers = book_2.identifiers
@@ -256,8 +258,8 @@ class TestOPDSImporter:
                 found = True
                 break
         assert found is True
-        # Third book has more than one dcterms:identifers, all of then must be present as metadata identifier
-        book_3 = metadata.get("urn:isbn:9781683351993")
+        # Third book has more than one dcterms:identifers, all of then must be present as bibliographic identifier
+        book_3 = bibliographic.get("urn:isbn:9781683351993")
         assert book_3 is not None
         # Verify if id was add in the end of identifier
         book_3_identifiers = book_3.identifiers
@@ -282,15 +284,15 @@ class TestOPDSImporter:
         collection_to_test = db.default_collection()
         importer = opds_importer_fixture.importer(collection=collection_to_test)
 
-        metadata, failures = importer.extract_feed_data(
+        bibliographic, failures = importer.extract_feed_data(
             data.feed_with_id_and_dcterms_identifier
         )
 
-        book_1 = metadata.get("https://root.uri/1")
+        book_1 = bibliographic.get("https://root.uri/1")
         assert book_1 != None
-        book_2 = metadata.get("https://root.uri/2")
+        book_2 = bibliographic.get("https://root.uri/2")
         assert book_2 != None
-        book_3 = metadata.get("https://root.uri/3")
+        book_3 = bibliographic.get("https://root.uri/3")
         assert book_3 != None
 
     def test_extract_link(self):
@@ -363,19 +365,21 @@ class TestOPDSImporter:
             data.content_server_mini_feed, data_source
         )
 
-        # The <entry> tag became a Metadata object.
-        metadata = values["urn:librarysimplified.org/terms/id/Gutenberg%20ID/10441"]
-        assert "The Green Mouse" == metadata["title"]
-        assert "A Tale of Mousy Terror" == metadata["subtitle"]
-        assert "en" == metadata["language"]
-        assert "Project Gutenberg" == metadata["publisher"]
+        # The <entry> tag became a bibliographic object.
+        bibliographic = values[
+            "urn:librarysimplified.org/terms/id/Gutenberg%20ID/10441"
+        ]
+        assert "The Green Mouse" == bibliographic["title"]
+        assert "A Tale of Mousy Terror" == bibliographic["subtitle"]
+        assert "en" == bibliographic["language"]
+        assert "Project Gutenberg" == bibliographic["publisher"]
 
-        circulation = metadata["circulation"]
+        circulation = bibliographic["circulation"]
         assert DataSource.GUTENBERG == circulation["data_source_name"]
 
         # The <simplified:message> tag did not become a
         # CoverageFailure -- that's handled by
-        # extract_metadata_from_elementtree.
+        # extract_bibliographic_from_elementtree.
         assert {} == failures
 
     def test_extract_data_from_feedparser_handles_exception(
@@ -388,7 +392,7 @@ class TestOPDSImporter:
         )
 
         class DoomedFeedparserOPDSImporter(OPDSImporter):
-            """An importer that can't extract metadata from feedparser."""
+            """An importer that can't extract bibliographic from feedparser."""
 
             @classmethod
             def _data_detail_for_feedparser_entry(cls, entry, data_source):
@@ -404,12 +408,12 @@ class TestOPDSImporter:
             data.content_server_mini_feed, data_source
         )
 
-        # No metadata was extracted.
+        # No bibliographic was extracted.
         assert 0 == len(list(values.keys()))
 
         # There are 2 failures, both from exceptions. The 202 message
         # found in content_server_mini.opds is not extracted
-        # here--it's extracted by extract_metadata_from_elementtree.
+        # here--it's extracted by extract_bibliographic_from_elementtree.
         assert 2 == len(failures)
 
         # The first error message became a CoverageFailure.
@@ -424,7 +428,7 @@ class TestOPDSImporter:
         assert True == failure.transient
         assert "Utter failure!" in failure.exception
 
-    def test_extract_metadata_from_elementtree(
+    def extract_bibliographic_from_elementtree(
         self, opds_importer_fixture: OPDSImporterFixture
     ):
         fixture, db, session = (
@@ -437,11 +441,11 @@ class TestOPDSImporter:
             session, DataSource.OA_CONTENT_SERVER, autocreate=True
         )
 
-        data, failures = OPDSImporter.extract_metadata_from_elementtree(
+        data, failures = OPDSImporter.extract_bibliographic_from_elementtree(
             fixture.content_server_feed, data_source
         )
 
-        # There are 76 entries in the feed, and we got metadata for
+        # There are 76 entries in the feed, and we got bibliographic for
         # every one of them.
         assert 76 == len(data)
         assert 0 == len(failures)
@@ -519,7 +523,7 @@ class TestOPDSImporter:
 
         assert datetime_utc(1910, 1, 1) == periodical["published"]
 
-    def test_extract_metadata_from_elementtree_treats_message_as_failure(
+    def test_extract_bibliographic_from_elementtree_treats_message_as_failure(
         self,
         opds_importer_fixture: OPDSImporterFixture,
         opds_files_fixture: OPDSFilesFixture,
@@ -535,11 +539,11 @@ class TestOPDSImporter:
         )
 
         feed = opds_files_fixture.sample_data("unrecognized_identifier.opds")
-        values, failures = OPDSImporter.extract_metadata_from_elementtree(
+        values, failures = OPDSImporter.extract_bibliographic_from_elementtree(
             feed, data_source
         )
 
-        # We have no Metadata objects and one CoverageFailure.
+        # We have no bibliographic objects and one CoverageFailure.
         assert {} == values
 
         # The CoverageFailure contains the information that was in a
@@ -682,7 +686,7 @@ class TestOPDSImporter:
         no_information = f(identifier.urn, None, None)
         assert "No detail provided." == no_information.exception
 
-    def test_extract_metadata_from_elementtree_handles_messages_that_become_identifiers(
+    def test_extract_bibliographic_from_elementtree_handles_messages_that_become_identifiers(
         self, opds_importer_fixture: OPDSImporterFixture
     ):
         data, db, session = (
@@ -707,12 +711,12 @@ class TestOPDSImporter:
             session, DataSource.OA_CONTENT_SERVER, autocreate=True
         )
 
-        values, failures = MockOPDSImporter.extract_metadata_from_elementtree(
+        values, failures = MockOPDSImporter.extract_bibliographic_from_elementtree(
             data.content_server_mini_feed, data_source
         )
         assert {not_a_failure.urn: not_a_failure} == failures
 
-    def test_extract_metadata_from_elementtree_handles_exception(
+    def test_extract_bibliographic_from_elementtree_handles_exception(
         self, opds_importer_fixture: OPDSImporterFixture
     ):
         data, db, session = (
@@ -722,7 +726,7 @@ class TestOPDSImporter:
         )
 
         class DoomedElementtreeOPDSImporter(OPDSImporter):
-            """An importer that can't extract metadata from elementttree."""
+            """An importer that can't extract bibliographic from elementttree."""
 
             @classmethod
             def _detail_for_elementtree_entry(cls, *args, **kwargs):
@@ -735,11 +739,11 @@ class TestOPDSImporter:
         (
             values,
             failures,
-        ) = DoomedElementtreeOPDSImporter.extract_metadata_from_elementtree(
+        ) = DoomedElementtreeOPDSImporter.extract_bibliographic_from_elementtree(
             data.content_server_mini_feed, data_source
         )
 
-        # No metadata was extracted.
+        # No bibliographic was extracted.
         assert 0 == len(list(values.keys()))
 
         # There are 3 CoverageFailures - every <entry> threw an
@@ -748,7 +752,7 @@ class TestOPDSImporter:
 
         # The entry with the 202 message became an appropriate
         # CoverageFailure because its data was not extracted through
-        # extract_metadata_from_elementtree.
+        # extract_bibliographic_from_elementtree.
         failure = failures["http://www.gutenberg.org/ebooks/1984"]
         assert isinstance(failure, CoverageFailure)
         assert True == failure.transient
@@ -756,7 +760,7 @@ class TestOPDSImporter:
         assert "Utter failure!" not in failure.exception
 
         # The other entries became generic CoverageFailures due to the failure
-        # of extract_metadata_from_elementtree.
+        # of extract_bibliographic_from_elementtree.
         failure = failures["urn:librarysimplified.org/terms/id/Gutenberg%20ID/10441"]
         assert isinstance(failure, CoverageFailure)
         assert True == failure.transient
@@ -975,7 +979,7 @@ class TestOPDSImporter:
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
         assert {} == failures
 
-        # We imported an Edition because there was metadata.
+        # We imported an Edition because there was bibliographic.
         [edition] = imported_editions
         new_data_source = edition.data_source
         assert "some new source" == new_data_source.name
@@ -989,7 +993,7 @@ class TestOPDSImporter:
         # From an Edition and a LicensePool we created a Work.
         assert 1 == len(works)
 
-    def test_import_updates_metadata(
+    def test_import_updates_bibliographic(
         self,
         opds_importer_fixture: OPDSImporterFixture,
         opds_files_fixture: OPDSFilesFixture,
@@ -1022,7 +1026,7 @@ class TestOPDSImporter:
             failures,
         ) = opds_importer_fixture.importer(collection=collection).import_from_feed(feed)
 
-        # The edition we created has had its metadata updated.
+        # The edition we created has had its bibliographic updated.
         [new_edition] = imported_editions
         assert new_edition == edition
         assert "The Green Mouse" == new_edition.title

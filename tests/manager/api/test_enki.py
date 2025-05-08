@@ -27,8 +27,8 @@ from palace.manager.api.enki import (
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.core.monitor import TimestampData
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -341,7 +341,7 @@ class TestEnkiAPI:
 
         assert 6 == len(activity)
         for i in activity:
-            assert isinstance(i, Metadata)
+            assert isinstance(i, BibliographicData)
 
         assert "Nervous System" == activity[0].title
         assert 1 == activity[0].circulation.licenses_owned
@@ -370,7 +370,7 @@ class TestEnkiAPI:
         metadata = enki_test_fixture.api.get_item("an id")
 
         # We get a Metadata with associated CirculationData.
-        assert isinstance(metadata, Metadata)
+        assert isinstance(metadata, BibliographicData)
         assert "Le But est le Seul Choix" == metadata.title
         assert 1 == metadata.circulation.licenses_owned
 
@@ -410,7 +410,7 @@ class TestEnkiAPI:
         results = list(enki_test_fixture.api.get_all_titles())
         assert 6 == len(results)
         metadata = results[0]
-        assert isinstance(metadata, Metadata)
+        assert isinstance(metadata, BibliographicData)
         assert "Nervous System" == metadata.title
         assert 1 == metadata.circulation.licenses_owned
 
@@ -700,7 +700,7 @@ class TestBibliographicParser:
         )
         parser = BibliographicParser()
         m = parser.extract_bibliographic(data["result"])
-        assert isinstance(m, Metadata)
+        assert isinstance(m, BibliographicData)
 
         assert "Le But est le Seul Choix" == m.title
         assert "fre" == m.language
@@ -772,7 +772,7 @@ class TestBibliographicParser:
         )
         parser = BibliographicParser()
         m = parser.extract_bibliographic(data["result"])
-        assert isinstance(m, Metadata)
+        assert isinstance(m, BibliographicData)
 
         # The book is available as a non-ACS PDF.
         circulation = m.circulation

@@ -9,8 +9,8 @@ import pytest
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.link import LinkData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -172,7 +172,7 @@ class TestOverdriveRepresentationExtractor:
         # Tests that can convert an overdrive json block into a Metadata object.
 
         raw, info = overdrive_api_fixture.sample_json("overdrive_metadata.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(info)
 
         assert "Agile Documentation" == metadata.title
         assert (
@@ -292,7 +292,7 @@ class TestOverdriveRepresentationExtractor:
         assert 2.7 == rating.value
 
         # Request only the bibliographic information.
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
+        metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(
             info, include_bibliographic=True, include_formats=False
         )
 
@@ -300,7 +300,7 @@ class TestOverdriveRepresentationExtractor:
         assert None == metadata.circulation
 
         # Request only the format information.
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(
+        metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(
             info, include_bibliographic=False, include_formats=True
         )
 
@@ -354,7 +354,7 @@ class TestOverdriveRepresentationExtractor:
         # Tests that we can convert an overdrive json block into a Metadata object
         # with series information.
         raw, info = overdrive_api_fixture.sample_json("overdrive_metadata_series.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(info)
 
         # Test normal case
         assert metadata.title == "A Bad God's Guide to Ruling the World"
@@ -373,8 +373,10 @@ class TestOverdriveRepresentationExtractor:
         # download, and the legacy format used by the mobile app
         # called 'Overdrive'.
         raw, info = overdrive_api_fixture.sample_json("audiobook.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        assert set(metadata.circulation.formats) == {
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
+        assert set(bibliographic.circulation.formats) == {
             FormatData(
                 content_type=DeliveryMechanism.STREAMING_AUDIO_CONTENT_TYPE,
                 drm_scheme=DeliveryMechanism.STREAMING_DRM,
@@ -386,14 +388,18 @@ class TestOverdriveRepresentationExtractor:
         }
 
         assert (
-            metadata.duration == 12 * 3600 + 20 * 60 + 38
+            bibliographic.duration == 12 * 3600 + 20 * 60 + 38
         )  # The last (and only) format's duration is used
 
     def test_book_info_with_sample(self, overdrive_api_fixture: OverdriveAPIFixture):
         # This book has one sample, available as a direct download
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        [manifest_sample] = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
+        [manifest_sample] = [
+            x for x in bibliographic.links if x.rel == Hyperlink.SAMPLE
+        ]
 
         # Here's the manifest.
         assert (
@@ -412,8 +418,10 @@ class TestOverdriveRepresentationExtractor:
         # get no sample links.
         info["formats"] = [info["formats"][1]]
         info["formats"][0]["samples"][0]["formatType"] = "overdrive-unknown"
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
-        samples = [x for x in metadata.links if x.rel == Hyperlink.SAMPLE]
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
+        samples = [x for x in bibliographic.links if x.rel == Hyperlink.SAMPLE]
 
         assert len(samples) == 0
 
@@ -421,22 +429,26 @@ class TestOverdriveRepresentationExtractor:
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
         raw, info = overdrive_api_fixture.sample_json("has_grade_levels.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
 
         grade_levels = sorted(
             x.identifier or "fail"
-            for x in metadata.subjects
+            for x in bibliographic.subjects
             if x.type == Subject.GRADE_LEVEL
         )
         assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
     def test_book_info_with_awards(self, overdrive_api_fixture: OverdriveAPIFixture):
         raw, info = overdrive_api_fixture.sample_json("has_awards.json")
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
 
         [awards] = [
             x
-            for x in metadata.measurements
+            for x in bibliographic.measurements
             if Measurement.AWARDS == x.quantity_measured
         ]
         assert 1 == awards.value

@@ -417,9 +417,9 @@ class CustomListEntry(Base):
 
         new_work = None
         if not metadata:
-            from palace.manager.metadata_layer.metadata import Metadata
+            from palace.manager.data_layer.bibliographic import BibliographicData
 
-            metadata = Metadata.from_edition(edition)
+            metadata = BibliographicData.from_edition(edition)
 
         # Try to guess based on metadata, if we can get a high-quality
         # guess.

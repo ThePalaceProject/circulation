@@ -37,6 +37,14 @@ from palace.manager.api.saml.credential import SAMLCredentialManager
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.core.monitor import CollectionMonitor, TimestampData
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.base import integration_settings_load
 from palace.manager.integration.configuration.connection import ConnectionSetting
 from palace.manager.integration.configuration.formats import FormatPrioritiesSettings
@@ -51,14 +59,6 @@ from palace.manager.integration.settings import (
     ConfigurationFormItemType,
     FormField,
 )
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -393,7 +393,7 @@ class BaseOPDSImporter(
     @abstractmethod
     def extract_feed_data(
         self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]: ...
+    ) -> tuple[dict[str, BibliographicData], dict[str, list[CoverageFailure]]]: ...
 
     @abstractmethod
     def extract_last_update_dates(
@@ -449,13 +449,15 @@ class BaseOPDSImporter(
             raise ValueError("Unable to load collection.")
         return collection
 
-    def import_edition_from_metadata(self, metadata: Metadata) -> Edition:
-        """For the passed-in Metadata object, see if can find or create an Edition
-        in the database. Also create a LicensePool if the Metadata has
+    def import_edition_from_bibliographic(
+        self, bibliographic: BibliographicData
+    ) -> Edition:
+        """For the passed-in BibliographicData object, see if can find or create an Edition
+        in the database. Also create a LicensePool if the BibliographicData has
         CirculationData in it.
         """
         # Locate or create an Edition for this book.
-        edition, is_new_edition = metadata.edition(self._db)
+        edition, is_new_edition = bibliographic.edition(self._db)
 
         policy = ReplacementPolicy(
             subjects=True,
@@ -466,7 +468,7 @@ class BaseOPDSImporter(
             formats=True,
             even_if_not_apparently_updated=True,
         )
-        metadata.apply(
+        bibliographic.apply(
             self._db,
             edition=edition,
             collection=self.collection,
@@ -523,8 +525,8 @@ class BaseOPDSImporter(
                 work = pool.work
 
         # If a presentation-ready Work already exists, there's no
-        # rush. We might have new metadata that will change the Work's
-        # presentation, but when we called Metadata.apply() the work
+        # rush. We might have new BibliographicData that will change the Work's
+        # presentation, but when we called BibliographicData.apply() the work
         # was set up to have its presentation recalculated in the
         # background, and that's good enough.
         return pool, work
@@ -543,10 +545,10 @@ class BaseOPDSImporter(
 
         # If parsing the overall feed throws an exception, we should address that before
         # moving on. Let the exception propagate.
-        metadata_objs, extracted_failures = self.extract_feed_data(feed, feed_url)
+        bibliographic_objs, extracted_failures = self.extract_feed_data(feed, feed_url)
         failures = defaultdict(list, extracted_failures)
         # make editions.  if have problem, make sure associated pool and work aren't created.
-        for key, metadata in metadata_objs.items():
+        for key, bibliographic in bibliographic_objs.items():
             # key is identifier.urn here
 
             # If there's a status message about this item, don't try to import it.
@@ -555,7 +557,7 @@ class BaseOPDSImporter(
 
             try:
                 # Create an edition. This will also create a pool if there's circulation data.
-                edition = self.import_edition_from_metadata(metadata)
+                edition = self.import_edition_from_bibliographic(bibliographic)
                 if edition:
                     imported_editions[key] = edition
             except Exception as e:
@@ -563,7 +565,7 @@ class BaseOPDSImporter(
                 # to this item.
                 self.log.error("Error importing an OPDS item", exc_info=e)
                 data_source = self.data_source
-                identifier = metadata.load_primary_identifier(self._db)
+                identifier = bibliographic.load_primary_identifier(self._db)
                 failure = CoverageFailure(
                     identifier,
                     traceback.format_exc(),
@@ -701,17 +703,19 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
     def extract_feed_data(
         self, feed: str | bytes, feed_url: str | None = None
-    ) -> tuple[dict[str, Metadata], dict[str, list[CoverageFailure]]]:
-        """Turn an OPDS feed into lists of Metadata and CirculationData objects,
+    ) -> tuple[dict[str, BibliographicData], dict[str, list[CoverageFailure]]]:
+        """Turn an OPDS feed into lists of BibliographicData and CirculationData objects,
         with associated messages and next_links.
         """
         data_source = self.data_source
-        fp_metadata, fp_failures = self.extract_data_from_feedparser(
+        fp_bibliographic, fp_failures = self.extract_data_from_feedparser(
             feed=feed, data_source=data_source
         )
         # gets: medium, measurements, links, contributors, etc.
-        xml_data_meta, xml_failures = self.extract_metadata_from_elementtree(
-            feed, data_source=data_source, feed_url=feed_url
+        xml_data_bibliographic, xml_failures = (
+            self.extract_bibliographic_from_elementtree(
+                feed, data_source=data_source, feed_url=feed_url
+            )
         )
 
         # translate the id in failures to identifier.urn
@@ -721,16 +725,16 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
             identified_failures[identifier.urn] = [failure]
 
         # Use one loop for both, since the id will be the same for both dictionaries.
-        metadata = {}
+        bibliographic = {}
         _id: str
-        for _id, m_data_dict in list(fp_metadata.items()):
-            xml_data_dict = xml_data_meta.get(_id, {})
+        for _id, bibliographic_data_dict in list(fp_bibliographic.items()):
+            xml_data_dict = xml_data_bibliographic.get(_id, {})
 
             external_identifier = None
             dcterms_ids = xml_data_dict.pop("dcterms_identifiers", [])
             if self.primary_identifier_source == IdentifierSource.DCTERMS_IDENTIFIER:
                 # If it should use <dcterms:identifier> as the primary identifier, it must use the
-                # first value from the dcterms identifier, that came from the metadata as an
+                # first value from the dcterms identifier, that came from the bibliographic data as an
                 # IdentifierData object and it must be validated as a foreign_id before be used
                 # as and external_identifier.
                 if len(dcterms_ids) > 0:
@@ -758,29 +762,33 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
             identifier_obj = IdentifierData.from_identifier(external_identifier)
 
-            # form the Metadata object
-            combined_meta = self.combine(m_data_dict, xml_data_dict)
-            if combined_meta.get("data_source_name") is None:
-                combined_meta["data_source_name"] = self.data_source_name
+            # form the BibliographicData object
+            combined_bibliographic = self.combine(
+                bibliographic_data_dict, xml_data_dict
+            )
+            if combined_bibliographic.get("data_source_name") is None:
+                combined_bibliographic["data_source_name"] = self.data_source_name
 
-            combined_meta["primary_identifier_data"] = identifier_obj
+            combined_bibliographic["primary_identifier_data"] = identifier_obj
 
-            metadata[external_identifier.urn] = Metadata(**combined_meta)
+            bibliographic[external_identifier.urn] = BibliographicData(
+                **combined_bibliographic
+            )
 
-            # Form the CirculationData that would correspond to this Metadata,
+            # Form the CirculationData that would correspond to this BibliographicData,
             # assuming there is a Collection to hold the LicensePool that
             # would result.
             c_data_dict = None
             if self.collection:
-                c_circulation_dict = m_data_dict.get("circulation")
+                c_circulation_dict = bibliographic_data_dict.get("circulation")
                 xml_circulation_dict = xml_data_dict.get("circulation", {})
                 c_data_dict = self.combine(c_circulation_dict, xml_circulation_dict)
 
             # Unless there's something useful in c_data_dict, we're
-            # not going to put anything under metadata.circulation,
+            # not going to put anything under bibliographic.circulation,
             # and any partial data that got added to
-            # metadata.circulation is going to be removed.
-            metadata[external_identifier.urn].circulation = None
+            # bibliographic.circulation is going to be removed.
+            bibliographic[external_identifier.urn].circulation = None
             if c_data_dict:
                 circ_links_dict = {}
                 # extract just the links to pass to CirculationData constructor
@@ -806,7 +814,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 self._add_format_data(circulation)
 
                 if circulation.formats:
-                    metadata[external_identifier.urn].circulation = circulation
+                    bibliographic[external_identifier.urn].circulation = circulation
                 else:
                     # If the CirculationData has no formats, it
                     # doesn't really offer any way to actually get the
@@ -817,7 +825,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                     # TODO: This will need to be revisited when we add
                     # ODL support.
                     pass
-        return metadata, identified_failures
+        return bibliographic, identified_failures
 
     @overload
     def handle_failure(
@@ -862,10 +870,10 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
 
     @classmethod
     def combine(
-        self, d1: dict[str, Any] | None, d2: dict[str, Any] | None
+        cls, d1: dict[str, Any] | None, d2: dict[str, Any] | None
     ) -> dict[str, Any]:
         """Combine two dictionaries that can be used as keyword arguments to
-        the Metadata constructor.
+        the BibliographicData constructor.
         """
         if not d1 and not d2:
             return dict()
@@ -888,7 +896,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 elif isinstance(v, dict):
                     # The values are dicts. Merge them by with
                     # a recursive combine() call.
-                    new_dict[k] = self.combine(new_dict[k], v)
+                    new_dict[k] = cls.combine(new_dict[k], v)
                 else:
                     # Overwrite d1's value with d2's value.
                     new_dict[k] = v
@@ -926,7 +934,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         return values, failures
 
     @classmethod
-    def extract_metadata_from_elementtree(
+    def extract_bibliographic_from_elementtree(
         cls,
         feed: bytes | str,
         data_source: DataSource,
@@ -938,7 +946,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         All the stuff that Feedparser can't handle so we have to use lxml.
 
         :return: a dictionary mapping IDs to dictionaries. The inner
-            dictionary can be used as keyword arguments to the Metadata
+            dictionary can be used as keyword arguments to the BibliographicData
             constructor.
         """
         values = {}
@@ -975,7 +983,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
                 urn = failure.obj.urn
             failures[urn] = failure
 
-        # Then turn Atom <entry> tags into Metadata objects.
+        # Then turn Atom <entry> tags into BibliographicData objects.
         for entry in parser._xpath(root, "/atom:feed/atom:entry"):
             identifier, detail, failure_entry = cls.detail_for_elementtree_entry(
                 parser, entry, data_source, feed_url
@@ -1006,9 +1014,9 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         cls, entry: dict[str, str], data_source: DataSource
     ) -> tuple[str | None, dict[str, Any] | None, CoverageFailure | None]:
         """Turn an entry dictionary created by feedparser into dictionaries of data
-        that can be used as keyword arguments to the Metadata and CirculationData constructors.
+        that can be used as keyword arguments to the BibliographicData and CirculationData constructors.
 
-        :return: A 3-tuple (identifier, kwargs for Metadata constructor, failure)
+        :return: A 3-tuple (identifier, kwargs for BibliographicData constructor, failure)
         """
         identifier = entry.get("id")
         if not identifier:
@@ -1031,7 +1039,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
     def _data_detail_for_feedparser_entry(
         cls, entry: dict[str, Any], metadata_data_source: DataSource
     ) -> dict[str, Any]:
-        """Helper method that extracts metadata and circulation data from a feedparser
+        """Helper method that extracts bibliographic data and circulation data from a feedparser
         entry. This method can be overridden in tests to check that callers handle things
         properly when it throws an exception.
         """
@@ -1041,10 +1049,10 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         subtitle = entry.get("schema_alternativeheadline", None)
 
         # Generally speaking, a data source will provide either
-        # metadata (e.g. the Simplified metadata wrangler) or both
-        # metadata and circulation data (e.g. a publisher's ODL feed).
+        # bibliographic data (e.g. the Simplified metadata wrangler) or both
+        # bibliographic and circulation data (e.g. a publisher's ODL feed).
         #
-        # However there is at least one case (the Simplified
+        # However, there is at least one case (the Simplified
         # open-access content server) where one server provides
         # circulation data from a _different_ data source
         # (e.g. Project Gutenberg).
@@ -1261,8 +1269,8 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         data_source: DataSource,
         feed_url: str | None = None,
     ) -> tuple[str | None, dict[str, Any] | None, CoverageFailure | None]:
-        """Turn an <atom:entry> tag into a dictionary of metadata that can be
-        used as keyword arguments to the Metadata contructor.
+        """Turn an <atom:entry> tag into a dictionary of bibliographic data that can be
+        used as keyword arguments to the BibliographicData contructor.
 
         :return: A 2-tuple (identifier, kwargs)
         """
@@ -1292,7 +1300,7 @@ class OPDSImporter(BaseOPDSImporter[OPDSImporterSettings]):
         entry_tag: Element,
         feed_url: str | None = None,
     ) -> dict[str, Any]:
-        """Helper method that extracts metadata and circulation data from an elementtree
+        """Helper method that extracts bibliographic and circulation data from an elementtree
         entry. This method can be overridden in tests to check that callers handle things
         properly when it throws an exception.
         """

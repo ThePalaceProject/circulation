@@ -4,7 +4,7 @@ from collections import defaultdict
 from sqlalchemy import or_
 from sqlalchemy.orm.session import Session
 
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.customlist import CustomListEntry
 from palace.manager.sqlalchemy.model.edition import Edition
