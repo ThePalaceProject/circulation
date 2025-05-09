@@ -42,6 +42,9 @@ def bibliographic_apply(
     collection_id: int | None,
     replace: ReplacementPolicy | None = None,
 ) -> None:
+    """
+    Call BibliographicData.apply() on the given edition.
+    """
 
     redis_client = task.services.redis().client()
     primary_identifier = bibliographic.primary_identifier_data
