@@ -1,11 +1,13 @@
 import os
 from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from celery import Celery
+from celery.app import autoretry
 from celery.worker import WorkController
 
 from palace.manager.celery.task import Task
@@ -70,12 +72,40 @@ def celery_includes() -> Sequence[str]:
 
 
 @dataclass
+class CeleryRetriesMock:
+    mock: MagicMock
+
+    @property
+    def retry_count(self) -> int:
+        """Return the number of times the task has been retried."""
+        call_args = self.mock.call_args
+        if call_args is None:
+            return 0
+
+        return call_args.kwargs.get("retries", 0)
+
+
+@dataclass
 class CeleryFixture:
     container: CeleryContainer
     app: Celery
     config: CeleryConfiguration
     worker: WorkController
     session_maker: MockSessionMaker
+
+    @contextmanager
+    def patch_retry_backoff(self) -> Generator[CeleryRetriesMock, None, None]:
+        """
+        Patch the retry backoff to always return 0, so we don't have to wait for
+        a retry to happen within our tests.
+
+        Returns a CeleryRetriesMock object that can be used to check how many times
+        the task has been retried.
+        """
+        with patch.object(
+            autoretry, "get_exponential_backoff_interval", return_value=0
+        ) as mock:
+            yield CeleryRetriesMock(mock=mock)
 
 
 @pytest.fixture()
