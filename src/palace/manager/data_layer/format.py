@@ -4,8 +4,8 @@ from pydantic import model_validator
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
-from palace.manager.metadata_layer.link import LinkData
+from palace.manager.data_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (

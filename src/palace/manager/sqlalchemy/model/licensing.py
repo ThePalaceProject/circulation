@@ -624,9 +624,9 @@ class LicensePool(Base):
 
         # Note: We can do a cleaner solution, if we refactor to not use metadata's
         # methods to update editions.  For now, we're choosing to go with the below approach.
-        from palace.manager.metadata_layer.identifier import IdentifierData
-        from palace.manager.metadata_layer.metadata import Metadata
-        from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+        from palace.manager.data_layer.bibliographic import BibliographicData
+        from palace.manager.data_layer.identifier import IdentifierData
+        from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 
         if len(all_editions) == 1:
             # There's only one edition associated with this
@@ -635,19 +635,19 @@ class LicensePool(Base):
             self.presentation_edition = all_editions[0]
         else:
             edition_identifier = IdentifierData.from_identifier(self.identifier)
-            metadata = Metadata(
+            bibliographic = BibliographicData(
                 data_source_name=DataSourceConstants.PRESENTATION_EDITION,
                 primary_identifier_data=edition_identifier,
             )
 
             for edition in all_editions:
                 if edition.data_source.name != DataSourceConstants.PRESENTATION_EDITION:
-                    metadata.update(Metadata.from_edition(edition))
+                    bibliographic.update(BibliographicData.from_edition(edition))
 
-            edition, is_new = metadata.edition(_db)
+            edition, is_new = bibliographic.edition(_db)
 
             policy = ReplacementPolicy.from_metadata_source()
-            self.presentation_edition, edition_core_changed = metadata.apply(
+            self.presentation_edition, edition_core_changed = bibliographic.apply(
                 _db, edition, collection=self.collection, replace=policy
             )
             changed = changed or edition_core_changed

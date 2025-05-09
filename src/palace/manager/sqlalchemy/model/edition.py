@@ -21,7 +21,7 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
 
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.sqlalchemy.constants import (

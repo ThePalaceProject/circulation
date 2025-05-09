@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import AwareDatetime, Field
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.util.datetime_helpers import utc_now
 
 

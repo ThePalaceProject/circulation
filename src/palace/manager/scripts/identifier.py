@@ -1,6 +1,6 @@
 import sys
 
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.scripts.input import IdentifierInputScript

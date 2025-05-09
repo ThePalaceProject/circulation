@@ -9,14 +9,14 @@ import isbnlib
 from palace.manager.api.overdrive.constants import OVERDRIVE_MAIN_ACCOUNT_ID
 from palace.manager.api.overdrive.util import _make_link_safe
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.subject import SubjectData
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -366,13 +366,13 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         return None
 
     @classmethod
-    def book_info_to_metadata(
+    def book_info_to_bibliographic(
         cls,
         book: dict[str, Any],
         include_bibliographic: bool = True,
         include_formats: bool = True,
-    ) -> Metadata | None:
-        """Turn Overdrive's JSON representation of a book into a Metadata
+    ) -> BibliographicData | None:
+        """Turn Overdrive's JSON representation of a book into a BibliographicData
         object.
 
         Note:  The json data passed into this method is from a different file/stream
@@ -653,7 +653,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                     )
                 )
 
-            metadata = Metadata(
+            bibliographic = BibliographicData(
                 data_source_name=DataSource.OVERDRIVE,
                 title=title,
                 subtitle=subtitle,
@@ -674,7 +674,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 duration=duration,
             )
         else:
-            metadata = Metadata(
+            bibliographic = BibliographicData(
                 data_source_name=DataSource.OVERDRIVE,
                 primary_identifier_data=primary_identifier,
             )
@@ -700,6 +700,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 formats=formats,
             )
 
-            metadata.circulation = circulationdata
+            bibliographic.circulation = circulationdata
 
-        return metadata
+        return bibliographic

@@ -5,7 +5,7 @@ import datetime
 from pydantic import NonNegativeInt
 from sqlalchemy.orm import Session
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.model.licensing import (
     License,

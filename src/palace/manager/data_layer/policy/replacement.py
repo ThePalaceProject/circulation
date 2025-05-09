@@ -4,8 +4,8 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 from typing_extensions import Self, TypedDict, Unpack
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 

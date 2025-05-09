@@ -16,11 +16,11 @@ from palace.manager.api.config import CannotLoadConfiguration, IntegrationExcept
 from palace.manager.api.metadata.base import MetadataService, MetadataServiceSettings
 from palace.manager.core.external_list import TitleFromExternalList
 from palace.manager.core.selftest import HasSelfTests, SelfTestResult
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import ConfigurationFormItem, FormField
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.metadata import Metadata
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -384,7 +384,7 @@ class NYTBestSellerListTitle(TitleFromExternalList):
         if display_author:
             contributors.append(ContributorData(display_name=display_author))
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=DataSource.NYT,
             title=title,
             medium=medium,
@@ -396,4 +396,6 @@ class NYTBestSellerListTitle(TitleFromExternalList):
             identifiers=other_isbns,
         )
 
-        super().__init__(metadata, first_appearance, most_recent_appearance, annotation)
+        super().__init__(
+            bibliographic, first_appearance, most_recent_appearance, annotation
+        )

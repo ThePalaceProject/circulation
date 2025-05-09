@@ -25,6 +25,9 @@ from palace.manager.core.entrypoint import (
 from palace.manager.core.exceptions import BasePalaceException
 from palace.manager.core.lcp.credential import LCPCredentialFactory, LCPHashedPassphrase
 from palace.manager.core.opds_import import OPDSXMLParser
+from palace.manager.data_layer.policy.presentation import (
+    PresentationCalculationPolicy,
+)
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.annotator.circulation import LibraryAnnotator
 from palace.manager.feed.annotator.loan_and_hold import LibraryLoanAndHoldAnnotator
@@ -32,9 +35,6 @@ from palace.manager.feed.opds import UnfulfillableWork
 from palace.manager.feed.types import FeedData, WorkEntry
 from palace.manager.feed.util import strftime
 from palace.manager.integration.goals import Goals
-from palace.manager.metadata_layer.policy.presentation import (
-    PresentationCalculationPolicy,
-)
 from palace.manager.service.container import container_instance
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.contributor import Contributor

@@ -1,5 +1,5 @@
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.link import LinkData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture

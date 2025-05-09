@@ -15,9 +15,9 @@ from palace.manager.api.odl.auth import OdlAuthenticatedRequest
 from palace.manager.api.odl.constants import FEEDBOOKS_AUDIO
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.opds2_import import OPDS2Importer, OPDS2ImportMonitor
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.license import LicenseData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.license import LicenseData
 from palace.manager.opds import opds2, rwpm
 from palace.manager.opds.lcp.status import LoanStatus
 from palace.manager.opds.odl import odl
@@ -84,7 +84,9 @@ class OPDS2WithODLImporter(OPDS2Importer):
 
         self.http_get = http_get or HTTP.get_with_timeout
 
-    def _process_unlimited_access_title(self, metadata: Metadata) -> Metadata:
+    def _process_unlimited_access_title(
+        self, metadata: BibliographicData
+    ) -> BibliographicData:
         if self.settings.auth_type != OPDS2AuthType.OAUTH:  # type: ignore[attr-defined]
             return metadata
 
@@ -126,21 +128,21 @@ class OPDS2WithODLImporter(OPDS2Importer):
         circulation.formats = new_formats
         return metadata
 
-    def _extract_publication_metadata(
+    def _extract_publication_bibliographic_data(
         self,
         publication: opds2.BasePublication,
         data_source_name: str,
         feed_self_url: str,
-    ) -> Metadata:
-        """Extract a Metadata object from webpub-manifest-parser's publication.
+    ) -> BibliographicData:
+        """Extract a BibliographicData object from webpub-manifest-parser's publication.
 
         :param publication: Feed object
         :param publication: Publication object
         :param data_source_name: Data source's name
 
-        :return: Publication's metadata
+        :return: Publication's bibliographic data
         """
-        metadata = super()._extract_publication_metadata(
+        metadata = super()._extract_publication_bibliographic_data(
             publication, data_source_name, feed_self_url
         )
 

@@ -17,9 +17,9 @@ from palace.manager.api.opds_for_distributors import (
     OPDSForDistributorsSettings,
 )
 from palace.manager.api.overdrive.api import OverdriveAPI
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp

@@ -35,20 +35,20 @@ from palace.manager.core.monitor import (
     TimelineMonitor,
     TimestampData,
 )
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.settings import (
     BaseSettings,
     ConfigurationFormItem,
     ConfigurationFormItemType,
     FormField,
 )
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -315,7 +315,7 @@ class EnkiAPI(
             if data:
                 yield data
 
-    def updated_titles(self, since: datetime.datetime) -> Generator[Metadata]:
+    def updated_titles(self, since: datetime.datetime) -> Generator[BibliographicData]:
         """Find recent changes to book metadata.
 
         NOTE: getUpdateTitles will return a maximum of 1000 items, so
@@ -323,7 +323,7 @@ class EnkiAPI(
         problem assuming the monitor is run regularly.
 
         :param since: A DateTime
-        :yield: A sequence of Metadata objects.
+        :yield: A sequence of BibliographicData objects.
         """
         minutes = self._minutes_since(since)
         url = self._url(self.list_endpoint)
@@ -338,13 +338,13 @@ class EnkiAPI(
         response = self.request(url, params=args)
         yield from BibliographicParser().process_all(response.content)
 
-    def get_item(self, enki_id: str | None) -> Metadata | None:
+    def get_item(self, enki_id: str | None) -> BibliographicData | None:
         """Retrieve bibliographic and availability information for
         a specific title.
 
         :param enki_id: An Enki record ID.
         :return: If the book is in the library's collection, a
-            Metadata object with attached CirculationData. Otherwise, None.
+            BibliographicData object with attached CirculationData. Otherwise, None.
         """
         url = self._url(self.item_endpoint)
         args = dict(
@@ -367,13 +367,15 @@ class EnkiAPI(
             return BibliographicParser().extract_bibliographic(book)
         return None
 
-    def get_all_titles(self, strt: int = 0, qty: int = 10) -> Generator[Metadata]:
+    def get_all_titles(
+        self, strt: int = 0, qty: int = 10
+    ) -> Generator[BibliographicData]:
         """Retrieve a single page of items from the Enki collection.
 
         Iterating over the entire collection is very expensive and
         should only happen during initial data population.
 
-        :yield: A sequence of Metadata objects, each with a
+        :yield: A sequence of BibliographicData objects, each with a
             CirculationData attached.
         """
         self.log.debug(
@@ -600,7 +602,7 @@ class EnkiAPI(
 
 class BibliographicParser(LoggerMixin):
     """Parses Enki's representation of book information into
-    Metadata and CirculationData objects.
+    BibliographicData and CirculationData objects.
     """
 
     # Convert the English names of languages given in the Enki API to
@@ -613,7 +615,7 @@ class BibliographicParser(LoggerMixin):
 
     def process_all(
         self, json_data: bytes | str | Mapping[str, Any]
-    ) -> Generator[Metadata]:
+    ) -> Generator[BibliographicData]:
         data = (
             json.loads(json_data) if isinstance(json_data, (bytes, str)) else json_data
         )
@@ -623,11 +625,11 @@ class BibliographicParser(LoggerMixin):
             if data:
                 yield data
 
-    def extract_bibliographic(self, element: Mapping[str, str]) -> Metadata:
-        """Extract Metadata and CirculationData from a dictionary
+    def extract_bibliographic(self, element: Mapping[str, str]) -> BibliographicData:
+        """Extract BibliographicData and CirculationData from a dictionary
         of information from Enki.
 
-        :return: A Metadata with attached CirculationData.
+        :return: A BibliographicData with attached CirculationData.
         """
         # TODO: it's not clear what these are or whether we'd find them
         # useful:
@@ -715,7 +717,7 @@ class BibliographicParser(LoggerMixin):
         language_code = element.get("language", "English")
         language = self.LANGUAGE_CODES.get(language_code, "eng")
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=DataSource.ENKI,
             title=element.get("title"),
             language=language,
@@ -732,8 +734,8 @@ class BibliographicParser(LoggerMixin):
             cast(Mapping[str, str], element.get("availability", {})),
             element.get("formattype", None),
         )
-        metadata.circulation = circulationdata
-        return metadata
+        bibliographic.circulation = circulationdata
+        return bibliographic
 
     def extract_circulation(
         self,
@@ -858,8 +860,8 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
     def incremental_import(self, since: datetime.datetime) -> tuple[int, int]:
         # Take care of new titles and titles with updated metadata.
         new_titles = 0
-        for metadata in self.api.updated_titles(since):
-            self.process_book(metadata)
+        for bibliographic in self.api.updated_titles(since):
+            self.process_book(bibliographic)
             new_titles += 1
         self._db.commit()
 
@@ -903,19 +905,21 @@ class EnkiImport(CollectionMonitor, TimelineMonitor):
                 # title, or we never made a Work for this
                 # LicensePool. Look up its bibliographic data -- that
                 # should let us make a Work.
-                metadata = self.api.get_item(license_pool.identifier.identifier)
-                if metadata:
-                    self.process_book(metadata)
+                bibliographic = self.api.get_item(license_pool.identifier.identifier)
+                if bibliographic:
+                    self.process_book(bibliographic)
             else:
                 circulation.apply(self._db, self.collection)
 
         return circulation_changes
 
-    def process_book(self, bibliographic: Metadata) -> tuple[Edition, LicensePool]:
+    def process_book(
+        self, bibliographic: BibliographicData
+    ) -> tuple[Edition, LicensePool]:
         """Make the local database reflect the state of the remote Enki
         collection for the given book.
 
-        :param bibliographic: A Metadata object with attached CirculationData
+        :param bibliographic: A BibliographicData object with attached CirculationData
 
         :return: A 2-tuple (LicensePool, Edition). If possible, a
             presentation-ready Work will be created for the LicensePool.
@@ -960,8 +964,8 @@ class EnkiCollectionReaper(IdentifierSweepMonitor):
 
     def process_item(self, identifier: Identifier) -> CirculationData | None:
         self.log.debug("Seeing if %s needs reaping", identifier.identifier)
-        metadata = self.api.get_item(identifier.identifier)
-        if metadata:
+        bibliographic = self.api.get_item(identifier.identifier)
+        if bibliographic:
             # This title is still in the collection. Do nothing.
             return None
 

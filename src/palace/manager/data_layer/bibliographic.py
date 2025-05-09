@@ -10,14 +10,15 @@ from sqlalchemy.orm import Query, Session
 from typing_extensions import Self
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
-from palace.manager.metadata_layer.base.mutable import BaseMutableData
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.measurement import MeasurementData
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
+from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.data_layer.base.mutable import BaseMutableData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.classification import Classification
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -54,8 +55,8 @@ _REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
 _REL_REQUIRES_FULL_RECALCULATION: list[str] = [LinkRelations.DESCRIPTION]
 
 
-class Metadata(BaseMutableData):
-    """A (potentially partial) set of metadata for a published work."""
+class BibliographicData(BaseMutableData):
+    """A (potentially partial) set of bibliographic data for a published work."""
 
     title: str | None = None
     subtitle: str | None = None
@@ -89,7 +90,7 @@ class Metadata(BaseMutableData):
     @field_validator("links")
     @classmethod
     def _filter_links(cls, links: list[LinkData]) -> list[LinkData]:
-        return [link for link in links if link.rel in Hyperlink.METADATA_ALLOWED]
+        return [link for link in links if link.rel in Hyperlink.BIBLIOGRAPHIC_ALLOWED]
 
     @model_validator(mode="after")
     def _primary_identifier_in_identifiers(self) -> Self:
@@ -102,8 +103,8 @@ class Metadata(BaseMutableData):
         return self
 
     @classmethod
-    def from_edition(cls, edition: Edition) -> Metadata:
-        """Create a basic Metadata object for the given Edition.
+    def from_edition(cls, edition: Edition) -> BibliographicData:
+        """Create a basic BibliographicData object for the given Edition.
 
         This doesn't contain everything but it contains enough
         information to run guess_license_pools.
@@ -137,7 +138,7 @@ class Metadata(BaseMutableData):
             link_data = LinkData(rel=link.rel, href=link.resource.url)
             links.append(link_data)
 
-        return Metadata(
+        return BibliographicData(
             data_source_name=edition.data_source.name,
             primary_identifier_data=primary_identifier,
             contributors=contributors,
@@ -160,20 +161,20 @@ class Metadata(BaseMutableData):
                 break
         return primary_author
 
-    def update(self, metadata: Metadata) -> None:
-        """Update this Metadata object with values from the given Metadata
-        object.
+    def update(self, bibliographic: BibliographicData) -> None:
+        """Update this BibliographicData object with values from the
+        given BibliographicData object.
 
         TODO: We might want to take a policy object as an argument.
         """
 
         fields = _BASIC_EDITION_FIELDS
         for field in fields:
-            new_value = getattr(metadata, field)
+            new_value = getattr(bibliographic, field)
             if new_value != None and new_value != "":
                 setattr(self, field, new_value)
 
-        new_value = getattr(metadata, "contributors")
+        new_value = getattr(bibliographic, "contributors")
         if new_value and isinstance(new_value, list):
             old_value = getattr(self, "contributors")
             # if we already have a better value, don't override it with a "missing info" placeholder value
@@ -181,7 +182,7 @@ class Metadata(BaseMutableData):
                 setattr(self, "contributors", new_value)
 
     def calculate_permanent_work_id(self, _db: Session) -> str | None:
-        """Try to calculate a permanent work ID from this metadata."""
+        """Try to calculate a permanent work ID from this BibliographicData."""
         primary_author = self.primary_author
 
         if not primary_author:
@@ -240,9 +241,11 @@ class Metadata(BaseMutableData):
                 )
 
     def edition(self, _db: Session) -> tuple[Edition, bool]:
-        """Find or create the edition described by this Metadata object."""
+        """Find or create the edition described by this BibliographicData object."""
         if not self.primary_identifier_data:
-            raise ValueError("Cannot find edition: metadata has no primary identifier.")
+            raise PalaceValueError(
+                "Cannot find edition: BibliographicData has no primary identifier."
+            )
 
         data_source = self.load_data_source(_db)
 
@@ -265,7 +268,7 @@ class Metadata(BaseMutableData):
         self.identifiers = new_identifiers
 
     def guess_license_pools(self, _db: Session) -> dict[LicensePool, float]:
-        """Try to find existing license pools for this Metadata."""
+        """Try to find existing license pools for this BibliographicData."""
         potentials: dict[LicensePool, float] = {}
         for contributor in self.contributors:
             if not any(
@@ -328,7 +331,7 @@ class Metadata(BaseMutableData):
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
     ) -> tuple[Edition, bool]:
-        """Apply this metadata to the given edition.
+        """Apply this BibliographicData to the given edition.
 
         :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes
             answers the question: were any edition core fields harmed in the making of this update?
@@ -349,7 +352,7 @@ class Metadata(BaseMutableData):
         if replace is None:
             replace = ReplacementPolicy()
 
-        # We were given an Edition, so either this metadata's
+        # We were given an Edition, so either this BibliographicData's
         # primary_identifier must be missing or it must match the
         # Edition's primary identifier.
         if self.primary_identifier_data:
@@ -358,8 +361,8 @@ class Metadata(BaseMutableData):
                 or self.primary_identifier_data.identifier
                 != edition.primary_identifier.identifier
             ):
-                raise ValueError(
-                    "Metadata's primary identifier (%s/%s) does not match edition's primary identifier (%r)"
+                raise PalaceValueError(
+                    "BibliographicData's primary identifier (%s/%s) does not match edition's primary identifier (%r)"
                     % (
                         self.primary_identifier_data.type,
                         self.primary_identifier_data.identifier,
@@ -376,24 +379,24 @@ class Metadata(BaseMutableData):
                 check_time = coverage_record.timestamp
                 last_time = self.data_source_last_updated
                 if check_time >= last_time:
-                    # The metadata has not changed since last time. Do nothing.
+                    # The BibliographicData has not changed since last time. Do nothing.
                     return edition, False
 
         identifier = edition.primary_identifier
 
-        self.log.info("APPLYING METADATA TO EDITION: %s", self.title)
+        self.log.info("APPLYING BIBLIOGRAPHIC DATA TO EDITION: %s", self.title)
         fields = _BASIC_EDITION_FIELDS + ["permanent_work_id"]
         for field in fields:
             old_edition_value = getattr(edition, field)
-            new_metadata_value = getattr(self, field)
+            new_bibliographic_value = getattr(self, field)
             if (
-                new_metadata_value != None
-                and new_metadata_value != ""
-                and (new_metadata_value != old_edition_value)
+                new_bibliographic_value != None
+                and new_bibliographic_value != ""
+                and (new_bibliographic_value != old_edition_value)
             ):
-                if new_metadata_value in [NO_VALUE, NO_NUMBER]:
-                    new_metadata_value = None
-                setattr(edition, field, new_metadata_value)
+                if new_bibliographic_value in [NO_VALUE, NO_NUMBER]:
+                    new_bibliographic_value = None
+                setattr(edition, field, new_bibliographic_value)
                 work_requires_new_presentation_edition = True
 
         # Create equivalencies between all given identifiers and
@@ -491,7 +494,7 @@ class Metadata(BaseMutableData):
         link_objects = {}
 
         for link in self.links:
-            if link.rel in Hyperlink.METADATA_ALLOWED:
+            if link.rel in Hyperlink.BIBLIOGRAPHIC_ALLOWED:
                 original_resource = None
                 if link.original:
                     rights_status = RightsStatus.lookup(db, link.original.rights_uri)
@@ -576,7 +579,7 @@ class Metadata(BaseMutableData):
                 edition.sort_author = primary_author.sort_name
                 work_requires_new_presentation_edition = True
 
-        # The Metadata object may include a CirculationData object which
+        # The BibliographicData object may include a CirculationData object which
         # contains information about availability such as open-access
         # links. Make sure
         # that that Collection has a LicensePool for this book and that
@@ -607,7 +610,7 @@ class Metadata(BaseMutableData):
 
         # Update the coverage record for this edition and data
         # source. We omit the collection information, even if we know
-        # which collection this is, because we only changed metadata.
+        # which collection this is, because we only changed bibliographic data.
         CoverageRecord.add_for(
             edition,
             data_source,

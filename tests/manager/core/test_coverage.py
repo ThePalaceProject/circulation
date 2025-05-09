@@ -15,17 +15,17 @@ from palace.manager.core.coverage import (
     WorkPresentationEditionCoverageProvider,
 )
 from palace.manager.core.opds_import import OPDSAPI
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
-from palace.manager.metadata_layer.subject import SubjectData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import CollectionMissing
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -117,8 +117,8 @@ class TestCoverageProviderProgress:
 
 
 @pytest.fixture
-def bibliographic_data() -> Metadata:
-    return Metadata(
+def bibliographic_data() -> BibliographicData:
+    return BibliographicData(
         data_source_name=DataSource.OVERDRIVE,
         publisher="Perfection Learning",
         language="eng",
@@ -149,7 +149,7 @@ def bibliographic_data() -> Metadata:
 
 
 @pytest.fixture
-def circulation_data(bibliographic_data: Metadata) -> CirculationData:
+def circulation_data(bibliographic_data: BibliographicData) -> CirculationData:
     # This data is used to test the insertion of circulation data
     # into a Collection.
     return CirculationData(
@@ -1051,11 +1051,13 @@ class TestIdentifierCoverageProvider:
         edition2 = provider.edition(identifier)
         assert edition == edition2
 
-    def test_set_metadata(self, bibliographic_data, db: DatabaseTransactionFixture):
-        """Test that set_metadata can create and populate an
+    def test_set_bibliographic(
+        self, bibliographic_data, db: DatabaseTransactionFixture
+    ):
+        """Test that set_bibliographic can create and populate an
         appropriate Edition.
 
-        set_metadata is tested in more detail in
+        set_bibliographic is tested in more detail in
         TestCollectionCoverageProvider.
         """
         # Here's a provider that is not associated with any particular
@@ -1065,33 +1067,35 @@ class TestIdentifierCoverageProvider:
 
         # It can't set circulation data, because it's not a
         # CollectionCoverageProvider.
-        assert not hasattr(provider, "set_metadata_and_circulationdata")
+        assert not hasattr(provider, "set_bibliographic_and_circulation_data")
 
-        # But it can set metadata.
+        # But it can set bibliographic data.
         identifier = db.identifier(
             identifier_type=Identifier.OVERDRIVE_ID,
             foreign_id=bibliographic_data.primary_identifier_data.identifier,
         )
         assert [] == identifier.primarily_identifies
-        result = provider.set_metadata(identifier, bibliographic_data)
+        result = provider.set_bibliographic(identifier, bibliographic_data)
 
         # Here's the proof.
         edition = provider.edition(identifier)
         assert "A Girl Named Disaster" == edition.title
 
-        # If no metadata is passed in, a CoverageFailure results.
-        result = provider.set_metadata(identifier, None)
+        # If no bibliographic data is passed in, a CoverageFailure results.
+        result = provider.set_bibliographic(identifier, None)
         assert isinstance(result, CoverageFailure)
-        assert "Did not receive metadata from input source" == result.exception
+        assert (
+            "Did not receive bibliographic data from input source" == result.exception
+        )
 
-        # If there's an exception setting the metadata, a
+        # If there's an exception setting the bibliographic data, a
         # CoverageFailure results. This call raises a ValueError
         # because the primary identifier & the edition's primary
         # identifier don't match.
         bibliographic_data.primary_identifier_data = IdentifierData(
             type=Identifier.OVERDRIVE_ID, identifier="abcd"
         )
-        result = provider.set_metadata(identifier, bibliographic_data)
+        result = provider.set_bibliographic(identifier, bibliographic_data)
         assert isinstance(result, CoverageFailure)
         assert "ValueError" in result.exception
 
@@ -1582,11 +1586,11 @@ class TestCollectionCoverageProvider:
         failure = provider._set_circulationdata(identifier, correct)
         assert isinstance(failure, CoverageFailure)
 
-    def test_set_metadata_incorporates_replacement_policy(
+    def test_set_bibliographic_incorporates_replacement_policy(
         self, db: DatabaseTransactionFixture
     ):
         # Make sure that if a ReplacementPolicy is passed in to
-        # set_metadata(), the policy's settings (and those of its
+        # set_bibliographic(), the policy's settings (and those of its
         # .presentation_calculation_policy) are respected.
         #
         # This is tested in this class rather than in
@@ -1621,7 +1625,7 @@ class TestCollectionCoverageProvider:
             db.default_collection(), replacement_policy=replacement_policy
         )
 
-        metadata = Metadata(
+        bibliographic = BibliographicData(
             data_source_name=provider.data_source.name,
             primary_identifier_data=IdentifierData.from_identifier(identifier),
         )
@@ -1635,8 +1639,8 @@ class TestCollectionCoverageProvider:
             primary_identifier_data=IdentifierData.from_identifier(db.identifier()),
             links=[link],
         )
-        failure = provider.set_metadata_and_circulation_data(
-            identifier, metadata, circulationdata
+        failure = provider.set_bibliographic_and_circulation_data(
+            identifier, bibliographic, circulationdata
         )
         assert (
             "Identifier did not match CirculationData's primary identifier."
@@ -1646,12 +1650,12 @@ class TestCollectionCoverageProvider:
         # Otherwise, the data is applied.
         circulationdata = CirculationData(
             data_source_name=provider.data_source.name,
-            primary_identifier_data=metadata.primary_identifier_data,
+            primary_identifier_data=bibliographic.primary_identifier_data,
             links=[link],
         )
 
-        provider.set_metadata_and_circulation_data(
-            identifier, metadata, circulationdata
+        provider.set_bibliographic_and_circulation_data(
+            identifier, bibliographic, circulationdata
         )
 
         # Our custom PresentationCalculationPolicy was used when
@@ -1779,14 +1783,14 @@ class TestCollectionCoverageProvider:
         work2 = provider.work(pool.identifier, pool)
         assert work2 == work
 
-    def test_set_metadata_and_circulationdata(
+    def test_set_bibliographic_and_circulation_data(
         self,
         bibliographic_data,
         circulation_data,
         db,
     ):
         """Verify that a CollectionCoverageProvider can set both
-        metadata (on an Edition) and circulation data (on a LicensePool).
+        bibliographic data (on an Edition) and circulation data (on a LicensePool).
         """
         # Here's an Overdrive Identifier to work with.
         identifier = db.identifier(
@@ -1807,19 +1811,19 @@ class TestCollectionCoverageProvider:
         provider = OverdriveProvider(collection)
 
         # We get a CoverageFailure if we don't pass in any data at all.
-        result = provider.set_metadata_and_circulation_data(identifier, None, None)
+        result = provider.set_bibliographic_and_circulation_data(identifier, None, None)
         assert isinstance(result, CoverageFailure)
         assert (
-            "Received neither metadata nor circulation data from input source"
+            "Received neither bibliographic data nor circulation data from input source"
             == result.exception
         )
 
         # We get a CoverageFailure if no work can be created. In this
-        # case, that happens because the metadata doesn't provide a
+        # case, that happens because the bibliographic data doesn't provide a
         # title.
         old_title = bibliographic_data.title
         bibliographic_data.title = None
-        result = provider.set_metadata_and_circulation_data(
+        result = provider.set_bibliographic_and_circulation_data(
             identifier, bibliographic_data, circulation_data
         )
         assert isinstance(result, CoverageFailure)
@@ -1827,12 +1831,12 @@ class TestCollectionCoverageProvider:
 
         # Restore the title and try again. This time it will work.
         bibliographic_data.title = old_title
-        result = provider.set_metadata_and_circulation_data(
+        result = provider.set_bibliographic_and_circulation_data(
             identifier, bibliographic_data, circulation_data
         )
         assert result == identifier
 
-        # An Edition was created to hold the metadata, a LicensePool
+        # An Edition was created to hold the bibliographic data, a LicensePool
         # was created to hold the circulation data, and a Work
         # was created to bind everything together.
         [edition] = identifier.primarily_identifies
@@ -1850,15 +1854,15 @@ class TestCollectionCoverageProvider:
         mechanism = lpdm.delivery_mechanism
         assert "application/epub+zip (DRM-free)" == mechanism.name
 
-        # If there's an exception setting the metadata, a
+        # If there's an exception setting the bibliographic data, a
         # CoverageFailure results. This call raises a ValueError
         # because the identifier we're trying to cover doesn't match
-        # the identifier found in the Metadata object.
+        # the identifier found in the BibliographicData object.
         old_identifier = bibliographic_data.primary_identifier_data
         bibliographic_data.primary_identifier_data = IdentifierData(
             type=Identifier.OVERDRIVE_ID, identifier="abcd"
         )
-        result = provider.set_metadata_and_circulation_data(
+        result = provider.set_bibliographic_and_circulation_data(
             identifier, bibliographic_data, circulation_data
         )
         assert isinstance(result, CoverageFailure)

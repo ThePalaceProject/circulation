@@ -4,11 +4,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from palace.manager.feed.annotator.base import Annotator
-from palace.manager.feed.types import Author, WorkEntry
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
+from palace.manager.feed.annotator.base import Annotator
+from palace.manager.feed.types import Author, WorkEntry
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition

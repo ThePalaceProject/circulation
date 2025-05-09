@@ -1,4 +1,4 @@
-from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from tests.fixtures.database import DatabaseTransactionFixture
 

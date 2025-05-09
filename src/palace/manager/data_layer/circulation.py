@@ -6,11 +6,11 @@ from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
-from palace.manager.metadata_layer.base.mutable import BaseMutableData
-from palace.manager.metadata_layer.format import FormatData
-from palace.manager.metadata_layer.license import LicenseData
-from palace.manager.metadata_layer.link import LinkData
-from palace.manager.metadata_layer.policy.replacement import ReplacementPolicy
+from palace.manager.data_layer.base.mutable import BaseMutableData
+from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.license import LicenseData
+from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -26,11 +26,11 @@ class CirculationData(BaseMutableData):
     """Information about actual copies of a book that can be delivered to
     patrons.
 
-    As distinct from Metadata, which is a container for information
+    As distinct from BibliographicData, which is a container for information
     about a book.
 
     Basically,
-        Metadata : Edition :: CirculationData : Licensepool
+        BibliographicData : Edition :: CirculationData : Licensepool
     """
 
     licenses_owned: int | None = None

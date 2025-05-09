@@ -22,9 +22,9 @@ from palace.manager.celery.tasks.axis import (
     timestamp,
 )
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.datetime_helpers import utc_now
@@ -96,7 +96,7 @@ def test_list_identifiers_for_import_integration_error(
     with patch.object(axis, "create_api") as mock_create_api:
         mock_create_api.return_value.recent_activity.side_effect = [
             IntegrationException("service", "uh oh"),
-            generate_test_metadata_and_circulation_objects(test_ids),
+            generate_test_bibliographic_and_circulation_objects(test_ids),
         ]
         result_test_ids = list_identifiers_for_import.delay(
             collection_id=collection.id
@@ -191,7 +191,7 @@ def test_list_identifiers_for_import(
     current_time = utc_now()
     test_ids = ["a", "b", "c"]
     mock_api.recent_activity.return_value = (
-        generate_test_metadata_and_circulation_objects(test_ids)
+        generate_test_bibliographic_and_circulation_objects(test_ids)
     )
     with patch.object(axis, "create_api") as mock_create_api:
         mock_create_api.return_value = mock_api
@@ -214,14 +214,16 @@ def test_list_identifiers_for_import(
     assert "Finished listing identifiers in collection" in caplog.text
 
 
-def generate_test_metadata_and_circulation_objects(test_ids: list[str]):
+def generate_test_bibliographic_and_circulation_objects(
+    test_ids: list[str],
+) -> list[tuple[BibliographicData, CirculationData]]:
     metadata_and_circulation_data_list = []
     for id in test_ids:
         data_source = "data_source"
         identifier = IdentifierData(type=Identifier.AXIS_360_ID, identifier=id)
         metadata_and_circulation_data_list.append(
             (
-                Metadata(
+                BibliographicData(
                     data_source_name=data_source, primary_identifier_data=identifier
                 ),
                 CirculationData(
@@ -248,7 +250,7 @@ def test_import_items(
         edition_2, lp_2 = db.edition(with_license_pool=True)
         title_ids = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
         mock_api.availability_by_title_ids.return_value = (
-            generate_test_metadata_and_circulation_objects(title_ids)
+            generate_test_bibliographic_and_circulation_objects(title_ids)
         )
         identifiers = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
         mock_api.update_book.side_effect = [
@@ -290,7 +292,7 @@ def test_import_identifiers_with_requeue(
         edition_2, lp_2 = db.edition(with_license_pool=True)
         title_ids = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
         mock_api.availability_by_title_ids.return_value = (
-            generate_test_metadata_and_circulation_objects(title_ids[0:1])
+            generate_test_bibliographic_and_circulation_objects(title_ids[0:1])
         )
         identifiers = [x.primary_identifier.identifier for x in [edition_1, edition_2]]
         mock_api.update_book.side_effect = [
