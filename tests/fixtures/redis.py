@@ -34,8 +34,14 @@ class RedisFixture:
         )
         self.client: Redis = self.services_fixture.services.redis.client()
 
+    def keys(self) -> list[str]:
+        """
+        Get all keys in the Redis database created by the test.
+        """
+        return self.client.keys(f"{self.key_prefix}*")
+
     def close(self):
-        keys = self.client.keys(f"{self.key_prefix}*")
+        keys = self.keys()
         if keys:
             self.client.delete(*keys)
 

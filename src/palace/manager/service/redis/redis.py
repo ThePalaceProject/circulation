@@ -93,9 +93,13 @@ class RedisPrefixCheckMixin(ABC):
             RedisCommandArgs("WATCH"),
             RedisCommandArgs("SRANDMEMBER"),
             RedisCommandArgs("SREM"),
+            RedisCommandArgs("SMEMBERS"),
+            RedisCommandArgs("SSCAN"),
+            RedisCommandArgs("SISMEMBER"),
             RedisCommandArgs("DEL", args_end=None),
             RedisCommandArgs("MGET", args_end=None),
             RedisCommandArgs("EXISTS", args_end=None),
+            RedisCommandArgs("SDIFF", args_end=None),
             RedisCommandArgs("EXPIRETIME"),
             RedisVariableCommandArgs("EVALSHA", key_index=1),
         ]

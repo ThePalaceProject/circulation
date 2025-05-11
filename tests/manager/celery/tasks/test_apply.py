@@ -3,11 +3,34 @@ import pytest
 from palace.manager.celery.tasks import apply
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.redis.models.lock import LockNotAcquired
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
+
+
+class TestCirculationApply:
+    def test_apply(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        collection = db.collection()
+        pool = db.licensepool(None, collection=collection)
+        title = db.fresh_str()
+        data = CirculationData(
+            data_source_name=pool.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(pool.identifier),
+            licenses_owned=100,
+        )
+        assert pool.licenses_owned != 100
+
+        # Calling apply sets licenses_owned
+        apply.circulation_apply.delay(data, collection.id).wait()
+        assert pool.licenses_owned == 100
 
 
 class TestBibliographicApply:

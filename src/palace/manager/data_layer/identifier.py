@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import Field
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
@@ -11,7 +12,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 class IdentifierData(BaseFrozenData):
     type: str
     identifier: str
-    weight: float = 1
+    weight: float = Field(1.0, repr=False)
 
     def load(self, _db: Session) -> tuple[Identifier, bool]:
         return Identifier.for_foreign_id(_db, self.type, self.identifier)
@@ -27,7 +28,14 @@ class IdentifierData(BaseFrozenData):
         return cls(type=identifier.type, identifier=identifier.identifier)
 
     def redis_key(self) -> str:
+        """
+        String representation of the IdentifierData object suitable for use
+        as a redis key.
+        """
         return (
             f"{self.__class__.__name__}{RedisKeyGenerator.SEPERATOR}"
             f"{self.type}{RedisKeyGenerator.SEPERATOR}{self.identifier}"
         )
+
+    def __str__(self) -> str:
+        return f"{self.type}/{self.identifier}"
