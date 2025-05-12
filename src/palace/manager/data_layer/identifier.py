@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing_extensions import Self
 
 from palace.manager.data_layer.base.frozen import BaseFrozenData
+from palace.manager.service.redis.key import RedisKeyGenerator
 from palace.manager.sqlalchemy.model.identifier import Identifier
 
 
@@ -24,3 +25,9 @@ class IdentifierData(BaseFrozenData):
             return identifier
 
         return cls(type=identifier.type, identifier=identifier.identifier)
+
+    def redis_key(self) -> str:
+        return (
+            f"{self.__class__.__name__}{RedisKeyGenerator.SEPERATOR}"
+            f"{self.type}{RedisKeyGenerator.SEPERATOR}{self.identifier}"
+        )

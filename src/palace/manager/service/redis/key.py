@@ -26,13 +26,16 @@ class SupportsRedisKey(Protocol):
     def redis_key(self) -> str: ...
 
 
+RedisKeyType = SupportsRedisKey | str | int
+
+
 class RedisKeyGenerator:
     SEPERATOR = "::"
 
     def __init__(self, prefix: str):
         self.prefix = prefix
 
-    def _stringify(self, key: SupportsRedisKey | str | int) -> str:
+    def _stringify(self, key: RedisKeyType) -> str:
         if isinstance(key, SupportsRedisKey):
             return key.redis_key()
         elif isinstance(key, str):
@@ -44,6 +47,6 @@ class RedisKeyGenerator:
                 f"Unsupported key type: {key} ({key.__class__.__name__})"
             )
 
-    def __call__(self, *args: SupportsRedisKey | str | int) -> str:
+    def __call__(self, *args: RedisKeyType) -> str:
         key_strings = [self._stringify(k) for k in args]
         return self.SEPERATOR.join([self.prefix, *key_strings])

@@ -16,7 +16,23 @@ else:
 
 class QueueNames(StrEnum):
     high = auto()
+    """
+    The `high` queue is for tasks that are short running and should be processed quickly because
+    they are time-sensitive (usually a user is waiting for them).
+    """
+
     default = auto()
+    """
+    The `default` queue is for tasks that are longer running and can be processed when the worker
+    has capacity.
+    """
+
+    apply = auto()
+    """
+    The `apply` queue is a special queue for BibliographicData and CirculationData updates. These
+    are individually small tasks, and they aren't time-sensitive, but they are extremely high volume,
+    so we want to keep them separate from the other tasks.
+    """
 
 
 def beat_schedule() -> dict[str, Any]:
@@ -210,9 +226,7 @@ def task_queue_config() -> dict[str, Any]:
     """
     Configure the task queues for our Celery app.
 
-    Currently we have two queues, `high` and `default`. The `high` queue is for tasks that are
-    short running and should be processed quickly because they are time-sensitive. The `default`
-    queue is for tasks that are longer running and can be processed when the worker has capacity.
+    See `QueueNames` for more information on what each queue is used for.
 
     TODO: Evaluate if we need more granular queues for different types of tasks, as we roll this
       out to production and start to monitor worker utilization.

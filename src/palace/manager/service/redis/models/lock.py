@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.service.redis.key import RedisKeyType
 from palace.manager.service.redis.redis import Redis
 
 
@@ -139,7 +140,7 @@ class RedisLock(BaseRedisLock):
     def __init__(
         self,
         redis_client: Redis,
-        lock_name: str | Sequence[str],
+        lock_name: str | Sequence[RedisKeyType],
         random_value: str | None = None,
         lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
