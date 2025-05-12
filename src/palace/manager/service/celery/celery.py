@@ -226,8 +226,6 @@ def task_queue_config() -> dict[str, Any]:
     """
     Configure the task queues for our Celery app.
 
-    Currently we have three queues, `high`, `default` and `apply`.
-
     See `QueueNames` for more information on what each queue is used for.
 
     TODO: Evaluate if we need more granular queues for different types of tasks, as we roll this
