@@ -43,12 +43,12 @@ from palace.manager.api.circulation_exceptions import (
     RemoteInitiatedServerError,
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest, SpineItem
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.base import integration_settings_update
-from palace.manager.metadata_layer.circulation import CirculationData
-from palace.manager.metadata_layer.contributor import ContributorData
-from palace.manager.metadata_layer.identifier import IdentifierData
-from palace.manager.metadata_layer.metadata import Metadata
-from palace.manager.metadata_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -95,7 +95,7 @@ class Axis360Fixture:
     # Sample bibliographic and availability data you can use in a test
     # without having to parse it from an XML file.
 
-    BIBLIOGRAPHIC_DATA = Metadata(
+    BIBLIOGRAPHIC_DATA = BibliographicData(
         data_source_name=DataSource.AXIS_360,
         publisher="Random House Inc",
         language="eng",
@@ -566,7 +566,7 @@ class TestAxis360API:
                     # The first identifer in the list is still
                     # available.
                     identifier_data = IdentifierData.from_identifier(identifier)
-                    metadata = Metadata(
+                    bibliographic = BibliographicData(
                         data_source_name=DataSource.AXIS_360,
                         primary_identifier_data=identifier_data,
                     )
@@ -577,8 +577,8 @@ class TestAxis360API:
                         licenses_available=6,
                     )
 
-                    metadata.circulation = availability
-                    yield metadata, availability
+                    bibliographic.circulation = availability
+                    yield bibliographic, availability
 
                     # The rest have been 'forgotten' by Axis 360.
                     break
@@ -730,9 +730,8 @@ class TestAxis360API:
         assert "Findaway content ID" == kwargs["params"]["fndcontentid"]
 
     def test_update_book(self, axis360: Axis360Fixture):
-        # Verify that the update_book method takes a Metadata and a
-        # CirculationData object, and creates appropriate data model
-        # objects.
+        # Verify that the update_book method takes a BibliographicData object,
+        # and creates appropriate data model objects.
 
         api = MockAxis360API(axis360.db.session, axis360.collection)
         e, e_new, lp, lp_new = api.update_book(

@@ -16,7 +16,7 @@ from palace.manager.api.circulation import (
 )
 from palace.manager.celery.task import Task
 from palace.manager.core.exceptions import IntegrationException
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -354,7 +354,7 @@ def process_book(
     task: Task,
     _db: Session,
     api: Axis360API,
-    metadata: Metadata,
+    metadata: BibliographicData,
 ) -> None:
     edition, new_edition, license_pool, new_license_pool = api.update_book(
         bibliographic=metadata,

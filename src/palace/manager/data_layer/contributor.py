@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import ColumnElement
 from typing_extensions import Self
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.contributor import Contribution, Contributor
 from palace.manager.util.log import LoggerMixin
 from palace.manager.util.personal_names import display_name_to_sort_name

@@ -35,11 +35,11 @@ from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE, genres
 from palace.manager.core.classifier.simplified import SimplifiedGenreClassifier
 from palace.manager.core.problem_details import INVALID_INPUT
-from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.feed.annotator.admin import AdminAnnotator
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
+from palace.manager.feed.acquisition import OPDSAcquisitionFeed
+from palace.manager.feed.annotator.admin import AdminAnnotator
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
     Genre,

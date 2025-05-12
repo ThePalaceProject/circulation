@@ -20,7 +20,7 @@ from palace.manager.api.odl.importer import (
 )
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.coverage import CoverageFailure
-from palace.manager.metadata_layer.license import LicenseData
+from palace.manager.data_layer.license import LicenseData
 from palace.manager.opds.odl.info import LicenseStatus
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,

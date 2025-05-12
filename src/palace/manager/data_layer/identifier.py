@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 from typing_extensions import Self
 
-from palace.manager.metadata_layer.base.frozen import BaseFrozenData
+from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.sqlalchemy.model.identifier import Identifier
 
 

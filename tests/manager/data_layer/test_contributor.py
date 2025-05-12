@@ -1,6 +1,6 @@
 from functools import partial
 
-from palace.manager.metadata_layer.contributor import ContributorData
+from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from tests.fixtures.database import DatabaseTransactionFixture
 

@@ -248,7 +248,7 @@ class LinkRelations:
         BORROW,
         GENERIC_OPDS_ACQUISITION,
     ]
-    METADATA_ALLOWED = [
+    BIBLIOGRAPHIC_ALLOWED = [
         CANONICAL,
         IMAGE,
         THUMBNAIL_IMAGE,

@@ -37,7 +37,7 @@ from sqlalchemy.sql.functions import func
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument

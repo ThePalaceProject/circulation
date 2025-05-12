@@ -32,7 +32,7 @@ from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.sql.expression import and_, or_
 
 from palace.manager.core.exceptions import BasePalaceException
-from palace.manager.metadata_layer.policy.presentation import (
+from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.sqlalchemy.constants import IdentifierConstants, LinkRelations
@@ -808,7 +808,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     ) -> tuple[Hyperlink, bool]:
         """Create a link between this Identifier and a (potentially new)
         Resource.
-        TODO: There's some code in metadata_layer for automatically
+        TODO: There's some code in data_layer for automatically
         fetching, mirroring and scaling Representations as links are
         created. It might be good to move that code into here.
         """

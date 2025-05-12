@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from palace.manager.core.exceptions import PalaceValueError
-from palace.manager.metadata_layer.identifier import IdentifierData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.log import LoggerMixin

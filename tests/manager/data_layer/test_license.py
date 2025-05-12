@@ -1,4 +1,4 @@
-from palace.manager.metadata_layer.license import LicenseData
+from palace.manager.data_layer.license import LicenseData
 from palace.manager.opds.odl.info import LicenseStatus
 
 

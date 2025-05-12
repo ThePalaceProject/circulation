@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from palace.manager.api.overdrive.constants import OVERDRIVE_LABEL
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.core.coverage import BibliographicCoverageProvider, CoverageFailure
-from palace.manager.metadata_layer.metadata import Metadata
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -63,17 +63,21 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
         if error:
             return self.failure(identifier, error, transient=False)  # type: ignore[no-any-return]
 
-        metadata = OverdriveRepresentationExtractor.book_info_to_metadata(info)
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
 
-        if not metadata:
-            e = "Could not extract metadata from Overdrive data: %r" % info
+        if not bibliographic:
+            e = "Could not extract bibliographic data from Overdrive data: %r" % info
             return self.failure(identifier, e)  # type: ignore[no-any-return]
 
-        self.metadata_pre_hook(metadata)
-        return self.set_metadata(identifier, metadata)  # type: ignore[no-any-return]
+        self.bibliographic_data_pre_hook(bibliographic)
+        return self.set_bibliographic(identifier, bibliographic)  # type: ignore[no-any-return]
 
-    def metadata_pre_hook(self, metadata: Metadata) -> Metadata:
-        """A hook method that allows subclasses to modify a Metadata
+    def bibliographic_data_pre_hook(
+        self, bibliographic: BibliographicData
+    ) -> BibliographicData:
+        """A hook method that allows subclasses to modify a BibliographicData
         object derived from Overdrive before it's applied.
         """
-        return metadata
+        return bibliographic
