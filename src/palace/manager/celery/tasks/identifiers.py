@@ -23,13 +23,13 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 @shared_task(queue=QueueNames.default, bind=True)
 def existing_available_identifiers(task: Task, collection_id: int) -> IdentifierSet:
     """
-    Get all the identifiers that have licensepools that are available (licenses_available > 0
-    and licenses_owned > 0) in the given collection and return them as a Redis IdentifierSet.
+    Retrieves all identifiers that have available licensepools (where licenses_available > 0 and
+    licenses_owned > 0) in the specified collection and returns them as a Redis IdentifierSet.
 
-    This is meant to be used as part of a chord that marks any identifiers not found in
-    a distributors feed as unavailable.
+    This function is designed to be used as part of a chord operation that identifies and
+    marks identifiers not present in a distributor's feed as unavailable.
 
-    See: mark_unavailable_chord.
+    See: `create_mark_unavailable_chord`.
     """
 
     redis_client = task.services.redis().client()
@@ -67,15 +67,15 @@ def mark_identifiers_unavailable(
     collection_id: int,
 ) -> None:
     """
-    Takes two IdentiferSets as the first positional arg. The first set is the existing identifiers
-    that are available in the collection. The second set is the active identifiers that we have
-    received from the distributor.
+    Takes a list of two RedisSetKwargs elements as the first positional argument. These are used to create
+    two IdentifierSets: the first represents existing identifiers that are available in the collection, and
+    the second contains active identifiers received from the distributor.
 
-    Any identifiers that are in the first set but not in the second set will be marked as
-    unavailable in the collection. This is done by sending a circulation_apply task that sets
-    the licenses_available and licenses_owned to 0 for the identifier in the collection.
+    Any identifiers present in the existing set but not in the active set will be marked as unavailable in
+    the collection. This is done by sending a circulation_apply task that sets both licenses_available and
+    licenses_owned to 0 for each identifier in the collection.
 
-    This is meant to be used as the body of a chord that is created by `mark_unavailable_chord`.
+    This function is designed to be used as the body of a chord created by `create_mark_unavailable_chord`.
     """
     redis_client = task.services.redis().client()
 
@@ -132,22 +132,24 @@ def create_mark_unavailable_chord(
     collection_id: int, active_identifiers_sig: Signature
 ) -> Signature:
     """
-    Create a celery chord that marks any identifiers that were not found in the distributors feed
-    as unavailable for a given collection.
+    Creates a Celery chord that identifies and marks as unavailable any identifiers that were not
+    found in the distributor's feed for a given collection.
 
-    This chord will first call the `existing_available_identifiers` task to get all the
-    identifiers that are available in the collection.
+    This chord performs the following sequence:
+    1. Calls the existing_available_identifiers task to retrieve all identifiers that are currently
+       available in the collection.
+    2. In parallel, executes the provided active_identifiers_sig task to retrieve identifiers that
+       are present in the distributor's feed.
+    3. Finally, calls the mark_identifiers_unavailable task with the results of the previous tasks
+       to mark any identifiers that exist in the collection but are not in the distributor's feed
+       as unavailable.
 
-    In parallel, it will call the `active_identifiers_sig` task to get the identifiers
-    that are available in the distributors feed.
+    :param collection_id: The ID of the collection to process.
+    :param active_identifiers_sig: A Celery signature that returns an IdentifierSet containing
+        identifiers available in the distributor's feed. This task may requeue itself if needed, as
+        long as it ultimately returns an IdentifierSet.
 
-    Finally, it will call the `mark_identifiers_unavailable` task to mark any identifiers
-    that are in the existing identifiers set but not in the active identifiers set as
-    unavailable in the collection.
-
-    The `active_identifiers_sig` task must be a celery signature that returns an IdentifierSet
-    that contains the identifiers that are available in the distributors feed. The task can
-    requeue itself if necessary, as long as it returns an IdentifierSet once it is done.
+    :return: A Celery chord signature that can be executed to perform the unavailable identifier marking process.
     """
     existing_identifiers_sig = existing_available_identifiers.s(collection_id)
     mark_identifiers_sig = mark_identifiers_unavailable.s(collection_id=collection_id)
