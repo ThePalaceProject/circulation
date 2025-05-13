@@ -20,7 +20,6 @@ class TestCirculationApply:
     ) -> None:
         collection = db.collection()
         pool = db.licensepool(None, collection=collection)
-        title = db.fresh_str()
         data = CirculationData(
             data_source_name=pool.data_source.name,
             primary_identifier_data=IdentifierData.from_identifier(pool.identifier),

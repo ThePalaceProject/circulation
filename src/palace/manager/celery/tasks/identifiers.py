@@ -7,7 +7,7 @@ from sqlalchemy.orm import raiseload
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.apply import circulation_apply
-from palace.manager.celery.utils import load_from_id
+from palace.manager.celery.utils import load_from_id, validate_not_none
 from palace.manager.core.exceptions import PalaceValueError
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.service.celery.celery import QueueNames
@@ -98,12 +98,10 @@ def mark_identifiers_unavailable(
 
         with task.session() as session:
             collection = load_from_id(session, Collection, collection_id)
-            data_source = collection.data_source
-            if data_source is None:
-                raise PalaceValueError(
-                    "Collection has no data source! (data_source is None)."
-                )
-            data_source_name = data_source.name
+            data_source_name = validate_not_none(
+                collection.data_source,
+                message="Collection has no data source! (data_source is None).",
+            ).name
             collection_name = collection.name
 
         create_circulation_data = partial(

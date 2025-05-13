@@ -1,10 +1,10 @@
 from datetime import timedelta
+from functools import partial
 
 from celery import shared_task
 
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import load_from_id
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.celery.utils import load_from_id, validate_not_none
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
@@ -29,18 +29,10 @@ def _lock(client: Redis, identifier: IdentifierData) -> RedisLock:
     )
 
 
-def _validate_primary_identifier(
-    primary_identifier: IdentifierData | None,
-) -> IdentifierData:
-    """
-    Validate that the primary identifier is not None.
-    """
-    if primary_identifier is None:
-        raise PalaceValueError(
-            "No primary identifier provided! (primary_identifier_data is None)."
-        )
-
-    return primary_identifier
+_validate_primary_identifier = partial(
+    validate_not_none,
+    message="No primary identifier provided! (primary_identifier_data is None).",
+)
 
 
 @shared_task(
