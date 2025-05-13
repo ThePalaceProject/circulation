@@ -206,9 +206,26 @@ class Library(Base, HasSessionCache):
 
     @property
     def active_collections(self) -> Sequence[Collection]:
-        """Active collections for this library."""
+        """Active collections for this library, cached for the life of the session."""
         _db = Session.object_session(self)
-        return _db.scalars(self._active_collections_query()).all()
+        cache: dict[int, list[Collection]] = _db.info.setdefault(
+            "_active_collections_cache", {}
+        )
+        if self.id not in cache:
+            cache[self.id] = list(_db.scalars(self._active_collections_query()).all())
+        return cache[self.id]
+
+    @staticmethod
+    def clear_active_collections_cache(target: Base) -> None:
+        """Helper to clear the cache for `active_collections`.
+
+        It is called by SQLAlchemy event listeners.
+        """
+        session = Session.object_session(target)
+        if session is not None:
+            cache = session.info.get("_active_collections_cache")
+            if cache is not None:
+                cache.clear()
 
     # Cache of the libraries loaded settings object
     _settings: LibrarySettings | None
