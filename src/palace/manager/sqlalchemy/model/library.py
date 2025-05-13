@@ -216,7 +216,7 @@ class Library(Base, HasSessionCache):
         return cache[self.id]
 
     @staticmethod
-    def clear_active_collections_cache(target: Base) -> None:
+    def _clear_active_collections_cache(target: Base) -> None:
         """Helper to clear the cache for `active_collections`.
 
         It is called by SQLAlchemy event listeners.

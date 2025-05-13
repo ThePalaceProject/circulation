@@ -6,12 +6,6 @@ This is necessary to make sure that all of our models are properly reflected in
 the database when we run migrations or create a new database.
 """
 
-from typing import Any
-
-from sqlalchemy import event
-from sqlalchemy.engine import Connection
-from sqlalchemy.orm import Mapper
-
 import palace.manager.sqlalchemy.model.admin
 import palace.manager.sqlalchemy.model.announcements
 import palace.manager.sqlalchemy.model.base
@@ -39,29 +33,3 @@ import palace.manager.sqlalchemy.model.resource
 import palace.manager.sqlalchemy.model.saml
 import palace.manager.sqlalchemy.model.time_tracking
 import palace.manager.sqlalchemy.model.work
-from palace.manager.sqlalchemy.model.base import Base
-from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.integration import (
-    IntegrationConfiguration,
-    IntegrationLibraryConfiguration,
-)
-from palace.manager.sqlalchemy.model.library import Library
-
-# The following supports an optimization in `Library.active_collections`.
-
-
-@event.listens_for(IntegrationConfiguration, "after_insert")
-@event.listens_for(IntegrationConfiguration, "after_delete")
-@event.listens_for(IntegrationConfiguration, "after_update")
-@event.listens_for(IntegrationLibraryConfiguration, "after_insert")
-@event.listens_for(IntegrationLibraryConfiguration, "after_delete")
-@event.listens_for(IntegrationLibraryConfiguration, "after_update")
-def handle_collection_change(_: Mapper, _connection: Connection, target: Base) -> None:
-    Library.clear_active_collections_cache(target)
-
-
-@event.listens_for(IntegrationConfiguration.library_configurations, "append")
-@event.listens_for(IntegrationConfiguration.library_configurations, "remove")
-@event.listens_for(IntegrationConfiguration.library_configurations, "set")
-def handle_collection_library_relationship_change(target: Base, *_args: Any) -> None:
-    Library.clear_active_collections_cache(target)

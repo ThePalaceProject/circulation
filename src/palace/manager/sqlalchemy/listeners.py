@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import datetime
 from threading import RLock
+from typing import Any
 
 from sqlalchemy import event, text
-from sqlalchemy.orm import Session
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapper, Session
 
 from palace.manager.core.config import Configuration
 from palace.manager.core.query.coverage import EquivalencyCoverageQueries
 from palace.manager.sqlalchemy.before_flush_decorator import Listener, ListenerState
+from palace.manager.sqlalchemy.model import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.identifier import (
     Equivalency,
@@ -216,3 +222,21 @@ def receive_modified(target, value, oldvalue, initiator):
     # Remove this information whenever the Lane configuration
     # changes. This will force it to be recalculated.
     Library._has_root_lane_cache.clear()
+
+
+# The following supports an optimization in `Library.active_collections`.
+@event.listens_for(IntegrationConfiguration, "after_insert")
+@event.listens_for(IntegrationConfiguration, "after_delete")
+@event.listens_for(IntegrationConfiguration, "after_update")
+@event.listens_for(IntegrationLibraryConfiguration, "after_insert")
+@event.listens_for(IntegrationLibraryConfiguration, "after_delete")
+@event.listens_for(IntegrationLibraryConfiguration, "after_update")
+def handle_collection_change(_: Mapper, _connection: Connection, target: Base) -> None:
+    Library._clear_active_collections_cache(target)
+
+
+@event.listens_for(IntegrationConfiguration.library_configurations, "append")
+@event.listens_for(IntegrationConfiguration.library_configurations, "remove")
+@event.listens_for(IntegrationConfiguration.library_configurations, "set")
+def handle_collection_library_relationship_change(target: Base, *_args: Any) -> None:
+    Library._clear_active_collections_cache(target)
