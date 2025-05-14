@@ -1,11 +1,12 @@
 from datetime import timedelta
+from functools import partial
 
 from celery import shared_task
 
 from palace.manager.celery.task import Task
-from palace.manager.celery.utils import load_from_id
-from palace.manager.core.exceptions import PalaceValueError
+from palace.manager.celery.utils import load_from_id, validate_not_none
 from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.service.celery.celery import QueueNames
@@ -28,6 +29,42 @@ def _lock(client: Redis, identifier: IdentifierData) -> RedisLock:
     )
 
 
+_validate_primary_identifier = partial(
+    validate_not_none,
+    message="No primary identifier provided! (primary_identifier_data is None).",
+)
+
+
+@shared_task(
+    queue=QueueNames.apply,
+    bind=True,
+    autoretry_for=(LockNotAcquired,),
+    max_retries=4,
+    retry_backoff=30,
+)
+def circulation_apply(
+    task: Task,
+    circulation: CirculationData,
+    collection_id: int,
+    replace: ReplacementPolicy | None = None,
+) -> None:
+    """
+    Call CirculationData.apply() on the given collection.
+    """
+
+    redis_client = task.services.redis().client()
+    primary_identifier = _validate_primary_identifier(
+        circulation.primary_identifier_data
+    )
+
+    with (
+        _lock(redis_client, primary_identifier).lock(),
+        task.transaction() as session,
+    ):
+        collection = load_from_id(session, Collection, collection_id)
+        circulation.apply(session, collection, replace)
+
+
 @shared_task(
     queue=QueueNames.apply,
     bind=True,
@@ -47,12 +84,9 @@ def bibliographic_apply(
     """
 
     redis_client = task.services.redis().client()
-    primary_identifier = bibliographic.primary_identifier_data
-
-    if primary_identifier is None:
-        raise PalaceValueError(
-            "No primary identifier provided! (primary_identifier_data is None)."
-        )
+    primary_identifier = _validate_primary_identifier(
+        bibliographic.primary_identifier_data
+    )
 
     with (
         _lock(redis_client, primary_identifier).lock(),
