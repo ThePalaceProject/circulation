@@ -42,7 +42,10 @@ from palace.manager.data_layer.policy.presentation import (
 )
 from palace.manager.search.service import SearchDocument
 from palace.manager.service.redis.redis import Redis
-from palace.manager.sqlalchemy.constants import DataSourceConstants
+from palace.manager.sqlalchemy.constants import (
+    DataSourceConstants,
+    IntegrationConfigurationConstants,
+)
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -1711,7 +1714,8 @@ class Work(Base, LoggerMixin):
                     license_pool.collection.integration_configuration.settings_dict
                 )
                 lc["lane_priority_level"] = collection_settings.get(
-                    "lane_priority_level", 5
+                    "lane_priority_level",
+                    IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,
                 )
                 result["licensepools"].append(lc)
 

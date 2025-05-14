@@ -48,6 +48,7 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -518,7 +519,7 @@ class BaseCirculationApiSettings(BaseSettings):
     )
 
     lane_priority_level: int = FormField(
-        default=Collection.DEFAULT_LANE_PRIORITY_LEVEL,
+        default=IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,
         form=ConfigurationFormItem(
             label=_("Lane Priority Level"),
             type=ConfigurationFormItemType.SELECT,

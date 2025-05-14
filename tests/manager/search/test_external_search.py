@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from opensearch_dsl import Q
-from opensearch_dsl.function import RandomScore, ScriptScore
+from opensearch_dsl.function import FieldValueFactor, RandomScore, ScriptScore
 from opensearch_dsl.query import (
     Bool,
     DisMax,
@@ -1956,6 +1956,15 @@ class TestFeaturedFacets:
         assert 42 == random.seed
         assert 1.1 == random.weight
 
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "licensepools.lane_priority_level",
+                "missing": 5,
+                "modifier": "log1p",
+            }
+        } == lane_priority_level.to_dict()
+
         # If the FeaturedFacets is set to be deterministic (which only happens
         # in tests), the RandomScore is removed.
         f.random_seed = filter.DETERMINISTIC
@@ -1966,6 +1975,15 @@ class TestFeaturedFacets:
         ] = f.scoring_functions(filter)
         assert featurable_2 == featurable
         assert available_now_2 == available_now
+
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "licensepools.lane_priority_level",
+                "missing": 5,
+                "modifier": "log1p",
+            }
+        } == lane_priority_level.to_dict()
 
         # If custom lists are in play, it can also be featured on one
         # of its custom lists.
@@ -1996,6 +2014,15 @@ class TestFeaturedFacets:
             == featured_filter.to_dict()
         )
         assert 11 == featured_on_list["weight"]
+
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "licensepools.lane_priority_level",
+                "missing": 5,
+                "modifier": "log1p",
+            }
+        } == lane_priority_level.to_dict()
 
     @pytest.mark.parametrize(
         "default_or_no_quality", [Filter.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY, None]

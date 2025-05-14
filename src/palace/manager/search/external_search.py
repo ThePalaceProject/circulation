@@ -42,6 +42,7 @@ from palace.manager.search.service import (
     SearchService,
     SearchServiceFailedDocument,
 )
+from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination
@@ -2108,8 +2109,9 @@ class Filter(SearchBase):
         lane_priority_level = SF(
             "field_value_factor",
             field="licensepools.lane_priority_level",
-            modifier="log1p",
-            missing=1,
+            factor=10,
+            modifier="none",
+            missing=IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,  # assume default if missing
         )
 
         function_scores = [

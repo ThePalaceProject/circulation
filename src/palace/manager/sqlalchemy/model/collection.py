@@ -412,7 +412,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
     AUDIOBOOK_LOAN_DURATION_KEY = "audio_loan_duration"
     EBOOK_LOAN_DURATION_KEY = "ebook_loan_duration"
     STANDARD_DEFAULT_LOAN_PERIOD = 21
-    DEFAULT_LANE_PRIORITY_LEVEL = 5
 
     def default_loan_period(
         self, library: Library | None, medium: str = EditionConstants.BOOK_MEDIUM
