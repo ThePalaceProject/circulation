@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -10,7 +9,6 @@ from unittest.mock import MagicMock, Mock, create_autospec
 import boto3
 import pytest
 from opensearchpy import OpenSearch
-from typing_extensions import Self
 
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision_directory import SearchRevisionDirectory
@@ -57,14 +55,10 @@ class MockServicesFixture:
 
         self.celery_app = MagicMock()
 
-    def copy(self) -> Self:
-        kwargs = {}
-        for key, item in self.__dict__.items():
+    def reset_mocks(self) -> None:
+        for item in self.__dict__.values():
             if isinstance(item, Mock):
-                kwargs[key] = copy.copy(item)
-            else:
-                kwargs[key] = item
-        return self.__class__(**kwargs)
+                item.reset_mock(return_value=True, side_effect=True)
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +81,8 @@ def mock_services_fixture(
     """
     Fixture to provide mock services for testing.
     """
-    yield mock_services_session_fixture.copy()
+    yield mock_services_session_fixture
+    mock_services_session_fixture.reset_mocks()
 
 
 @dataclass

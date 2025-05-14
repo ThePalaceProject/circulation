@@ -303,6 +303,10 @@ class DatabaseFixture:
         self.engine = self.engine_factory()
         self.connection = self.engine.connect()
 
+        self.default_library = None
+        self.default_collection = None
+        self.default_inactive_collection = None
+
     def engine_factory(self) -> Engine:
         return SessionManager.engine(self.database_name.url, application_name="test")
 
@@ -317,6 +321,107 @@ class DatabaseFixture:
         with Session(self.connection) as session:
             # Initialize the database with default data
             SessionManager.initialize_data(session)
+
+            # Initialize the database with a default library and collection
+            self.default_library = self.library(session, "default", "default")
+            self.default_collection = self.collection(
+                session,
+                "Default Collection",
+                library=self.default_library,
+            )
+            self.default_inactive_collection = self.collection(
+                session,
+                "Default Inactive Collection",
+                inactive=True,
+                library=self.default_library,
+            )
+
+            session.commit()
+
+    @staticmethod
+    def library(
+        session: Session,
+        name: str,
+        short_name: str,
+        settings: LibrarySettings | None = None,
+    ) -> Library:
+        # Just a dummy key used for testing.
+        key_string = """\
+            -----BEGIN RSA PRIVATE KEY-----
+            MIIBOQIBAAJBALFOBYf91uHhGQufTEOCZ9/L/Ge0/Lw4DRDuFBh9p+BpOxQJE9gi
+            4FaJc16Wh53Sg5vQTOZMEGgjjTaP7K6NWgECAwEAAQJAEsR4b2meCjDCbumAsBCo
+            oBa+c9fDfMTOFUGuHN2IHIe5zObxWAKD3xq73AO+mpeEl+KpeLeq2IJNqCZdf1yK
+            MQIhAOGeurU6vgn/yA9gXECzvWYaxiAzHsOeW4RDhb/+14u1AiEAyS3VWo6jPt0i
+            x8oiahujtCqaKLy611rFHQuK+yKNfJ0CIFuQVIuaNGfQc3uyCp6Dk3jtoryMoo6X
+            JOLvmEdMAGQFAiB4D+psiQPT2JWRNokjWitwspweA8ReEcXhd6oSBqT54QIgaVc5
+            wNybPDDs9mU+du+r0U+5iXaZzS5StYZpo9B4KjA=
+            -----END RSA PRIVATE KEY-----
+        """
+        # Because key generation takes a significant amount of time, and we
+        # create a lot of new libraries in our tests, we just use the same
+        # dummy key for all of them.
+        private_key = import_key(dedent(key_string))
+        public_key = private_key.public_key()
+
+        settings_dict = settings.model_dump() if settings else {}
+
+        # Make sure we have defaults for settings that are required
+        if "website" not in settings_dict:
+            settings_dict["website"] = "http://library.com"
+        if "help_web" not in settings_dict and "help_email" not in settings_dict:
+            settings_dict["help_web"] = "http://library.com/support"
+
+        library, _ = get_one_or_create(
+            session,
+            Library,
+            name=name,
+            short_name=short_name,
+            create_method_kwargs=dict(
+                uuid=str(uuid.uuid4()),
+                public_key=public_key.export_key("PEM").decode("utf-8"),
+                private_key=private_key.export_key("DER"),
+                settings_dict=settings_dict,
+            ),
+        )
+        return library
+
+    opds_settings = functools.partial(
+        OPDSImporterSettings,
+        external_account_id="http://opds.example.com/feed",
+        data_source="OPDS",
+    )
+
+    @staticmethod
+    def collection(
+        session: Session,
+        name: str,
+        *,
+        library: Library | None = None,
+        inactive: bool = False,
+    ) -> Collection:
+        collection, _ = Collection.by_name_and_protocol(session, name, "OPDS Import")
+
+        kwargs = (
+            {
+                "subscription_activation_date": datetime.date(2000, 12, 31),
+                "subscription_expiration_date": datetime.date(1999, 1, 1),
+            }
+            if inactive
+            else {}
+        )
+
+        settings = OPDSImporterSettings(
+            external_account_id="http://opds.example.com/feed",
+            data_source="OPDS",
+            **kwargs,
+        )
+
+        OPDSAPI.settings_update(collection.integration_configuration, settings)
+
+        if library and library not in collection.associated_libraries:
+            collection.associated_libraries.append(library)
+
+        return collection
 
     @staticmethod
     def _load_model_classes():
@@ -405,9 +510,6 @@ class DatabaseTransactionFixture:
 
     def __init__(self, database: DatabaseFixture, services: ServicesFixture):
         self._database = database
-        self._default_library: Library | None = None
-        self._default_collection: Collection | None = None
-        self._default_inactive_collection: Collection | None = None
         self._counter = 2000
         self._isbns = [
             "9780674368279",
@@ -418,6 +520,16 @@ class DatabaseTransactionFixture:
         self._services = services
         self._session = SessionManager.session_from_connection(database.connection)
         self._transaction = database.connection.begin_nested()
+
+        self._default_library = self._session.merge(
+            database.default_library, load=False
+        )
+        self._default_collection = self._session.merge(
+            database.default_collection, load=False
+        )
+        self._default_inactive_collection = self._session.merge(
+            database.default_inactive_collection, load=False
+        )
 
         self._goal_registry_mapping: Mapping[Goals, IntegrationRegistry[Any]] = {
             Goals.CATALOG_GOAL: self._services.services.integration_registry.catalog_services(),
