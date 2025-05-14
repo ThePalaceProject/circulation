@@ -62,7 +62,7 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
 @shared_task(queue=QueueNames.default, bind=True)
 def mark_identifiers_unavailable(
     task: Task,
-    identifiers: list[RedisSetKwargs],
+    existing_and_active_identifier_sets: list[RedisSetKwargs],
     *,
     collection_id: int,
 ) -> None:
@@ -79,18 +79,20 @@ def mark_identifiers_unavailable(
     """
     redis_client = task.services.redis().client()
 
-    existing_identifiers, active_identifiers = identifiers
-    existing_set = IdentifierSet(redis_client, **existing_identifiers)
-    active_set = IdentifierSet(redis_client, **active_identifiers)
+    existing_identifier_kwargs, active_identifier_kwargs = (
+        existing_and_active_identifier_sets
+    )
+    existing_identifiers = IdentifierSet(redis_client, **existing_identifier_kwargs)
+    active_identifiers = IdentifierSet(redis_client, **active_identifier_kwargs)
 
     try:
-        if not existing_set.exists():
+        if not existing_identifiers.exists():
             task.log.warning(
                 "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
             )
             return
 
-        if not active_set.exists():
+        if not active_identifiers.exists():
             task.log.error(
                 "Active identifiers set does not exist in Redis. Refusing to mark all identifiers as unavailable."
             )
@@ -110,7 +112,7 @@ def mark_identifiers_unavailable(
             licenses_owned=0,
             licenses_available=0,
         )
-        identifiers_to_mark = existing_set - active_set
+        identifiers_to_mark = existing_identifiers - active_identifiers
         for identifier in identifiers_to_mark:
             task.log.info(
                 f"Marking identifier {identifier} as unavailable in collection {collection_name} ({collection_id})"
@@ -124,8 +126,8 @@ def mark_identifiers_unavailable(
             f"Sent tasks to mark {len(identifiers_to_mark)} identifiers as unavailable"
         )
     finally:
-        existing_set.delete()
-        active_set.delete()
+        existing_identifiers.delete()
+        active_identifiers.delete()
 
 
 def create_mark_unavailable_chord(
@@ -136,11 +138,12 @@ def create_mark_unavailable_chord(
     found in the distributor's feed for a given collection.
 
     This chord performs the following sequence:
-    1. Calls the existing_available_identifiers task to retrieve all identifiers that are currently
-       available in the collection.
-    2. In parallel, executes the provided active_identifiers_sig task to retrieve identifiers that
-       are present in the distributor's feed.
-    3. Finally, calls the mark_identifiers_unavailable task with the results of the previous tasks
+    1. Performs the following in parallel:
+        a. Calls the existing_available_identifiers task to retrieve all identifiers that are currently
+           available in the collection.
+        b. Executes the provided active_identifiers_sig task to retrieve identifiers that
+           are present in the distributor's feed.
+    2. Finally, calls the mark_identifiers_unavailable task with the results of the previous tasks
        to mark any identifiers that exist in the collection but are not in the distributor's feed
        as unavailable.
 
