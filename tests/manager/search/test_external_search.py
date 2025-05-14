@@ -1960,8 +1960,9 @@ class TestFeaturedFacets:
         assert {
             "field_value_factor": {
                 "field": "licensepools.lane_priority_level",
-                "missing": 5,
-                "modifier": "log1p",
+                "factor": 10,
+                "missing": 10,
+                "modifier": "none",
             }
         } == lane_priority_level.to_dict()
 
@@ -1980,8 +1981,9 @@ class TestFeaturedFacets:
         assert {
             "field_value_factor": {
                 "field": "licensepools.lane_priority_level",
-                "missing": 5,
-                "modifier": "log1p",
+                "factor": 10,
+                "missing": 10,
+                "modifier": "none",
             }
         } == lane_priority_level.to_dict()
 
@@ -2019,8 +2021,9 @@ class TestFeaturedFacets:
         assert {
             "field_value_factor": {
                 "field": "licensepools.lane_priority_level",
-                "missing": 5,
-                "modifier": "log1p",
+                "factor": 10,
+                "missing": 10,
+                "modifier": "none",
             }
         } == lane_priority_level.to_dict()
 
