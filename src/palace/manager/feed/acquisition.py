@@ -460,6 +460,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: CirculationManagerAnnotator,
         facets: FacetsWithEntryPoint | None,
         pagination: Pagination | None,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
     ) -> OPDSAcquisitionFeed:
         works = worklist.works(
@@ -682,6 +683,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         annotator: LibraryAnnotator,
         pagination: Pagination | None = None,
         facets: FacetsWithEntryPoint | None = None,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         search_debug: bool = False,
     ) -> OPDSAcquisitionFeed:

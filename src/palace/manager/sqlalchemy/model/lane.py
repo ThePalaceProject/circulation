@@ -1735,6 +1735,7 @@ class WorkList:
         include_sublanes=True,
         pagination=None,
         facets=None,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):
@@ -1804,6 +1805,7 @@ class WorkList:
         _db,
         facets=None,
         pagination=None,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
         **kwargs,
@@ -1987,6 +1989,7 @@ class WorkList:
         queryable_lanes,
         pagination,
         facets,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):
@@ -3137,6 +3140,7 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
         include_sublanes=True,
         pagination=None,
         facets=None,
+        *,
         search_engine: ExternalSearchIndex = Provide["search.index"],
         debug=False,
     ):

@@ -40,7 +40,7 @@ class TestCirculationManager:
             CirculationManager, "setup_one_time_controllers", mock_setup_controllers
         )
 
-        manager = CirculationManager(mock_db, services_fixture.services)
+        manager = CirculationManager(mock_db, services=services_fixture.services)
 
         assert mock_load_settings.called
         assert mock_setup_controllers.called

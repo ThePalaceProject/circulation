@@ -228,7 +228,7 @@ class MockCirculationManager(CirculationManager):
     d_circulation: MockCirculationAPI
 
     def __init__(self, db: Session, services: Services):
-        super().__init__(db, services)
+        super().__init__(db, services=services)
 
     def setup_circulation_api(
         self,
