@@ -53,6 +53,9 @@ def pyinstrument_test(
 
     For example something like @pytest.fixture(auto_use=True, scope="module") will profile provide
     module level traces for all the tests that are run.
+
+    This isn't meant to be left in tests permanently, but is useful when trying to find performance issues
+    or when a test is taking a long time to run.
     """
     # Turn profiling on
     profiler = Profiler()
