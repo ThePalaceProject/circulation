@@ -185,7 +185,7 @@ class TestOPDSAcquisitionFeed:
             CirculationManagerAnnotator(None),
             None,
             None,
-            MagicMock(),
+            search_engine=MagicMock(),
         ).as_response(max_age=10, private=private)
 
         # The result is an OPDSFeedResponse. The 'private' argument,
@@ -1075,7 +1075,7 @@ class TestEntrypointLinkInsertion:
                 data.annotator(),
                 facets,
                 pagination,
-                MagicMock(),
+                search_engine=MagicMock(),
             )
 
             return data.mock.called_with
