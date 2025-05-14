@@ -293,7 +293,7 @@ class TestHold:
         with services_fixture.wired():
             hold.collect_event_and_delete()
         assert db.session.query(Hold).count() == 0
-        services_fixture.analytics_fixture.analytics_mock.collect_event.assert_called_once()
+        services_fixture.mock_services.analytics.collect_event.assert_called_once()
 
 
 class TestLoans:

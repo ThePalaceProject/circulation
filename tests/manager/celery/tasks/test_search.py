@@ -158,7 +158,7 @@ def test_search_reindex_failures(
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
 
-    add_documents_mock = services_fixture.search_fixture.index_mock.add_documents
+    add_documents_mock = services_fixture.mock_services.search_index.add_documents
 
     # If we fail to add documents, we should retry up to 4 times, then fail.
     add_documents_mock.return_value = [1, 2, 3]
@@ -208,7 +208,7 @@ def test_search_reindex_failures_multiple_batch(
             offset : offset + batch_size
         ]
     )
-    add_documents_mock = services_fixture.search_fixture.index_mock.add_documents
+    add_documents_mock = services_fixture.mock_services.search_index.add_documents
     add_documents_mock.side_effect = [
         # First batch
         OpenSearchException(),
@@ -268,7 +268,7 @@ def test_update_read_pointer_failures(
     mock_backoff.return_value = 0
 
     read_pointer_set_mock = (
-        services_fixture.search_fixture.service_mock.read_pointer_set
+        services_fixture.mock_services.search_service.read_pointer_set
     )
     read_pointer_set_mock.side_effect = OpenSearchException()
     with pytest.raises(MaxRetriesExceededError):
@@ -456,7 +456,7 @@ def test_index_works_failures(
 
     # If we fail to add documents, we should retry up to 4 times, then fail.
     work = db.work(with_open_access_download=True)
-    add_document_mocks = services_fixture.search_fixture.index_mock.add_documents
+    add_document_mocks = services_fixture.mock_services.search_index.add_documents
     add_document_mocks.side_effect = OpenSearchException()
     with pytest.raises(MaxRetriesExceededError):
         index_works.delay([work.id]).wait()

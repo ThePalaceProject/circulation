@@ -112,7 +112,7 @@ class TestWorkReaper:
     ) -> None:
         # Set up our search mock to track calls to remove_work
         removed = set()
-        mock_remove_work = services_fixture.search_fixture.index_mock.remove_work
+        mock_remove_work = services_fixture.mock_services.search_index.remove_work
         mock_remove_work.side_effect = lambda x: removed.add(x.id)
 
         # First, create three works.
@@ -435,9 +435,7 @@ def test_hold_reaper(
     assert len(db.session.query(Hold).where(Hold.patron == current_patron).all()) == 2
 
     # verify expected circ event count for hold reaper run
-    call_args_list = (
-        services_fixture.analytics_fixture.analytics_mock.collect.call_args_list
-    )
+    call_args_list = services_fixture.mock_services.analytics.collect.call_args_list
     assert len(call_args_list) == 2
     event_types = [call_args.kwargs["event"].type for call_args in call_args_list]
     assert event_types == [

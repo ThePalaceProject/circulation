@@ -225,7 +225,6 @@ def test__recalculate_holds_for_licensepool(
     collection = db.collection(protocol=OPDS2WithODLApi)
     pool, [license1, license2] = opds_task_fixture.pool_with_licenses(collection)
 
-    analytics = opds_task_fixture.services.analytics_fixture.analytics_mock
     # Recalculate the hold queue
     _recalculate_holds_for_licensepool(pool, timedelta(days=5))
 
@@ -285,9 +284,9 @@ def test_remove_expired_holds_for_collection_task(
     # Remove the expired holds
     remove_expired_holds_for_collection_task.delay(collection1.id).wait()
 
-    assert len(
-        opds_task_fixture.services.analytics_fixture.analytics_mock.method_calls
-    ) == len(expired_holds1)
+    assert len(opds_task_fixture.services.mock_services.analytics.method_calls) == len(
+        expired_holds1
+    )
 
     current_holds = {h.id for h in db.session.scalars(select(Hold))}
     assert expired_holds1.isdisjoint(current_holds)
