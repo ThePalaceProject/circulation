@@ -16,6 +16,7 @@ pytest_plugins = [
     "tests.fixtures.marc",
     "tests.fixtures.odl",
     "tests.fixtures.overdrive",
+    "tests.fixtures.pyinstrument",
     "tests.fixtures.redis",
     "tests.fixtures.s3",
     "tests.fixtures.search",

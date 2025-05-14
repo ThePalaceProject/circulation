@@ -45,6 +45,9 @@ nosetests.xml
 coverage.xml
 coverage.json
 
+# Testing profile data
+tests/profiles/
+
 # Translations
 *.mo
 
