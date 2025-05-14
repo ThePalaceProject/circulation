@@ -119,7 +119,7 @@ def celery_fixture(
     """Fixture to provide a Celery app and worker for testing."""
 
     # Make sure our services container has the correct celery app setup
-    container = services_fixture.celery_fixture.celery_container
+    container = services_fixture.services.celery()
     container.config.from_dict(celery_pydantic_config.model_dump())
     container.app.override(celery_session_app)
 

@@ -2,28 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, Mock, create_autospec
 
 import boto3
 import pytest
-from celery import Celery
+from opensearchpy import OpenSearch
 
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision_directory import SearchRevisionDirectory
 from palace.manager.search.service import SearchServiceOpensearch1
 from palace.manager.service.analytics.analytics import Analytics
-from palace.manager.service.analytics.container import AnalyticsContainer
-from palace.manager.service.celery.container import CeleryContainer
 from palace.manager.service.container import Services, wire_container
 from palace.manager.service.email.configuration import EmailConfiguration
-from palace.manager.service.email.container import Email
-from palace.manager.service.logging.container import Logging
 from palace.manager.service.logging.log import setup_logging
-from palace.manager.service.search.container import Search
 from palace.manager.service.sitewide import SitewideConfiguration
-from palace.manager.service.storage.container import Storage
 from palace.manager.service.storage.s3 import S3Service
 
 
@@ -40,112 +33,54 @@ def mock_services_container(
         container._container_instance = None
 
 
-@dataclass
-class ServicesLoggingFixture:
-    logging_container: Logging
-    logging_mock: MagicMock
+class MockServicesFixture:
+    def __init__(self) -> None:
+        self.logging = create_autospec(setup_logging)
+
+        self.s3_client = create_autospec(boto3.client)
+        self.s3_analytics = create_autospec(S3Service.factory)
+        self.s3_public = create_autospec(S3Service.factory)
+
+        self.search_client = create_autospec(OpenSearch)
+        self.search_service = create_autospec(SearchServiceOpensearch1)
+        self.search_revision_directory = create_autospec(SearchRevisionDirectory)
+        self.search_index = create_autospec(ExternalSearchIndex)
+
+        self.analytics = create_autospec(Analytics)
+
+        self.emailer_sender = "test@email.com"
+        self.emailer = MagicMock()
+
+        self.celery_app = MagicMock()
+
+    def reset_mocks(self) -> None:
+        for item in self.__dict__.values():
+            if isinstance(item, Mock):
+                item.reset_mock(return_value=True, side_effect=True)
 
 
-@pytest.fixture
-def services_logging_fixture() -> ServicesLoggingFixture:
-    logging_container = Logging()
-    logging_mock = create_autospec(setup_logging)
-    logging_container.logging.override(logging_mock)
-    return ServicesLoggingFixture(logging_container, logging_mock)
+@pytest.fixture(scope="session")
+def mock_services_session_fixture() -> MockServicesFixture:
+    """
+    Fixture to provide mock services for testing. This fixture is scoped to the session
+    so that we only have the overhead of creating the mock services via autospec once
+    per test session, which can be expensive.
+
+    Note: This fixture shouldn't be used directly, but rather through the `mock_services_fixture`
+    which resets the mocks after each test.
+    """
+    return MockServicesFixture()
 
 
-@dataclass
-class ServicesStorageFixture:
-    storage_container: Storage
-    s3_client_mock: MagicMock
-    analytics_mock: MagicMock
-    public_mock: MagicMock
-
-
-@pytest.fixture
-def services_storage_fixture() -> ServicesStorageFixture:
-    storage_container = Storage()
-    s3_client_mock = create_autospec(boto3.client)
-    analytics_mock = create_autospec(S3Service.factory)
-    public_mock = create_autospec(S3Service.factory)
-    storage_container.s3_client.override(s3_client_mock)
-    storage_container.analytics.override(analytics_mock)
-    storage_container.public.override(public_mock)
-    return ServicesStorageFixture(
-        storage_container, s3_client_mock, analytics_mock, public_mock
-    )
-
-
-@dataclass
-class ServicesSearchFixture:
-    search_container: Search
-    client_mock: MagicMock
-    service_mock: MagicMock
-    revision_directory_mock: MagicMock
-    index_mock: MagicMock
-
-
-@pytest.fixture
-def services_search_fixture() -> ServicesSearchFixture:
-    search_container = Search()
-    client_mock = create_autospec(boto3.client)
-    service_mock = create_autospec(SearchServiceOpensearch1)
-    revision_directory_mock = create_autospec(SearchRevisionDirectory)
-    index_mock = create_autospec(ExternalSearchIndex)
-    search_container.client.override(client_mock)
-    search_container.service.override(service_mock)
-    search_container.revision_directory.override(revision_directory_mock)
-    search_container.index.override(index_mock)
-    return ServicesSearchFixture(
-        search_container, client_mock, service_mock, revision_directory_mock, index_mock
-    )
-
-
-@dataclass
-class ServicesAnalyticsFixture:
-    analytics_container: AnalyticsContainer
-    analytics_mock: MagicMock
-
-
-@pytest.fixture
-def services_analytics_fixture() -> ServicesAnalyticsFixture:
-    analytics_container = AnalyticsContainer()
-    analytics_mock = create_autospec(Analytics)
-    analytics_container.analytics.override(analytics_mock)
-    return ServicesAnalyticsFixture(analytics_container, analytics_mock)
-
-
-@dataclass
-class ServicesEmailFixture:
-    email_container: Email
-    mock_emailer: MagicMock
-    sender_email: str
-
-
-@pytest.fixture
-def services_email_fixture() -> ServicesEmailFixture:
-    email_container = Email()
-    sender_email = "test@email.com"
-    email_container.config.from_dict(
-        EmailConfiguration(sender=sender_email).model_dump()
-    )
-    mock_emailer = MagicMock()
-    email_container.emailer.override(mock_emailer)
-    return ServicesEmailFixture(email_container, mock_emailer, sender_email)
-
-
-@dataclass
-class ServicesCeleryFixture:
-    celery_container: CeleryContainer
-    app: Celery
-
-
-@pytest.fixture
-def services_celery_fixture() -> ServicesCeleryFixture:
-    celery_container = CeleryContainer()
-    celery_mock_app = MagicMock()
-    celery_container.app.override(celery_mock_app)
-    return ServicesCeleryFixture(celery_container, celery_mock_app)
+@pytest.fixture(scope="function")
+def mock_services_fixture(
+    mock_services_session_fixture: MockServicesFixture,
+) -> Generator[MockServicesFixture]:
+    """
+    Fixture to provide mock services for testing.
+    """
+    yield mock_services_session_fixture
+    mock_services_session_fixture.reset_mocks()
 
 
 class ServicesFixture:
@@ -155,27 +90,45 @@ class ServicesFixture:
 
     def __init__(
         self,
-        logging: ServicesLoggingFixture,
-        storage: ServicesStorageFixture,
-        search: ServicesSearchFixture,
-        analytics: ServicesAnalyticsFixture,
-        email: ServicesEmailFixture,
-        celery: ServicesCeleryFixture,
+        mock_services: MockServicesFixture,
     ) -> None:
-        self.logging_fixture = logging
-        self.storage_fixture = storage
-        self.search_fixture = search
-        self.analytics_fixture = analytics
-        self.email_fixture = email
-        self.celery_fixture = celery
+        self.mock_services = mock_services
 
         self.services = Services()
-        self.services.logging.override(logging.logging_container)
-        self.services.storage.override(storage.storage_container)
-        self.services.search.override(search.search_container)
-        self.services.analytics.override(analytics.analytics_container)
-        self.services.email.override(email.email_container)
-        self.services.celery.override(celery.celery_container)
+
+        # Mock out logging
+        logging_container = self.services.logging()
+        logging_container.logging.override(mock_services.logging)
+
+        # Mock out storage
+        storage_container = self.services.storage()
+        storage_container.s3_client.override(mock_services.s3_client)
+        storage_container.analytics.override(mock_services.s3_analytics)
+        storage_container.public.override(mock_services.s3_public)
+
+        # Mock out search
+        search_container = self.services.search()
+        search_container.client.override(mock_services.search_client)
+        search_container.service.override(mock_services.search_service)
+        search_container.revision_directory.override(
+            mock_services.search_revision_directory
+        )
+        search_container.index.override(mock_services.search_index)
+
+        # Mock out analytics
+        analytics_container = self.services.analytics()
+        analytics_container.analytics.override(mock_services.analytics)
+
+        # Mock out email
+        email_container = self.services.email()
+        email_container.config.from_dict(
+            EmailConfiguration(sender=mock_services.emailer_sender).model_dump()
+        )
+        email_container.emailer.override(mock_services.emailer)
+
+        # Mock out celery
+        celery_container = self.services.celery()
+        celery_container.app.override(mock_services.celery_app)
 
         # setup basic configuration from default settings
         self.services.config.from_dict(
@@ -211,20 +164,10 @@ class ServicesFixture:
 
 @pytest.fixture
 def services_fixture(
-    services_logging_fixture: ServicesLoggingFixture,
-    services_storage_fixture: ServicesStorageFixture,
-    services_search_fixture: ServicesSearchFixture,
-    services_analytics_fixture: ServicesAnalyticsFixture,
-    services_email_fixture: ServicesEmailFixture,
-    services_celery_fixture: ServicesCeleryFixture,
+    mock_services_fixture: MockServicesFixture,
 ) -> Generator[ServicesFixture]:
     fixture = ServicesFixture(
-        logging=services_logging_fixture,
-        storage=services_storage_fixture,
-        search=services_search_fixture,
-        analytics=services_analytics_fixture,
-        email=services_email_fixture,
-        celery=services_celery_fixture,
+        mock_services=mock_services_fixture,
     )
     with mock_services_container(fixture.services):
         yield fixture

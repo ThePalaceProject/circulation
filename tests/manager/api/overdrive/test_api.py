@@ -972,9 +972,7 @@ class TestOverdriveAPI:
             match="format of this book is not supported",
         ):
             api.checkout(patron, pin, pool, None)
-        mock_collect = (
-            services_fixture_wired.analytics_fixture.analytics_mock.collect_event
-        )
+        mock_collect = services_fixture_wired.mock_services.analytics.collect_event
         mock_collect.assert_called_once_with(
             db.default_library(),
             pool,

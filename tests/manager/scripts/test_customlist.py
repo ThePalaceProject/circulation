@@ -112,7 +112,7 @@ class TestCustomListUpdateEntriesScript:
     def test_search_facets(
         self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
     ):
-        mock_index = services_fixture_wired.search_fixture.index_mock
+        mock_index = services_fixture_wired.mock_services.search_index
 
         last_updated = datetime.datetime.now() - datetime.timedelta(hours=1)
         custom_list, _ = db.customlist()
