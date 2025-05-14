@@ -1074,7 +1074,7 @@ class CirculationAPI(LoggerMixin):
             if existing_hold:
                 # The book was on hold, and now we have a loan. Call
                 # collect cm event and delete the record of the hold.
-                existing_hold.collect_event_and_delete(self.analytics)
+                existing_hold.collect_event_and_delete(analytics=self.analytics)
 
             __transaction.commit()
 

@@ -698,7 +698,7 @@ class Hold(Base, LoanAndHoldMixin):
 
     @inject
     def collect_event_and_delete(
-        self, analytics: Analytics | None = Provide["analytics.analytics"]
+        self, *, analytics: Analytics | None = Provide["analytics.analytics"]
     ) -> None:
         """
         When a hold is converted to a loan, we log the event and delete

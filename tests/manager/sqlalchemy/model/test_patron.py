@@ -270,7 +270,7 @@ class TestHold:
         assert_calculated_value_used()
 
     def test_collect_event_and_delete(
-        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+        self, db: DatabaseTransactionFixture, services_fixture_wired: ServicesFixture
     ) -> None:
         patron = db.patron()
         work = db.work(with_license_pool=True)
@@ -278,22 +278,21 @@ class TestHold:
         hold, _ = pool.on_hold_to(patron)
 
         # If we provide None as an analytics service, the hold is just deleted.
-        hold.collect_event_and_delete(None)
+        hold.collect_event_and_delete(analytics=None)
         assert db.session.query(Hold).count() == 0
 
         # If we provide an analytics service, it is used to collect the event and the hold is deleted.
         hold, _ = pool.on_hold_to(patron)
         mock_analytics = MagicMock()
-        hold.collect_event_and_delete(mock_analytics)
+        hold.collect_event_and_delete(analytics=mock_analytics)
         assert db.session.query(Hold).count() == 0
         mock_analytics.collect_event.assert_called_once()
 
         # If analytics is not provided we use the one provided via dependency injection.
         hold, _ = pool.on_hold_to(patron)
-        with services_fixture.wired():
-            hold.collect_event_and_delete()
+        hold.collect_event_and_delete()
         assert db.session.query(Hold).count() == 0
-        services_fixture.analytics_fixture.analytics_mock.collect_event.assert_called_once()
+        services_fixture_wired.analytics_fixture.analytics_mock.collect_event.assert_called_once()
 
 
 class TestLoans:
