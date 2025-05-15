@@ -9,32 +9,13 @@ Note: This file is not used in the app directly and shouldn't be imported anywhe
 Its only used to provide a global app instance for the Celery cli to use.
 """
 
-import importlib
 import logging
 from logging.handlers import WatchedFileHandler
-from pathlib import Path
 from typing import Any
 
 from celery.signals import setup_logging
 
 from palace.manager.service.container import container_instance
-
-
-def import_celery_tasks() -> None:
-    """
-    Import all the Celery tasks from the tasks module.
-
-    This automatically imports all the tasks from the tasks module so that they are registered
-    with the worker when it starts up.
-
-    This makes the assumption that all of our Celery tasks will be in the `tasks` module.
-    """
-    tasks_path = Path(__file__).parent / "tasks"
-    for task_file in tasks_path.glob("*.py"):
-        if task_file.stem == "__init__":
-            continue
-        module = f"palace.manager.celery.tasks.{task_file.stem}"
-        importlib.import_module(module)
 
 
 @setup_logging.connect
@@ -57,5 +38,6 @@ def celery_logger_setup(loglevel: int, logfile: str | None, **kwargs: Any) -> No
 
 services = container_instance()
 services.init_resources()
-import_celery_tasks()
+import palace.manager.celery.tasks  # noqa: autoflake
+
 app = services.celery.app()
