@@ -266,7 +266,6 @@ return champion;
         licensepools.add_property("suppressed", BOOLEAN)
         licensepools.add_property("licensed", BOOLEAN)
         licensepools.add_property("medium", keyword())
-        licensepools.add_property("lane_priority_level", INTEGER)
         self._fields["licensepools"] = licensepools
 
         identifiers = nested()
