@@ -9,7 +9,7 @@ from frozendict import frozendict
 from psycopg2._range import NumericRange
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
+from sqlalchemy.exc import IntegrityError, MultipleResultsFound
 from sqlalchemy.ext import mutable
 from sqlalchemy.orm import Session
 from typing_extensions import Self
@@ -97,7 +97,7 @@ def get_one(
         q = q.filter(constraint)
 
     try:
-        return q.one()  # type: ignore[no-any-return]
+        return q.one_or_none()  # type: ignore[no-any-return]
     except MultipleResultsFound:
         if on_multiple == "error":
             raise
@@ -109,8 +109,6 @@ def get_one(
             # database-level constraint might be useful.
             q = q.limit(1)
             return q.one()  # type: ignore[no-any-return]
-    except NoResultFound:
-        return None
 
 
 log = logging.getLogger(__name__)
