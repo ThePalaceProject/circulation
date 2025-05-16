@@ -11,4 +11,4 @@ class SearchV6(SearchV5):
 
     def __init__(self) -> None:
         super().__init__()
-        self._fields.add_property("lane_priority_level", INTEGER)
+        self._fields["lane_priority_level"] = INTEGER

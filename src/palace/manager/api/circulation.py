@@ -523,7 +523,7 @@ class BaseCirculationApiSettings(BaseSettings):
         form=ConfigurationFormItem(
             label=_("Lane Priority Level"),
             type=ConfigurationFormItemType.SELECT,
-            options={index + 1: value for index, value in enumerate(range(1, 11))},
+            options={str(index + 1): value for index, value in enumerate(range(1, 11))},
             description=(
                 "An integer between 1 (lowest priority) and 10 (highest) inclusive indicating "
                 "the priority of collection's contents in lanes.  In other words, a lower number relative to "
