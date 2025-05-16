@@ -149,6 +149,7 @@ class CirculationManager(LoggerMixin):
     def __init__(
         self,
         _db,
+        *,
         services: Services = Provide[Services],
     ):
         self._db = _db

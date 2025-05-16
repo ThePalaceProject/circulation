@@ -201,6 +201,7 @@ class CirculationManagerAnnotator(Annotator):
         active_holds_by_work: dict[Work, Hold] | None = None,
         active_fulfillments_by_work: dict[Work, UrlFulfillment] | None = None,
         hidden_content_types: list[str] | None = None,
+        *,
         analytics: Analytics = Provide[Services.analytics.analytics],
     ) -> None:
         if lane:

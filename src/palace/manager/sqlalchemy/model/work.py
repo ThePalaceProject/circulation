@@ -1874,7 +1874,7 @@ class Work(Base, LoggerMixin):
 
     @inject
     def delete(
-        self, search_index: ExternalSearchIndex = Provide["search.index"]
+        self, *, search_index: ExternalSearchIndex = Provide["search.index"]
     ) -> None:
         """Delete the work from both the DB and search index."""
         _db = Session.object_session(self)

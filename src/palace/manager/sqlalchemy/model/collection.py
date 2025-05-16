@@ -644,7 +644,7 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     @inject
     def delete(
-        self, search_index: ExternalSearchIndex = Provide["search.index"]
+        self, *, search_index: ExternalSearchIndex = Provide["search.index"]
     ) -> None:
         """Delete a collection.
 
