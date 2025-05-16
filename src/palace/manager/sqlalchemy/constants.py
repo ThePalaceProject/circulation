@@ -379,4 +379,4 @@ class MediaTypes:
 
 
 class IntegrationConfigurationConstants:
-    DEFAULT_LANE_PRIORITY_LEVEL = 10
+    DEFAULT_LANE_PRIORITY_LEVEL = 5

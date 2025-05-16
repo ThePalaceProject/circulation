@@ -1345,6 +1345,7 @@ class TestSearchOrder:
         # The custom list and the collection both put d earlier than e, but the
         # last_update_time wins out, and it puts e before d.
         result.collection3 = transaction.collection()
+
         result.d = transaction.work(
             collection=result.collection3, with_license_pool=True
         )
@@ -1557,6 +1558,69 @@ class TestSearchOrder:
             [data.e, data.d],
             collections=[data.collection3],
             customlist_restriction_sets=[[data.extra_list]],
+        )
+
+    def test_lane_priority_level_ordering(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        fixture = end_to_end_search_fixture
+        expect = fixture.expect_results
+
+        data = self._populate_works(fixture)
+
+        def assert_book_is_in_collection(book, in_collection, not_in_collection):
+            book_collections = [x.collection for x in book.license_pools]
+            assert (
+                in_collection in book_collections
+                and not_in_collection not in book_collections
+            )
+
+        collection1_books = [
+            data.b,
+            data.c,
+            data.a,
+        ]
+        collection3_books = [
+            data.d,
+            data.e,
+        ]
+
+        # ensure that all collection 1 books are in collection1 and not in collection3
+        for book in collection1_books:
+            assert_book_is_in_collection(book, data.collection1, data.collection3)
+        # ensure that all collection 3 books are in collection1 and not in collection1
+        for book in collection3_books:
+            assert_book_is_in_collection(book, data.collection3, data.collection1)
+
+        assert data.e.license_pools[0].collection
+        # collection 1 has the highest priority
+        data.collection1._set_settings(lane_priority_level=10)
+        data.collection3._set_settings(lane_priority_level=1)
+
+        fixture.populate_search_index()
+        facets = FeaturedFacets(minimum_featured_quality=0, entrypoint_is_default=True)
+
+        # use deterministic ordering
+        facets.random_seed = Filter.DETERMINISTIC
+        # expect collection 1 books to come first.
+        order = collection1_books + collection3_books
+        expect(
+            order,
+            None,
+            Filter(facets=facets, collections=[data.collection1, data.collection3]),
+        )
+
+        # now reverse the priority
+        data.collection1._set_settings(lane_priority_level=1)
+        data.collection3._set_settings(lane_priority_level=10)
+
+        fixture.populate_search_index()
+        # expect collection 3 books to come first.
+        order = collection3_books + collection1_books
+        expect(
+            order,
+            None,
+            Filter(facets=facets, collections=[data.collection1, data.collection3]),
         )
 
 
@@ -1959,9 +2023,9 @@ class TestFeaturedFacets:
         assert isinstance(lane_priority_level, FieldValueFactor)
         assert {
             "field_value_factor": {
-                "field": "licensepools.lane_priority_level",
-                "factor": 10,
-                "missing": 10,
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
                 "modifier": "none",
             }
         } == lane_priority_level.to_dict()
@@ -1980,9 +2044,9 @@ class TestFeaturedFacets:
         assert isinstance(lane_priority_level, FieldValueFactor)
         assert {
             "field_value_factor": {
-                "field": "licensepools.lane_priority_level",
-                "factor": 10,
-                "missing": 10,
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
                 "modifier": "none",
             }
         } == lane_priority_level.to_dict()
@@ -2020,9 +2084,9 @@ class TestFeaturedFacets:
         assert isinstance(lane_priority_level, FieldValueFactor)
         assert {
             "field_value_factor": {
-                "field": "licensepools.lane_priority_level",
-                "factor": 10,
-                "missing": 10,
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
                 "modifier": "none",
             }
         } == lane_priority_level.to_dict()
