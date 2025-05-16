@@ -58,7 +58,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     __tablename__ = "collections"
     id: Mapped[int] = Column(Integer, primary_key=True, nullable=False)
-
     DATA_SOURCE_NAME_SETTING = "data_source"
     DATA_SOURCE_FOR_LICENSE_PROTOCOL = [
         DataSourceConstants.OVERDRIVE,

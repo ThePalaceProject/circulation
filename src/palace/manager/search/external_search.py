@@ -42,6 +42,7 @@ from palace.manager.search.service import (
     SearchService,
     SearchServiceFailedDocument,
 )
+from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.lane import Pagination
@@ -184,13 +185,8 @@ class ExternalSearchIndex(LoggerMixin):
             for results in resultset:
                 for i, result in enumerate(results):
                     self.log.debug(
-                        '%02d "%s" (%s) work=%s score=%.3f shard=%s',
-                        i,
-                        result.sort_title,
-                        result.sort_author,
-                        result.meta["id"],
-                        result.meta.explanation["value"] or 0,
-                        result.meta["shard"],
+                        f'{i:2d} "{result.sort_title}" ({result.sort_author}) work={result.meta["id"]} '
+                        f'score={(0 if not result.meta["score"] else result.meta["score"]):0.3f}',
                     )
 
         for i, results in enumerate(resultset):
@@ -2104,11 +2100,25 @@ class Filter(SearchBase):
         nested = Nested(path="licensepools", query=available)
         available_now = dict(filter=nested, weight=5)
 
-        function_scores = [quality_field, available_now]
+        # Works with higher lane priority scores are more featurable
+        lane_priority_level = SF(
+            "field_value_factor",
+            field="lane_priority_level",
+            factor=1,
+            modifier="none",
+            missing=IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,  # assume default if missing
+        )
+
+        function_scores = [
+            quality_field,
+            available_now,
+            lane_priority_level,
+        ]
 
         # Random chance can boost a lower-quality work, but not by
         # much -- this mainly ensures we don't get the exact same
         # books every time.
+
         if random_seed != self.DETERMINISTIC:
             random = SF(
                 "random_score",
