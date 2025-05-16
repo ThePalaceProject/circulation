@@ -1575,15 +1575,15 @@ class TestSearchOrder:
                 and not_in_collection not in book_collections
             )
 
-        collection1_books = [
+        collection1_books = {
             data.b,
             data.c,
             data.a,
-        ]
-        collection3_books = [
+        }
+        collection3_books = {
             data.d,
             data.e,
-        ]
+        }
 
         # ensure that all collection 1 books are in collection1 and not in collection3
         for book in collection1_books:
@@ -1602,13 +1602,25 @@ class TestSearchOrder:
 
         # use deterministic ordering
         facets.random_seed = Filter.DETERMINISTIC
-        # expect collection 1 books to come first.
-        order = collection1_books + collection3_books
-        expect(
-            order,
-            None,
-            Filter(facets=facets, collections=[data.collection1, data.collection3]),
-        )
+
+        filter = Filter(facets=facets, collections=[data.collection1, data.collection3])
+
+        def get_results():
+            hits = fixture.external_search_index.query_works(
+                None,
+                filter,
+                None,
+                debug=True,
+            )
+
+            return [x.work_id for x in hits]
+
+        def to_work_id_set(book_set):
+            return {x.id for x in book_set}
+
+        results = get_results()
+        assert set(results[0:3]) == to_work_id_set(collection1_books)
+        assert set(results[3:5]) == to_work_id_set(collection3_books)
 
         # now reverse the priority
         data.collection1._set_settings(lane_priority_level=1)
@@ -1616,12 +1628,9 @@ class TestSearchOrder:
 
         fixture.populate_search_index()
         # expect collection 3 books to come first.
-        order = collection3_books + collection1_books
-        expect(
-            order,
-            None,
-            Filter(facets=facets, collections=[data.collection1, data.collection3]),
-        )
+        results = get_results()
+        assert set(results[0:2]) == to_work_id_set(collection3_books)
+        assert set(results[2:5]) == to_work_id_set(collection1_books)
 
 
 class TestAuthorFilterData:
