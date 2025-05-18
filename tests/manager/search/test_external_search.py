@@ -1564,7 +1564,6 @@ class TestSearchOrder:
         self, end_to_end_search_fixture: EndToEndSearchFixture
     ):
         fixture = end_to_end_search_fixture
-        expect = fixture.expect_results
 
         data = self._populate_works(fixture)
 
@@ -1580,6 +1579,9 @@ class TestSearchOrder:
             data.c,
             data.a,
         }
+
+        collection2_books = collection1_books
+
         collection3_books = {
             data.d,
             data.e,
@@ -1588,6 +1590,11 @@ class TestSearchOrder:
         # ensure that all collection 1 books are in collection1 and not in collection3
         for book in collection1_books:
             assert_book_is_in_collection(book, data.collection1, data.collection3)
+        # ensure that all collection 2 books (which are the same as collection 1) are in collection2
+        # and not in collection3
+
+        for book in collection2_books:
+            assert_book_is_in_collection(book, data.collection2, data.collection3)
         # ensure that all collection 3 books are in collection1 and not in collection1
         for book in collection3_books:
             assert_book_is_in_collection(book, data.collection3, data.collection1)
@@ -1595,6 +1602,9 @@ class TestSearchOrder:
         assert data.e.license_pools[0].collection
         # collection 1 has the highest priority
         data.collection1._set_settings(lane_priority_level=10)
+        # collection 2 has lowest priority, but since all books in collection 2 are also in collection 1
+        # the highest priority of a collection associated with a work is used.
+        data.collection2._set_settings(lane_priority_level=1)
         data.collection3._set_settings(lane_priority_level=1)
 
         fixture.populate_search_index()
@@ -1619,8 +1629,9 @@ class TestSearchOrder:
         assert set(results[0:3]) == to_work_id_set(collection1_books)
         assert set(results[3:5]) == to_work_id_set(collection3_books)
 
-        # now reverse the priority
+        # now reverse the priority for 1 and 3 while keeping collection 2 the same
         data.collection1._set_settings(lane_priority_level=1)
+        data.collection2._set_settings(lane_priority_level=1)
         data.collection3._set_settings(lane_priority_level=10)
 
         fixture.populate_search_index()
@@ -1628,6 +1639,17 @@ class TestSearchOrder:
         results = get_results()
         assert set(results[0:2]) == to_work_id_set(collection3_books)
         assert set(results[2:5]) == to_work_id_set(collection1_books)
+
+        # now give 2 priority over 3 while keeping 1 the same.
+        data.collection1._set_settings(lane_priority_level=1)
+        data.collection2._set_settings(lane_priority_level=10)
+        data.collection3._set_settings(lane_priority_level=5)
+
+        fixture.populate_search_index()
+        # expect collection to come after 1/2 books since the priority of 2 exceeds 3.
+        results = get_results()
+        assert set(results[0:3]) == to_work_id_set(collection2_books)
+        assert set(results[3:5]) == to_work_id_set(collection3_books)
 
 
 class TestAuthorFilterData:
