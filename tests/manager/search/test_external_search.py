@@ -1600,9 +1600,6 @@ class TestSearchOrder:
         fixture.populate_search_index()
         facets = FeaturedFacets(minimum_featured_quality=0, entrypoint_is_default=True)
 
-        # use deterministic ordering
-        facets.random_seed = Filter.DETERMINISTIC
-
         filter = Filter(facets=facets, collections=[data.collection1, data.collection3])
 
         def get_results():
