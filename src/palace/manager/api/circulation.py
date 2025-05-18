@@ -528,7 +528,9 @@ class BaseCirculationApiSettings(BaseSettings):
                 "An integer between 1 (lowest priority) and 10 (highest) inclusive indicating "
                 "the priority of collection's contents in lanes.  In other words, a lower number relative to "
                 "other collections will push the contents of this collection to the bottom of any lane in which this "
-                "collection's contents appear. By default the priority is set right in the middle at 5."
+                "collection's contents appear. The default value "
+                f"({IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL}) "
+                "will be used, if no value is provided here."
             ),
             required=False,
         ),
