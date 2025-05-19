@@ -1719,9 +1719,14 @@ class Work(Base, LoggerMixin):
                 )
                 result["licensepools"].append(lc)
             # use the maximum lane priority level associated with the work.
-            result["lane_priority_level"] = max(
-                [lc["lane_priority_level"] for lc in result["licensepools"]]
-            )
+            if result["licensepools"]:
+                result["lane_priority_level"] = max(
+                    [lc["lane_priority_level"] for lc in result["licensepools"]]
+                )
+            else:
+                result["lane_priority_level"] = (
+                    IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL
+                )
 
         # Extra special genre massaging
         result["genres"] = []
