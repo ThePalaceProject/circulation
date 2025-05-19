@@ -486,6 +486,13 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                         quantity_measured=Measurement.AWARDS, value=str(num_awards)
                     )
                 )
+            if popularity := book.get("popularity"):
+                measurements.append(
+                    MeasurementData(
+                        quantity_measured=Measurement.POPULARITY,
+                        value=popularity,
+                    )
+                )
 
             for name, subject_type in (
                 ("ATOS", Subject.ATOS_SCORE),
@@ -634,22 +641,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                         rel=Hyperlink.SHORT_DESCRIPTION,
                         content=short,
                         media_type="text/html",
-                    )
-                )
-
-            # Add measurements: rating and popularity
-            if book.get("starRating") is not None and book["starRating"] > 0:
-                measurements.append(
-                    MeasurementData(
-                        quantity_measured=Measurement.RATING, value=book["starRating"]
-                    )
-                )
-
-            if book.get("popularity"):
-                measurements.append(
-                    MeasurementData(
-                        quantity_measured=Measurement.POPULARITY,
-                        value=book["popularity"],
                     )
                 )
 
