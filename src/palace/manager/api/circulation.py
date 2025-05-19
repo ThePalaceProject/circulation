@@ -48,6 +48,7 @@ from palace.manager.integration.settings import (
     FormField,
 )
 from palace.manager.service.analytics.analytics import Analytics
+from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -514,6 +515,25 @@ class BaseCirculationApiSettings(BaseSettings):
             ),
             required=False,
             hidden=AdminConfiguration.admin_client_settings().hide_subscription_config,
+        ),
+    )
+
+    lane_priority_level: int = FormField(
+        default=IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,
+        form=ConfigurationFormItem(
+            label=_("Lane Priority Level"),
+            type=ConfigurationFormItemType.SELECT,
+            options={str(index + 1): value for index, value in enumerate(range(1, 11))},
+            description=(
+                "An integer between 1 (lowest priority) and 10 (highest) inclusive indicating "
+                "the priority of collection's contents in lanes.  In other words, a lower number relative to "
+                "other collections will push the contents of this collection to the bottom of any lane in which this "
+                "collection's contents appear. The default value "
+                f"({IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL}) "
+                "will be used if no value is provided here. If two or more collections contain overlapping sets of "
+                "books, the highest of the lane priorities will be used when ordering a book's position in a lane."
+            ),
+            required=False,
         ),
     )
 

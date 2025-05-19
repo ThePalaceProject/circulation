@@ -1430,12 +1430,19 @@ class TestWork:
     def test_to_search_documents(self, db: DatabaseTransactionFixture):
         customlist, editions = db.customlist()
         library = db.library()
+        collection = db.default_collection()
+        lane_priority = 1
+
+        collection.integration_configuration.settings_dict["lane_priority_level"] = (
+            lane_priority
+        )
 
         works = [
             db.work(
                 authors=[db.contributor()],
                 with_license_pool=True,
                 genre="history",
+                collection=collection,
             ),
             editions[0].work,
         ]
@@ -1505,6 +1512,12 @@ class TestWork:
                     assert actual["collection_id"] == pool.collection_id
                     assert actual["open_access"] == pool.open_access
                     assert actual["suppressed"] == pool.suppressed
+                    assert (
+                        actual["lane_priority_level"]
+                        == pool.collection.integration_configuration.settings_dict[
+                            "lane_priority_level"
+                        ]
+                    )
             else:
                 assert doc["licensepools"] is None
 

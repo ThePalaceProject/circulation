@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from opensearch_dsl import Q
-from opensearch_dsl.function import RandomScore, ScriptScore
+from opensearch_dsl.function import FieldValueFactor, RandomScore, ScriptScore
 from opensearch_dsl.query import (
     Bool,
     DisMax,
@@ -1345,6 +1345,7 @@ class TestSearchOrder:
         # The custom list and the collection both put d earlier than e, but the
         # last_update_time wins out, and it puts e before d.
         result.collection3 = transaction.collection()
+
         result.d = transaction.work(
             collection=result.collection3, with_license_pool=True
         )
@@ -1558,6 +1559,97 @@ class TestSearchOrder:
             collections=[data.collection3],
             customlist_restriction_sets=[[data.extra_list]],
         )
+
+    def test_lane_priority_level_ordering(
+        self, end_to_end_search_fixture: EndToEndSearchFixture
+    ):
+        fixture = end_to_end_search_fixture
+
+        data = self._populate_works(fixture)
+
+        def assert_book_is_in_collection(book, in_collection, not_in_collection):
+            book_collections = [x.collection for x in book.license_pools]
+            assert (
+                in_collection in book_collections
+                and not_in_collection not in book_collections
+            )
+
+        collection1_books = {
+            data.b,
+            data.c,
+            data.a,
+        }
+
+        collection2_books = collection1_books
+
+        collection3_books = {
+            data.d,
+            data.e,
+        }
+
+        # ensure that all collection 1 books are in collection1 and not in collection3
+        for book in collection1_books:
+            assert_book_is_in_collection(book, data.collection1, data.collection3)
+        # ensure that all collection 2 books (which are the same as collection 1) are in collection2
+        # and not in collection3
+
+        for book in collection2_books:
+            assert_book_is_in_collection(book, data.collection2, data.collection3)
+        # ensure that all collection 3 books are in collection1 and not in collection1
+        for book in collection3_books:
+            assert_book_is_in_collection(book, data.collection3, data.collection1)
+
+        assert data.e.license_pools[0].collection
+        # collection 1 has the highest priority
+        data.collection1._set_settings(lane_priority_level=10)
+        # collection 2 has lowest priority, but since all books in collection 2 are also in collection 1
+        # the highest priority of a collection associated with a work is used.
+        data.collection2._set_settings(lane_priority_level=1)
+        data.collection3._set_settings(lane_priority_level=1)
+
+        fixture.populate_search_index()
+        facets = FeaturedFacets(minimum_featured_quality=0, entrypoint_is_default=True)
+
+        filter = Filter(facets=facets, collections=[data.collection1, data.collection3])
+
+        def get_results():
+            hits = fixture.external_search_index.query_works(
+                None,
+                filter,
+                None,
+                debug=True,
+            )
+
+            return [x.work_id for x in hits]
+
+        def to_work_id_set(book_set):
+            return {x.id for x in book_set}
+
+        results = get_results()
+        assert set(results[0:3]) == to_work_id_set(collection1_books)
+        assert set(results[3:5]) == to_work_id_set(collection3_books)
+
+        # now reverse the priority for 1 and 3 while keeping collection 2 the same
+        data.collection1._set_settings(lane_priority_level=1)
+        data.collection2._set_settings(lane_priority_level=1)
+        data.collection3._set_settings(lane_priority_level=10)
+
+        fixture.populate_search_index()
+        # expect collection 3 books to come first.
+        results = get_results()
+        assert set(results[0:2]) == to_work_id_set(collection3_books)
+        assert set(results[2:5]) == to_work_id_set(collection1_books)
+
+        # now give 2 priority over 3 while keeping 1 the same.
+        data.collection1._set_settings(lane_priority_level=1)
+        data.collection2._set_settings(lane_priority_level=10)
+        data.collection3._set_settings(lane_priority_level=5)
+
+        fixture.populate_search_index()
+        # expect collection to come after 1/2 books since the priority of 2 exceeds 3.
+        results = get_results()
+        assert set(results[0:3]) == to_work_id_set(collection2_books)
+        assert set(results[3:5]) == to_work_id_set(collection3_books)
 
 
 class TestAuthorFilterData:
@@ -1922,7 +2014,12 @@ class TestFeaturedFacets:
         f.modify_search_filter(filter)
 
         # In most cases, there are three things that can boost a work's score.
-        [featurable, available_now, random] = f.scoring_functions(filter)
+        [
+            featurable,
+            available_now,
+            lane_priority_level,
+            random,
+        ] = f.scoring_functions(filter)
 
         # It can be high-quality enough to be featured.
         assert isinstance(featurable, ScriptScore)
@@ -1951,17 +2048,43 @@ class TestFeaturedFacets:
         assert 42 == random.seed
         assert 1.1 == random.weight
 
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
+                "modifier": "none",
+            }
+        } == lane_priority_level.to_dict()
+
         # If the FeaturedFacets is set to be deterministic (which only happens
         # in tests), the RandomScore is removed.
         f.random_seed = filter.DETERMINISTIC
-        [featurable_2, available_now_2] = f.scoring_functions(filter)
+        [
+            featurable_2,
+            available_now_2,
+            lane_priority_level,
+        ] = f.scoring_functions(filter)
         assert featurable_2 == featurable
         assert available_now_2 == available_now
+
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
+                "modifier": "none",
+            }
+        } == lane_priority_level.to_dict()
 
         # If custom lists are in play, it can also be featured on one
         # of its custom lists.
         filter.customlist_restriction_sets = [[1, 2], [3]]
-        [featurable_2, available_now_2, featured_on_list] = f.scoring_functions(filter)
+        [featurable_2, available_now_2, lane_priority_level, featured_on_list] = (
+            f.scoring_functions(filter)
+        )
         assert featurable_2 == featurable
         assert available_now_2 == available_now
 
@@ -1985,6 +2108,16 @@ class TestFeaturedFacets:
             == featured_filter.to_dict()
         )
         assert 11 == featured_on_list["weight"]
+
+        assert isinstance(lane_priority_level, FieldValueFactor)
+        assert {
+            "field_value_factor": {
+                "field": "lane_priority_level",
+                "factor": 1,
+                "missing": 5,
+                "modifier": "none",
+            }
+        } == lane_priority_level.to_dict()
 
     @pytest.mark.parametrize(
         "default_or_no_quality", [Filter.FEATURABLE_SCRIPT_DEFAULT_WORK_QUALITY, None]

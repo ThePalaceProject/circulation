@@ -42,7 +42,10 @@ from palace.manager.data_layer.policy.presentation import (
 )
 from palace.manager.search.service import SearchDocument
 from palace.manager.service.redis.redis import Redis
-from palace.manager.sqlalchemy.constants import DataSourceConstants
+from palace.manager.sqlalchemy.constants import (
+    DataSourceConstants,
+    IntegrationConfigurationConstants,
+)
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -1707,7 +1710,18 @@ class Work(Base, LoggerMixin):
                     lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = license_pool.id
                 lc["quality"] = doc.quality
+                collection_settings = (
+                    license_pool.collection.integration_configuration.settings_dict
+                )
+                lc["lane_priority_level"] = collection_settings.get(
+                    "lane_priority_level",
+                    IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL,
+                )
                 result["licensepools"].append(lc)
+            # use the maximum lane priority level associated with the work.
+            result["lane_priority_level"] = max(
+                [lc["lane_priority_level"] for lc in result["licensepools"]]
+            )
 
         # Extra special genre massaging
         result["genres"] = []

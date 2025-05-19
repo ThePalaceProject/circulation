@@ -376,3 +376,7 @@ class MediaTypes:
             # multiple media types have the same extension, the most
             # common media type will be used.
             MEDIA_TYPE_FOR_EXTENSION[_extension] = _media_type
+
+
+class IntegrationConfigurationConstants:
+    DEFAULT_LANE_PRIORITY_LEVEL = 5
