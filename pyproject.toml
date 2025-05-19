@@ -265,7 +265,7 @@ PyLD = "2.0.4"
 pymarc = "5.2.3"
 pyOpenSSL = "^25.0.0"
 pyparsing = "3.2.3"
-pyspellchecker = "0.8.2"
+pyspellchecker = "0.8.3"
 python = ">=3.10,<4"
 python-dateutil = "2.9.0.post0"
 python3-saml = "^1.16"  # python-saml is required for SAML authentication
