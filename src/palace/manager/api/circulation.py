@@ -530,8 +530,8 @@ class BaseCirculationApiSettings(BaseSettings):
                 "other collections will push the contents of this collection to the bottom of any lane in which this "
                 "collection's contents appear. The default value "
                 f"({IntegrationConfigurationConstants.DEFAULT_LANE_PRIORITY_LEVEL}) "
-                "will be used, if no value is provided here. If two or more collections contain overlapping sets of "
-                "books, the highest of the lane priorities when ordering a book's position in a lane."
+                "will be used if no value is provided here. If two or more collections contain overlapping sets of "
+                "books, the highest of the lane priorities will be used when ordering a book's position in a lane."
             ),
             required=False,
         ),
