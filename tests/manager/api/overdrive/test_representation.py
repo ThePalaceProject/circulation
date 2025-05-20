@@ -168,10 +168,24 @@ class TestOverdriveRepresentationExtractor:
         assert 0 == data.licenses_available
         assert 0 == data.patrons_in_hold_queue
 
-    def test_book_info_with_metadata(self, overdrive_api_fixture: OverdriveAPIFixture):
+    # TODO: We can remove the "star-rating-present" case, its test file, and
+    #  this `parametrize`; and hard code the remaining filename once OverDrive
+    #  removes star ratings from their metadata(scheduled for June 16, 2025).
+    @pytest.mark.parametrize(
+        "metadata_file",
+        (
+            pytest.param("overdrive_metadata.json", id="star-rating-removed"),
+            pytest.param(
+                "overdrive_metadata_with_star_rating.json", id="star-rating-present"
+            ),
+        ),
+    )
+    def test_book_info_with_metadata(
+        self, overdrive_api_fixture: OverdriveAPIFixture, metadata_file: str
+    ):
         # Tests that can convert an overdrive json block into a Metadata object.
 
-        raw, info = overdrive_api_fixture.sample_json("overdrive_metadata.json")
+        raw, info = overdrive_api_fixture.sample_json(metadata_file)
         metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(info)
 
         assert "Agile Documentation" == metadata.title
@@ -285,11 +299,6 @@ class TestOverdriveRepresentationExtractor:
             x for x in measurements if x.quantity_measured == Measurement.POPULARITY
         ][0]
         assert 2 == popularity.value
-
-        rating = [x for x in measurements if x.quantity_measured == Measurement.RATING][
-            0
-        ]
-        assert 2.7 == rating.value
 
         # Request only the bibliographic information.
         metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(

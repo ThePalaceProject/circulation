@@ -703,7 +703,6 @@ class Measurement(Base):
     # to another. Once we know the scale used by a given data source, we can
     # scale its ratings to the 0..1 range and create a 'quality' rating.
     RATING_SCALES = {
-        DataSourceConstants.OVERDRIVE: [1, 5],
         DataSourceConstants.AMAZON: [1, 5],
         DataSourceConstants.UNGLUE_IT: [1, 5],
         DataSourceConstants.NOVELIST: [0, 5],
