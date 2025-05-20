@@ -219,13 +219,6 @@ def beat_schedule() -> dict[str, Any]:
                 minute="0", hour="0", day_of_week="0"
             ),  # Every Sunday at midnight
         },
-        "work_classifications": {
-            "task": "work.work_classifications",
-            "schedule": crontab(
-                minute="0",
-                hour="*/3",
-            ),  # Every 3 hours on the hour
-        },
     }
 
 

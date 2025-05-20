@@ -34,6 +34,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, literal_column, select
 from sqlalchemy.sql.functions import func
 
+from palace.manager.celery.tasks.work import calculate_presentation
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
@@ -46,6 +47,7 @@ from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     IntegrationConfigurationConstants,
 )
+from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -70,7 +72,6 @@ from palace.manager.sqlalchemy.util import (
 )
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
-from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -112,7 +113,7 @@ class WorkGenre(Base):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
 
 
-class Work(Base, LoggerMixin):
+class Work(Base, HasSessionCache):
     APPEALS_URI = "http://librarysimplified.org/terms/appeals/"
 
     CHARACTER_APPEAL = "Character"
@@ -349,29 +350,29 @@ class Work(Base, LoggerMixin):
             len(self.license_pools),
         )
 
-    @classmethod
-    def missing_coverage_from(
-        cls, _db, operation=None, count_as_covered=None, count_as_missing_before=None
-    ):
-        """Find Works which have no WorkCoverageRecord for the given
-        `operation`.
-        """
-
-        clause = and_(
-            Work.id == WorkCoverageRecord.work_id,
-            WorkCoverageRecord.operation == operation,
-        )
-        q = (
-            _db.query(Work)
-            .outerjoin(WorkCoverageRecord, clause)
-            .order_by(Work.id, WorkCoverageRecord.id)
-        )
-
-        missing = WorkCoverageRecord.not_covered(
-            count_as_covered, count_as_missing_before
-        )
-        q2 = q.filter(missing)
-        return q2
+    # @classmethod
+    # def missing_coverage_from(
+    #     cls, _db, operation=None, count_as_covered=None, count_as_missing_before=None
+    # ):
+    #     """Find Works which have no WorkCoverageRecord for the given
+    #     `operation`.
+    #     """
+    #
+    #     clause = and_(
+    #         Work.id == WorkCoverageRecord.work_id,
+    #         WorkCoverageRecord.operation == operation,
+    #     )
+    #     q = (
+    #         _db.query(Work)
+    #         .outerjoin(WorkCoverageRecord, clause)
+    #         .order_by(Work.id, WorkCoverageRecord.id)
+    #     )
+    #
+    #     missing = WorkCoverageRecord.not_covered(
+    #         count_as_covered, count_as_missing_before
+    #     )
+    #     q2 = q.filter(missing)
+    #     return q2
 
     @classmethod
     def for_unchecked_subjects(cls, _db):
@@ -639,7 +640,6 @@ class Work(Base, LoggerMixin):
             )
         else:
             self.summary_text = ""
-        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.SUMMARY_OPERATION)
 
     @classmethod
     def with_genre(cls, _db, genre):
@@ -916,11 +916,6 @@ class Work(Base, LoggerMixin):
         ) and new_presentation_edition != None:
             # did we find a pool whose presentation edition was better than the work's?
             self.set_presentation_edition(new_presentation_edition)
-
-        # tell everyone else we tried to set work's presentation edition
-        WorkCoverageRecord.add_for(
-            self, operation=WorkCoverageRecord.CHOOSE_EDITION_OPERATION
-        )
 
         changed = (
             edition_metadata_changed
@@ -1253,24 +1248,22 @@ class Work(Base, LoggerMixin):
             waiting.add(work_id)
 
     def needs_full_presentation_recalculation(self):
-        """Mark this work as needing to have its presentation completely
-        recalculated.
-
-        This shifts the time spent recalculating presentation to a
-        script dedicated to this purpose, rather than a script that
-        interacts with APIs. It's also more efficient, since a work
-        might be flagged multiple times before we actually get around
-        to recalculating the presentation.
-        """
-        return self._reset_coverage(WorkCoverageRecord.CLASSIFY_OPERATION)
+        """Queue an async background task to have this work's presentation completely recalculated"""
+        calculate_presentation.delay(
+            work_id=self.id,
+            policy=PresentationCalculationPolicy.recalculate_everything(),
+        )
 
     def needs_new_presentation_edition(self):
-        """Mark this work as needing to have its presentation edition
+        """Queue an async task to have this work's presentation edition
         regenerated. This is significantly less work than
         calling needs_full_presentation_recalculation, but it will
         not update a Work's quality score, summary, or genre classification.
         """
-        return self._reset_coverage(WorkCoverageRecord.CHOOSE_EDITION_OPERATION)
+        calculate_presentation.delay(
+            work_id=self.id,
+            policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
+        )
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
@@ -1336,7 +1329,6 @@ class Work(Base, LoggerMixin):
         self.quality = Measurement.overall_quality(
             measurements, default_value=default_quality
         )
-        WorkCoverageRecord.add_for(self, operation=WorkCoverageRecord.QUALITY_OPERATION)
 
     def assign_genres(
         self,
