@@ -217,7 +217,14 @@ def beat_schedule() -> dict[str, Any]:
             "task": "novelist.update_novelists_for_all_libraries",
             "schedule": crontab(
                 minute="0", hour="0", day_of_week="0"
-            ),  # Every Sundary at midnight
+            ),  # Every Sunday at midnight
+        },
+        "work_classifications": {
+            "task": "work.work_classifications",
+            "schedule": crontab(
+                minute="0",
+                hour="*/3",
+            ),  # Every 3 hours on the hour
         },
     }
 
