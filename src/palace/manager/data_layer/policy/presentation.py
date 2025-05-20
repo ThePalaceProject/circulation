@@ -105,3 +105,22 @@ class PresentationCalculationPolicy(BaseFrozenData):
             choose_summary=False,
             calculate_quality=False,
         )
+
+    @classmethod
+    def recalculate_presentation_edition(cls):
+        return cls(
+            choose_edition=True,
+            set_edition_metadata=True,
+            verbose=True,
+            # These are the expensive ones, and they're covered by
+            # recalculate_everything
+            classify=False,
+            choose_summary=False,
+            calculate_quality=False,
+            # It would be better if there were a separate class for this
+            # operation (COVER_OPERATION), but it's a little complicated because
+            # that's not a WorkCoverageRecord operation.
+            choose_cover=True,
+            # This will flag the Work as needing a search index update
+            update_search_index=True,
+        )
