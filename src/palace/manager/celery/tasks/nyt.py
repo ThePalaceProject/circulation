@@ -12,10 +12,11 @@ def update_nyt_best_sellers_lists(task: Task, include_history: bool = False) -> 
     with task.session() as session:
         try:
             api = NYTBestSellerAPI.from_config(session)
-            names = api.list_of_lists()
         except CannotLoadConfiguration as e:
             task.log.warning(f"Skipping update: {e.message}")
             return
+
+    names = api.list_of_lists()
 
     for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
         # run each list update in its own transaction to minimize transaction time and size
