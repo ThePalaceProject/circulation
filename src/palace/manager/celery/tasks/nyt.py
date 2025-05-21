@@ -2,6 +2,7 @@ from celery import shared_task
 
 from palace.manager.api.metadata.nyt import NYTBestSellerAPI
 from palace.manager.celery.task import Task
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.service.celery.celery import QueueNames
 
 
@@ -9,8 +10,14 @@ from palace.manager.service.celery.celery import QueueNames
 def update_nyt_best_sellers_lists(task: Task, include_history: bool = False) -> None:
 
     with task.session() as session:
-        api = NYTBestSellerAPI.from_config(session)
+        try:
+            api = NYTBestSellerAPI.from_config(session)
+        except CannotLoadConfiguration as e:
+            task.log.warning(f"Skipping update: {e.message}")
+            return
+
         names = api.list_of_lists()
+
     for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
         # run each list update in its own transaction to minimize transaction time and size
         with task.transaction() as session:

@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import create_autospec, patch
 
 import pytest
@@ -56,3 +57,29 @@ def test_update_nyt_best_sellers_lists(
             assert mock_api.update.call_count == 2
 
         assert best_seller_list.to_customlist.call_count == 2
+
+
+def test_cannot_load_configuration_due_to_no_integration_found(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    caplog: pytest.LogCaptureFixture,
+):
+
+    caplog.set_level(logging.WARN)
+    update_nyt_best_sellers_lists.delay().wait()
+    assert "Skipping update: No Integration found for the NYT." in caplog.text
+
+
+def test_api_failure(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+
+    with patch("palace.manager.celery.tasks.nyt.NYTBestSellerAPI") as nyt_api:
+        mock_api = create_autospec(NYTBestSellerAPI)
+        mock_api.list_of_lists.side_effect = [Exception("any exception")]
+        nyt_api.from_config.return_value = mock_api
+
+        with pytest.raises(Exception) as e:
+            update_nyt_best_sellers_lists.delay().wait()
+            assert "any exception" in str(e)
