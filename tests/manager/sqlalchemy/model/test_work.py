@@ -19,7 +19,6 @@ from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import WorkCoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -127,7 +126,6 @@ class TestWork:
         work_queue_indexing: WorkQueueIndexingFixture,
     ):
         # Test that:
-        # - work coverage records are made on work creation and primary edition selection.
         # - work's presentation information (author, title, etc. fields) does a proper job
         #   of combining fields from underlying editions.
         # - work's presentation information keeps in sync with work's presentation edition.
@@ -233,11 +231,6 @@ class TestWork:
         # The author of the Work is the author of its primary work record.
         assert "Alice Adder, Bob Bitshifter" == work.author
 
-        # This Work starts out with a single CoverageRecord reflecting
-        # the work done to choose-edition as a primary edition is set.
-        [choose_edition] = sorted(work.coverage_records, key=lambda x: x.operation)
-        assert choose_edition.operation == WorkCoverageRecord.CHOOSE_EDITION_OPERATION
-
         # pools aren't yet aware of each other
         assert pool1.superceded == False
         assert pool2.superceded == False
@@ -284,24 +277,6 @@ class TestWork:
         # The index has not been updated.
         assert [] == external_search_fake_fixture.service.documents_all()
 
-        # The Work now has a complete set of WorkCoverageRecords
-        # associated with it, reflecting all the operations that
-        # occurred as part of calculate_presentation().
-        #
-        # All the work has actually been done, except for the work of
-        # updating the search index, which has been queued and
-        # will be done later.
-        records = work.coverage_records
-
-        wcr = WorkCoverageRecord
-        success = wcr.SUCCESS
-        expect = {
-            (wcr.CHOOSE_EDITION_OPERATION, success),
-            (wcr.CLASSIFY_OPERATION, success),
-            (wcr.SUMMARY_OPERATION, success),
-            (wcr.QUALITY_OPERATION, success),
-        }
-        assert expect == {(x.operation, x.status) for x in records}
         assert work_queue_indexing.is_queued(work)
 
         # Now mark the pool with the presentation edition as suppressed.
@@ -369,17 +344,11 @@ class TestWork:
         # crash.
         work = db.work()
         work.presentation_edition = None
-        work.coverage_records = []
         db.session.commit()
         work.calculate_presentation()
 
         # The work is not presentation-ready.
         assert False == work.presentation_ready
-
-        # Work was done to choose the presentation edition, but since no
-        # presentation edition was found, no other work was done.
-        [choose_edition] = work.coverage_records
-        assert WorkCoverageRecord.CHOOSE_EDITION_OPERATION == choose_edition.operation
 
     def test_calculate_presentation_sets_presentation_ready_based_on_content(
         self, db: DatabaseTransactionFixture
@@ -988,47 +957,6 @@ class TestWork:
         )
         assert has_no_cover(other_edition)
         assert has_no_cover(other_work)
-
-    def test_missing_coverage_from(self, db: DatabaseTransactionFixture):
-        operation = "the_operation"
-
-        # Here's a work with a coverage record.
-        work = db.work(with_license_pool=True)
-
-        # It needs coverage.
-        assert [work] == Work.missing_coverage_from(db.session, operation).all()
-
-        # Let's give it coverage.
-        record = db.work_coverage_record(work, operation)
-
-        # It no longer needs coverage!
-        assert [] == Work.missing_coverage_from(db.session, operation).all()
-
-        # But if we disqualify coverage records created before a
-        # certain time, it might need coverage again.
-        assert isinstance(record.timestamp, datetime.datetime)
-        cutoff = record.timestamp + datetime.timedelta(seconds=1)
-
-        assert [work] == Work.missing_coverage_from(
-            db.session, operation, count_as_missing_before=cutoff
-        ).all()
-
-    def test_missing_coverage_from_sorts_results(self, db: DatabaseTransactionFixture):
-        """Ensure that Work objects returned by Work.missing_coverage_from are sorted by their identifier."""
-        operation = "the_operation"
-
-        # Create two Work objects.
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
-        works = [work1, work2]
-
-        db.session.commit()
-
-        # Sort the objects by their id.
-        works.sort(key=lambda work: work.id)
-
-        # Ensure that the Work objects returned by Work.missing_coverage_from are sorted.
-        assert works == Work.missing_coverage_from(db.session, operation).all()
 
     def test_top_genre(self, db: DatabaseTransactionFixture):
         work = db.work()
@@ -1784,42 +1712,6 @@ class TestWork:
 
         assert work_queue_indexing.is_queued(work)
         assert work_queue_indexing.is_queued(another_work)
-
-    def test_reset_coverage(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        # Test the methods that reset coverage for works, indicating
-        # that some task needs to be performed again.
-        WCR = WorkCoverageRecord
-        work = db.work()
-        work.presentation_ready = True
-
-        # Calling _reset_coverage when there is no coverage creates
-        # a new WorkCoverageRecord in the REGISTERED state
-        operation = "an operation"
-        record = work._reset_coverage(operation)
-        assert WCR.REGISTERED == record.status
-
-        # Calling _reset_coverage when the WorkCoverageRecord already
-        # exists sets the state back to REGISTERED.
-        record.state = WCR.SUCCESS
-        work._reset_coverage(operation)
-        assert WCR.REGISTERED == record.status
-
-        # A number of methods with helpful names all call _reset_coverage
-        # for some specific operation.
-        def mock_reset_coverage(operation):
-            work.coverage_reset_for = operation
-
-        work._reset_coverage = mock_reset_coverage
-
-        for method, operation in (
-            (work.needs_full_presentation_recalculation, WCR.CLASSIFY_OPERATION),
-            (work.needs_new_presentation_edition, WCR.CHOOSE_EDITION_OPERATION),
-        ):
-            method()
-            assert operation == work.coverage_reset_for
 
     def test_for_unchecked_subjects(self, db: DatabaseTransactionFixture):
         w1 = db.work(with_license_pool=True)
@@ -2870,12 +2762,11 @@ class TestWorkConsolidation:
         [lp1] = work1.license_pools
         lp1.presentation_edition.permanent_work_id = "abcd"
 
-        # Let's give it a WorkGenre and a WorkCoverageRecord.
+        # Let's give it a WorkGenre
         genre, ignore = Genre.lookup(db.session, "Fantasy")
         wg, wg_is_new = get_one_or_create(
             db.session, WorkGenre, work=work1, genre=genre
         )
-        wcr, wcr_is_new = WorkCoverageRecord.add_for(work1, "test")
 
         # Here's another work with an open-access LicensePool for the
         # same book.
@@ -2886,16 +2777,9 @@ class TestWorkConsolidation:
         # Let's merge the first work into the second.
         work1.merge_into(work2)
 
-        # The first work has been deleted, as have its WorkGenre and
-        # WorkCoverageRecord.
+        # The first work has been deleted
         assert [] == db.session.query(Work).filter(Work.id == work1.id).all()
         assert [] == db.session.query(WorkGenre).all()
-        assert (
-            []
-            == db.session.query(WorkCoverageRecord)
-            .filter(WorkCoverageRecord.work_id == work1.id)
-            .all()
-        )
 
     def test_open_access_for_permanent_work_id_fixes_mismatched_works_incidentally(
         self, db

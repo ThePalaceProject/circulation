@@ -12,7 +12,6 @@ from palace.manager.core.coverage import (
     BibliographicCoverageProvider,
     CollectionCoverageProvider,
     IdentifierCoverageProvider,
-    WorkCoverageProvider,
 )
 from palace.manager.core.opds_import import OPDSAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -113,20 +112,6 @@ class InstrumentedCoverageProvider(MockCoverageProvider, IdentifierCoverageProvi
         self.finalize_batch_called = True
 
 
-class InstrumentedWorkCoverageProvider(MockCoverageProvider, WorkCoverageProvider):
-    """A WorkCoverageProvider that keeps track of every item it tried
-    to cover.
-    """
-
-    def __init__(self, _db, *args, **kwargs):
-        super().__init__(_db, *args, **kwargs)
-        self.attempts = []
-
-    def process_item(self, item):
-        self.attempts.append(item)
-        return item
-
-
 class AlwaysSuccessfulCollectionCoverageProvider(
     MockCoverageProvider, CollectionCoverageProvider
 ):
@@ -142,12 +127,6 @@ class AlwaysSuccessfulCoverageProvider(InstrumentedCoverageProvider):
     """A CoverageProvider that does nothing and always succeeds."""
 
     SERVICE_NAME = "Always successful"
-
-
-class AlwaysSuccessfulWorkCoverageProvider(InstrumentedWorkCoverageProvider):
-    """A WorkCoverageProvider that does nothing and always succeeds."""
-
-    SERVICE_NAME = "Always successful (works)"
 
 
 class AlwaysSuccessfulBibliographicCoverageProvider(
@@ -181,14 +160,6 @@ class NeverSuccessfulCoverageProvider(InstrumentedCoverageProvider):
         return self.failure(item, "What did you expect?", self.transient)
 
 
-class NeverSuccessfulWorkCoverageProvider(InstrumentedWorkCoverageProvider):
-    SERVICE_NAME = "Never successful (works)"
-
-    def process_item(self, item):
-        self.attempts.append(item)
-        return self.failure(item, "What did you expect?", False)
-
-
 class NeverSuccessfulBibliographicCoverageProvider(
     MockCoverageProvider, BibliographicCoverageProvider
 ):
@@ -202,14 +173,6 @@ class NeverSuccessfulBibliographicCoverageProvider(
 
 class TransientFailureCoverageProvider(InstrumentedCoverageProvider):
     SERVICE_NAME = "Never successful (transient)"
-
-    def process_item(self, item):
-        self.attempts.append(item)
-        return self.failure(item, "Oops!", True)
-
-
-class TransientFailureWorkCoverageProvider(InstrumentedWorkCoverageProvider):
-    SERVICE_NAME = "Never successful (transient, works)"
 
     def process_item(self, item):
         self.attempts.append(item)
