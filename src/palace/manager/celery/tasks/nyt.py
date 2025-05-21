@@ -16,7 +16,7 @@ def update_nyt_best_sellers_lists(task: Task, include_history: bool = False) -> 
             task.log.warning(f"Skipping update: {e.message}")
             return
 
-    names = api.list_of_lists()
+        names = api.list_of_lists()
 
     for l in sorted(names["results"], key=lambda x: x["list_name_encoded"]):
         # run each list update in its own transaction to minimize transaction time and size
