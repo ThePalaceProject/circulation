@@ -68,7 +68,7 @@ def celery_parameters() -> Mapping[str, Any]:
 @pytest.fixture(scope="session")
 def celery_includes() -> Sequence[str]:
     """Include modules when a worker starts."""
-    return ("palace.manager.celery.app",)
+    return ("palace.manager.celery.tasks",)
 
 
 @dataclass
@@ -112,8 +112,8 @@ class CeleryFixture:
 def celery_fixture(
     services_fixture: ServicesFixture,
     mock_session_maker: MockSessionMaker,
-    celery_app: Celery,
-    celery_worker: WorkController,
+    celery_session_app: Celery,
+    celery_session_worker: WorkController,
     celery_pydantic_config: CeleryConfiguration,
 ) -> Generator[CeleryFixture, None, None]:
     """Fixture to provide a Celery app and worker for testing."""
@@ -121,7 +121,11 @@ def celery_fixture(
     # Make sure our services container has the correct celery app setup
     container = services_fixture.celery_fixture.celery_container
     container.config.from_dict(celery_pydantic_config.model_dump())
-    container.app.override(celery_app)
+    container.app.override(celery_session_app)
+
+    # Make sure that the app created by the container is set as current and default
+    celery_session_app.set_default()
+    celery_session_app.set_current()
 
     # We mock out the session maker, so it doesn't try to create a new session,
     # instead it should use the same session as the test transaction.
@@ -133,8 +137,8 @@ def celery_fixture(
     ):
         yield CeleryFixture(
             container,
-            celery_app,
+            celery_session_app,
             celery_pydantic_config,
-            celery_worker,
+            celery_session_worker,
             mock_session_maker,
         )
