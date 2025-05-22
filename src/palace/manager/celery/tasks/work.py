@@ -1,15 +1,14 @@
 from celery import shared_task
 
 from palace.manager.celery.task import Task
-from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
-from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.service.celery.celery import QueueNames
 
 
-@shared_task()
+@shared_task(queue=QueueNames.default, bind=True)
 def calculate_presentation(
-    task: Task, work_id: int, policy: PresentationCalculationPolicy
+    task: Task,
 ):
-
-    with task.session() as session:
-        work = Work.by_id(task.session)
-        work.calculate_presentation(policy)
+    pass
+    # with task.session() as session:
+    #     work = Work.by_id(task.session)
+    #     work.calculate_presentation(policy)
