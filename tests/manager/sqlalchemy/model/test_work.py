@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import opensearchpy
 import pytest
@@ -15,8 +15,13 @@ from palace.manager.core.equivalents_coverage import (
     EquivalentIdentifiersCoverageProvider,
 )
 from palace.manager.core.exceptions import BasePalaceException
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.logging.configuration import LogLevel
 from palace.manager.service.redis.models.search import WaitingForIndexing
+from palace.manager.service.redis.models.work import (
+    WaitingForPresentationCalculation,
+    WorkIdAndPolicy,
+)
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -327,7 +332,15 @@ class TestWork:
         staff_edition.author = Edition.UNKNOWN_AUTHOR
         staff_edition.sort_author = Edition.UNKNOWN_AUTHOR
 
-        work.calculate_presentation()
+        # we need to patch with method since it makes a call to redis which we don't need to test.
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            work.calculate_presentation()
+            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+            queue_presentation_recalculation.assert_called_once_with(
+                work_id=work.id, policy=policy
+            )
 
         # The title of the Work got superseded.
         assert "The Staff Title" == work.title
@@ -1944,6 +1957,20 @@ class TestWork:
             Work.queue_indexing(None)
             assert waiting.pop(1) == []
 
+    def test_queue_presentation_recalculation(
+        self, redis_fixture: RedisFixture, services_fixture: ServicesFixture
+    ):
+        # Test the method that adds a work to a redis set to wait for presentation recalculation
+        waiting = WaitingForPresentationCalculation(redis_fixture.client)
+
+        with services_fixture.wired():
+            policy = PresentationCalculationPolicy.recalculate_everything()
+            Work.queue_presentation_recalculation(555, policy=policy)
+            assert waiting.pop(1) == {WorkIdAndPolicy(work_id=555, policy=policy)}
+
+            Work.queue_presentation_recalculation(None, policy=policy)
+            assert waiting.pop(1) == set()
+
 
 class TestWorkConsolidation:
     def test_calculate_work_success(self, db: DatabaseTransactionFixture):
@@ -2989,9 +3016,11 @@ class TestWorkConsolidation:
         )
 
     def test_licensepool_without_presentation_edition_gets_no_work(
-        self, db: DatabaseTransactionFixture
+        self,
+        db: DatabaseTransactionFixture,
     ):
         data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
+        # Test the method that adds a work to a redis set to wait for indexing
         identifier = db.identifier()
         work, _ = create(db.session, Work)
         lp, _ = create(
@@ -3003,6 +3032,14 @@ class TestWorkConsolidation:
             work=work,
         )
 
-        # Even if the LicensePool had a work before, it gets removed.
-        assert lp.calculate_work() == (None, False)
-        assert lp.work is None
+        # we need to patch with method since it makes a call to redis which we don't need to test.
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            # Even if the LicensePool had a work before, it gets removed.
+            assert lp.calculate_work() == (None, False)
+            assert lp.work is None
+            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+            queue_presentation_recalculation.assert_called_once_with(
+                work_id=work.id, policy=policy
+            )

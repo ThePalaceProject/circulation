@@ -13,7 +13,6 @@ from palace.manager.sqlalchemy.model.coverage import (
     CoverageRecord,
     EquivalencyCoverageRecord,
     Timestamp,
-    WorkCoverageRecord,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
