@@ -11,7 +11,7 @@ from palace.manager.api.admin.problem_details import (
 )
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_admin import AdminControllerFixture
-from tests.fixtures.services import ServicesEmailFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestResetPasswordController:
@@ -68,7 +68,7 @@ class TestResetPasswordController:
     def test_forgot_password_post(
         self,
         admin_ctrl_fixture: AdminControllerFixture,
-        services_email_fixture: ServicesEmailFixture,
+        services_fixture: ServicesFixture,
     ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
@@ -116,17 +116,17 @@ class TestResetPasswordController:
             assert "Email successfully sent" in response.get_data(as_text=True)
 
             # Check the email is sent
-            assert services_email_fixture.mock_emailer.send.call_count == 1
+            assert services_fixture.mock_services.emailer.send.call_count == 1
 
             # Check that the email is sent to the right admin
-            assert services_email_fixture.mock_emailer.send.call_args.kwargs[
+            assert services_fixture.mock_services.emailer.send.call_args.kwargs[
                 "receivers"
             ] == [admin_email]
 
     def test_reset_password_get(
         self,
         admin_ctrl_fixture: AdminControllerFixture,
-        services_email_fixture: ServicesEmailFixture,
+        services_fixture: ServicesFixture,
     ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
         token = "token"
@@ -211,7 +211,7 @@ class TestResetPasswordController:
 
             assert forgot_password_response.status_code == 200
 
-            mail_text = services_email_fixture.mock_emailer.send.call_args.kwargs[
+            mail_text = services_fixture.mock_services.emailer.send.call_args.kwargs[
                 "text"
             ]
 
@@ -244,7 +244,7 @@ class TestResetPasswordController:
     def test_reset_password_post(
         self,
         admin_ctrl_fixture: AdminControllerFixture,
-        services_email_fixture: ServicesEmailFixture,
+        services_fixture: ServicesFixture,
     ):
         reset_password_ctrl = admin_ctrl_fixture.manager.admin_reset_password_controller
 
@@ -260,7 +260,7 @@ class TestResetPasswordController:
             response = reset_password_ctrl.forgot_password()
             assert response.status_code == 200
 
-            mail_text = services_email_fixture.mock_emailer.send.call_args.kwargs[
+            mail_text = services_fixture.mock_services.emailer.send.call_args.kwargs[
                 "text"
             ]
 

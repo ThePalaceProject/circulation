@@ -670,7 +670,7 @@ class TestCollection:
         collection2.delete()
 
         # The search index was injected and told to remove the second work.
-        services_fixture_wired.search_fixture.index_mock.remove_work.assert_called_once_with(
+        services_fixture_wired.mock_services.search_index.remove_work.assert_called_once_with(
             work2
         )
 

@@ -390,23 +390,23 @@ def test_generate_inventory_and_hold_reports_task(
     # there must be at least one opds collection associated with the library for this to work
     create_test_opds_collection("c1", "d1", db, library)
     generate_inventory_and_hold_reports.delay(library.id, "test@email").wait()
-    services_fixture.email_fixture.mock_emailer.send.assert_called_once()
+    services_fixture.mock_services.emailer.send.assert_called_once()
 
     mock_s3_service.store_stream.assert_called_once()
     mock_s3_service.generate_url.assert_called_once()
 
     assert (
         "Inventory and Holds Reports"
-        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["subject"]
+        in services_fixture.mock_services.emailer.send.call_args.kwargs["subject"]
     )
-    assert services_fixture.email_fixture.mock_emailer.send.call_args.kwargs[
+    assert services_fixture.mock_services.emailer.send.call_args.kwargs[
         "receivers"
     ] == ["test@email"]
     assert (
         "Download Report here -> http://test"
-        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["text"]
+        in services_fixture.mock_services.emailer.send.call_args.kwargs["text"]
     )
     assert (
         "This report will be available for download for 30 days."
-        in services_fixture.email_fixture.mock_emailer.send.call_args.kwargs["text"]
+        in services_fixture.mock_services.emailer.send.call_args.kwargs["text"]
     )
