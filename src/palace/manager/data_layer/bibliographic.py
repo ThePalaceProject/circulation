@@ -29,6 +29,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
@@ -342,7 +343,7 @@ class BibliographicData(BaseMutableData):
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
-    ) -> tuple[Edition, bool]:
+    ) -> tuple[Edition, bool, bool | None]:
         """Apply this BibliographicData to the given edition.
 
         :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes
@@ -645,9 +646,9 @@ class BibliographicData(BaseMutableData):
             if pool and pool.work:
                 work = pool.work
                 if work_requires_full_recalculation:
-                    work.needs_full_presentation_recalculation()
+                    Work.queue_full_presentation_recalculation(work_id=work.id)
                 else:
-                    work.needs_new_presentation_edition()
+                    Work.queue_presentation_edition_recalculation(work_id=work.id)
 
         return edition, work_requires_new_presentation_edition
 

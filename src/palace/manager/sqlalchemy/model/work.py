@@ -34,7 +34,6 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, literal_column, select
 from sqlalchemy.sql.functions import func
 
-from palace.manager.celery.tasks.work import calculate_presentation
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.classifier.work import WorkClassifier
 from palace.manager.core.exceptions import BasePalaceException
@@ -42,6 +41,10 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument
+from palace.manager.service.redis.models.work import (
+    WaitingForPresentationCalculation,
+    WorkIdAndPolicy,
+)
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -1194,23 +1197,18 @@ class Work(Base, HasSessionCache):
         if work_id is not None:
             waiting.add(work_id)
 
-    def needs_full_presentation_recalculation(self):
-        """Queue an async background task to have this work's presentation completely recalculated"""
-        calculate_presentation.delay(
-            work_id=self.id,
-            policy=PresentationCalculationPolicy.recalculate_everything(),
-        )
-
-    def needs_new_presentation_edition(self):
-        """Queue an async task to have this work's presentation edition
-        regenerated. This is significantly less work than
-        calling needs_full_presentation_recalculation, but it will
-        not update a Work's quality score, summary, or genre classification.
-        """
-        calculate_presentation.delay(
-            work_id=self.id,
-            policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-        )
+    @staticmethod
+    @inject
+    def queue_presentation_recalculation(
+        work_id: int | None,
+        policy: PresentationCalculationPolicy,
+        *,
+        redis_client: Redis = Provide["redis.client"],
+    ):
+        """Queue an async background task to have this work's presentation  recalculated"""
+        waiting = WaitingForPresentationCalculation(redis_client)
+        if work_id is not None:
+            waiting.add(WorkIdAndPolicy(work_id=work_id, policy=policy))
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.
