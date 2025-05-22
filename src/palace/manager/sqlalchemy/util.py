@@ -9,7 +9,7 @@ from frozendict import frozendict
 from psycopg2._range import NumericRange
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import IntegrityError, MultipleResultsFound, NoResultFound
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext import mutable
 from sqlalchemy.orm import Session
 from typing_extensions import Self
@@ -96,21 +96,15 @@ def get_one(
     if constraint is not None:
         q = q.filter(constraint)
 
-    try:
-        return q.one()  # type: ignore[no-any-return]
-    except MultipleResultsFound:
-        if on_multiple == "error":
-            raise
-        elif on_multiple == "interchangeable":
-            # These records are interchangeable so we can use
-            # whichever one we want.
-            #
-            # This may be a sign of a problem somewhere else. A
-            # database-level constraint might be useful.
-            q = q.limit(1)
-            return q.one()  # type: ignore[no-any-return]
-    except NoResultFound:
-        return None
+    if on_multiple == "interchangeable":
+        # These records are interchangeable so we can use
+        # whichever one we want.
+        #
+        # This may be a sign of a problem somewhere else. A
+        # database-level constraint might be useful.
+        q = q.limit(1)
+
+    return q.one_or_none()
 
 
 log = logging.getLogger(__name__)
