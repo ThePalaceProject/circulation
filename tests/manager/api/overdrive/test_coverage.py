@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
 
@@ -10,6 +11,7 @@ from palace.manager.scripts.coverage_provider import RunCollectionCoverageProvid
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.mocks.overdrive import MockOverdriveAPI
@@ -111,7 +113,11 @@ class TestOverdriveBibliographicCoverageProvider:
         raw, info = fixture.overdrive.sample_json("overdrive_metadata.json")
         http.queue_response(200, content=raw)
 
-        [result] = fixture.provider.process_batch([identifier])
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            [result] = fixture.provider.process_batch([identifier])
+            assert queue_presentation_recalculation.call_count == 1
         assert result == identifier
 
         # A LicensePool was created, not because we know anything

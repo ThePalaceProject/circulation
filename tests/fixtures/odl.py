@@ -8,6 +8,7 @@ from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
+from fixtures.redis import RedisFixture
 from jinja2 import Template
 from requests import Response
 
@@ -288,6 +289,7 @@ class OPDS2WithODLImporterFixture:
         self,
         db: DatabaseTransactionFixture,
         api_fixture: OPDS2WithODLApiFixture,
+        redis_fixture: RedisFixture,
     ):
         self.db = db
         self.api_fixture = api_fixture
@@ -302,6 +304,11 @@ class OPDS2WithODLImporterFixture:
             collection=self.collection,
             http_get=self.get_response,
         )
+
+        self.redis_fixture = redis_fixture
+
+    def wired(self):
+        return self.redis_fixture.services_fixture.wired()
 
     def get_response(self, *args: Any, **kwargs: Any) -> Response:
         return MockRequestsResponse(200, content=self.responses.pop(0))
@@ -367,5 +374,6 @@ class OPDS2WithODLImporterFixture:
 def opds2_with_odl_importer_fixture(
     db: DatabaseTransactionFixture,
     opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
+    redis_fixture: RedisFixture,
 ) -> OPDS2WithODLImporterFixture:
-    return OPDS2WithODLImporterFixture(db, opds2_with_odl_api_fixture)
+    return OPDS2WithODLImporterFixture(db, opds2_with_odl_api_fixture, redis_fixture)

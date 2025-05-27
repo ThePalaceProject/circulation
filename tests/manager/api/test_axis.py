@@ -58,6 +58,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.flask_util import Response
 from palace.manager.util.http import RemoteIntegrationException
@@ -380,7 +381,11 @@ class TestAxis360API:
 
         axis360.api.queue_response(200, content=data)
 
-        axis360.api.update_availability(pool)
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            axis360.api.update_availability(pool)
+            assert queue_presentation_recalculation.call_count == 1
 
         # The availability information has been udpated, as has the
         # date the availability information was last checked.
@@ -734,9 +739,14 @@ class TestAxis360API:
         # and creates appropriate data model objects.
 
         api = MockAxis360API(axis360.db.session, axis360.collection)
-        e, e_new, lp, lp_new = api.update_book(
-            axis360.BIBLIOGRAPHIC_DATA,
-        )
+
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            e, e_new, lp, lp_new = api.update_book(
+                axis360.BIBLIOGRAPHIC_DATA,
+            )
+            assert queue_presentation_recalculation.call_count == 1
         # A new LicensePool and Edition were created.
         assert True == lp_new
         assert True == e_new

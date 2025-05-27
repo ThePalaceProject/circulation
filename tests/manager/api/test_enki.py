@@ -6,6 +6,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from fixtures.redis import RedisFixture
 
 from palace.manager.api.circulation import (
     FetchFulfillment,
@@ -59,7 +60,12 @@ def enki_files_fixture() -> EnkiFilesFixture:
 
 
 class EnkiTestFixure:
-    def __init__(self, db: DatabaseTransactionFixture, files: EnkiFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: EnkiFilesFixture,
+        redis_fixture: RedisFixture,
+    ):
         self.db = db
         self.files = files
         self.library = db.default_library()
@@ -74,12 +80,19 @@ class EnkiTestFixure:
             EnkiLibrarySettings(enki_library_id="c"),
         )
 
+        self.redis_fixture = redis_fixture
+
+    def wired(self):
+        return self.redis_fixture.services_fixture.wired()
+
 
 @pytest.fixture(scope="function")
 def enki_test_fixture(
-    db: DatabaseTransactionFixture, enki_files_fixture: EnkiFilesFixture
+    db: DatabaseTransactionFixture,
+    enki_files_fixture: EnkiFilesFixture,
+    redis_fixture: RedisFixture,
 ) -> EnkiTestFixure:
-    return EnkiTestFixure(db, enki_files_fixture)
+    return EnkiTestFixure(db, enki_files_fixture, redis_fixture)
 
 
 class TestEnkiAPI:
@@ -1029,7 +1042,8 @@ class TestEnkiImport:
         # Ask for circulation events from one hour in 1970.
         start = datetime_utc(1970, 1, 1, 0, 0, 0)
         end = datetime_utc(1970, 1, 1, 1, 0, 0)
-        monitor._update_circulation(start, end)
+        with enki_test_fixture.wired():
+            monitor._update_circulation(start, end)
 
         # Two requests were made -- one to getRecentActivityTime
         # and one to getItem.
@@ -1075,7 +1089,8 @@ class TestEnkiImport:
         # EnkiImport won't ask for it.
 
         # Pump the monitor again.
-        monitor._update_circulation(start, end)
+        with enki_test_fixture.wired():
+            monitor._update_circulation(start, end)
 
         # We made a single request, to getRecentActivityTime.
         [method, url, headers, data, params, kwargs] = api.requests.pop(0)
