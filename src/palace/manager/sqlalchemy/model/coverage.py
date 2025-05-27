@@ -1,4 +1,4 @@
-# BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+# BaseCoverageRecord, Timestamp, CoverageRecord
 from __future__ import annotations
 
 import datetime
@@ -32,9 +32,7 @@ if TYPE_CHECKING:
 
 
 class BaseCoverageRecord:
-    """Contains useful constants used by both CoverageRecord and
-    WorkCoverageRecord.
-    """
+    """Contains useful constants used by CoverageRecord."""
 
     SUCCESS = "success"
     TRANSIENT_FAILURE = "transient failure"
