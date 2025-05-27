@@ -1,5 +1,5 @@
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -525,7 +525,12 @@ class TestCollection:
         )
 
         staff_edition.title = db.fresh_str()
-        work.calculate_presentation()
+
+        with patch.object(
+            Work, "queue_presentation_recalculation"
+        ) as queue_presentation_recalculation:
+            work.calculate_presentation()
+            assert queue_presentation_recalculation.call_count == 1
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 

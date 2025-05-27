@@ -3,6 +3,7 @@ from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fixtures.redis import RedisFixture
 from freezegun import freeze_time
 
 from palace.manager.api.circulation_exceptions import (
@@ -92,12 +93,19 @@ def authentication_document() -> Callable[[str], str]:
 
 class OPDSForDistributorsAPIFixture:
     def __init__(
-        self, db: DatabaseTransactionFixture, files: OPDSForDistributorsFilesFixture
+        self,
+        db: DatabaseTransactionFixture,
+        files: OPDSForDistributorsFilesFixture,
+        redis_fixtrue: RedisFixture,
     ):
         self.db = db
         self.collection = self.mock_collection(db.default_library())
         self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
+        self.redis_fixture = redis_fixtrue
+
+    def wired(self):
+        return self.redis_fixture.services_fixture.wired()
 
     def mock_collection(
         self,
@@ -123,8 +131,9 @@ class OPDSForDistributorsAPIFixture:
 def opds_dist_api_fixture(
     db: DatabaseTransactionFixture,
     opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
+    redis_fixture: RedisFixture,
 ) -> OPDSForDistributorsAPIFixture:
-    return OPDSForDistributorsAPIFixture(db, opds_dist_files_fixture)
+    return OPDSForDistributorsAPIFixture(db, opds_dist_files_fixture, redis_fixture)
 
 
 class TestOPDSForDistributorsAPI:
@@ -519,12 +528,13 @@ class TestOPDSForDistributorsImporter:
             collection=collection,
         )
 
-        (
-            imported_editions,
-            imported_pools,
-            imported_works,
-            failures,
-        ) = importer.import_from_feed(feed)
+        with opds_dist_api_fixture.wired():
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = importer.import_from_feed(feed)
 
         # This importer works the same as the base OPDSImporter, except that
         # it adds delivery mechanisms for books with epub acquisition links
