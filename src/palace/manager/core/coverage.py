@@ -63,16 +63,6 @@ class CoverageFailure:
             record.status = CoverageRecord.PERSISTENT_FAILURE
         return record
 
-    def to_work_coverage_record(self, operation):
-        """Convert this failure into a WorkCoverageRecord."""
-        record, ignore = WorkCoverageRecord.add_for(self.obj, operation=operation)
-        record.exception = self.exception
-        if self.transient:
-            record.status = CoverageRecord.TRANSIENT_FAILURE
-        else:
-            record.status = CoverageRecord.PERSISTENT_FAILURE
-        return record
-
     def to_equivalency_coverage_record(
         self, operation: str
     ) -> EquivalencyCoverageRecord:
@@ -133,13 +123,10 @@ class BaseCoverageProvider:
     coverage record.
 
     Instead of instantiating this class directly, subclass one of its
-    subclasses: either IdentifierCoverageProvider or
-    WorkCoverageProvider.
+    subclasses: either IdentifierCoverageProvider.
 
     In IdentifierCoverageProvider the 'objects' are Identifier objects
-    and the coverage records are CoverageRecord objects. In
-    WorkCoverageProvider the 'objects' are Work objects and the
-    coverage records are WorkCoverageRecord objects.
+    and the coverage records are CoverageRecord objects.
     """
 
     # In your subclass, set this to the name of the service,
@@ -554,21 +541,21 @@ class BaseCoverageProvider:
             only items that need coverage *and* are associated with one
             of these identifiers.
 
-        Implemented in CoverageProvider and WorkCoverageProvider.
+        Implemented in CoverageProvider.
         """
         raise NotImplementedError()
 
     def add_coverage_record_for(self, item):
         """Add a coverage record for the given item.
 
-        Implemented in IdentifierCoverageProvider and WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider
         """
         raise NotImplementedError()
 
     def record_failure_as_coverage_record(self, failure):
         """Convert the given CoverageFailure to a coverage record.
 
-        Implemented in IdentifierCoverageProvider and WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider
         """
         raise NotImplementedError()
 
@@ -576,8 +563,7 @@ class BaseCoverageProvider:
         """Create a CoverageFailure recording the coverage provider's
         failure to even try to process an item.
 
-        Implemented in IdentifierCoverageProvider and
-        WorkCoverageProvider.
+        Implemented in IdentifierCoverageProvider.
         """
         raise NotImplementedError()
 
@@ -585,8 +571,7 @@ class BaseCoverageProvider:
         """Do the work necessary to give coverage to one specific item.
 
         Since this is where the actual work happens, this is not
-        implemented in IdentifierCoverageProvider or
-        WorkCoverageProvider, and must be handled in a subclass.
+        implemented in IdentifierCoverageProvider, and must be handled in a subclass.
         """
         raise NotImplementedError()
 

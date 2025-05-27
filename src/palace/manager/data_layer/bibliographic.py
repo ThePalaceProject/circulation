@@ -17,6 +17,7 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import LinkRelations
@@ -646,9 +647,15 @@ class BibliographicData(BaseMutableData):
             if pool and pool.work:
                 work = pool.work
                 if work_requires_full_recalculation:
-                    Work.queue_full_presentation_recalculation(work_id=work.id)
+                    Work.queue_presentation_recalculation(
+                        work_id=work.id,
+                        policy=PresentationCalculationPolicy.recalculate_everything(),
+                    )
                 else:
-                    Work.queue_presentation_edition_recalculation(work_id=work.id)
+                    Work.queue_presentation_recalculation(
+                        work_id=work.id,
+                        policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
+                    )
 
         return edition, work_requires_new_presentation_edition
 
