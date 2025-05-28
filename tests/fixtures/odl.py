@@ -8,7 +8,6 @@ from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
-from fixtures.redis import RedisFixture
 from jinja2 import Template
 from requests import Response
 
@@ -32,6 +31,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
+from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 

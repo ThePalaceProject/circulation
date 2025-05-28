@@ -6,7 +6,6 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
-from fixtures.redis import RedisFixture
 
 from palace.manager.api.circulation import (
     FetchFulfillment,
@@ -42,6 +41,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.redis import RedisFixture
 from tests.mocks.enki import MockEnkiAPI
 from tests.mocks.mock import MockRequestsResponse
 
