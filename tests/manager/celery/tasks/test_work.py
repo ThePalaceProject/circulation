@@ -1,9 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-from fixtures.celery import CeleryFixture
-from fixtures.database import DatabaseTransactionFixture
-from fixtures.redis import RedisFixture
 from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.celery.tasks import work
@@ -16,6 +13,9 @@ from palace.manager.service.redis.models.work import (
     WaitingForPresentationCalculation,
     WorkIdAndPolicy,
 )
+from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 
 
 @pytest.mark.parametrize(
