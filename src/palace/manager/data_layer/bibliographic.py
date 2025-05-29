@@ -344,7 +344,7 @@ class BibliographicData(BaseMutableData):
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
-    ) -> tuple[Edition, bool, bool | None]:
+    ) -> tuple[Edition, bool]:
         """Apply this BibliographicData to the given edition.
 
         :return: (edition, made_core_changes), where edition is the newly-updated object, and made_core_changes

@@ -15,8 +15,8 @@ from palace.manager.util.log import elapsed_time_logging
 @shared_task(queue=QueueNames.default, bind=True)
 def calculate_presentation(
     task: Task,
-    batch_size: 100,
-):
+    batch_size: int = 100,
+) -> None:
 
     redis_client = task.services.redis.client()
     with TaskLock(task).lock():
@@ -44,8 +44,8 @@ class OperationalErrorn:
 def calculate_presentation_editions_for_works(
     task: Task,
     work_policies: list[WorkIdAndPolicy],
-    disable_exponential_back_off=False,
-):
+    disable_exponential_back_off: bool = False,
+) -> None:
     with (
         task.session() as session,
         elapsed_time_logging(
@@ -69,7 +69,7 @@ def calculate_presentation_editions_for_works(
             )
 
             task.log.exception(
-                f"Something unexpected went wrong while calculating the presentation for work(id={work.id}) "
+                f"Something unexpected went wrong while calculating the presentation for one of the works in "
                 f"task(id={task.request.id} due to {e}. Retrying in {wait_time} seconds."
             )
             raise task.retry(countdown=wait_time)

@@ -107,7 +107,7 @@ class PresentationCalculationPolicy(BaseFrozenData):
         )
 
     @classmethod
-    def recalculate_presentation_edition(cls):
+    def recalculate_presentation_edition(cls) -> Self:
         return cls(
             choose_edition=True,
             set_edition_metadata=True,
