@@ -50,7 +50,6 @@ from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     IntegrationConfigurationConstants,
 )
-from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import (
     Classification,
@@ -74,6 +73,7 @@ from palace.manager.sqlalchemy.util import (
 )
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.languages import LanguageCodes
+from palace.manager.util.log import LoggerMixin
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -115,7 +115,7 @@ class WorkGenre(Base):
         return "%s (%d%%)" % (self.genre.name, self.affinity * 100)
 
 
-class Work(Base, HasSessionCache):
+class Work(Base, LoggerMixin):
     APPEALS_URI = "http://librarysimplified.org/terms/appeals/"
 
     CHARACTER_APPEAL = "Character"
@@ -346,6 +346,10 @@ class Work(Base, HasSessionCache):
             self.language,
             len(self.license_pools),
         )
+
+    @classmethod
+    def by_id(cls, _db: Session, id: int):
+        return _db.execute(select(Work).where(id == id)).unique().one_or_none()
 
     @classmethod
     def for_unchecked_subjects(cls, _db):

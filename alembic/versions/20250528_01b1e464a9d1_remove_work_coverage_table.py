@@ -80,7 +80,7 @@ def downgrade() -> None:
         sa.Column(
             "status",
             postgresql.ENUM(
-                *BaseCoverageRecord.status_enum.enums,
+                *BaseCoverageRecord.status_enum.enums,  #  type: ignore[attr-defined]
                 name=BaseCoverageRecord.status_enum.name,
                 create_type=False,
             ),

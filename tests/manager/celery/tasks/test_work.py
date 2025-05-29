@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm.exc import StaleDataError
@@ -13,6 +13,7 @@ from palace.manager.service.redis.models.work import (
     WaitingForPresentationCalculation,
     WorkIdAndPolicy,
 )
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -71,9 +72,14 @@ def test_calculate_presentation_editions_for_works(
     work1 = db.work()
     policy1 = PresentationCalculationPolicy.recalculate_everything()
 
-    with patch.object(work1, "calculate_presentation") as calc_pres:
+    with (
+        patch.object(work1, "calculate_presentation") as calc_pres,
+        patch.object(Work, "by_id") as by_id,
+    ):
+        by_id.return_value = work1
         calculate_presentation_editions_for_works.delay(
-            work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)]
+            work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)],
+            disable_exponential_back_off=True,
         ).wait()
         calc_pres.assert_called_once_with(policy=policy1)
 
@@ -85,10 +91,15 @@ def test_calculate_presentation_editions_for_works_with_retry(
     work1 = db.work()
     policy1 = PresentationCalculationPolicy.recalculate_everything()
 
-    with patch.object(work1, "calculate_presentation") as calc_pres:
+    with (
+        patch.object(work1, "calculate_presentation") as calc_pres,
+        patch.object(Work, "by_id") as by_id,
+    ):
+        by_id.return_value = work1
         calc_pres.side_effect = [StaleDataError, None]
         calculate_presentation_editions_for_works.delay(
-            work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)]
+            work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)],
+            disable_exponential_back_off=True,
         ).wait()
         assert calc_pres.call_count == 2
 
@@ -100,7 +111,11 @@ def test_calculate_presentation_editions_for_works_failure(
     work1 = db.work()
     policy1 = PresentationCalculationPolicy.recalculate_everything()
 
-    with patch.object(work1, "calculate_presentation") as calc_pres:
+    with (
+        patch.object(work1, "calculate_presentation") as calc_pres,
+        patch.object(Work, "by_id") as by_id,
+    ):
+        by_id.return_value = work1
         calc_pres.side_effect = [Exception] * 5
 
         with pytest.raises(Exception):
@@ -116,15 +131,24 @@ def test_calculate_presentation_editions_for_works_non_existent_work(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
 ):
+    calculate_presentation = MagicMock()
+
+    Work.calculate_presentation = calculate_presentation
+
     no_existent_work_id = 666
     work1 = db.work()
     policy1 = PresentationCalculationPolicy.recalculate_everything()
 
-    with patch.object(work1, "calculate_presentation") as calc_pres:
+    with (
+        patch.object(work1, "calculate_presentation") as calc_pres,
+        patch.object(Work, "by_id") as by_id,
+    ):
+        by_id.side_effect = [None, work1]
         calculate_presentation_editions_for_works.delay(
             work_policies=[
                 WorkIdAndPolicy(work_id=no_existent_work_id, policy=policy1),
                 WorkIdAndPolicy(work_id=work1.id, policy=policy1),
-            ]
+            ],
+            disable_exponential_back_off=True,
         ).wait()
         assert calc_pres.call_count == 1
