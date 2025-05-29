@@ -9,7 +9,8 @@ Create Date: 2025-05-28 17:19:45.090766+00:00
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Unicode
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Unicode
+from sqlalchemy.dialects import postgresql
 
 from palace.manager.sqlalchemy.model.coverage import BaseCoverageRecord
 
@@ -78,17 +79,34 @@ def downgrade() -> None:
         ),
         sa.Column(
             "status",
-            BaseCoverageRecord.status_enum,
+            postgresql.ENUM(
+                *BaseCoverageRecord.status_enum.enums,
+                name=BaseCoverageRecord.status_enum.name,
+                create_type=False,
+            ),
             index=True,
         ),
         sa.Column(
-            exception=Column(Unicode),
+            "exception",
+            Unicode,
             index=True,
         ),
     )
 
     op.create_index(
-        op.f("ix_workcoveragerecords_work_id"),
+        op.f("ix_workcoveragerecords_operation_work_id"),
         "workcoveragerecords",
-        columns=["work_id", "operation"],
+        columns=[
+            "operation",
+            "work_id",
+        ],
+    )
+
+    op.create_unique_constraint(
+        "workcoveragerecords_work_id_operation_key",
+        columns=[
+            "operation",
+            "work_id",
+        ],
+        table_name="workcoveragerecords",
     )
