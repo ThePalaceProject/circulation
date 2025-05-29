@@ -13,7 +13,7 @@ from palace.manager.util.log import elapsed_time_logging
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def calculate_presentation(
+def calculate_work_presentations(
     task: Task,
     batch_size: int = 100,
 ) -> None:
@@ -25,12 +25,12 @@ def calculate_presentation(
 
         if len(work_policies) > 0:
 
-            calculate_presentation_editions_for_works.delay(list(work_policies))
+            calculate_presentation_for_works.delay(list(work_policies))
 
     if len(work_policies) == batch_size:
         # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
         # to process the next batch.
-        raise task.replace(calculate_presentation.s(batch_size=batch_size))
+        raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
 
     task.log.info(f"Finished queuing indexing tasks.")
     return
@@ -41,7 +41,7 @@ class OperationalErrorn:
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
-def calculate_presentation_editions_for_works(
+def calculate_presentation_for_works(
     task: Task,
     work_policies: list[WorkIdAndPolicy],
     disable_exponential_back_off: bool = False,

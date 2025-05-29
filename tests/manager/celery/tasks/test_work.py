@@ -5,8 +5,8 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from palace.manager.celery.tasks import work
 from palace.manager.celery.tasks.work import (
-    calculate_presentation,
-    calculate_presentation_editions_for_works,
+    calculate_presentation_for_works,
+    calculate_work_presentations,
 )
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.redis.models.work import (
@@ -26,7 +26,7 @@ from tests.fixtures.redis import RedisFixture
         (2),
     ],
 )
-def test_calculate_presentation(
+def test_calculate_work_presentations(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     redis_fixture: RedisFixture,
@@ -46,10 +46,8 @@ def test_calculate_presentation(
 
         assert waiting.len() == 2
 
-        with patch.object(
-            work, "calculate_presentation_editions_for_works"
-        ) as calc_for_works:
-            calculate_presentation.delay(batch_size=batch_size).wait()
+        with patch.object(work, "calculate_presentation_for_works") as calc_for_works:
+            calculate_work_presentations.delay(batch_size=batch_size).wait()
 
             assert waiting.len() == 0
             # with a batch size of one, we expect one invocation of the subtask
@@ -77,7 +75,7 @@ def test_calculate_presentation_editions_for_works(
         patch.object(Work, "by_id") as by_id,
     ):
         by_id.return_value = work1
-        calculate_presentation_editions_for_works.delay(
+        calculate_presentation_for_works.delay(
             work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)],
             disable_exponential_back_off=True,
         ).wait()
@@ -97,14 +95,14 @@ def test_calculate_presentation_editions_for_works_with_retry(
     ):
         by_id.return_value = work1
         calc_pres.side_effect = [StaleDataError, None]
-        calculate_presentation_editions_for_works.delay(
+        calculate_presentation_for_works.delay(
             work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)],
             disable_exponential_back_off=True,
         ).wait()
         assert calc_pres.call_count == 2
 
 
-def test_calculate_presentation_editions_for_works_failure(
+def test_calculate_presentation_for_works_failure(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
 ):
@@ -119,7 +117,7 @@ def test_calculate_presentation_editions_for_works_failure(
         calc_pres.side_effect = [Exception] * 5
 
         with pytest.raises(Exception):
-            calculate_presentation_editions_for_works.delay(
+            calculate_presentation_for_works.delay(
                 work_policies=[WorkIdAndPolicy(work_id=work1.id, policy=policy1)],
                 disable_exponential_back_off=True,
             ).wait()
@@ -127,7 +125,7 @@ def test_calculate_presentation_editions_for_works_failure(
         assert calc_pres.call_count == 5
 
 
-def test_calculate_presentation_editions_for_works_non_existent_work(
+def test_calculate_presentation_for_works_non_existent_work(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
 ):
@@ -144,7 +142,7 @@ def test_calculate_presentation_editions_for_works_non_existent_work(
         patch.object(Work, "by_id") as by_id,
     ):
         by_id.side_effect = [None, work1]
-        calculate_presentation_editions_for_works.delay(
+        calculate_presentation_for_works.delay(
             work_policies=[
                 WorkIdAndPolicy(work_id=no_existent_work_id, policy=policy1),
                 WorkIdAndPolicy(work_id=work1.id, policy=policy1),
