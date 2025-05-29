@@ -185,7 +185,6 @@ gh_endgroup
 gh_group "Starting service containers"
 compose_cmd down
 compose_cmd up -d pg os
-sleep 5
 gh_endgroup
 
 gh_group "Initializing database"
