@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from pydantic import ValidationError
 from requests import Response
 
@@ -35,7 +36,6 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
-from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -91,7 +91,9 @@ class OPDS2Test:
 
 class OPDS2ImporterFixture:
     def __init__(
-        self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
+        self,
+        db: DatabaseTransactionFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ) -> None:
         self.transaction = db
         self.collection = db.collection(
@@ -108,10 +110,9 @@ class OPDS2ImporterFixture:
         )
         self.collection.data_source = self.data_source
         self.importer = OPDS2Importer(db.session, self.collection)
-        self.redis_fixture = redis_fixture
-
-    def wired(self):
-        return self.redis_fixture.services_fixture.wired()
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
+        )
 
     @staticmethod
     def get_delivery_mechanisms(
@@ -126,9 +127,9 @@ class OPDS2ImporterFixture:
 @pytest.fixture
 def opds2_importer_fixture(
     db: DatabaseTransactionFixture,
-    redis_fixture: RedisFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDS2ImporterFixture:
-    return OPDS2ImporterFixture(db, redis_fixture)
+    return OPDS2ImporterFixture(db, work_id_policy_queue_presentation_recalculation)
 
 
 class TestOPDS2Importer(OPDS2Test):
@@ -193,10 +194,9 @@ class TestOPDS2Importer(OPDS2Test):
             content_server_feed = content_server_feed_text
 
         # Act
-        with opds2_importer_fixture.wired():
-            imported_editions, pools, works, failures = data.importer.import_from_feed(
-                content_server_feed
-            )
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            content_server_feed
+        )
 
         # Assert
 
@@ -430,10 +430,9 @@ class TestOPDS2Importer(OPDS2Test):
         content_server_feed = opds2_files_fixture.sample_text("feed.json")
 
         # Act
-        with opds2_importer_fixture.wired():
-            imported_editions, pools, works, failures = data.importer.import_from_feed(
-                content_server_feed
-            )
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            content_server_feed
+        )
 
         # Assert
 
@@ -499,10 +498,9 @@ class TestOPDS2Importer(OPDS2Test):
             "until": week_ago.isoformat(),
         }
 
-        with opds2_importer_fixture.wired():
-            imported_editions, pools, works, failures = data.importer.import_from_feed(
-                json.dumps(feed_json)
-            )
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         # Make we have the correct number of editions
         assert isinstance(imported_editions, list)
@@ -579,10 +577,9 @@ class TestOPDS2Importer(OPDS2Test):
         del postmodernism_metadata["availability"]
         postmodernism_metadata["modified"] = utc_now().isoformat()
 
-        with opds2_importer_fixture.wired():
-            imported_editions, pools, works, failures = data.importer.import_from_feed(
-                json.dumps(feed_json)
-            )
+        imported_editions, pools, works, failures = data.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         # Make we have the correct number of editions
         assert isinstance(imported_editions, list)
@@ -791,29 +788,28 @@ class TestOpds2Api:
     ):
         """Test the end to end workflow from importing the feed to a fulfill"""
 
-        with opds2_importer_fixture.wired():
-            content = opds2_files_fixture.sample_text("auth_token_feed.json")
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_importer_fixture.importer.import_from_feed(content)
+        content = opds2_files_fixture.sample_text("auth_token_feed.json")
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_importer_fixture.importer.import_from_feed(content)
 
-            work = works[0]
+        work = works[0]
 
-            api = CirculationAPI(
-                db.session,
-                opds2_importer_fixture.library,
-                {
-                    opds2_importer_fixture.collection.id: OPDS2API(
-                        db.session, opds2_importer_fixture.collection
-                    )
-                },
-            )
-            patron = db.patron()
-            # Borrow the book from the library
-            api.borrow(patron, "pin", work.license_pools[0], MagicMock(), None)
+        api = CirculationAPI(
+            db.session,
+            opds2_importer_fixture.library,
+            {
+                opds2_importer_fixture.collection.id: OPDS2API(
+                    db.session, opds2_importer_fixture.collection
+                )
+            },
+        )
+        patron = db.patron()
+        # Borrow the book from the library
+        api.borrow(patron, "pin", work.license_pools[0], MagicMock(), None)
 
         loans = db.session.query(Loan).filter(Loan.patron == patron)
         assert loans.count() == 1

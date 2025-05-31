@@ -1,7 +1,8 @@
 import datetime
 import logging
 from copy import deepcopy
-from unittest.mock import patch
+
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.data_layer.bibliographic import (
@@ -16,6 +17,7 @@ from palace.manager.data_layer.measurement import MeasurementData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -497,7 +499,9 @@ class TestBibliographicData:
         assert 0 == db.session.query(Work).count()
 
     def test_apply_causes_presentation_recalculation(
-        self, db: DatabaseTransactionFixture
+        self,
+        db: DatabaseTransactionFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
@@ -511,15 +515,15 @@ class TestBibliographicData:
             title="The Harry Otter and the Seaweed of Ages",
         )
         edition, ignore = bibliographic.edition(db.session)
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            bibliographic.apply(db.session, edition, None)
+        bibliographic.apply(db.session, edition, None)
 
-            queue_presentation.assert_called_once_with(
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=work.id,
                 policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-            )
+            ),
+            clear=True,
+        )
 
         # The work still has the wrong title, but a full recalculation has been queued.
         assert "The Wrong Title" == work.title
@@ -528,17 +532,17 @@ class TestBibliographicData:
         # is classified.
         bibliographic.title = None
         bibliographic.subjects = [SubjectData(type=Subject.TAG, identifier="subject")]
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            bibliographic.apply(db.session, edition, None)
 
-            # The work is now slated to have its presentation completely
-            # recalculated.
-            queue_presentation.assert_called_once_with(
+        bibliographic.apply(db.session, edition, None)
+        # The work is now slated to have its presentation completely
+        # recalculated.
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=work.id,
                 policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+            ),
+            clear=True,
+        )
 
         # We then find a new description for the work.
         bibliographic.subjects = []
@@ -546,30 +550,29 @@ class TestBibliographicData:
             LinkData(rel=Hyperlink.DESCRIPTION, content="a description")
         ]
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            bibliographic.apply(db.session, edition, None)
-
-            # We need to do a full recalculation again.
-            queue_presentation.assert_called_once_with(
+        bibliographic.apply(db.session, edition, None)
+        # We need to do a full recalculation again.
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=work.id,
                 policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+            ),
+            clear=True,
+        )
 
         # We then find a new cover image for the work.
         bibliographic.subjects = []
         bibliographic.links = [LinkData(rel=Hyperlink.IMAGE, href="http://image/")]
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            bibliographic.apply(db.session, edition, None)
-            # We need to choose a new presentation edition.
-            queue_presentation.assert_called_once_with(
+        bibliographic.apply(db.session, edition, None)
+        # We need to choose a new presentation edition.
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=work.id,
                 policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-            )
+            ),
+            clear=True,
+        )
 
     def test_apply_identifier_equivalency(self, db: DatabaseTransactionFixture):
         # Set up an Edition.

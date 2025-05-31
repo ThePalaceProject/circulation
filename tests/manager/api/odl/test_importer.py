@@ -21,7 +21,9 @@ from palace.manager.api.odl.importer import (
 from palace.manager.api.odl.settings import OPDS2AuthType, OPDS2WithODLSettings
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.license import LicenseData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.opds.odl.info import LicenseStatus
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -72,13 +74,12 @@ class TestOPDS2WithODLImporter:
         ]
 
         # Act
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file("feed.json")
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file("feed.json")
 
         # Assert
 
@@ -192,6 +193,14 @@ class TestOPDS2WithODLImporter:
 
         assert "2 validation errors" in huck_finn_failure.exception
 
+        # 5 Make sure that expected work id are queued for recalculation
+        policy = PresentationCalculationPolicy.recalculate_everything()
+        work_id_policies = [WorkIdAndPolicy(work_id=w.id, policy=policy) for w in works]
+        for wp in work_id_policies:
+            assert opds2_with_odl_importer_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
+                wp
+            )
+
     @freeze_time("2016-01-01T00:00:00+00:00")
     def test_import_audiobook_with_streaming(
         self,
@@ -201,15 +210,14 @@ class TestOPDS2WithODLImporter:
         """Ensure that OPDSWithODLImporter correctly processes and imports a feed with an audiobook."""
 
         opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                "feed-audiobook-streaming.json"
-            )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "feed-audiobook-streaming.json"
+        )
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -257,15 +265,14 @@ class TestOPDS2WithODLImporter:
         """
         opds2_with_odl_importer_fixture.queue_fixture_file("license-audiobook.json")
 
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                "feed-audiobook-no-streaming.json"
-            )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "feed-audiobook-no-streaming.json"
+        )
 
         # Make sure we imported one edition and it is an audiobook
         assert isinstance(imported_editions, list)
@@ -317,15 +324,14 @@ class TestOPDS2WithODLImporter:
             auth_type=auth_type,
         )
 
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                "open-access-title.json"
-            )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "open-access-title.json"
+        )
 
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
@@ -378,15 +384,14 @@ class TestOPDS2WithODLImporter:
             auth_type=auth_type,
         )
 
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                "unlimited-access-title.json"
-            )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            "unlimited-access-title.json"
+        )
 
         assert isinstance(imported_editions, list)
         assert 1 == len(imported_editions)
@@ -481,15 +486,14 @@ class TestOPDS2WithODLImporter:
             license_status_reply(HUCK_FINN_LICENSE_ID)
         )
 
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
-                json.dumps(feed_json)
-            )
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -573,16 +577,15 @@ class TestOPDS2WithODLImporter:
             license_status_reply(TEST_BOOK_LICENSE_ID, checkouts=None, expires=None)
         )
 
-        with opds2_with_odl_importer_fixture.wired():
-            # Harvest the feed again
-            (
-                imported_editions,
-                pools,
-                works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
-                json.dumps(feed_json)
-            )
+        # Harvest the feed again
+        (
+            imported_editions,
+            pools,
+            works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.importer.import_from_feed(
+            json.dumps(feed_json)
+        )
 
         assert isinstance(pools, list)
         assert 3 == len(pools)
@@ -656,13 +659,12 @@ class TestOPDS2WithODLImporter:
     ):
         """Ensure OPDSWithODLImporter imports expired licenses, but does not count them."""
         # Import the test feed with an expired ODL license.
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                imported_pools,
-                imported_works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=[license])
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=[license])
 
         # The importer created 1 edition and 1 work with no failures.
         assert failures == {}
@@ -695,16 +697,13 @@ class TestOPDS2WithODLImporter:
 
         # First import the license when it is not expired
         with freeze_time(license_expiry - datetime.timedelta(days=1)):
-            with opds2_with_odl_importer_fixture.wired():
-                # Import the test feed.
-                (
-                    imported_editions,
-                    imported_pools,
-                    imported_works,
-                    failures,
-                ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                    licenses=licenses
-                )
+            # Import the test feed.
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -725,15 +724,12 @@ class TestOPDS2WithODLImporter:
         # Reimport the license when it is expired
         with freeze_time(license_expiry + datetime.timedelta(days=1)):
             # Import the test feed.
-            with opds2_with_odl_importer_fixture.wired():
-                (
-                    imported_editions,
-                    imported_pools,
-                    imported_works,
-                    failures,
-                ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                    licenses=licenses
-                )
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # The importer created 1 edition and 1 work with no failures.
             assert failures == {}
@@ -799,15 +795,14 @@ class TestOPDS2WithODLImporter:
             ),
         ]
 
-        with opds2_with_odl_importer_fixture.wired():
-            (
-                imported_editions,
-                imported_pools,
-                imported_works,
-                failures,
-            ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                licenses=active + inactive
-            )
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = opds2_with_odl_importer_fixture.import_fixture_file(
+            licenses=active + inactive
+        )
 
         assert failures == {}
 
@@ -850,15 +845,12 @@ class TestOPDS2WithODLImporter:
 
         # Import with all licenses valid
         with freeze_time(license_expiry - datetime.timedelta(days=1)):
-            with opds2_with_odl_importer_fixture.wired():
-                (
-                    imported_editions,
-                    imported_pools,
-                    imported_works,
-                    failures,
-                ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                    licenses=licenses
-                )
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # No failures in the import
             assert failures == {}
@@ -885,16 +877,13 @@ class TestOPDS2WithODLImporter:
             # The perpetual license has a copy available
             perpetual.available = 1
 
-            with opds2_with_odl_importer_fixture.wired():
-                # Reimport
-                (
-                    imported_editions,
-                    imported_pools,
-                    imported_works,
-                    failures,
-                ) = opds2_with_odl_importer_fixture.import_fixture_file(
-                    licenses=licenses
-                )
+            # Reimport
+            (
+                imported_editions,
+                imported_pools,
+                imported_works,
+                failures,
+            ) = opds2_with_odl_importer_fixture.import_fixture_file(licenses=licenses)
 
             # No failures in the import
             assert failures == {}

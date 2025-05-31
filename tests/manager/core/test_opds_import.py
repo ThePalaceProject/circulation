@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests_mock
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from lxml import etree
 from psycopg2.extras import NumericRange
 
@@ -59,7 +60,6 @@ from palace.manager.util.http import BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
-from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 
@@ -90,7 +90,7 @@ class OPDSImporterFixture:
         self,
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
-        redis_fixture: RedisFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.content_server_feed = opds_files_fixture.sample_data("content_server.opds")
@@ -106,19 +106,20 @@ class OPDSImporterFixture:
             OPDSImporter, _db=self.db.session, collection=self.db.default_collection()
         )
 
-        self.redis_fixture = redis_fixture
-
-    def wired(self):
-        return self.redis_fixture.services_fixture.wired()
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
+        )
 
 
 @pytest.fixture()
 def opds_importer_fixture(
     db: DatabaseTransactionFixture,
     opds_files_fixture: OPDSFilesFixture,
-    redis_fixture: RedisFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSImporterFixture:
-    data = OPDSImporterFixture(db, opds_files_fixture, redis_fixture)
+    data = OPDSImporterFixture(
+        db, opds_files_fixture, work_id_policy_queue_presentation_recalculation
+    )
     return data
 
 
@@ -802,8 +803,7 @@ class TestOPDSImporter:
             collection=collection, data_source_name=DataSource.METADATA_WRANGLER
         )
 
-        with opds_importer_fixture.wired():
-            imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         [crow, mouse] = sorted(imported_editions, key=lambda x: str(x.title))
 
@@ -922,10 +922,9 @@ class TestOPDSImporter:
         assert "http://www.gutenberg.org/ebooks/10441.epub.images" == mech.resource.url
 
         # If we import the same file again, we get the same list of Editions.
-        with opds_importer_fixture.wired():
-            imported_editions_2, pools_2, works_2, failures_2 = (
-                importer.import_from_feed(feed)
-            )
+        imported_editions_2, pools_2, works_2, failures_2 = importer.import_from_feed(
+            feed
+        )
         assert imported_editions_2 == imported_editions
 
     def test_import_with_lendability(self, opds_importer_fixture: OPDSImporterFixture):
@@ -943,8 +942,7 @@ class TestOPDSImporter:
         # Works, because there is no Collection.
         importer = opds_importer_fixture.importer()
 
-        with opds_importer_fixture.wired():
-            imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         # Both editions were imported, because they were new.
         assert 2 == len(imported_editions)
@@ -992,8 +990,7 @@ class TestOPDSImporter:
         )
         importer = opds_importer_fixture.importer(collection=collection)
 
-        with opds_importer_fixture.wired():
-            imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
         assert {} == failures
 
         # We imported an Edition because there was bibliographic.
@@ -1015,46 +1012,43 @@ class TestOPDSImporter:
         opds_importer_fixture: OPDSImporterFixture,
         opds_files_fixture: OPDSFilesFixture,
     ):
-        with opds_importer_fixture.wired():
-            data, db, session = (
-                opds_importer_fixture,
-                opds_importer_fixture.db,
-                opds_importer_fixture.db.session,
-            )
+        data, db, session = (
+            opds_importer_fixture,
+            opds_importer_fixture.db,
+            opds_importer_fixture.db.session,
+        )
 
-            feed = opds_files_fixture.sample_text("metadata_wrangler_overdrive.opds")
+        feed = opds_files_fixture.sample_text("metadata_wrangler_overdrive.opds")
 
-            edition, is_new = db.edition(
-                DataSource.OVERDRIVE, Identifier.OVERDRIVE_ID, with_license_pool=True
-            )
-            [old_license_pool] = edition.license_pools
-            old_license_pool.calculate_work()
-            work = old_license_pool.work
+        edition, is_new = db.edition(
+            DataSource.OVERDRIVE, Identifier.OVERDRIVE_ID, with_license_pool=True
+        )
+        [old_license_pool] = edition.license_pools
+        old_license_pool.calculate_work()
+        work = old_license_pool.work
 
-            feed = feed.replace("{OVERDRIVE ID}", edition.primary_identifier.identifier)
+        feed = feed.replace("{OVERDRIVE ID}", edition.primary_identifier.identifier)
 
-            collection = db.collection(
-                protocol=OPDSAPI,
-                settings=db.opds_settings(data_source=DataSource.OVERDRIVE),
-            )
-            (
-                imported_editions,
-                imported_pools,
-                imported_works,
-                failures,
-            ) = opds_importer_fixture.importer(collection=collection).import_from_feed(
-                feed
-            )
+        collection = db.collection(
+            protocol=OPDSAPI,
+            settings=db.opds_settings(data_source=DataSource.OVERDRIVE),
+        )
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = opds_importer_fixture.importer(collection=collection).import_from_feed(feed)
 
-            # The edition we created has had its bibliographic updated.
-            [new_edition] = imported_editions
-            assert new_edition == edition
-            assert "The Green Mouse" == new_edition.title
-            assert DataSource.OVERDRIVE == new_edition.data_source.name
+        # The edition we created has had its bibliographic updated.
+        [new_edition] = imported_editions
+        assert new_edition == edition
+        assert "The Green Mouse" == new_edition.title
+        assert DataSource.OVERDRIVE == new_edition.data_source.name
 
-            # But the license pools have not changed.
-            assert edition.license_pools == [old_license_pool]
-            assert work.license_pools == [old_license_pool]
+        # But the license pools have not changed.
+        assert edition.license_pools == [old_license_pool]
+        assert work.license_pools == [old_license_pool]
 
     def test_import_from_license_source(
         self, opds_importer_fixture: OPDSImporterFixture
@@ -1070,13 +1064,12 @@ class TestOPDSImporter:
         feed = data.content_server_mini_feed
         importer = opds_importer_fixture.importer()
 
-        with opds_importer_fixture.wired():
-            (
-                imported_editions,
-                imported_pools,
-                imported_works,
-                failures,
-            ) = importer.import_from_feed(feed)
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = importer.import_from_feed(feed)
 
         # Two works have been created, because the content server
         # actually tells you how to get copies of these books.
@@ -1148,11 +1141,10 @@ class TestOPDSImporter:
 
         feed = data.content_server_mini_feed
 
-        with opds_importer_fixture.wired():
-            imported_editions, pools, works, failures = DoomedOPDSImporter(
-                session,
-                collection=db.default_collection(),
-            ).import_from_feed(feed)
+        imported_editions, pools, works, failures = DoomedOPDSImporter(
+            session,
+            collection=db.default_collection(),
+        ).import_from_feed(feed)
 
         # Only one book was imported, the other failed.
         assert 1 == len(imported_editions)
@@ -1177,8 +1169,7 @@ class TestOPDSImporter:
         feed = data.content_server_mini_feed
         importer = DoomedWorkOPDSImporter(session, collection=db.default_collection())
 
-        with opds_importer_fixture.wired():
-            imported_editions, pools, works, failures = importer.import_from_feed(feed)
+        imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         # One work was created, the other failed.
         assert 1 == len(works)
@@ -1330,8 +1321,7 @@ class TestOPDSImporter:
 
         importer = opds_importer_fixture.importer()
 
-        with opds_importer_fixture.wired():
-            returned_pool, returned_work = importer.update_work_for_edition(edition)
+        returned_pool, returned_work = importer.update_work_for_edition(edition)
         assert returned_pool == pool
         assert returned_work == work
 
@@ -1411,13 +1401,12 @@ class TestOPDSImporter:
             collection=db.default_collection(),
         )
 
-        with opds_importer_fixture.wired():
-            (
-                imported_editions,
-                imported_pools,
-                imported_works,
-                failures,
-            ) = importer.import_from_feed(feed)
+        (
+            imported_editions,
+            imported_pools,
+            imported_works,
+            failures,
+        ) = importer.import_from_feed(feed)
 
         assert 1 == len(imported_editions)
 
@@ -1491,8 +1480,7 @@ class TestOPDSImporter:
                 pool,
             )
 
-        with opds_importer_fixture.redis_fixture.services_fixture.wired():
-            yield _wayfless_circulation_api
+        yield _wayfless_circulation_api
 
     def test_wayfless_url(self, wayfless_circulation_api):
         circulation, patron, pool = wayfless_circulation_api()
@@ -1943,8 +1931,7 @@ class TestOPDSImportMonitor:
 
         feed = data.content_server_mini_feed
 
-        with opds_importer_fixture.wired():
-            imported, failures = monitor.import_one_feed(feed)
+        imported, failures = monitor.import_one_feed(feed)
 
         editions = session.query(Edition).all()
 

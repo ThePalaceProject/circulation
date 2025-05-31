@@ -41,7 +41,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.fixtures.redis import RedisFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.enki import MockEnkiAPI
 from tests.mocks.mock import MockRequestsResponse
 
@@ -64,7 +64,7 @@ class EnkiTestFixure:
         self,
         db: DatabaseTransactionFixture,
         files: EnkiFilesFixture,
-        redis_fixture: RedisFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.files = files
@@ -80,19 +80,20 @@ class EnkiTestFixure:
             EnkiLibrarySettings(enki_library_id="c"),
         )
 
-        self.redis_fixture = redis_fixture
-
-    def wired(self):
-        return self.redis_fixture.services_fixture.wired()
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
+        )
 
 
 @pytest.fixture(scope="function")
 def enki_test_fixture(
     db: DatabaseTransactionFixture,
     enki_files_fixture: EnkiFilesFixture,
-    redis_fixture: RedisFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> EnkiTestFixure:
-    return EnkiTestFixure(db, enki_files_fixture, redis_fixture)
+    return EnkiTestFixure(
+        db, enki_files_fixture, work_id_policy_queue_presentation_recalculation
+    )
 
 
 class TestEnkiAPI:
@@ -1042,8 +1043,7 @@ class TestEnkiImport:
         # Ask for circulation events from one hour in 1970.
         start = datetime_utc(1970, 1, 1, 0, 0, 0)
         end = datetime_utc(1970, 1, 1, 1, 0, 0)
-        with enki_test_fixture.wired():
-            monitor._update_circulation(start, end)
+        monitor._update_circulation(start, end)
 
         # Two requests were made -- one to getRecentActivityTime
         # and one to getItem.
@@ -1089,8 +1089,7 @@ class TestEnkiImport:
         # EnkiImport won't ask for it.
 
         # Pump the monitor again.
-        with enki_test_fixture.wired():
-            monitor._update_circulation(start, end)
+        monitor._update_circulation(start, end)
 
         # We made a single request, to getRecentActivityTime.
         [method, url, headers, data, params, kwargs] = api.requests.pop(0)

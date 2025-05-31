@@ -6,9 +6,10 @@ from datetime import date, datetime, timedelta
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING
 from unittest import mock
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from pymarc import parse_xml_to_array
 from pymarc.record import Record
 
@@ -49,6 +50,7 @@ from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -76,21 +78,32 @@ if TYPE_CHECKING:
 
 
 class BibliothecaAPITestFixture:
-    def __init__(self, db: DatabaseTransactionFixture, files: BibliothecaFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: BibliothecaFilesFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         self.files = files
         self.db = db
         self.collection = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library()
         )
         self.api = MockBibliothecaAPI(db.session, self.collection)
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
+        )
 
 
 @pytest.fixture(scope="function")
 def bibliotheca_fixture(
     db: DatabaseTransactionFixture,
     bibliotheca_files_fixture: BibliothecaFilesFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BibliothecaAPITestFixture:
-    return BibliothecaAPITestFixture(db, bibliotheca_files_fixture)
+    return BibliothecaAPITestFixture(
+        db, bibliotheca_files_fixture, work_id_policy_queue_presentation_recalculation
+    )
 
 
 class TestBibliothecaAPI:
@@ -353,14 +366,12 @@ class TestBibliothecaAPI:
         # Update availability using that data.
         bibliotheca_fixture.api.queue_response(200, content=data)
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            bibliotheca_fixture.api.update_availability(pool)
-            queue_presentation.assert_called_once_with(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
+        bibliotheca_fixture.api.update_availability(pool)
+        assert bibliotheca_fixture.is_queued(
+            WorkIdAndPolicy(
+                work.id, PresentationCalculationPolicy.recalculate_everything()
             )
+        )
         # The availability information has been updated, as has the
         # date the availability information was last checked.
         assert 1 == pool.licenses_owned
@@ -699,14 +710,13 @@ class TestBibliothecaCirculationSweep:
             api_class=bibliotheca_fixture.api,
         )
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            monitor.process_items([identifier])
-            queue_presentation.assert_called_once_with(
+        monitor.process_items([identifier])
+        assert bibliotheca_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=identifier.work.id,
                 policy=PresentationCalculationPolicy.recalculate_everything(),
             )
+        )
 
         # Validate that the HTTP request went to the /items endpoint.
         request = bibliotheca_fixture.api.requests.pop()
@@ -1906,15 +1916,14 @@ class TestBibliographicCoverageProvider(TestBibliothecaAPI):
         # We can't use bibliotheca_fixture.api because that's not the same object
         # as the one created by the coverage provider.
         provider.api.queue_response(200, content=data)
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation:
-            [result] = provider.process_batch([identifier])
-            assert identifier == result
-            queue_presentation.assert_called_once_with(
+        [result] = provider.process_batch([identifier])
+        assert identifier == result
+        bibliotheca_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
                 work_id=identifier.work.id,
                 policy=PresentationCalculationPolicy.recalculate_everything(),
             )
+        )
         # A LicensePool was created and populated with format and availability
         # information.
         [pool] = identifier.licensed_through

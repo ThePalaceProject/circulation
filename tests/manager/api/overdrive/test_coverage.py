@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import patch
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.mocks.overdrive import MockOverdriveAPI
@@ -22,19 +23,28 @@ class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
     api: MockOverdriveAPI
+    work_id_policy_queue_presentation_recalculation: (
+        WorkIdPolicyQueuePresentationRecalculationFixture
+    )
 
 
 @pytest.fixture
 def overdrive_biblio_provider_fixture(
     db: DatabaseTransactionFixture,
     overdrive_api_fixture: OverdriveAPIFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveBibliographicCoverageProviderFixture:
     overdrive = overdrive_api_fixture
     api = overdrive_api_fixture.api
     provider = OverdriveBibliographicCoverageProvider(
         overdrive_api_fixture.collection, api=api
     )
-    return OverdriveBibliographicCoverageProviderFixture(overdrive, provider, api)
+    return OverdriveBibliographicCoverageProviderFixture(
+        overdrive,
+        provider,
+        api,
+        work_id_policy_queue_presentation_recalculation,
+    )
 
 
 class TestOverdriveBibliographicCoverageProvider:
@@ -113,13 +123,16 @@ class TestOverdriveBibliographicCoverageProvider:
         raw, info = fixture.overdrive.sample_json("overdrive_metadata.json")
         http.queue_response(200, content=raw)
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            [result] = fixture.provider.process_batch([identifier])
-            assert queue_presentation_recalculation.call_count == 1
+        [result] = fixture.provider.process_batch([identifier])
+
         assert result == identifier
 
+        assert fixture.work_id_policy_queue_presentation_recalculation.is_queued(
+            wp=WorkIdAndPolicy(
+                work_id=identifier.work.id,
+                policy=PresentationCalculationPolicy.recalculate_everything(),
+            )
+        )
         # A LicensePool was created, not because we know anything
         # about how we've licensed this book, but to have a place to
         # store the information about what formats the book is

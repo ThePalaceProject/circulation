@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from psycopg2.errors import DeadlockDetected
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
@@ -25,6 +26,8 @@ from palace.manager.core.exceptions import IntegrationException
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
@@ -562,6 +565,7 @@ def test_process_item_creates_presentation_ready_work(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
     """Test the normal workflow where we ask Axis for data,
     Axis provides it, and we create a presentation-ready work.
@@ -570,12 +574,7 @@ def test_process_item_creates_presentation_ready_work(
     collection = MockAxis360API.mock_collection(db.session, library=library)
     data = axis_files_fixture.sample_data("single_item.xml")
 
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation,
-    ):
+    with patch.object(axis, "create_api") as mock_create_api:
         api = MockAxis360API(_db=db.session, collection=collection)
         mock_create_api.return_value = api
         api.queue_response(200, content=data)
@@ -591,7 +590,12 @@ def test_process_item_creates_presentation_ready_work(
             collection_id=collection.id, identifiers=[identifier.identifier]
         ).wait()
 
-        assert queue_presentation_recalculation.call_count == 1
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
+                work_id=identifier.work.id,
+                policy=PresentationCalculationPolicy.recalculate_everything(),
+            )
+        )
 
         # A LicensePool was created. We know both how many copies of this
         # book are available, and what formats it's available in.
@@ -612,6 +616,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
     """Test an unrealistic case where we ask Axis 360 about one book and
     it tells us about a totally different book.
@@ -619,12 +624,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
     library = db.default_library()
     collection = MockAxis360API.mock_collection(db.session, library=library)
 
-    with (
-        patch.object(axis, "create_api") as mock_create_api,
-        patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation,
-    ):
+    with patch.object(axis, "create_api") as mock_create_api:
         api = MockAxis360API(_db=db.session, collection=collection)
         mock_create_api.return_value = api
 
@@ -648,7 +648,9 @@ def test_transient_failure_if_requested_book_not_mentioned(
         )
         assert [] == identifier.licensed_through
         assert [] == identifier.primarily_identifies
-        assert queue_presentation_recalculation.call_count == 1
+
+        work = Work.from_identifiers(_db=db.session, identifiers=[identifier])
+        assert work_id_policy_queue_presentation_recalculation.queue_size() == 1
 
 
 def test__check_api_credentials():

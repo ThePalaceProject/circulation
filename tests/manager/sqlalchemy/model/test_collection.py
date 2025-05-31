@@ -1,16 +1,19 @@
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from sqlalchemy import select
 
 from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.core.opds_import import OPDSImporterSettings
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -491,7 +494,11 @@ class TestCollection:
         assert (db.default_library() in collection.active_libraries) == expect_active
         assert (other_library in collection.active_libraries) == expect_active
 
-    def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
+    def test_custom_lists(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
@@ -526,11 +533,14 @@ class TestCollection:
 
         staff_edition.title = db.fresh_str()
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            work.calculate_presentation()
-            assert queue_presentation_recalculation.call_count == 1
+        work.calculate_presentation()
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            wp=WorkIdAndPolicy(
+                work_id=work.id,
+                policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
+            )
+        )
+
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 

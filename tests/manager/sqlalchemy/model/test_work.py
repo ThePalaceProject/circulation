@@ -1,7 +1,7 @@
 import datetime
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import opensearchpy
 import pytest
@@ -50,6 +50,7 @@ from tests.fixtures.search import (
     WorkQueueIndexingFixture,
 )
 from tests.fixtures.services import ServicesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 class TestWork:
@@ -129,6 +130,7 @@ class TestWork:
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
         work_queue_indexing: WorkQueueIndexingFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # Test that:
         # - work's presentation information (author, title, etc. fields) does a proper job
@@ -332,15 +334,11 @@ class TestWork:
         staff_edition.author = Edition.UNKNOWN_AUTHOR
         staff_edition.sort_author = Edition.UNKNOWN_AUTHOR
 
-        # we need to patch with method since it makes a call to redis which we don't need to test.
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            work.calculate_presentation()
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            queue_presentation_recalculation.assert_called_once_with(
-                work_id=work.id, policy=policy
-            )
+        work.calculate_presentation()
+        policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(work_id=work.id, policy=policy)
+        )
 
         # The title of the Work got superseded.
         assert "The Staff Title" == work.title
@@ -3018,6 +3016,7 @@ class TestWorkConsolidation:
     def test_licensepool_without_presentation_edition_gets_no_work(
         self,
         db: DatabaseTransactionFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         # Test the method that adds a work to a redis set to wait for indexing
@@ -3032,14 +3031,10 @@ class TestWorkConsolidation:
             work=work,
         )
 
-        # we need to patch with method since it makes a call to redis which we don't need to test.
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            # Even if the LicensePool had a work before, it gets removed.
-            assert lp.calculate_work() == (None, False)
-            assert lp.work is None
-            policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-            queue_presentation_recalculation.assert_called_once_with(
-                work_id=work.id, policy=policy
-            )
+        # Even if the LicensePool had a work before, it gets removed.
+        assert lp.calculate_work() == (None, False)
+        assert lp.work is None
+        policy = PresentationCalculationPolicy.recalculate_presentation_edition()
+        assert work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(work_id=work.id, policy=policy)
+        )
