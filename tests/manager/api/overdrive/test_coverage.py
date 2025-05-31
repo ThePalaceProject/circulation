@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverageProvider
 from palace.manager.core.coverage import CoverageFailure
@@ -15,6 +14,7 @@ from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.overdrive import MockOverdriveAPI
 
 

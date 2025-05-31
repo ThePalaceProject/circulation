@@ -3,7 +3,6 @@ from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from freezegun import freeze_time
 
 from palace.manager.api.circulation_exceptions import (
@@ -40,6 +39,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
 

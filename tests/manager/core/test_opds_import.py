@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests_mock
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from lxml import etree
 from psycopg2.extras import NumericRange
 
@@ -60,6 +59,7 @@ from palace.manager.util.http import BadResponseException
 from palace.manager.util.opds_writer import AtomFeed, OPDSFeed, OPDSMessage
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
 

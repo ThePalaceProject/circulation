@@ -3,7 +3,6 @@ from datetime import timedelta
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from psycopg2.errors import DeadlockDetected
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
@@ -37,6 +36,9 @@ from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import AxisFilesFixture
 from tests.fixtures.redis import RedisFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
+from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
 from tests.mocks.mock import MockRequestsResponse
 
