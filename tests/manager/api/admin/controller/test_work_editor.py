@@ -44,7 +44,6 @@ from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.problem_detail import raises_problem_detail
-from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
@@ -53,7 +52,8 @@ from tests.mocks.mock import (
 
 class WorkFixture(AdminControllerFixture):
     def __init__(
-        self, controller_fixture: ControllerFixture, redis_fixture: RedisFixture
+        self,
+        controller_fixture: ControllerFixture,
     ):
         super().__init__(controller_fixture)
 
@@ -71,18 +71,12 @@ class WorkFixture(AdminControllerFixture):
 
         self.admin.add_role(AdminRole.LIBRARIAN, self.ctrl.db.default_library())
 
-        self.redis_fixture = redis_fixture
-
-    def wired(self):
-        return self.redis_fixture.services_fixture.wired()
-
 
 @pytest.fixture(scope="function")
 def work_fixture(
     controller_fixture: ControllerFixture,
-    redis_fixture: RedisFixture,
 ) -> Generator[WorkFixture, None, None]:
-    fixture = WorkFixture(controller_fixture, redis_fixture)
+    fixture = WorkFixture(controller_fixture)
     with fixture.ctrl.wired_container():
         yield fixture
 

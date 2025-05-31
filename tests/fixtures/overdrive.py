@@ -5,6 +5,7 @@ from functools import partial
 from typing import Any
 
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.api.circulation import CirculationAPI
 from palace.manager.api.config import Configuration
@@ -29,6 +30,7 @@ class OverdriveAPIFixture:
         db: DatabaseTransactionFixture,
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.data = data
@@ -51,6 +53,10 @@ class OverdriveAPIFixture:
         )
         self.create_mock_api = partial(
             MockOverdriveAPI, db.session, mock_http=self.mock_http
+        )
+
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
         )
 
     def error_message(
@@ -123,5 +129,11 @@ def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveAPIFixture:
-    return OverdriveAPIFixture(db, overdrive_files_fixture, monkeypatch)
+    return OverdriveAPIFixture(
+        db,
+        overdrive_files_fixture,
+        monkeypatch,
+        work_id_policy_queue_presentation_recalculation,
+    )

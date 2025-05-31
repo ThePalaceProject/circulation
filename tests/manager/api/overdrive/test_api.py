@@ -33,6 +33,8 @@ from palace.manager.api.overdrive.model import Checkout, Format, Link
 from palace.manager.api.overdrive.representation import OverdriveRepresentationExtractor
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import BasePalaceException, IntegrationException
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
+from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -1396,11 +1398,13 @@ class TestOverdriveAPI:
 
         http.queue_response(200, content=bibliographic)
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            overdrive_api_fixture.api.update_formats(pool)
-            assert queue_presentation_recalculation.call_count == 1
+        overdrive_api_fixture.api.update_formats(pool)
+        assert overdrive_api_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
+            WorkIdAndPolicy(
+                work_id=edition.work.id,
+                policy=PresentationCalculationPolicy.recalculate_everything(),
+            )
+        )
 
         # The delivery mechanisms have been updated.
         assert len(pool.delivery_mechanisms) == 4
