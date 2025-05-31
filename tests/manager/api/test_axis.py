@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.api.axis import (
     AudiobookMetadataParser,
@@ -70,6 +69,7 @@ from palace.manager.util.problem_detail import (
 )
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.axis import MockAxis360API
 
 if TYPE_CHECKING:
@@ -1752,17 +1752,28 @@ class TestAxisNowManifest:
 
 
 class Axis360ProviderFixture(Axis360Fixture):
-    def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
-        super().__init__(db, files)
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: AxisFilesFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
+        super().__init__(db, files, work_id_policy_queue_presentation_recalculation)
         mock_api = MockAxis360API(db.session, self.collection)
         self.api = mock_api
 
 
 @pytest.fixture(scope="function")
 def axis360provider(
-    db: DatabaseTransactionFixture, axis_files_fixture: AxisFilesFixture
+    db: DatabaseTransactionFixture,
+    axis_files_fixture: AxisFilesFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360ProviderFixture:
-    return Axis360ProviderFixture(db, axis_files_fixture)
+    return Axis360ProviderFixture(
+        db,
+        axis_files_fixture,
+        work_id_policy_queue_presentation_recalculation,
+    )
 
 
 class Axis360AcsFulfillmentFixture:

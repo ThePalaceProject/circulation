@@ -2,8 +2,6 @@ import datetime
 import logging
 from copy import deepcopy
 
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
-
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.data_layer.bibliographic import (
     _BASIC_EDITION_FIELDS,
@@ -30,6 +28,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.mock import LogCaptureHandler
 
 

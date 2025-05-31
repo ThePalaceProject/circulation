@@ -9,7 +9,6 @@ from unittest import mock
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from pymarc import parse_xml_to_array
 from pymarc.record import Record
 
@@ -69,6 +68,7 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from palace.manager.util.web_publication_manifest import AudiobookManifest
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
@@ -367,9 +367,10 @@ class TestBibliothecaAPI:
         bibliotheca_fixture.api.queue_response(200, content=data)
 
         bibliotheca_fixture.api.update_availability(pool)
-        assert bibliotheca_fixture.is_queued(
+        assert bibliotheca_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
             WorkIdAndPolicy(
-                work.id, PresentationCalculationPolicy.recalculate_everything()
+                work_id=work.id,
+                policy=PresentationCalculationPolicy.recalculate_everything(),
             )
         )
         # The availability information has been updated, as has the

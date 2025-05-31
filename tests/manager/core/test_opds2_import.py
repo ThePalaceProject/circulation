@@ -5,7 +5,6 @@ from contextlib import nullcontext
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from pydantic import ValidationError
 from requests import Response
 
@@ -36,6 +35,7 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
+from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 from tests.mocks.mock import MockRequestsResponse
 
 
