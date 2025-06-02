@@ -123,7 +123,7 @@ class BaseCoverageProvider:
     coverage record.
 
     Instead of instantiating this class directly, subclass one of its
-    subclasses: either IdentifierCoverageProvider.
+    subclasses, e.g. IdentifierCoverageProvider.
 
     In IdentifierCoverageProvider the 'objects' are Identifier objects
     and the coverage records are CoverageRecord objects.
