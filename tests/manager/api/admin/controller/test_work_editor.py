@@ -44,6 +44,10 @@ from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.problem_detail import raises_problem_detail
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 from tests.mocks.mock import (
     AlwaysSuccessfulCoverageProvider,
     NeverSuccessfulCoverageProvider,
@@ -54,6 +58,7 @@ class WorkFixture(AdminControllerFixture):
     def __init__(
         self,
         controller_fixture: ControllerFixture,
+        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         super().__init__(controller_fixture)
 
@@ -70,13 +75,19 @@ class WorkFixture(AdminControllerFixture):
         self.manager.external_search.mock_query_works(self.works)
 
         self.admin.add_role(AdminRole.LIBRARIAN, self.ctrl.db.default_library())
+        self.work_id_policy_queue_presentation_recalculation = (
+            work_id_policy_queue_presentation_recalculation
+        )
 
 
 @pytest.fixture(scope="function")
 def work_fixture(
     controller_fixture: ControllerFixture,
+    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Generator[WorkFixture, None, None]:
-    fixture = WorkFixture(controller_fixture)
+    fixture = WorkFixture(
+        controller_fixture, work_id_policy_queue_presentation_recalculation
+    )
     with fixture.ctrl.wired_container():
         yield fixture
 
