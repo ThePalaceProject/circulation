@@ -37,7 +37,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import MockRequestsResponse
 
@@ -96,7 +96,7 @@ class OPDS2ImporterFixture:
     def __init__(
         self,
         db: DatabaseTransactionFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ) -> None:
         self.transaction = db
         self.collection = db.collection(
@@ -113,9 +113,7 @@ class OPDS2ImporterFixture:
         )
         self.collection.data_source = self.data_source
         self.importer = OPDS2Importer(db.session, self.collection)
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     @staticmethod
     def get_delivery_mechanisms(
@@ -130,9 +128,9 @@ class OPDS2ImporterFixture:
 @pytest.fixture
 def opds2_importer_fixture(
     db: DatabaseTransactionFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDS2ImporterFixture:
-    return OPDS2ImporterFixture(db, work_id_policy_queue_presentation_recalculation)
+    return OPDS2ImporterFixture(db, work_policy_recalc_fixture)
 
 
 class TestOPDS2Importer(OPDS2Test):

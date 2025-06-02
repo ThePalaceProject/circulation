@@ -21,7 +21,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import MockHTTPClient
 from tests.mocks.overdrive import MockOverdriveAPI
@@ -33,7 +33,7 @@ class OverdriveAPIFixture:
         db: DatabaseTransactionFixture,
         data: OverdriveFilesFixture,
         monkeypatch: pytest.MonkeyPatch,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.data = data
@@ -58,9 +58,7 @@ class OverdriveAPIFixture:
             MockOverdriveAPI, db.session, mock_http=self.mock_http
         )
 
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def error_message(
         self, error_code: str, message: str | None = None, token: str | None = None
@@ -132,11 +130,11 @@ def overdrive_api_fixture(
     db: DatabaseTransactionFixture,
     overdrive_files_fixture: OverdriveFilesFixture,
     monkeypatch: pytest.MonkeyPatch,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveAPIFixture:
     return OverdriveAPIFixture(
         db,
         overdrive_files_fixture,
         monkeypatch,
-        work_id_policy_queue_presentation_recalculation,
+        work_policy_recalc_fixture,
     )

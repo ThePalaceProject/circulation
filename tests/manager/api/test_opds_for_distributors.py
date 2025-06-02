@@ -41,7 +41,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
@@ -99,15 +99,13 @@ class OPDSForDistributorsAPIFixture:
         self,
         db: DatabaseTransactionFixture,
         files: OPDSForDistributorsFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.collection = self.mock_collection(db.default_library())
         self.api = MockOPDSForDistributorsAPI(db.session, self.collection)
         self.files = files
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def mock_collection(
         self,
@@ -133,10 +131,10 @@ class OPDSForDistributorsAPIFixture:
 def opds_dist_api_fixture(
     db: DatabaseTransactionFixture,
     opds_dist_files_fixture: OPDSForDistributorsFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSForDistributorsAPIFixture:
     return OPDSForDistributorsAPIFixture(
-        db, opds_dist_files_fixture, work_id_policy_queue_presentation_recalculation
+        db, opds_dist_files_fixture, work_policy_recalc_fixture
     )
 
 

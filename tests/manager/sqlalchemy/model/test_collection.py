@@ -12,7 +12,6 @@ from palace.manager.data_layer.policy.presentation import PresentationCalculatio
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -28,7 +27,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 
 
@@ -500,7 +499,7 @@ class TestCollection:
     def test_custom_lists(
         self,
         example_collection_fixture: ExampleCollectionFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
@@ -537,11 +536,9 @@ class TestCollection:
         staff_edition.title = db.fresh_str()
 
         work.calculate_presentation()
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            wp=WorkIdAndPolicy(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-            )
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
         )
 
         assert 0 == len(list1.entries)

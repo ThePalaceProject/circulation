@@ -50,7 +50,6 @@ from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.base import integration_settings_update
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.constants import LinkRelations, MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -71,7 +70,7 @@ from tests.fixtures.files import FilesFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.axis import MockAxis360API
 
@@ -137,7 +136,7 @@ class Axis360Fixture:
         self,
         db: DatabaseTransactionFixture,
         files: AxisFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.files = files
@@ -145,9 +144,7 @@ class Axis360Fixture:
             db.session, db.default_library()
         )
         self.api = MockAxis360API(db.session, self.collection)
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def sample_data(self, filename):
         return self.files.sample_data(filename)
@@ -160,11 +157,9 @@ class Axis360Fixture:
 def axis360(
     db: DatabaseTransactionFixture,
     axis_files_fixture: AxisFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360Fixture:
-    return Axis360Fixture(
-        db, axis_files_fixture, work_id_policy_queue_presentation_recalculation
-    )
+    return Axis360Fixture(db, axis_files_fixture, work_policy_recalc_fixture)
 
 
 class TestAxis360API:
@@ -400,11 +395,9 @@ class TestAxis360API:
 
         axis360.api.update_availability(pool)
 
-        assert axis360.work_id_policy_queue_presentation_recalculation.is_queued(
-            wp=WorkIdAndPolicy(
-                work_id=edition.work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+        assert axis360.work_policy_recalc_fixture.is_queued(
+            edition.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
         )
 
         # The availability information has been udpated, as has the
@@ -763,11 +756,9 @@ class TestAxis360API:
         e, e_new, lp, lp_new = api.update_book(
             axis360.BIBLIOGRAPHIC_DATA,
         )
-        assert axis360.work_id_policy_queue_presentation_recalculation.is_queued(
-            wp=WorkIdAndPolicy(
-                work_id=e.work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+        assert axis360.work_policy_recalc_fixture.is_queued(
+            e.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
         )
 
         # A new LicensePool and Edition were created.
@@ -1188,9 +1179,9 @@ class Axis360FixturePlusParsers(Axis360Fixture):
         self,
         db: DatabaseTransactionFixture,
         files: AxisFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
-        super().__init__(db, files, work_id_policy_queue_presentation_recalculation)
+        super().__init__(db, files, work_policy_recalc_fixture)
 
         # We don't need an actual Collection object to test most of
         # these classes, but we do need to test that whatever object
@@ -1205,11 +1196,9 @@ class Axis360FixturePlusParsers(Axis360Fixture):
 def axis360parsers(
     db: DatabaseTransactionFixture,
     axis_files_fixture: AxisFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360FixturePlusParsers:
-    return Axis360FixturePlusParsers(
-        db, axis_files_fixture, work_id_policy_queue_presentation_recalculation
-    )
+    return Axis360FixturePlusParsers(db, axis_files_fixture, work_policy_recalc_fixture)
 
 
 class TestRaiseExceptionOnError:
@@ -1759,9 +1748,9 @@ class Axis360ProviderFixture(Axis360Fixture):
         self,
         db: DatabaseTransactionFixture,
         files: AxisFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
-        super().__init__(db, files, work_id_policy_queue_presentation_recalculation)
+        super().__init__(db, files, work_policy_recalc_fixture)
         mock_api = MockAxis360API(db.session, self.collection)
         self.api = mock_api
 
@@ -1770,12 +1759,12 @@ class Axis360ProviderFixture(Axis360Fixture):
 def axis360provider(
     db: DatabaseTransactionFixture,
     axis_files_fixture: AxisFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360ProviderFixture:
     return Axis360ProviderFixture(
         db,
         axis_files_fixture,
-        work_id_policy_queue_presentation_recalculation,
+        work_policy_recalc_fixture,
     )
 
 

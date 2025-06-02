@@ -23,7 +23,6 @@ from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.opds.odl.info import LicenseStatus
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.constants import (
     EditionConstants,
     IdentifierConstants,
@@ -195,10 +194,9 @@ class TestOPDS2WithODLImporter:
 
         # 5 Make sure that expected work id are queued for recalculation
         policy = PresentationCalculationPolicy.recalculate_everything()
-        work_id_policies = [WorkIdAndPolicy(work_id=w.id, policy=policy) for w in works]
-        for wp in work_id_policies:
-            assert opds2_with_odl_importer_fixture.work_id_policy_queue_presentation_recalculation.is_queued(
-                wp
+        for w in works:
+            assert opds2_with_odl_importer_fixture.work_policy_recalc_fixture.is_queued(
+                w.id, policy
             )
 
     @freeze_time("2016-01-01T00:00:00+00:00")

@@ -43,7 +43,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.enki import MockEnkiAPI
 from tests.mocks.mock import MockRequestsResponse
@@ -67,7 +67,7 @@ class EnkiTestFixure:
         self,
         db: DatabaseTransactionFixture,
         files: EnkiFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.files = files
@@ -83,20 +83,16 @@ class EnkiTestFixure:
             EnkiLibrarySettings(enki_library_id="c"),
         )
 
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
 
 @pytest.fixture(scope="function")
 def enki_test_fixture(
     db: DatabaseTransactionFixture,
     enki_files_fixture: EnkiFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> EnkiTestFixure:
-    return EnkiTestFixure(
-        db, enki_files_fixture, work_id_policy_queue_presentation_recalculation
-    )
+    return EnkiTestFixure(db, enki_files_fixture, work_policy_recalc_fixture)
 
 
 class TestEnkiAPI:

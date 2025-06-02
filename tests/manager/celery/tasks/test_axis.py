@@ -26,7 +26,6 @@ from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.work import Work
@@ -38,7 +37,7 @@ from tests.fixtures.files import AxisFilesFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture
@@ -570,7 +569,7 @@ def test_process_item_creates_presentation_ready_work(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
     """Test the normal workflow where we ask Axis for data,
     Axis provides it, and we create a presentation-ready work.
@@ -595,11 +594,9 @@ def test_process_item_creates_presentation_ready_work(
             collection_id=collection.id, identifiers=[identifier.identifier]
         ).wait()
 
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(
-                work_id=identifier.work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+        assert work_policy_recalc_fixture.is_queued(
+            identifier.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
         )
 
         # A LicensePool was created. We know both how many copies of this
@@ -621,7 +618,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
     axis_files_fixture: AxisFilesFixture,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ):
     """Test an unrealistic case where we ask Axis 360 about one book and
     it tells us about a totally different book.
@@ -655,7 +652,7 @@ def test_transient_failure_if_requested_book_not_mentioned(
         assert [] == identifier.primarily_identifies
 
         work = Work.from_identifiers(_db=db.session, identifiers=[identifier])
-        assert work_id_policy_queue_presentation_recalculation.queue_size() == 1
+        assert work_policy_recalc_fixture.queue_size() == 1
 
 
 def test__check_api_credentials():

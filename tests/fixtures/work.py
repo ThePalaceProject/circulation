@@ -45,8 +45,17 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
     def disable_fixture(self):
         self.patch.stop()
 
-    def is_queued(self, wp: WorkIdAndPolicy, *, clear: bool = False) -> bool:
-        queued = wp in self.queued_work_Id_and_policy_combinations
+    def is_queued(
+        self,
+        work_id: int,
+        policy: PresentationCalculationPolicy,
+        *,
+        clear: bool = False,
+    ) -> bool:
+        queued = (
+            WorkIdAndPolicy(work_id=work_id, policy=policy)
+            in self.queued_work_Id_and_policy_combinations
+        )
 
         if clear:
             self.clear()
@@ -68,7 +77,7 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
 
 
 @pytest.fixture(scope="function")
-def work_id_policy_queue_presentation_recalculation() -> (
+def work_policy_recalc_fixture() -> (
     Generator[WorkIdPolicyQueuePresentationRecalculationFixture]
 ):
     with WorkIdPolicyQueuePresentationRecalculationFixture.fixture() as fixture:

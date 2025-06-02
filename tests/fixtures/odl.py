@@ -33,7 +33,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
@@ -292,7 +292,7 @@ class OPDS2WithODLImporterFixture:
         self,
         db: DatabaseTransactionFixture,
         api_fixture: OPDS2WithODLApiFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.api_fixture = api_fixture
@@ -308,9 +308,7 @@ class OPDS2WithODLImporterFixture:
             http_get=self.get_response,
         )
 
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def get_response(self, *args: Any, **kwargs: Any) -> Response:
         return MockRequestsResponse(200, content=self.responses.pop(0))
@@ -376,8 +374,8 @@ class OPDS2WithODLImporterFixture:
 def opds2_with_odl_importer_fixture(
     db: DatabaseTransactionFixture,
     opds2_with_odl_api_fixture: OPDS2WithODLApiFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDS2WithODLImporterFixture:
     return OPDS2WithODLImporterFixture(
-        db, opds2_with_odl_api_fixture, work_id_policy_queue_presentation_recalculation
+        db, opds2_with_odl_api_fixture, work_policy_recalc_fixture
     )
