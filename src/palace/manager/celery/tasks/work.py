@@ -18,9 +18,8 @@ def calculate_work_presentations(
     batch_size: int = 100,
 ) -> None:
 
-    redis_client = task.services.redis.client()
     with TaskLock(task).lock():
-        waiting = WaitingForPresentationCalculation(redis_client)
+        waiting = WaitingForPresentationCalculation(task.services.redis.client())
         work_policies = waiting.pop(batch_size)
 
         if len(work_policies) > 0:
@@ -28,16 +27,12 @@ def calculate_work_presentations(
             calculate_presentation_for_works.delay(list(work_policies))
 
     if len(work_policies) == batch_size:
-        # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
+        # This task is complete, but there are more works waiting to be recalculated. Requeue ourselves
         # to process the next batch.
         raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
 
-    task.log.info(f"Finished queuing indexing tasks.")
+    task.log.info(f"Finished queuing recalculation tasks.")
     return
-
-
-class OperationalErrorn:
-    pass
 
 
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
