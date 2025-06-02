@@ -36,7 +36,10 @@ from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import AxisFilesFixture
 from tests.fixtures.redis import RedisFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API

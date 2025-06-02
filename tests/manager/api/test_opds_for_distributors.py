@@ -39,7 +39,10 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.opds_writer import OPDSFeed
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 from tests.mocks.mock import MockRequestsResponse
 from tests.mocks.opds_for_distributors import MockOPDSForDistributorsAPI
 
