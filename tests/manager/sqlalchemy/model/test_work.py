@@ -50,7 +50,10 @@ from tests.fixtures.search import (
     WorkQueueIndexingFixture,
 )
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 
 
 class TestWork:

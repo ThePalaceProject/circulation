@@ -31,7 +31,10 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture, OPDS2WithODLFilesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 from tests.mocks.odl import MockOPDS2WithODLApi
 

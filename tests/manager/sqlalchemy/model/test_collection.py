@@ -26,7 +26,10 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 
 
 class ExampleCollectionFixture:

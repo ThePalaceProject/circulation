@@ -19,7 +19,10 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
-from tests.fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
+from tests.fixtures.work import (  # noqa: autoflake
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_id_policy_queue_presentation_recalculation,
+)
 from tests.mocks.mock import MockHTTPClient
 from tests.mocks.overdrive import MockOverdriveAPI
 
