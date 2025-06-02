@@ -8,7 +8,6 @@ from palace.manager.api.overdrive.coverage import OverdriveBibliographicCoverage
 from palace.manager.core.coverage import CoverageFailure
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
@@ -16,7 +15,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.overdrive import MockOverdriveAPI
 
@@ -26,16 +25,14 @@ class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
     api: MockOverdriveAPI
-    work_id_policy_queue_presentation_recalculation: (
-        WorkIdPolicyQueuePresentationRecalculationFixture
-    )
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture
 
 
 @pytest.fixture
 def overdrive_biblio_provider_fixture(
     db: DatabaseTransactionFixture,
     overdrive_api_fixture: OverdriveAPIFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OverdriveBibliographicCoverageProviderFixture:
     overdrive = overdrive_api_fixture
     api = overdrive_api_fixture.api
@@ -46,7 +43,7 @@ def overdrive_biblio_provider_fixture(
         overdrive,
         provider,
         api,
-        work_id_policy_queue_presentation_recalculation,
+        work_policy_recalc_fixture,
     )
 
 
@@ -130,11 +127,9 @@ class TestOverdriveBibliographicCoverageProvider:
 
         assert result == identifier
 
-        assert fixture.work_id_policy_queue_presentation_recalculation.is_queued(
-            wp=WorkIdAndPolicy(
-                work_id=identifier.work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            )
+        assert fixture.work_policy_recalc_fixture.is_queued(
+            identifier.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
         )
         # A LicensePool was created, not because we know anything
         # about how we've licensed this book, but to have a place to

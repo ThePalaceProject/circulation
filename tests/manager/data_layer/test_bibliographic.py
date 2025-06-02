@@ -15,7 +15,6 @@ from palace.manager.data_layer.measurement import MeasurementData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
-from palace.manager.service.redis.models.work import WorkIdAndPolicy
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.coverage import CoverageRecord
@@ -30,7 +29,7 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import LogCaptureHandler
 
@@ -503,7 +502,7 @@ class TestBibliographicData:
     def test_apply_causes_presentation_recalculation(
         self,
         db: DatabaseTransactionFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # We have a work.
         work = db.work(title="The Wrong Title", with_license_pool=True)
@@ -519,11 +518,9 @@ class TestBibliographicData:
         edition, ignore = bibliographic.edition(db.session)
         bibliographic.apply(db.session, edition, None)
 
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-            ),
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
             clear=True,
         )
 
@@ -538,11 +535,9 @@ class TestBibliographicData:
         bibliographic.apply(db.session, edition, None)
         # The work is now slated to have its presentation completely
         # recalculated.
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            ),
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
             clear=True,
         )
 
@@ -554,11 +549,9 @@ class TestBibliographicData:
 
         bibliographic.apply(db.session, edition, None)
         # We need to do a full recalculation again.
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_everything(),
-            ),
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
             clear=True,
         )
 
@@ -568,11 +561,9 @@ class TestBibliographicData:
 
         bibliographic.apply(db.session, edition, None)
         # We need to choose a new presentation edition.
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(
-                work_id=work.id,
-                policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
-            ),
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
             clear=True,
         )
 

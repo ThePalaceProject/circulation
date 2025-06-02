@@ -61,7 +61,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDSFilesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 from tests.mocks.mock import MockHTTPClient, MockRequestsResponse
 
@@ -93,7 +93,7 @@ class OPDSImporterFixture:
         self,
         db: DatabaseTransactionFixture,
         opds_files_fixture: OPDSFilesFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         self.db = db
         self.content_server_feed = opds_files_fixture.sample_data("content_server.opds")
@@ -109,20 +109,16 @@ class OPDSImporterFixture:
             OPDSImporter, _db=self.db.session, collection=self.db.default_collection()
         )
 
-        self.work_id_policy_queue_presentation_recalculation = (
-            work_id_policy_queue_presentation_recalculation
-        )
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
 
 @pytest.fixture()
 def opds_importer_fixture(
     db: DatabaseTransactionFixture,
     opds_files_fixture: OPDSFilesFixture,
-    work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDSImporterFixture:
-    data = OPDSImporterFixture(
-        db, opds_files_fixture, work_id_policy_queue_presentation_recalculation
-    )
+    data = OPDSImporterFixture(db, opds_files_fixture, work_policy_recalc_fixture)
     return data
 
 

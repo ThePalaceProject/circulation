@@ -52,7 +52,7 @@ from tests.fixtures.search import (
 from tests.fixtures.services import ServicesFixture
 from tests.fixtures.work import (  # noqa: autoflake
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_id_policy_queue_presentation_recalculation,
+    work_policy_recalc_fixture,
 )
 
 
@@ -133,7 +133,7 @@ class TestWork:
         db: DatabaseTransactionFixture,
         external_search_fake_fixture: ExternalSearchFixtureFake,
         work_queue_indexing: WorkQueueIndexingFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         # Test that:
         # - work's presentation information (author, title, etc. fields) does a proper job
@@ -339,8 +339,9 @@ class TestWork:
 
         work.calculate_presentation()
         policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(work_id=work.id, policy=policy)
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            policy,
         )
 
         # The title of the Work got superseded.
@@ -3019,7 +3020,7 @@ class TestWorkConsolidation:
     def test_licensepool_without_presentation_edition_gets_no_work(
         self,
         db: DatabaseTransactionFixture,
-        work_id_policy_queue_presentation_recalculation: WorkIdPolicyQueuePresentationRecalculationFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
     ):
         data_source = DataSource.lookup(db.session, DataSource.OVERDRIVE)
         # Test the method that adds a work to a redis set to wait for indexing
@@ -3038,6 +3039,4 @@ class TestWorkConsolidation:
         assert lp.calculate_work() == (None, False)
         assert lp.work is None
         policy = PresentationCalculationPolicy.recalculate_presentation_edition()
-        assert work_id_policy_queue_presentation_recalculation.is_queued(
-            WorkIdAndPolicy(work_id=work.id, policy=policy)
-        )
+        assert work_policy_recalc_fixture.is_queued(work.id, policy)
