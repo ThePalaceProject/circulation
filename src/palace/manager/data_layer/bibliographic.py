@@ -92,6 +92,18 @@ class BibliographicData(BaseMutableData):
     def _filter_links(cls, links: list[LinkData]) -> list[LinkData]:
         return [link for link in links if link.rel in Hyperlink.BIBLIOGRAPHIC_ALLOWED]
 
+    @field_validator("published", mode="before")
+    @classmethod
+    def _published_validator(
+        cls, value: datetime.date | datetime.datetime | None
+    ) -> datetime.date | None:
+        # guarantee the published date is a date rather than datetime (which may have time data which will
+        # cause a pydantic validation error)
+        if value:
+            return datetime.date(year=value.year, month=value.month, day=value.day)
+        else:
+            return None
+
     @model_validator(mode="after")
     def _primary_identifier_in_identifiers(self) -> Self:
         if (
