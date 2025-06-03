@@ -219,6 +219,13 @@ def beat_schedule() -> dict[str, Any]:
                 minute="0", hour="0", day_of_week="0"
             ),  # Every Sundary at midnight
         },
+        "update_saml_federation_idps_metadata": {
+            "task": "saml.update_saml_federation_idps_metadata",
+            "schedule": crontab(
+                minute="0",
+                hour="5",
+            ),  # Every day at 5 am
+        },
     }
 
 
