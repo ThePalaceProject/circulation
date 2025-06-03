@@ -228,6 +228,13 @@ def beat_schedule() -> dict[str, Any]:
             "task": "work.migrate_work_coverage_records",
             "schedule": crontab(minute="0", hour="0"),  # Every day at midnight
         },
+        "update_saml_federation_idps_metadata": {
+            "task": "saml.update_saml_federation_idps_metadata",
+            "schedule": crontab(
+                minute="0",
+                hour="5",
+            ),  # Every day at 5 am
+        },
     }
 
 
