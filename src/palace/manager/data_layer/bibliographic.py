@@ -94,7 +94,9 @@ class BibliographicData(BaseMutableData):
 
     @field_validator("published", mode="before")
     @classmethod
-    def _published_validator(cls, value: datetime.date | None) -> datetime.date | None:
+    def _published_validator(
+        cls, value: datetime.date | datetime.datetime | None
+    ) -> datetime.date | None:
         # guarantee the published date is a date rather than datetime (which may have time data which will
         # cause a pydantic validation error)
         if value:
