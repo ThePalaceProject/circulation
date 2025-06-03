@@ -17,14 +17,15 @@ from palace.manager.celery.task import Task
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.saml import SAMLFederation
 from palace.manager.util.datetime_helpers import utc_now
+from palace.manager.util.log import LoggerAdapterType
 
 
 def _update_saml_federation_idps_metadata(
     saml_federation: SAMLFederation,
     loader: SAMLFederatedIdentityProviderLoader,
     session: Session,
-    log: Logger,
-):
+    log: Logger | LoggerAdapterType,
+) -> None:
     """Update IdPs' metadata belonging to the specified SAML federation."""
     log.info(f"Started processing {saml_federation}")
 
@@ -35,6 +36,7 @@ def _update_saml_federation_idps_metadata(
 
     for new_identity_provider in new_identity_providers:
         session.add(new_identity_provider)
+        new_identity_provider
 
     saml_federation.last_updated_at = utc_now()
 
@@ -42,7 +44,7 @@ def _update_saml_federation_idps_metadata(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def update_saml_federation_idps_metadata(task: Task):
+def update_saml_federation_idps_metadata(task: Task) -> None:
     """
     For each SAML Fedoration in the CM, update the federations IdPs metadata
     Please note that the monitor looks up for federations in `samlfederations` table.
@@ -64,10 +66,12 @@ def update_saml_federation_idps_metadata(task: Task):
                 task.log,
             )
 
-    task.log.info("Finished running the SAML metadata monitor")
+    task.log.info("Finished updating the SAML metadata")
 
 
-def _create_saml_federated_identity_provider_loader():
+def _create_saml_federated_identity_provider_loader() -> (
+    SAMLFederatedIdentityProviderLoader
+):
     saml_metadata_loader = SAMLMetadataLoader()
     saml_metadata_validator = SAMLFederatedMetadataValidatorChain(
         [SAMLFederatedMetadataExpirationValidator(), SAMLMetadataSignatureValidator()]
