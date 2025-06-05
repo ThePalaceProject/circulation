@@ -45,7 +45,6 @@ class EquivalentIdentifiersCoverageProvider(BaseCoverageProvider):
             .options(joinedload(EquivalencyCoverageRecord.equivalency))
         )
 
-        # Need this function exactly
         missing = EquivalencyCoverageRecord.not_covered(
             kwargs.get("count_as_covered"), kwargs.get("count_as_missing_before")
         )
