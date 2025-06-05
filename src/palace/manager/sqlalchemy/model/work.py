@@ -348,10 +348,6 @@ class Work(Base, LoggerMixin):
         )
 
     @classmethod
-    def by_id(cls, _db: Session, id: int):
-        return _db.execute(select(Work).where(id == id)).unique().one_or_none()
-
-    @classmethod
     def for_unchecked_subjects(cls, _db):
         from palace.manager.sqlalchemy.model.classification import (
             Classification,
