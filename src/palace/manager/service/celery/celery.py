@@ -219,6 +219,10 @@ def beat_schedule() -> dict[str, Any]:
                 minute="0", hour="0", day_of_week="0"
             ),  # Every Sunday at midnight
         },
+        "calculate_work_presentations": {
+            "task": "work.calculate_work_presentations",
+            "schedule": crontab(minute="*/10"),  # Every 10 minutes
+        },
     }
 
 
