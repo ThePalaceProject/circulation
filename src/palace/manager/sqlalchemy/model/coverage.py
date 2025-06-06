@@ -1,4 +1,4 @@
-# BaseCoverageRecord, Timestamp, CoverageRecord, WorkCoverageRecord
+# BaseCoverageRecord, Timestamp, CoverageRecord
 from __future__ import annotations
 
 import datetime
@@ -29,13 +29,10 @@ if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
     from palace.manager.sqlalchemy.model.datasource import DataSource
     from palace.manager.sqlalchemy.model.identifier import Equivalency, Identifier
-    from palace.manager.sqlalchemy.model.work import Work
 
 
 class BaseCoverageRecord:
-    """Contains useful constants used by both CoverageRecord and
-    WorkCoverageRecord.
-    """
+    """Contains useful constants used by CoverageRecord."""
 
     SUCCESS = "success"
     TRANSIENT_FAILURE = "transient failure"
@@ -632,7 +629,6 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
 
     id: Mapped[int] = Column(Integer, primary_key=True)
     work_id = Column(Integer, ForeignKey("works.id"), index=True)
-    work: Mapped[Work | None] = relationship("Work", back_populates="coverage_records")
     operation = Column(String(255), index=True, default=None)
 
     timestamp = Column(DateTime(timezone=True), index=True)
@@ -641,126 +637,6 @@ class WorkCoverageRecord(Base, BaseCoverageRecord):
     exception = Column(Unicode, index=True)
 
     __table_args__ = (UniqueConstraint("work_id", "operation"),)
-
-    def __repr__(self):
-        if self.exception:
-            exception = ' exception="%s"' % self.exception
-        else:
-            exception = ""
-        template = '<WorkCoverageRecord: work_id=%s operation="%s" timestamp="%s"%s>'
-        return template % (
-            self.work_id,
-            self.operation,
-            self.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-            exception,
-        )
-
-    @classmethod
-    def lookup(self, work, operation):
-        _db = Session.object_session(work)
-        return get_one(
-            _db,
-            WorkCoverageRecord,
-            work=work,
-            operation=operation,
-            on_multiple="interchangeable",
-        )
-
-    @classmethod
-    def add_for(self, work, operation, timestamp=None, status=CoverageRecord.SUCCESS):
-        _db = Session.object_session(work)
-        timestamp = timestamp or utc_now()
-        coverage_record, is_new = get_one_or_create(
-            _db,
-            WorkCoverageRecord,
-            work=work,
-            operation=operation,
-            on_multiple="interchangeable",
-        )
-        coverage_record.status = status
-        coverage_record.timestamp = timestamp
-        return coverage_record, is_new
-
-    @classmethod
-    def bulk_add(
-        self,
-        works,
-        operation,
-        timestamp=None,
-        status=CoverageRecord.SUCCESS,
-        exception=None,
-    ):
-        """Create and update WorkCoverageRecords so that every Work in
-        `works` has an identical record.
-        """
-        from palace.manager.sqlalchemy.model.work import Work
-
-        if not works:
-            # Nothing to do.
-            return
-        _db = Session.object_session(works[0])
-        timestamp = timestamp or utc_now()
-        work_ids = [w.id for w in works]
-
-        # Make sure that works that previously had a
-        # WorkCoverageRecord for this operation have their timestamp
-        # and status updated.
-        # We want records to be updated in ascending order in order to avoid deadlocks.
-        # To guarantee lock order, we explicitly acquire locks by using a subquery with FOR UPDATE (with_for_update).
-        # Please refer for my details to this SO article:
-        # https://stackoverflow.com/questions/44660368/postgres-update-with-order-by-how-to-do-it
-        update = (
-            WorkCoverageRecord.__table__.update()
-            .where(
-                WorkCoverageRecord.id.in_(
-                    _db.query(WorkCoverageRecord.id)
-                    .with_for_update()
-                    .filter(
-                        and_(
-                            WorkCoverageRecord.work_id.in_(work_ids),
-                            WorkCoverageRecord.operation == operation,
-                        )
-                    )
-                )
-            )
-            .values(dict(timestamp=timestamp, status=status, exception=exception))
-        )
-        _db.execute(update)
-
-        # Make sure that any works that are missing a
-        # WorkCoverageRecord for this operation get one.
-
-        # Works that already have a WorkCoverageRecord will be ignored
-        # by the INSERT but handled by the UPDATE.
-        already_covered = (
-            _db.query(WorkCoverageRecord.work_id)
-            .select_from(WorkCoverageRecord)
-            .filter(WorkCoverageRecord.work_id.in_(work_ids))
-            .filter(WorkCoverageRecord.operation == operation)
-        )
-
-        # The SELECT part of the INSERT...SELECT query.
-        new_records = _db.query(
-            Work.id.label("work_id"),
-            literal(operation, type_=String(255)).label("operation"),
-            literal(timestamp, type_=DateTime).label("timestamp"),
-            literal(status, type_=BaseCoverageRecord.status_enum).label("status"),
-        ).select_from(Work)
-        new_records = new_records.filter(Work.id.in_(work_ids)).filter(
-            ~Work.id.in_(already_covered)
-        )
-
-        # The INSERT part.
-        insert = WorkCoverageRecord.__table__.insert().from_select(
-            [
-                literal_column("work_id"),
-                literal_column("operation"),
-                literal_column("timestamp"),
-                literal_column("status"),
-            ],
-            new_records,
-        )
-        _db.execute(insert)
 
 
 Index(

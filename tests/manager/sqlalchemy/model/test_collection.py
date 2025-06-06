@@ -8,6 +8,7 @@ from palace.manager.api.bibliotheca import BibliothecaAPI
 from palace.manager.api.overdrive.api import OverdriveAPI
 from palace.manager.api.overdrive.settings import OverdriveLibrarySettings
 from palace.manager.core.opds_import import OPDSImporterSettings
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
 from palace.manager.search.external_search import ExternalSearchIndex
@@ -24,6 +25,9 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from palace.manager.util.datetime_helpers import utc_now
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 
 
 class ExampleCollectionFixture:
@@ -491,7 +495,11 @@ class TestCollection:
         assert (db.default_library() in collection.active_libraries) == expect_active
         assert (other_library in collection.active_libraries) == expect_active
 
-    def test_custom_lists(self, example_collection_fixture: ExampleCollectionFixture):
+    def test_custom_lists(
+        self,
+        example_collection_fixture: ExampleCollectionFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         db = example_collection_fixture.database_fixture
         test_collection = example_collection_fixture.collection
 
@@ -525,7 +533,13 @@ class TestCollection:
         )
 
         staff_edition.title = db.fresh_str()
+
         work.calculate_presentation()
+        assert work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_presentation_edition(),
+        )
+
         assert 0 == len(list1.entries)
         assert 1 == len(list2.entries)
 

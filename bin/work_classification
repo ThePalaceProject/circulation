@@ -1,8 +1,0 @@
-#!/usr/bin/env python
-"""Re-classify any Works that need it."""
-
-
-from palace.manager.core.coverage import WorkClassificationCoverageProvider
-from palace.manager.scripts.coverage_provider import RunWorkCoverageProviderScript
-
-RunWorkCoverageProviderScript(WorkClassificationCoverageProvider).run()

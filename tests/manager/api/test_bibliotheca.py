@@ -47,11 +47,12 @@ from palace.manager.api.circulation_exceptions import (
 )
 from palace.manager.api.web_publication_manifest import FindawayManifest
 from palace.manager.core.monitor import TimestampData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.scripts.coverage_provider import RunCollectionCoverageProviderScript
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import Timestamp, WorkCoverageRecord
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -66,6 +67,9 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from palace.manager.util.web_publication_manifest import AudiobookManifest
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
 if TYPE_CHECKING:
@@ -75,21 +79,30 @@ if TYPE_CHECKING:
 
 
 class BibliothecaAPITestFixture:
-    def __init__(self, db: DatabaseTransactionFixture, files: BibliothecaFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: BibliothecaFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         self.files = files
         self.db = db
         self.collection = MockBibliothecaAPI.mock_collection(
             db.session, db.default_library()
         )
         self.api = MockBibliothecaAPI(db.session, self.collection)
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
 
 @pytest.fixture(scope="function")
 def bibliotheca_fixture(
     db: DatabaseTransactionFixture,
     bibliotheca_files_fixture: BibliothecaFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> BibliothecaAPITestFixture:
-    return BibliothecaAPITestFixture(db, bibliotheca_files_fixture)
+    return BibliothecaAPITestFixture(
+        db, bibliotheca_files_fixture, work_policy_recalc_fixture
+    )
 
 
 class TestBibliothecaAPI:
@@ -342,11 +355,6 @@ class TestBibliothecaAPI:
         # We do have a Work hanging around, but things are about to
         # change for it.
         work, is_new = pool.calculate_work()
-        assert any(
-            x
-            for x in work.coverage_records
-            if x.operation == WorkCoverageRecord.CLASSIFY_OPERATION
-        )
 
         # Prepare availability information.
         data = bibliotheca_fixture.files.sample_data("item_metadata_single.xml")
@@ -356,8 +364,12 @@ class TestBibliothecaAPI:
 
         # Update availability using that data.
         bibliotheca_fixture.api.queue_response(200, content=data)
-        bibliotheca_fixture.api.update_availability(pool)
 
+        bibliotheca_fixture.api.update_availability(pool)
+        assert bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
+            work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+        )
         # The availability information has been updated, as has the
         # date the availability information was last checked.
         assert 1 == pool.licenses_owned
@@ -366,15 +378,6 @@ class TestBibliothecaAPI:
 
         old_last_checked = pool.last_checked
         assert old_last_checked is not None
-
-        # The work's CLASSIFY_OPERATION coverage record has been
-        # removed. In the near future its coverage will be
-        # recalculated to accommodate the new metadata.
-        assert any(
-            x
-            for x in work.coverage_records
-            if x.operation == WorkCoverageRecord.CLASSIFY_OPERATION
-        )
 
         # Now let's try update_availability again, with a file that
         # makes it look like the book has been removed from the
@@ -704,7 +707,12 @@ class TestBibliothecaCirculationSweep:
             bibliotheca_fixture.collection,
             api_class=bibliotheca_fixture.api,
         )
+
         monitor.process_items([identifier])
+        assert bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
+            identifier.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+        )
 
         # Validate that the HTTP request went to the /items endpoint.
         request = bibliotheca_fixture.api.requests.pop()
@@ -1904,10 +1912,12 @@ class TestBibliographicCoverageProvider(TestBibliothecaAPI):
         # We can't use bibliotheca_fixture.api because that's not the same object
         # as the one created by the coverage provider.
         provider.api.queue_response(200, content=data)
-
         [result] = provider.process_batch([identifier])
         assert identifier == result
-
+        bibliotheca_fixture.work_policy_recalc_fixture.is_queued(
+            identifier.work.id,
+            PresentationCalculationPolicy.recalculate_everything(),
+        )
         # A LicensePool was created and populated with format and availability
         # information.
         [pool] = identifier.licensed_through

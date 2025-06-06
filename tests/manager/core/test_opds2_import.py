@@ -35,6 +35,9 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OPDS2FilesFixture
+from tests.fixtures.work import (
+    WorkIdPolicyQueuePresentationRecalculationFixture,
+)
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -89,7 +92,11 @@ class OPDS2Test:
 
 
 class OPDS2ImporterFixture:
-    def __init__(self, db: DatabaseTransactionFixture) -> None:
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ) -> None:
         self.transaction = db
         self.collection = db.collection(
             protocol=OPDS2API,
@@ -105,6 +112,7 @@ class OPDS2ImporterFixture:
         )
         self.collection.data_source = self.data_source
         self.importer = OPDS2Importer(db.session, self.collection)
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     @staticmethod
     def get_delivery_mechanisms(
@@ -119,8 +127,9 @@ class OPDS2ImporterFixture:
 @pytest.fixture
 def opds2_importer_fixture(
     db: DatabaseTransactionFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> OPDS2ImporterFixture:
-    return OPDS2ImporterFixture(db)
+    return OPDS2ImporterFixture(db, work_policy_recalc_fixture)
 
 
 class TestOPDS2Importer(OPDS2Test):
@@ -778,6 +787,7 @@ class TestOpds2Api:
         opds2_files_fixture: OPDS2FilesFixture,
     ):
         """Test the end to end workflow from importing the feed to a fulfill"""
+
         content = opds2_files_fixture.sample_text("auth_token_feed.json")
         (
             imported_editions,

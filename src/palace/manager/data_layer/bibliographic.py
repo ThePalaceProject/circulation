@@ -17,6 +17,7 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.constants import LinkRelations
@@ -29,6 +30,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
@@ -645,9 +647,15 @@ class BibliographicData(BaseMutableData):
             if pool and pool.work:
                 work = pool.work
                 if work_requires_full_recalculation:
-                    work.needs_full_presentation_recalculation()
+                    Work.queue_presentation_recalculation(
+                        work_id=work.id,
+                        policy=PresentationCalculationPolicy.recalculate_everything(),
+                    )
                 else:
-                    work.needs_new_presentation_edition()
+                    Work.queue_presentation_recalculation(
+                        work_id=work.id,
+                        policy=PresentationCalculationPolicy.recalculate_presentation_edition(),
+                    )
 
         return edition, work_requires_new_presentation_edition
 
