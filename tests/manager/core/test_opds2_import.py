@@ -808,6 +808,7 @@ class TestOpds2Api:
             },
         )
         patron = db.patron()
+
         # Borrow the book from the library
         api.borrow(patron, "pin", work.license_pools[0], MagicMock(), None)
 

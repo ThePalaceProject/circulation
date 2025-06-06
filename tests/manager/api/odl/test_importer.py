@@ -192,7 +192,7 @@ class TestOPDS2WithODLImporter:
 
         assert "2 validation errors" in huck_finn_failure.exception
 
-        # 5 Make sure that expected work id are queued for recalculation
+        # 5. Make sure that expected work id are queued for recalculation
         policy = PresentationCalculationPolicy.recalculate_everything()
         for w in works:
             assert opds2_with_odl_importer_fixture.work_policy_recalc_fixture.is_queued(
@@ -321,7 +321,6 @@ class TestOPDS2WithODLImporter:
         importer.settings = db.opds2_odl_settings(
             auth_type=auth_type,
         )
-
         (
             imported_editions,
             pools,

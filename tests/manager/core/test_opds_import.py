@@ -800,7 +800,6 @@ class TestOPDSImporter:
         importer = opds_importer_fixture.importer(
             collection=collection, data_source_name=DataSource.METADATA_WRANGLER
         )
-
         imported_editions, pools, works, failures = importer.import_from_feed(feed)
 
         [crow, mouse] = sorted(imported_editions, key=lambda x: str(x.title))

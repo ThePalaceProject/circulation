@@ -46,7 +46,6 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util import base64
 from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
@@ -1459,11 +1458,11 @@ class TestOverdriveAPI:
         # Updating the formats again, does not overwrite the changes we made to the pool
         http.queue_response(200, content=bibliographic)
 
-        with patch.object(
-            Work, "queue_presentation_recalculation"
-        ) as queue_presentation_recalculation:
-            overdrive_api_fixture.api.update_formats(pool)
-            assert queue_presentation_recalculation.call_count == 1
+        overdrive_api_fixture.api.update_formats(pool)
+        assert (
+            overdrive_api_fixture.work_policy_recalc_fixture.queue_presentation_recalculation.call_count
+            == 1
+        )
 
         assert len(pool.delivery_mechanisms) == 4
         assert {
