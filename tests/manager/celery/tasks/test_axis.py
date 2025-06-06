@@ -34,9 +34,8 @@ from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
 from tests.manager.api.test_axis import AxisFilesFixture

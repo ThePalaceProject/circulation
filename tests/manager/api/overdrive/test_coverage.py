@@ -13,9 +13,8 @@ from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 from tests.mocks.overdrive import MockOverdriveAPI
 

@@ -50,9 +50,8 @@ from tests.fixtures.search import (
     WorkQueueIndexingFixture,
 )
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 
 

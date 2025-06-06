@@ -41,9 +41,8 @@ from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import RemoteIntegrationException, RequestTimedOut
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import FilesFixture
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 from tests.mocks.enki import MockEnkiAPI
 from tests.mocks.mock import MockRequestsResponse
