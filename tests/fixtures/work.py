@@ -25,7 +25,7 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
     """
 
     def __init__(self):
-        self.queued_work_Id_and_policy_combinations = set()
+        self.queued_work_id_and_policy_combinations = set()
         self.patch = patch.object(Work, "queue_presentation_recalculation", self.queue)
 
     def queue(
@@ -35,12 +35,12 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
         *,
         redis_client: Any = None,
     ) -> None:
-        return self.queued_work_Id_and_policy_combinations.add(
+        return self.queued_work_id_and_policy_combinations.add(
             WorkIdAndPolicy(work_id=work_id, policy=policy)
         )
 
     def clear(self):
-        self.queued_work_Id_and_policy_combinations.clear()
+        self.queued_work_id_and_policy_combinations.clear()
 
     def disable_fixture(self):
         self.patch.stop()
@@ -54,7 +54,7 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
     ) -> bool:
         queued = (
             WorkIdAndPolicy(work_id=work_id, policy=policy)
-            in self.queued_work_Id_and_policy_combinations
+            in self.queued_work_id_and_policy_combinations
         )
 
         if clear:
@@ -63,7 +63,7 @@ class WorkIdPolicyQueuePresentationRecalculationFixture:
         return queued
 
     def queue_size(self):
-        return len(self.queued_work_Id_and_policy_combinations)
+        return len(self.queued_work_id_and_policy_combinations)
 
     @classmethod
     @contextmanager
