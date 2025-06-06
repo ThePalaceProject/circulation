@@ -2805,7 +2805,7 @@ class TestWorkConsolidation:
         # Let's merge the first work into the second.
         work1.merge_into(work2)
 
-        # The first work has been deleted
+        # The first work has been deleted, as have its WorkGenre
         assert [] == db.session.query(Work).filter(Work.id == work1.id).all()
         assert [] == db.session.query(WorkGenre).all()
 
