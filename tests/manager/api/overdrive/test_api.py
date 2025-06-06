@@ -1459,10 +1459,7 @@ class TestOverdriveAPI:
         http.queue_response(200, content=bibliographic)
 
         overdrive_api_fixture.api.update_formats(pool)
-        assert (
-            overdrive_api_fixture.work_policy_recalc_fixture.queue_presentation_recalculation.call_count
-            == 1
-        )
+        assert overdrive_api_fixture.work_policy_recalc_fixture.queue_size() == 1
 
         assert len(pool.delivery_mechanisms) == 4
         assert {
