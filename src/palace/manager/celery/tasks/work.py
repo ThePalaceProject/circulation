@@ -22,25 +22,33 @@ def calculate_work_presentations(
         work_policies = waiting.pop(batch_size)
 
         if work_policies:
-            with (
-                task.session() as session,
-                elapsed_time_logging(
-                    log_method=task.log.info,
-                    message_prefix="Presentation calculated for works",
-                    skip_start=True,
-                ),
-            ):
-                for wp in work_policies:
-                    work = get_one(session, Work, id=wp.work_id)
-                    if not work:
-                        task.log.warning(f"No work with id={wp.work_id}. Skipping...")
-                        continue
-                    work.calculate_presentation(policy=wp.policy)
 
-        if len(work_policies) == batch_size:
-            # This task is complete, but there are more works waiting to be recalculated. Requeue ourselves
-            # to process the next batch.
-            raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
+            try:
+                with (
+                    task.session() as session,
+                    elapsed_time_logging(
+                        log_method=task.log.info,
+                        message_prefix=f"Presentation calculated presentation for works: count={len(work_policies)}, "
+                        f"remaining={len(waiting.len())}",
+                        skip_start=True,
+                    ),
+                ):
+                    for wp in work_policies:
+                        work = get_one(session, Work, id=wp.work_id)
+                        if not work:
+                            task.log.warning(
+                                f"No work with id={wp.work_id}. Skipping..."
+                            )
+                            continue
+                        work.calculate_presentation(policy=wp.policy)
+            except Exception as e:
+                # if a failure occurs requeue the items so that can be recalculated in the next round
+                waiting.add(*work_policies)
+                raise e
 
-    task.log.info(f"Finished queuing recalculation tasks.")
-    return
+    if len(work_policies) == batch_size:
+        # This task is complete, but there are more works waiting to be recalculated. Requeue ourselves
+        # to process the next batch.
+        raise task.replace(calculate_work_presentations.s(batch_size=batch_size))
+
+    task.log.info(f"Finished calculating presentation for works.")
