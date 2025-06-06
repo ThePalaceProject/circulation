@@ -68,9 +68,8 @@ from palace.manager.util.problem_detail import (
 )
 from tests.fixtures.files import FilesFixture
 from tests.fixtures.library import LibraryFixture
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 from tests.mocks.axis import MockAxis360API
 

@@ -25,6 +25,7 @@ pytest_plugins = [
     "tests.fixtures.tls_server",
     "tests.fixtures.vendor_id",
     "tests.fixtures.webserver",
+    "tests.fixtures.work",
 ]
 
 # Ensure that Freezegun does not interfere when using PyInstrument to profile tests or

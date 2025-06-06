@@ -67,9 +67,8 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.util.http import BadResponseException, RemoteIntegrationException
 from palace.manager.util.web_publication_manifest import AudiobookManifest
-from tests.fixtures.work import (  # noqa: autoflake
+from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
-    work_policy_recalc_fixture,
 )
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
