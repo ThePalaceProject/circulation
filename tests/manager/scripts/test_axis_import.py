@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.celery.tasks.axis import import_identifiers
 from palace.manager.scripts import axis_import
 from palace.manager.scripts.axis_import import ImportCollection

@@ -7,7 +7,7 @@ from psycopg2.errors import DeadlockDetected
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import axis
 from palace.manager.celery.tasks.axis import (
@@ -31,9 +31,8 @@ from palace.manager.util.datetime_helpers import utc_now
 from palace.manager.util.http import BadResponseException
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import AxisFilesFixture
 from tests.fixtures.redis import RedisFixture
-from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
-from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
 from tests.mocks.mock import MockRequestsResponse
 

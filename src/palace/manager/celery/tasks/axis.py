@@ -8,7 +8,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.api.circulation import (
     BaseCirculationAPI,
     LibrarySettingsType,

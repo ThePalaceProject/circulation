@@ -16,7 +16,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
-        from palace.manager.api.axis import Axis360API
+        from palace.manager.api.axis.api import Axis360API
         from palace.manager.api.bibliotheca import BibliothecaAPI
         from palace.manager.api.enki import EnkiAPI
         from palace.manager.api.odl.api import OPDS2WithODLApi

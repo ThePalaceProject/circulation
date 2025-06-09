@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from palace.manager.api.axis import Axis360API
+from palace.manager.api.axis.api import Axis360API
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.http import HTTP

@@ -119,3 +119,16 @@ class OverdriveFilesFixture(FilesFixture):
 def overdrive_files_fixture() -> OverdriveFilesFixture:
     """A fixture providing access to Overdrive files."""
     return OverdriveFilesFixture()
+
+
+class AxisFilesFixture(FilesFixture):
+    """A fixture providing access to Axis files."""
+
+    def __init__(self):
+        super().__init__("axis")
+
+
+@pytest.fixture()
+def axis_files_fixture() -> AxisFilesFixture:
+    """A fixture providing access to Axis files."""
+    return AxisFilesFixture()
