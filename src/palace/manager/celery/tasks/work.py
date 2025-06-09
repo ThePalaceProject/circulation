@@ -29,7 +29,7 @@ def calculate_work_presentations(
                     elapsed_time_logging(
                         log_method=task.log.info,
                         message_prefix=f"Presentation calculated presentation for works: count={len(work_policies)}, "
-                        f"remaining={len(waiting.len())}",
+                        f"remaining={waiting.len()}",
                         skip_start=True,
                     ),
                 ):
