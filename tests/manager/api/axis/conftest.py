@@ -1,4 +1,5 @@
 import pytest
+from fixtures.work import WorkIdPolicyQueuePresentationRecalculationFixture
 
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
@@ -55,13 +56,19 @@ class Axis360Fixture:
         circulation=CIRCULATION_DATA,
     )
 
-    def __init__(self, db: DatabaseTransactionFixture, files: AxisFilesFixture):
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        files: AxisFilesFixture,
+        work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
+    ):
         self.db = db
         self.files = files
         self.collection = MockAxis360API.mock_collection(
             db.session, db.default_library()
         )
         self.api = MockAxis360API(db.session, self.collection)
+        self.work_policy_recalc_fixture = work_policy_recalc_fixture
 
     def sample_data(self, filename):
         return self.files.sample_data(filename)
@@ -72,6 +79,8 @@ class Axis360Fixture:
 
 @pytest.fixture(scope="function")
 def axis360(
-    db: DatabaseTransactionFixture, axis_files_fixture: AxisFilesFixture
+    db: DatabaseTransactionFixture,
+    axis_files_fixture: AxisFilesFixture,
+    work_policy_recalc_fixture: WorkIdPolicyQueuePresentationRecalculationFixture,
 ) -> Axis360Fixture:
-    return Axis360Fixture(db, axis_files_fixture)
+    return Axis360Fixture(db, axis_files_fixture, work_policy_recalc_fixture)
