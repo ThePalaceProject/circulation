@@ -3,7 +3,10 @@ from unittest.mock import MagicMock, create_autospec, patch
 from palace.manager.api.saml.metadata.federations.loader import (
     SAMLFederatedIdentityProviderLoader,
 )
-from palace.manager.celery.tasks.saml import update_saml_federation_idps_metadata
+from palace.manager.celery.tasks.saml import (
+    _create_saml_federated_identity_provider_loader,
+    update_saml_federation_idps_metadata,
+)
 from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
@@ -53,3 +56,8 @@ def test(db: DatabaseTransactionFixture, celery_fixture: CeleryFixture):
             SAMLFederatedIdentityProvider
         ).all()
         assert expected_federated_identity_providers == identity_providers
+
+
+def test_create_saml_federated_identity_provider_loader():
+
+    assert _create_saml_federated_identity_provider_loader()
