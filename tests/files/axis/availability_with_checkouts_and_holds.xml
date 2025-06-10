@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<availabilityResponse xmlns="http://axis360api.baker-taylor.com/vendorAPI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <title xsi:type="Axis360AvailCirculationV206">
+    <CurrentAPIVersion>version3</CurrentAPIVersion>
+    <titleId>0027094423</titleId>
+    <productTitle>Harry Potter and the Deathly Hallows</productTitle>
+    <titleUrl>https://xyz.baker-taylor.com/Title?itemId=0027094423</titleUrl>
+    <contributor>Rowling, J. K. </contributor>
+    <isbn>9781781102695</isbn>
+    <subject>JUVENILE FICTION / Fantasy / General; JUVENILE FICTION / School  Education; JUVENILE FICTION / Places / Europe</subject>
+    <series>Harry Potter</series>
+    <publisher>Pottermore</publisher>
+    <language>ENGLISH</language>
+    <audience>Children's - Grade 4-6, Age 9-11</audience>
+    <imprint>Pottermore</imprint>
+    <annotation>Jim Dale's Grammy Award-winning performance of J.K. Rowling's iconic stories is a listening adventure for the whole family.'Give me Harry Potter,' said Voldemort's voice, 'and none shall be harmed. Give me Harry Potter, and I shall leave the school untouched. Give me Harry Potter, and you will be rewarded.'Close your eyes and enter the magical world of Harry Potter. In these editions, Jim Dale's characterful narration is so entertaining, fun, and theatrical you can almost hear the crackle of the fire in the Gryffindor common room.As he climbs into the sidecar of Hagrid's motorbike and takes to the skies, leaving Privet Drive for the last time, Harry Potter knows that Lord Voldemort and the Death Eaters are not far behind. The protective charm that has kept Harry safe until now is broken, but he cannot keep hiding. The Dark Lord is breathing fear into everything Harry loves and to stop him Harry will have to find and destroy the remaining Horcruxes. The final battle must begin - Harry must stand and face his enemy...Having become classics of our time, the Harry Potter stories never fail to bring comfort and escapism. With their message of hope, belonging and the enduring power of truth and love, the story of the Boy Who Lived continues to delight generations of new listeners.</annotation>
+    <narrator>Dale, Jim</narrator>
+    <edition>Unabridged</edition>
+    <runtime>21:36</runtime>
+    <fileSize>593.43 MB</fileSize>
+    <addedDate>4/25/2025 4:15:36 PM</addedDate>
+    <publicationDate>6/6/2018</publicationDate>
+    <availability>
+      <availableFormats>
+        <formatName>Acoustik</formatName>
+      </availableFormats>
+      <availableCopies>2</availableCopies>
+      <totalCopies>9</totalCopies>
+      <Checkouts>
+        <checkout>
+          <Patron>01</Patron>
+          <StartDate>5/27/2025 6:33:07 PM +00:00</StartDate>
+          <EndDate>6/10/2025 6:33:00 PM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+        <checkout>
+          <Patron>02</Patron>
+          <StartDate>5/30/2025 4:19:15 PM +00:00</StartDate>
+          <EndDate>6/13/2025 4:19:00 PM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+        <checkout>
+          <Patron>03</Patron>
+          <StartDate>6/3/2025 5:32:22 AM +00:00</StartDate>
+          <EndDate>6/17/2025 5:32:00 AM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+        <checkout>
+          <Patron>04</Patron>
+          <StartDate>6/3/2025 4:58:14 PM +00:00</StartDate>
+          <EndDate>6/17/2025 4:58:00 PM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+        <checkout>
+          <Patron>05</Patron>
+          <StartDate>6/4/2025 2:01:03 AM +00:00</StartDate>
+          <EndDate>6/18/2025 2:01:00 AM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+        <checkout>
+          <Patron>06</Patron>
+          <StartDate>6/9/2025 4:14:28 PM +00:00</StartDate>
+          <EndDate>6/23/2025 4:14:00 PM +00:00</EndDate>
+          <Format>Acoustik</Format>
+          <Active>true</Active>
+        </checkout>
+      </Checkouts>
+      <Holds>
+        <Hold>
+          <Patron>07</Patron>
+          <Email/>
+          <HoldDate>6/8/2025 7:06:43 PM +00:00</HoldDate>
+          <Reserved>true</Reserved>
+        </Hold>
+      </Holds>
+      <holdsQueueSize>0</holdsQueueSize>
+      <estimatedHoldPeriod>0</estimatedHoldPeriod>
+      <transactionID/>
+      <updateDate>6/9/2025 11:15:07 PM +00:00</updateDate>
+    </availability>
+    <minLoanPeriod>1</minLoanPeriod>
+    <maxLoanPeriod>14</maxLoanPeriod>
+    <defaultLoanPeriod>14</defaultLoanPeriod>
+    <authors>
+      <author>Rowling, J. K.</author>
+    </authors>
+    <narrators>
+      <narrator>Dale, Jim (NAR)</narrator>
+    </narrators>
+    <formatType>ABT</formatType>
+    <imageUrl>https://fde-contentcafecloud-dwgjf8dvedfedjc2.a01.azurefd.net/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9781781102695/Medium/Logo</imageUrl>
+    <RTV>true</RTV>
+  </title>
+  <title xsi:type="Axis360AvailCirculationV206">
+    <CurrentAPIVersion>version3</CurrentAPIVersion>
+    <titleId>0026562458</titleId>
+    <productTitle>A Royal Spring</productTitle>
+    <titleUrl>https://xyz.baker-taylor.com/Title?itemId=0026562458</titleUrl>
+    <contributor>Depken, Kristen L. ; Laguna, Fabio (ILT); Colletti, Marco (ILT)</contributor>
+    <isbn>9780736434539</isbn>
+    <subject>JUVENILE FICTION / Media Tie-In; JUVENILE FICTION / Readers / Beginner; JUVENILE FICTION / Fairy Tales  Folklore / General</subject>
+    <series>Step into Reading</series>
+    <publisher>Random House Digital</publisher>
+    <language>ENGLISH</language>
+    <audience>Children's - Grade 1-2, Age 6-7</audience>
+    <imprint>Disney Books for Young Readers</imprint>
+    <annotation>Rapunzel, Tiana, Belle, and Merida celebrate springtime in this Step 2 Step into Reading book! Perfect for kids ages 4 to 6, Step 2 readers use basic vocabulary and short sentences to tell simple stories. Children who recognize familiar words and can sound out new words with help will love this book.</annotation>
+    <narrator/>
+    <edition/>
+    <runtime/>
+    <fileSize>67.55 MB</fileSize>
+    <addedDate>2/16/2024 11:51:30 PM</addedDate>
+    <publicationDate>1/5/2016</publicationDate>
+    <availability>
+      <availableFormats>
+        <formatName>Blio</formatName>
+        <formatName>ePub</formatName>
+        <formatName>AxisNow</formatName>
+      </availableFormats>
+      <availableCopies>0</availableCopies>
+      <totalCopies>3</totalCopies>
+      <Checkouts/>
+      <Holds>
+        <Hold>
+          <Patron>01</Patron>
+          <Email/>
+          <HoldDate>6/5/2025 3:23:24 PM +00:00</HoldDate>
+          <Reserved>true</Reserved>
+        </Hold>
+        <Hold>
+          <Patron>02</Patron>
+          <Email>test@test.com</Email>
+          <HoldDate>6/6/2025 2:52:44 AM +00:00</HoldDate>
+          <Reserved>true</Reserved>
+        </Hold>
+        <Hold>
+          <Patron>03</Patron>
+          <Email/>
+          <HoldDate>6/6/2025 4:44:20 PM +00:00</HoldDate>
+          <Reserved>true</Reserved>
+        </Hold>
+      </Holds>
+      <holdsQueueSize>0</holdsQueueSize>
+      <estimatedHoldPeriod>0</estimatedHoldPeriod>
+      <transactionID/>
+      <updateDate>6/9/2025 12:25:03 AM +00:00</updateDate>
+    </availability>
+    <minLoanPeriod>1</minLoanPeriod>
+    <maxLoanPeriod>14</maxLoanPeriod>
+    <defaultLoanPeriod>14</defaultLoanPeriod>
+    <authors>
+      <author>Depken, Kristen L.</author>
+      <author>Laguna, Fabio (ILT)</author>
+      <author>Colletti, Marco (ILT)</author>
+    </authors>
+    <narrators/>
+    <formatType>EBT</formatType>
+    <imageUrl>https://fde-contentcafecloud-dwgjf8dvedfedjc2.a01.azurefd.net/Jacket.svc/D65D0665-050A-487B-9908-16E6D8FF5C3E/9780736434539/Medium/Logo</imageUrl>
+    <RTV>true</RTV>
+  </title>
+  <status>
+    <code>0000</code>
+    <statusMessage>Availability Data is Successfully retrieved.</statusMessage>
+  </status>
+</availabilityResponse>
