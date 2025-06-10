@@ -8,6 +8,6 @@ class UpdateSamlMetadata(Script):
     def do_run(self, *args, **kwargs):
         update_saml_federation_idps_metadata.delay()
         self.log.info(
-            "update_saml_federation_idps_metadata task has been queued for execution. See celery logs "
-            "for more info about task execution"
+            'The "update_saml_federation_idps_metadata" task has been queued for execution. See the celery logs '
+            "for details about task execution."
         )
