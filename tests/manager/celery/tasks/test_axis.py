@@ -38,8 +38,6 @@ from tests.fixtures.redis import RedisFixture
 from tests.fixtures.work import (
     WorkIdPolicyQueuePresentationRecalculationFixture,
 )
-from tests.manager.api.test_axis import axis_files_fixture  # noqa: autoflake
-from tests.manager.api.test_axis import AxisFilesFixture
 from tests.mocks.axis import MockAxis360API
 from tests.mocks.mock import MockRequestsResponse
 
