@@ -79,7 +79,7 @@ def migrate_work_coverage_records(task: Task) -> None:
             Work.queue_presentation_recalculation(work_id=row["work_id"], policy=policy)
 
         session.execute(
-            delete(WorkCoverageRecord.work_id).where(
+            delete(WorkCoverageRecord).where(
                 WorkCoverageRecord.status == WorkCoverageRecord.REGISTERED
             )
         )
